@@ -28,6 +28,8 @@
     font-family: 'Inconsolata', monospace;
     font-weight: 400;
     min-height: 100vh;
+  }
+  .page-wrap {
     overflow-x: hidden;
   }
 
@@ -677,7 +679,7 @@
 </head>
 <body>
 
-<div class="page">
+<div class="page-wrap"><div class="page">
 
   <!-- TOP BAR -->
   <header class="topbar">
@@ -895,7 +897,7 @@
     <span class="footer-copy">© 2026 Come With · Brooklyn, NY</span>
   </footer>
 
-</div><!-- /page -->
+</div></div><!-- /page -->
 
 <!-- PANEL OVERLAY -->
 <div class="panel-overlay" id="overlay" onclick="closePanel()"></div>
@@ -1032,13 +1034,13 @@ function openPanel(key) {
   document.getElementById('panelBody').innerHTML = content.html;
   document.getElementById('panel').classList.add('open');
   document.getElementById('overlay').classList.add('open');
-  document.body.style.overflow = 'hidden';
+  document.documentElement.style.overflow = 'hidden';
 }
 
 function closePanel() {
   document.getElementById('panel').classList.remove('open');
   document.getElementById('overlay').classList.remove('open');
-  document.body.style.overflow = '';
+  document.documentElement.style.overflow = '';
 }
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
