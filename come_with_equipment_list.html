@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Equipment Rentals</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #F2EDE6;
+    color: #1A1410;
+    font-family: 'Inconsolata', monospace;
+    font-weight: 400;
+    min-height: 100vh;
+    padding: 48px 24px 64px;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: radial-gradient(circle, rgba(26,20,16,0.055) 1px, transparent 1px);
+    background-size: 18px 18px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+  }
+
+  /* ── HEADER ── */
+  .header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #1A1410;
+    margin-bottom: 48px;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .brand-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 3.2rem;
+    letter-spacing: 0.06em;
+    color: #1A1410;
+    line-height: 1;
+  }
+
+  .brand-sub {
+    font-size: 0.7rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: #8A7F72;
+    margin-top: 4px;
+  }
+
+  .header-right {
+    text-align: right;
+  }
+
+  .header-label {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.4rem;
+    letter-spacing: 0.1em;
+    color: #C13B2A;
+  }
+
+  .header-detail {
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #8A7F72;
+    margin-top: 2px;
+  }
+
+  /* ── SECTION LABEL ── */
+  .section-label {
+    font-size: 0.62rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #C13B2A;
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: rgba(193,59,42,0.25);
+  }
+
+  /* ── GEAR GRID ── */
+  .gear-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 2px;
+    background: #1A1410;
+    border: 2px solid #1A1410;
+    margin-bottom: 32px;
+  }
+
+  .gear-card {
+    background: #F2EDE6;
+    padding: 28px 26px 24px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+
+  .gear-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: #C13B2A;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
+  }
+
+  .gear-card:hover { background: #FAE8E6; }
+  .gear-card:hover::after { transform: scaleX(1); }
+
+  .gear-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.62rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    margin-bottom: 14px;
+    font-weight: 500;
+  }
+
+  .badge-blue   { background: #DCEEFF; color: #185FA5; }
+  .badge-green  { background: #DFF0D0; color: #3B6D11; }
+  .badge-amber  { background: #FFF0D0; color: #854F0B; }
+  .badge-purple { background: #EDE8FF; color: #534AB7; }
+  .badge-coral  { background: #FFE8E4; color: #993C1D; }
+
+  .gear-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.5rem;
+    letter-spacing: 0.04em;
+    color: #1A1410;
+    line-height: 1.1;
+    margin-bottom: 5px;
+  }
+
+  .gear-brand {
+    font-family: 'Libre Baskerville', serif;
+    font-style: italic;
+    font-size: 0.8rem;
+    color: #8A7F72;
+    margin-bottom: 18px;
+  }
+
+  .gear-rate {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    letter-spacing: 0.04em;
+    color: #1A1410;
+    line-height: 1;
+  }
+
+  .gear-rate-unit {
+    font-family: 'Inconsolata', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #8A7F72;
+    margin-top: 2px;
+  }
+
+  .gear-note {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    color: #8A7F72;
+    margin-top: 10px;
+    line-height: 1.5;
+  }
+
+  /* ── ACCESSORIES ROW ── */
+  .accessories-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2px;
+    background: #1A1410;
+    border: 2px solid #1A1410;
+    margin-bottom: 48px;
+  }
+
+  .acc-card {
+    background: #EBE6DF;
+    padding: 20px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    transition: background 0.2s;
+  }
+
+  .acc-card:hover { background: #FAE8E6; }
+
+  .acc-left { flex: 1; }
+
+  .acc-name {
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #1A1410;
+    margin-bottom: 2px;
+  }
+
+  .acc-detail {
+    font-size: 0.7rem;
+    color: #8A7F72;
+    letter-spacing: 0.04em;
+  }
+
+  .acc-rate {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.06em;
+    color: #1A1410;
+    white-space: nowrap;
+    text-align: right;
+  }
+
+  .acc-rate-small {
+    font-family: 'Inconsolata', monospace;
+    font-size: 0.6rem;
+    color: #8A7F72;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: right;
+    margin-top: 1px;
+  }
+
+  /* ── RENTAL DETAILS ── */
+  .details-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: #1A1410;
+    border: 2px solid #1A1410;
+    margin-bottom: 48px;
+  }
+
+  .detail-item {
+    background: #F2EDE6;
+    padding: 18px 22px;
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .detail-dash {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem;
+    color: #C13B2A;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .detail-text {
+    font-size: 0.78rem;
+    color: #1A1410;
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── FOOTER BAR ── */
+  .footer-bar {
+    background: #1A1410;
+    padding: 24px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .footer-block { }
+
+  .footer-label {
+    font-size: 0.58rem;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    color: rgba(242,237,230,0.35);
+    margin-bottom: 3px;
+  }
+
+  .footer-val {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.08em;
+    color: #F2EDE6;
+  }
+
+  .footer-divider {
+    width: 1px;
+    height: 32px;
+    background: rgba(242,237,230,0.1);
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 28px 16px 48px; }
+    .brand-name { font-size: 2.4rem; }
+    .header { flex-direction: column; align-items: flex-start; }
+    .header-right { text-align: left; }
+    .details-grid { grid-template-columns: 1fr; }
+    .footer-divider { display: none; }
+    .footer-bar { flex-direction: column; align-items: flex-start; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <!-- HEADER -->
+  <header class="header">
+    <div>
+      <div class="brand-name">Come With</div>
+      <div class="brand-sub">Brooklyn, NY · Equipment Rentals</div>
+    </div>
+    <div class="header-right">
+      <div class="header-label">Pro DJ Gear for Rent</div>
+      <div class="header-detail">Short-term · Flexible pickup · DJ-to-DJ rates</div>
+    </div>
+  </header>
+
+  <!-- CONTROLLERS & MEDIA PLAYERS -->
+  <div class="section-label">Controllers &amp; Media Players</div>
+  <div class="gear-grid">
+
+    <div class="gear-card">
+      <div class="gear-badge badge-blue">All-in-one</div>
+      <div class="gear-name">Pioneer XDJ-AZ</div>
+      <div class="gear-brand">Pioneer DJ · 4-channel standalone</div>
+      <div class="gear-rate">$175</div>
+      <div class="gear-rate-unit">Per day</div>
+      <div class="gear-note">Full-size jog wheels · 10.1" touchscreen · Wi-Fi &amp; SonicLink · Cables included</div>
+    </div>
+
+    <div class="gear-card">
+      <div class="gear-badge badge-green">Pair</div>
+      <div class="gear-name">Pioneer CDJ-3000</div>
+      <div class="gear-brand">Pioneer DJ · Professional media players</div>
+      <div class="gear-rate">$300</div>
+      <div class="gear-rate-unit">Per day · Both units</div>
+      <div class="gear-note">Industry standard · Dual stand included with pair rental · Pro DJ Link ready</div>
+    </div>
+
+    <div class="gear-card">
+      <div class="gear-badge badge-blue">Single unit</div>
+      <div class="gear-name">CDJ-3000 Unit A or B</div>
+      <div class="gear-brand">Pioneer DJ · Individual media player</div>
+      <div class="gear-rate">$175</div>
+      <div class="gear-rate-unit">Per day · One unit</div>
+      <div class="gear-note">Available as single unit or as part of the pair</div>
+    </div>
+
+  </div>
+
+  <!-- SPEAKERS -->
+  <div class="section-label">Speakers</div>
+  <div class="gear-grid">
+
+    <div class="gear-card">
+      <div class="gear-badge badge-coral">Pair</div>
+      <div class="gear-name">Alpha Theta Wave 8</div>
+      <div class="gear-brand">AlphaTheta · Powered portable monitors</div>
+      <div class="gear-rate">$120</div>
+      <div class="gear-rate-unit">Per day · Both speakers</div>
+      <div class="gear-note">8-hr battery · IPX4 waterproof · Ultra-low-latency SonicLink · Stereo pair</div>
+    </div>
+
+    <div class="gear-card">
+      <div class="gear-badge badge-blue">Single unit</div>
+      <div class="gear-name">Wave 8 Unit A or B</div>
+      <div class="gear-brand">AlphaTheta · Individual speaker</div>
+      <div class="gear-rate">$70</div>
+      <div class="gear-rate-unit">Per day · One speaker</div>
+      <div class="gear-note">Available individually or as part of stereo pair</div>
+    </div>
+
+  </div>
+
+  <!-- ACCESSORIES -->
+  <div class="section-label">Accessories</div>
+  <div class="accessories-grid">
+
+    <div class="acc-card">
+      <div class="acc-left">
+        <div class="acc-name">DJ Headphones</div>
+        <div class="acc-detail">Professional monitoring · Add to any rental</div>
+      </div>
+      <div>
+        <div class="acc-rate">$25</div>
+        <div class="acc-rate-small">/ day</div>
+      </div>
+    </div>
+
+    <div class="acc-card">
+      <div class="acc-left">
+        <div class="acc-name">CDJ Dual Stand</div>
+        <div class="acc-detail">For CDJ-3000 pair · Included with pair rental</div>
+      </div>
+      <div>
+        <div class="acc-rate">Included</div>
+        <div class="acc-rate-small">with pair</div>
+      </div>
+    </div>
+
+    <div class="acc-card">
+      <div class="acc-left">
+        <div class="acc-name">Cables &amp; Wiring</div>
+        <div class="acc-detail">All connections · RCA, XLR, power</div>
+      </div>
+      <div>
+        <div class="acc-rate">Included</div>
+        <div class="acc-rate-small">on request</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- RENTAL DETAILS -->
+  <div class="section-label">Rental details</div>
+  <div class="details-grid">
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Signed Equipment Rental Agreement required prior to every pickup</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Pickup and return in Brooklyn, NY · Flexible scheduling</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Damage deposit may apply depending on rental · confirmed at booking</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Multi-day discounts available · ask when inquiring</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Payment: Venmo · Zelle · Cash · Check payable to Come With</div>
+    </div>
+    <div class="detail-item">
+      <div class="detail-dash">—</div>
+      <div class="detail-text">Renter assumes full liability for damage or loss during rental period</div>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer-bar">
+    <div class="footer-block">
+      <div class="footer-label">Book a rental</div>
+      <div class="footer-val">hello@comewith.org</div>
+    </div>
+    <div class="footer-divider"></div>
+    <div class="footer-block">
+      <div class="footer-label">Website</div>
+      <div class="footer-val">comewith.org</div>
+    </div>
+    <div class="footer-divider"></div>
+    <div class="footer-block">
+      <div class="footer-label">Instagram</div>
+      <div class="footer-val">@comewithnyc</div>
+    </div>
+    <div class="footer-divider"></div>
+    <div class="footer-block">
+      <div class="footer-label">Location</div>
+      <div class="footer-val">Brooklyn, NY</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

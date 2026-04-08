@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Events Services Agreement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
+  --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
+  --border-strong:rgba(26,20,16,0.3);
+}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+.page{position:relative;z-index:1;max-width:800px;margin:0 auto;}
+
+.doc-header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:40px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;}
+.doc-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;}
+.doc-title{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.12em;color:var(--red);}
+.doc-sub{font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--mid);margin-top:3px;}
+.ref-row{display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;}
+.ref-block label{font-size:0.6rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:4px;}
+.ref-block input{font-family:'Inconsolata',monospace;font-size:0.85rem;background:transparent;border:none;border-bottom:1px solid var(--border-strong);width:140px;padding:2px 0;color:var(--ink);outline:none;}
+.ref-block input:focus{border-bottom-color:var(--red);}
+
+.section{margin-bottom:36px;}
+.section-label{font-size:0.6rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:rgba(193,59,42,0.25);}
+
+.field-grid{display:grid;gap:14px;}
+.field-grid.cols-2{grid-template-columns:1fr 1fr;}
+.field-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+.field-group{display:flex;flex-direction:column;gap:5px;}
+.field-group label{font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
+.field-group input,.field-group select,.field-group textarea{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;}
+.field-group input:focus,.field-group select:focus,.field-group textarea:focus{border-color:var(--red);}
+.field-group textarea{resize:vertical;min-height:72px;}
+
+.check-grid{display:grid;gap:8px;}
+.check-grid.cols-2{grid-template-columns:1fr 1fr;}
+.check-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
+.check-item{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;background:white;border:1px solid var(--border);cursor:pointer;transition:border-color 0.15s,background 0.15s;user-select:none;}
+.check-item:hover{border-color:var(--border-strong);background:var(--off);}
+.check-item.selected{border-color:var(--red);background:#FAE8E6;}
+.check-item input[type=checkbox]{position:absolute;opacity:0;pointer-events:none;}
+.check-box{width:16px;height:16px;border:1.5px solid var(--border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color 0.15s,background 0.15s;margin-top:1px;}
+.check-item.selected .check-box{border-color:var(--red);background:var(--red);}
+.check-box svg{display:none;}
+.check-item.selected .check-box svg{display:block;}
+.check-label{font-size:0.84rem;color:var(--ink);line-height:1.3;font-weight:500;}
+.check-sub{font-size:0.7rem;color:var(--mid);margin-top:3px;line-height:1.4;}
+
+.radio-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:white;border:1px solid var(--border);cursor:pointer;transition:border-color 0.15s,background 0.15s;user-select:none;}
+.radio-item:hover{border-color:var(--border-strong);background:var(--off);}
+.radio-item.selected{border-color:var(--red);background:#FAE8E6;}
+.radio-item input[type=radio]{position:absolute;opacity:0;pointer-events:none;}
+.radio-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:border-color 0.15s;}
+.radio-item.selected .radio-dot{border-color:var(--red);}
+.radio-dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--red);display:none;}
+.radio-item.selected .radio-dot::after{display:block;}
+
+/* SERVICE CARDS — large prominent selectors */
+.service-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:2px;background:var(--ink);border:2px solid var(--ink);}
+.svc-card{background:var(--bg);padding:20px 18px;cursor:pointer;transition:background 0.18s;user-select:none;position:relative;}
+.svc-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
+.svc-card:hover{background:var(--off);}
+.svc-card:hover::after{transform:scaleX(1);}
+.svc-card.selected{background:#FAE8E6;}
+.svc-card.selected::after{transform:scaleX(1);}
+.svc-card input{position:absolute;opacity:0;pointer-events:none;}
+.svc-card-check{width:18px;height:18px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;margin-bottom:12px;transition:border-color 0.15s,background 0.15s;}
+.svc-card.selected .svc-card-check{border-color:var(--red);background:var(--red);}
+.svc-card-check svg{display:none;}
+.svc-card.selected .svc-card-check svg{display:block;}
+.svc-card-title{font-family:'Bebas Neue',sans-serif;font-size:1.15rem;letter-spacing:0.06em;color:var(--ink);margin-bottom:4px;}
+.svc-card-desc{font-size:0.68rem;color:var(--mid);line-height:1.5;}
+
+.fee-table{width:100%;border-collapse:collapse;}
+.fee-table th{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border-strong);background:var(--off);}
+.fee-table td{padding:6px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:0.85rem;}
+.fee-table td input{font-family:'Inconsolata',monospace;font-size:0.88rem;background:transparent;border:none;border-bottom:1px dashed var(--border);width:100%;outline:none;padding:2px 0;color:var(--ink);}
+.fee-table td input:focus{border-bottom-color:var(--red);}
+.fee-total td{font-weight:500;background:var(--off);}
+
+.pay-grid{display:flex;flex-wrap:wrap;gap:8px;}
+.pay-item{display:flex;align-items:center;gap:8px;padding:8px 16px;background:white;border:1px solid var(--border);cursor:pointer;transition:border-color 0.15s,background 0.15s;font-size:0.82rem;user-select:none;}
+.pay-item:hover{border-color:var(--border-strong);}
+.pay-item.selected{border-color:var(--red);background:#FAE8E6;color:var(--red);}
+.pay-item input{position:absolute;opacity:0;pointer-events:none;}
+
+.deposit-row{display:none;margin-top:12px;}
+.deposit-row.visible{display:grid;}
+
+.clause-block{background:var(--off);border-left:3px solid var(--border-strong);padding:14px 16px;margin-bottom:8px;}
+.clause-num{font-size:0.62rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;}
+.clause-text{font-size:0.8rem;color:var(--ink);line-height:1.65;}
+.clause-fill{background:transparent;border:none;border-bottom:1px dashed var(--border-strong);font-family:'Inconsolata',monospace;font-size:0.8rem;color:var(--ink);outline:none;padding:0 2px;min-width:60px;}
+.clause-fill:focus{border-bottom-color:var(--red);}
+
+.promo-row{display:flex;align-items:center;gap:10px;padding:10px 14px;background:white;border:1px solid var(--border);cursor:pointer;user-select:none;margin-bottom:8px;}
+.promo-row:hover{border-color:var(--border-strong);}
+.promo-row.selected{border-color:var(--red);background:#FAE8E6;}
+.promo-row input{position:absolute;opacity:0;pointer-events:none;}
+
+.sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);}
+.sig-panel{background:var(--bg);padding:28px 24px;}
+.sig-party{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.1em;color:var(--ink);margin-bottom:20px;}
+.sig-line{border:none;border-bottom:1px solid var(--ink);width:100%;margin-bottom:20px;height:44px;background:transparent;display:block;}
+.sig-label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;}
+.sig-input{font-family:'Inconsolata',monospace;font-size:0.85rem;background:white;border:1px solid var(--border);padding:8px 10px;width:100%;outline:none;color:var(--ink);}
+.sig-input:focus{border-color:var(--red);}
+
+.submit-bar{margin-top:40px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+.btn-primary{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:16px 36px;border:none;cursor:pointer;transition:background 0.18s;}
+.btn-primary:hover{background:var(--red);}
+.btn-secondary{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:transparent;color:var(--ink);padding:14px 28px;border:2px solid var(--ink);cursor:pointer;transition:all 0.18s;}
+.btn-secondary:hover{border-color:var(--red);color:var(--red);}
+.submit-note{font-size:0.68rem;color:var(--mid);letter-spacing:0.06em;}
+.success-banner{display:none;background:#DFF0D0;border:1px solid #3B6D11;padding:16px 20px;margin-top:20px;font-size:0.85rem;color:#3B6D11;line-height:1.5;}
+
+@media(max-width:600px){
+  body{padding:28px 16px 60px;}
+  .doc-header{flex-direction:column;align-items:flex-start;}
+  .field-grid.cols-2,.field-grid.cols-3{grid-template-columns:1fr;}
+  .check-grid.cols-2,.check-grid.cols-3{grid-template-columns:1fr;}
+  .sig-grid{grid-template-columns:1fr;}
+  .service-cards{grid-template-columns:1fr 1fr;}
+}
+@media print{
+  body::before{display:none;}
+  .submit-bar,.success-banner{display:none!important;}
+  .svc-card.selected,.check-item.selected{background:#FAE8E6!important;-webkit-print-color-adjust:exact;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <div>
+      <div class="doc-brand">Come With</div>
+      <div class="doc-title">Events Services Agreement</div>
+      <div class="doc-sub">DJ Performance · Event Production · A/V Recording · Equipment</div>
+    </div>
+    <div>
+      <div class="ref-row">
+        <div class="ref-block">
+          <label>Agreement #</label>
+          <input type="text" id="agr-num" placeholder="ESA-____">
+        </div>
+        <div class="ref-block">
+          <label>Date</label>
+          <input type="date" id="agr-date">
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <form id="esaForm" onsubmit="handleSubmit(event)">
+
+    <!-- CLIENT INFO -->
+    <div class="section">
+      <div class="section-label">Client information</div>
+      <div class="field-grid cols-2">
+        <div class="field-group">
+          <label>Full legal name *</label>
+          <input type="text" name="clientName" required placeholder="First and last name">
+        </div>
+        <div class="field-group">
+          <label>Organization / event name</label>
+          <input type="text" name="orgName" placeholder="Company, brand, or event name">
+        </div>
+        <div class="field-group">
+          <label>Email *</label>
+          <input type="email" name="email" required placeholder="your@email.com">
+        </div>
+        <div class="field-group">
+          <label>Phone</label>
+          <input type="tel" name="phone" placeholder="(555) 000-0000">
+        </div>
+        <div class="field-group">
+          <label>Instagram</label>
+          <input type="text" name="instagram" placeholder="@handle">
+        </div>
+        <div class="field-group">
+          <label>City / State</label>
+          <input type="text" name="location" placeholder="Brooklyn, NY">
+        </div>
+      </div>
+    </div>
+
+    <!-- SERVICES SELECTED -->
+    <div class="section">
+      <div class="section-label">Services — select all that apply</div>
+      <div class="service-cards">
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="DJ Performance">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">DJ Performance</div>
+          <div class="svc-card-desc">Live mixing and DJ set(s) for your event</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="Event Production">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">Event Production</div>
+          <div class="svc-card-desc">End-to-end planning, coordination, and day-of management</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="A/V Recording">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">A/V Recording</div>
+          <div class="svc-card-desc">Audio/video capture with basic editing</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="Equipment Rental">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">Equipment Rental</div>
+          <div class="svc-card-desc">See Equipment Rental Agreement for full terms</div>
+        </div>
+      </div>
+      <div class="field-grid" style="margin-top:12px;">
+        <div class="field-group">
+          <label>Additional service details</label>
+          <input type="text" name="serviceNotes" placeholder="Any specifics about what's needed...">
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENT DETAILS -->
+    <div class="section">
+      <div class="section-label">Event details</div>
+      <div class="field-grid cols-2">
+        <div class="field-group">
+          <label>Event type *</label>
+          <select name="eventType" required>
+            <option value="" disabled selected>Select type...</option>
+            <option>Private party</option>
+            <option>Corporate event</option>
+            <option>Fundraiser / charity</option>
+            <option>Club / venue night</option>
+            <option>Wedding / celebration</option>
+            <option>Brand activation</option>
+            <option>Other</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Event date *</label>
+          <input type="date" name="eventDate" required>
+        </div>
+        <div class="field-group">
+          <label>Venue name</label>
+          <input type="text" name="venueName" placeholder="Venue or location name">
+        </div>
+        <div class="field-group">
+          <label>Venue address</label>
+          <input type="text" name="venueAddress" placeholder="Street, City, State">
+        </div>
+        <div class="field-group">
+          <label>Load-in / arrival time</label>
+          <input type="time" name="loadIn">
+        </div>
+        <div class="field-group">
+          <label>Set start time</label>
+          <input type="time" name="setStart">
+        </div>
+        <div class="field-group">
+          <label>Set end time</label>
+          <input type="time" name="setEnd">
+        </div>
+        <div class="field-group">
+          <label>Expected attendance</label>
+          <input type="text" name="attendance" placeholder="Est. number of guests">
+        </div>
+        <div class="field-group">
+          <label>Indoor / outdoor</label>
+          <select name="indoorOutdoor">
+            <option value="" disabled selected>Select...</option>
+            <option>Indoor</option>
+            <option>Outdoor</option>
+            <option>Both</option>
+          </select>
+        </div>
+        <div class="field-group">
+          <label>Music genre / direction</label>
+          <input type="text" name="genre" placeholder="e.g. house, deep house, open format">
+        </div>
+      </div>
+      <div class="field-grid" style="margin-top:14px;">
+        <div class="field-group">
+          <label>Music requests / do-not-play list</label>
+          <textarea name="musicNotes" placeholder="Any specific requests, must-plays, or songs to avoid..."></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- EQUIPMENT (for DJ performance) -->
+    <div class="section">
+      <div class="section-label">Equipment — who provides each item</div>
+      <p style="font-size:0.72rem;color:var(--mid);margin-bottom:14px;">For each item, select who is responsible for providing it.</p>
+      <div id="equipRows">
+      </div>
+    </div>
+
+    <!-- FEES -->
+    <div class="section">
+      <div class="section-label">Fees &amp; payment</div>
+      <table class="fee-table">
+        <thead>
+          <tr><th>Service</th><th style="width:150px;">Fee</th><th style="width:80px;">Included?</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>DJ Performance</td><td><input type="text" name="djFee" placeholder="$0.00"></td><td><select name="djIncl" style="font-size:0.78rem;padding:4px 6px;border:1px solid var(--border);background:white;font-family:'Inconsolata',monospace;outline:none;"><option value="">—</option><option>Yes</option><option>No</option></select></td></tr>
+          <tr><td>Event Production</td><td><input type="text" name="prodFee" placeholder="$0.00"></td><td><select name="prodIncl" style="font-size:0.78rem;padding:4px 6px;border:1px solid var(--border);background:white;font-family:'Inconsolata',monospace;outline:none;"><option value="">—</option><option>Yes</option><option>No</option></select></td></tr>
+          <tr><td>A/V Recording add-on</td><td><input type="text" name="avFee" placeholder="$0.00"></td><td><select name="avIncl" style="font-size:0.78rem;padding:4px 6px;border:1px solid var(--border);background:white;font-family:'Inconsolata',monospace;outline:none;"><option value="">—</option><option>Yes</option><option>No</option></select></td></tr>
+          <tr><td>Equipment rental add-on</td><td><input type="text" name="rentFee" placeholder="$0.00"></td><td><select name="rentIncl" style="font-size:0.78rem;padding:4px 6px;border:1px solid var(--border);background:white;font-family:'Inconsolata',monospace;outline:none;"><option value="">—</option><option>Yes</option><option>No</option></select></td></tr>
+        </tbody>
+        <tfoot>
+          <tr class="fee-total"><td colspan="1"><strong>Total</strong></td><td><input type="text" name="totalFee" placeholder="$0.00"></td><td></td></tr>
+        </tfoot>
+      </table>
+
+      <div style="margin-top:20px;">
+        <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Deposit</div>
+        <div class="check-grid cols-2" style="margin-bottom:0;">
+          <label class="radio-item" onclick="toggleRadioGroup(this,'depositOpt','required')">
+            <input type="radio" name="depositOpt" value="required">
+            <div class="radio-dot"></div>
+            <div class="check-label">Required</div>
+          </label>
+          <label class="radio-item" onclick="toggleRadioGroup(this,'depositOpt','waived')">
+            <input type="radio" name="depositOpt" value="waived">
+            <div class="radio-dot"></div>
+            <div class="check-label">Waived</div>
+          </label>
+        </div>
+        <div class="deposit-row field-grid cols-2" id="depositDetails">
+          <div class="field-group">
+            <label>Deposit amount / %</label>
+            <input type="text" name="depositAmt" placeholder="$500 or 50%">
+          </div>
+          <div class="field-group">
+            <label>Deposit due date</label>
+            <input type="date" name="depositDue">
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:18px;">
+        <div class="field-group">
+          <label>Balance due date</label>
+          <input type="date" name="balanceDue" style="max-width:220px;">
+        </div>
+      </div>
+
+      <div style="margin-top:18px;">
+        <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Payment method</div>
+        <div class="pay-grid">
+          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Venmo">Venmo</label>
+          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Zelle">Zelle</label>
+          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Cash">Cash</label>
+          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Check">Check</label>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECORDING & PROMO RIGHTS -->
+    <div class="section">
+      <div class="section-label">Recording &amp; promotional rights</div>
+      <p style="font-size:0.72rem;color:var(--mid);margin-bottom:14px;">Client grants Come With the following rights to content captured at this event:</p>
+      <div class="check-grid cols-2">
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" name="promoRights" value="Social media posts">
+          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div><div class="check-label">Social media posts</div><div class="check-sub">Instagram, TikTok, etc.</div></div>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" name="promoRights" value="YouTube / SoundCloud upload">
+          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div><div class="check-label">YouTube / SoundCloud</div><div class="check-sub">Full set upload</div></div>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" name="promoRights" value="Website use">
+          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div><div class="check-label">Website use</div><div class="check-sub">comewith.org portfolio</div></div>
+        </label>
+        <label class="check-item" onclick="toggleCheck(this)">
+          <input type="checkbox" name="promoRights" value="No promotional use">
+          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div><div class="check-label">No promotional use</div><div class="check-sub">Client restricts all use</div></div>
+        </label>
+      </div>
+    </div>
+
+    <!-- TERMS -->
+    <div class="section">
+      <div class="section-label">Terms &amp; conditions</div>
+      <div class="clause-block">
+        <div class="clause-num">1 — Cancellation policy</div>
+        <div class="clause-text">Cancellation with 30+ days notice: deposit fully refundable. 14–29 days: 50% of deposit refundable. Fewer than 14 days: deposit non-refundable. Day of event: full fee is due. If Come With must cancel, all payments received will be refunded in full.</div>
+      </div>
+      <div class="clause-block">
+        <div class="clause-num">2 — Performance standards</div>
+        <div class="clause-text">Come With will arrive no less than <input class="clause-fill" name="arrivalHrs" size="3" placeholder="__"> hours before set start time. Extensions beyond the contracted set require mutual agreement and may incur additional charges at $<input class="clause-fill" name="extRate" size="5" placeholder="_____"> per hour.</div>
+      </div>
+      <div class="clause-block">
+        <div class="clause-num">3 — Force majeure</div>
+        <div class="clause-text">Neither party shall be liable for failure to perform due to circumstances beyond their reasonable control, including natural disasters, government mandates, or venue closure. Parties will negotiate in good faith regarding rescheduling or refund.</div>
+      </div>
+      <div class="clause-block">
+        <div class="clause-num">4 — Indemnification</div>
+        <div class="clause-text">Come With's total liability shall not exceed total fees paid. Client agrees to indemnify Come With from claims arising from the Client's event, venue conditions, or acts of attendees.</div>
+      </div>
+      <div class="clause-block">
+        <div class="clause-num">5 — Governing law</div>
+        <div class="clause-text">This Agreement is governed by the laws of the State of New York. Disputes shall be resolved in the courts of New York County.</div>
+      </div>
+    </div>
+
+    <!-- ADDITIONAL NOTES -->
+    <div class="section">
+      <div class="section-label">Additional notes</div>
+      <div class="field-group">
+        <textarea name="notes" placeholder="Any additional terms, special arrangements, rider requests, or notes..."></textarea>
+      </div>
+    </div>
+
+    <!-- SIGNATURES -->
+    <div class="section">
+      <div class="section-label">Signatures</div>
+      <p style="font-size:0.75rem;color:var(--mid);margin-bottom:16px;line-height:1.6;">By signing below, both parties confirm they have read and agreed to the full terms of this Events Services Agreement.</p>
+      <div class="sig-grid">
+        <div class="sig-panel">
+          <div class="sig-party">Come With — Service Provider</div>
+          <div class="sig-label">Signature</div>
+          <canvas class="sig-line" id="ownerSigCanvas" width="320" height="44"></canvas>
+          <div class="sig-label">Printed name</div>
+          <input class="sig-input" type="text" name="ownerName" value="Berky (Keith Berkman)" readonly style="background:var(--off);">
+          <div style="margin-top:10px;">
+            <div class="sig-label">Date signed</div>
+            <input class="sig-input" type="date" name="ownerDate">
+          </div>
+        </div>
+        <div class="sig-panel">
+          <div class="sig-party">Client</div>
+          <div class="sig-label">Signature</div>
+          <canvas class="sig-line" id="clientSigCanvas" width="320" height="44" style="cursor:crosshair;"></canvas>
+          <div class="sig-label">Printed name</div>
+          <input class="sig-input" type="text" name="clientSigName" placeholder="Full legal name">
+          <div style="margin-top:10px;">
+            <div class="sig-label">Date signed</div>
+            <input class="sig-input" type="date" name="clientDate">
+          </div>
+        </div>
+      </div>
+      <p style="font-size:0.65rem;color:var(--mid);margin-top:8px;">Draw your signature in the box above, or type your name to acknowledge agreement.</p>
+    </div>
+
+    <div class="submit-bar">
+      <button type="submit" class="btn-primary">Submit Agreement</button>
+      <button type="button" class="btn-secondary" onclick="window.print()">Print / Save PDF</button>
+      <button type="button" class="btn-secondary" onclick="clearForm()">Clear Form</button>
+      <span class="submit-note">Submission sends a copy to hello@comewith.org</span>
+    </div>
+
+    <div class="success-banner" id="successBanner">
+      Agreement submitted successfully. A copy has been sent to hello@comewith.org. The client should retain this page as their record.
+    </div>
+
+  </form>
+</div>
+
+<script>
+document.getElementById('agr-date').valueAsDate = new Date();
+
+// Equipment provider rows
+const equipItems = [
+  'DJ Controller / Decks (XDJ-AZ or CDJ-3000s)',
+  'CDJ Dual Stand',
+  'Speakers / PA system',
+  'Mixer',
+  'DJ Headphones',
+  'Cables / Accessories',
+  'Recording equipment (if A/V selected)',
+];
+
+const equipDiv = document.getElementById('equipRows');
+equipItems.forEach((item, i) => {
+  const safeName = 'equip_' + i;
+  const row = document.createElement('div');
+  row.style.cssText = 'display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:8px 0;border-bottom:1px solid rgba(26,20,16,0.08);';
+  row.innerHTML = `
+    <span style="font-size:0.82rem;color:var(--ink);">${item}</span>
+    <select name="${safeName}" style="font-family:'Inconsolata',monospace;font-size:0.8rem;padding:6px 10px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;min-width:160px;border-radius:0;-webkit-appearance:none;">
+      <option value="">— Select —</option>
+      <option value="Come With">Come With</option>
+      <option value="Venue">Venue</option>
+      <option value="Client">Client</option>
+      <option value="N/A">N/A</option>
+    </select>`;
+  equipDiv.appendChild(row);
+});
+
+function toggleSvc(el){
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+}
+function toggleCheck(el){
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+}
+function togglePayment(el){
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+}
+function toggleRadioGroup(el, groupName, val){
+  document.querySelectorAll(`[name=${groupName}]`).forEach(r=>r.closest('.radio-item').classList.remove('selected'));
+  el.classList.add('selected');
+  el.querySelector('input[type=radio]').checked = true;
+  if(groupName==='depositOpt'){
+    document.getElementById('depositDetails').classList.toggle('visible', val==='required');
+  }
+}
+
+// Signature canvases
+function initCanvas(id){
+  const canvas = document.getElementById(id);
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  let drawing = false;
+  ctx.strokeStyle='#1A1410'; ctx.lineWidth=1.8; ctx.lineCap='round';
+  function pos(e){const r=canvas.getBoundingClientRect();const t=e.touches?e.touches[0]:e;return{x:(t.clientX-r.left)*(canvas.width/r.width),y:(t.clientY-r.top)*(canvas.height/r.height)};}
+  canvas.addEventListener('mousedown',e=>{drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});
+  canvas.addEventListener('mousemove',e=>{if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();});
+  canvas.addEventListener('mouseup',()=>drawing=false);
+  canvas.addEventListener('mouseleave',()=>drawing=false);
+  canvas.addEventListener('touchstart',e=>{e.preventDefault();drawing=true;const p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});
+  canvas.addEventListener('touchmove',e=>{e.preventDefault();if(!drawing)return;const p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();},{passive:false});
+  canvas.addEventListener('touchend',()=>drawing=false);
+}
+initCanvas('ownerSigCanvas');
+initCanvas('clientSigCanvas');
+
+const APPS_SCRIPT_URL = "YOUR_GOOGLE_APPS_SCRIPT_URL_HERE";
+
+async function handleSubmit(e){
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('.btn-primary');
+  btn.textContent='Submitting...'; btn.disabled=true;
+  const services = [...form.querySelectorAll('[name=services]:checked')].map(c=>c.value).join(', ');
+  const payment  = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
+  const promoRights = [...form.querySelectorAll('[name=promoRights]:checked')].map(c=>c.value).join(', ');
+  const depositOpt = [...form.querySelectorAll('[name=depositOpt]:checked')].map(r=>r.value)[0]||'';
+  const data={
+    type:'Events Services Agreement',
+    timestamp:new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
+    agreementNum:document.getElementById('agr-num').value,
+    clientName:form.clientName.value,
+    email:form.email.value,
+    phone:form.phone.value,
+    instagram:form.instagram.value,
+    services,
+    eventType:form.eventType.value,
+    eventDate:form.eventDate.value,
+    venueName:form.venueName.value,
+    setStart:form.setStart.value,
+    setEnd:form.setEnd.value,
+    genre:form.genre.value,
+    totalFee:form.totalFee.value,
+    depositOpt,
+    depositAmt:form.depositAmt?form.depositAmt.value:'',
+    payment,
+    promoRights,
+    clientSigName:form.clientSigName.value,
+    clientDate:form.clientDate.value,
+    notes:form.notes.value,
+  };
+  try{
+    await fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
+    document.getElementById('successBanner').style.display='block';
+    btn.style.display='none';
+  }catch(err){
+    btn.textContent='Submit Agreement'; btn.disabled=false;
+    alert('Submission failed. Please email the completed form to hello@comewith.org');
+  }
+}
+
+function clearForm(){
+  if(!confirm('Clear all fields?')) return;
+  document.getElementById('esaForm').reset();
+  document.querySelectorAll('.svc-card.selected,.check-item.selected,.radio-item.selected,.pay-item.selected').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('depositDetails').classList.remove('visible');
+  ['ownerSigCanvas','clientSigCanvas'].forEach(id=>{
+    const c=document.getElementById(id);
+    c.getContext('2d').clearRect(0,0,c.width,c.height);
+  });
+  document.getElementById('agr-date').valueAsDate=new Date();
+}
+</script>
+</body>
+</html>
