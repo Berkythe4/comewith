@@ -818,7 +818,7 @@
         <span>Something.</span>
       </div>
       <p class="booking-body">Whether you need a DJ, gear for your event, or someone to run the whole production — start here. We respond within 24 hours.</p>
-      <div class="contact-line"><div class="contact-mark"></div><a href="/cdn-cgi/l/email-protection" class="__cf_email__" data-cfemail="4e2c2b3c25370e2d21232b39273a2660213c29">[email&#160;protected]</a></div>
+      <div class="contact-line"><div class="contact-mark"></div>berky@comewith.org</div>
       <div class="contact-line"><div class="contact-mark"></div>Brooklyn, NY</div>
       <div class="contact-line"><div class="contact-mark"></div>@comewithnyc</div>
     </div>
@@ -889,7 +889,7 @@
     <div class="footer-brand">Come With</div>
     <ul class="footer-links">
       <li><a href="#booking">Book</a></li>
-      <li><a href="/cdn-cgi/l/email-protection#debcbbacb5a79ebdb1b3bba9b7aab6f0b1acb9">Email</a></li>
+      <li><a href="mailto:berky@comewith.org">Email</a></li>
       <li><a href="https://instagram.com/comewithnyc" target="_blank">Instagram</a></li>
     </ul>
     <span class="footer-copy">© 2026 Come With · Brooklyn, NY</span>
@@ -909,7 +909,7 @@
   <div class="panel-body" id="panelBody"></div>
 </div>
 
-<script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script>
+<script>
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
 
 const panelContent = {
@@ -1065,12 +1065,17 @@ async function submitForm(e) {
     message: form.message.value,
   };
 
-  try {
-    await fetch(APPS_SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data)
-    });
-    form.reset();
- 
+  // Fire and forget — no-cors mode always returns opaque response, so we show success immediately
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  form.reset();
+  success.style.display = 'block';
+  btn.style.display = 'none';
+</script>
+
+</body>
+</html>
