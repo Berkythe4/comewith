@@ -331,6 +331,8 @@
     position: relative;
     overflow: hidden;
     transition: background 0.2s;
+    cursor: pointer;
+    user-select: none;
   }
 
   .svc-card::after {
@@ -346,6 +348,26 @@
 
   .svc-card:hover { background: #FAE8E6; }
   .svc-card:hover::after { transform: scaleX(1); }
+  .svc-card.selected { background: #FAE8E6; }
+  .svc-card.selected::after { transform: scaleX(1); }
+
+  .svc-card input[type=checkbox] { position: absolute; opacity: 0; pointer-events: none; }
+
+  .svc-check {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid rgba(26,20,16,0.3);
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 10px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .svc-card.selected .svc-check { border-color: #C13B2A; background: #C13B2A; }
+  .svc-check svg { display: none; }
+  .svc-card.selected .svc-check svg { display: block; }
 
   .svc-name {
     font-family: 'Bebas Neue', sans-serif;
@@ -548,22 +570,30 @@
     </div>
   </div>
 
-  <!-- SERVICES -->
-  <div class="section-label">Services</div>
-  <div class="svc-grid">
-    <div class="svc-card">
+  <!-- ALSO INTERESTED IN -->
+  <div class="section-label">Also interested in?</div>
+  <div class="svc-grid" id="svcGrid">
+    <div class="svc-card" onclick="toggleSvc(this)">
+      <input type="checkbox" name="interest" value="DJ Services">
+      <div class="svc-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="svc-name">DJ Services</div>
       <div class="svc-desc">Live DJ sets for events of any size. House, deep house, dance music, and open format. Pre-event consultation, full setup, and flexible set lengths.</div>
     </div>
-    <div class="svc-card">
+    <div class="svc-card" onclick="toggleSvc(this)">
+      <input type="checkbox" name="interest" value="Event Production">
+      <div class="svc-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="svc-name">Event Production</div>
       <div class="svc-desc">End-to-end event planning, talent coordination, vendor management, and day-of production. From private parties to fundraisers and brand activations.</div>
     </div>
-    <div class="svc-card">
+    <div class="svc-card" onclick="toggleSvc(this)">
+      <input type="checkbox" name="interest" value="A/V Recording">
+      <div class="svc-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="svc-name">A/V Recording</div>
       <div class="svc-desc">Audio and video capture of DJ sets and live performances with basic editing. Delivered in SoundCloud, Mixcloud, YouTube, or custom format.</div>
     </div>
-    <div class="svc-card">
+    <div class="svc-card" onclick="toggleSvc(this)">
+      <input type="checkbox" name="interest" value="Equipment Consultation">
+      <div class="svc-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
       <div class="svc-name">Equipment Consultation</div>
       <div class="svc-desc">Not sure what gear you need? We'll help you figure out the right setup for your event, venue size, and budget. No commitment required.</div>
     </div>
@@ -571,7 +601,7 @@
 
   <!-- CTA -->
   <div class="cta-bar">
-    <a href="index.html#booking" class="cta-btn">Request This Gear + Services →</a>
+    <button type="button" class="cta-btn" onclick="requestGear()">Request This Gear + Services →</button>
   </div>
 
   <!-- FOOTER -->
@@ -598,5 +628,23 @@
   </div>
 
 </div>
+
+<script>
+function toggleSvc(el) {
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+}
+
+function requestGear() {
+  var checked = document.querySelectorAll('#svcGrid input[type=checkbox]:checked');
+  var interests = [];
+  checked.forEach(function(cb) { interests.push(cb.value); });
+  var url = 'index.html#booking';
+  if (interests.length > 0) {
+    url = 'index.html?interests=' + encodeURIComponent(interests.join(', ')) + '#booking';
+  }
+  window.location.href = url;
+}
+</script>
 </body>
 </html>

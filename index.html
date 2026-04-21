@@ -1103,6 +1103,32 @@ async function submitForm(e) {
   success.style.display = 'block';
   btn.style.display = 'none';
 }
+
+// Pre-fill from equipment list page interests
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const interests = params.get('interests');
+  if (interests) {
+    const form = document.getElementById('bookingForm');
+    // Set service dropdown to "Multiple" if more than one interest, else match first
+    const values = interests.split(', ');
+    const serviceSelect = form.service;
+    if (values.length > 1) {
+      serviceSelect.value = 'Multiple';
+    } else {
+      // Try exact match
+      for (let i = 0; i < serviceSelect.options.length; i++) {
+        if (serviceSelect.options[i].value === values[0]) {
+          serviceSelect.value = values[0];
+          break;
+        }
+      }
+    }
+    // Prepend to message
+    form.message.value = 'Interested in: ' + interests + '\n';
+    form.message.focus();
+  }
+})();
 </script>
 
 </body>
