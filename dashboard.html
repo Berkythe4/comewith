@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Dashboard</title>
+<!--
+  GOOGLE APPS SCRIPT NOTE:
+  This dashboard fetches data via GET requests to the Apps Script URL.
+  Your Apps Script needs a doGet(e) handler that returns JSON based on e.parameter.action:
+
+  function doGet(e) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var action = e.parameter.action;
+
+    if (action === 'getInquiries') {
+      var sheet = ss.getSheetByName('Bookings Intake');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getAgreements') {
+      var sheet = ss.getSheetByName('Events Services Agreements');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getRentals') {
+      var sheet = ss.getSheetByName('Equipment Rental Agreements');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getAll') {
+      return jsonResponse({
+        inquiries: sheetToArray(ss.getSheetByName('Bookings Intake')),
+        agreements: sheetToArray(ss.getSheetByName('Events Services Agreements')),
+        rentals: sheetToArray(ss.getSheetByName('Equipment Rental Agreements'))
+      });
+    }
+    return jsonResponse({error: 'Unknown action'});
+  }
+
+  function sheetToArray(sheet) {
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var headers = data[0];
+    var rows = [];
+    for (var i = 1; i < data.length; i++) {
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) {
+        obj[headers[j]] = data[i][j];
+      }
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function jsonResponse(data) {
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
+  --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
+  --border-strong:rgba(26,20,16,0.3);--green:#3B6D11;--green-bg:#DFF0D0;
+  --amber:#854F0B;--amber-bg:#FFF0D0;--blue:#185FA5;--blue-bg:#DCEEFF;
+}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:0;margin:0;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+
+/* LOCK */
+.lock-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;position:relative;z-index:1;}
+.lock-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;margin-bottom:6px;}
+.lock-sub{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);margin-bottom:40px;}
+.lock-field{display:flex;gap:0;border:2px solid var(--ink);width:100%;max-width:340px;}
+.lock-field input{flex:1;font-family:'Inconsolata',monospace;font-size:0.95rem;padding:14px 16px;border:none;background:white;color:var(--ink);outline:none;}
+.lock-field button{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:14px 24px;border:none;cursor:pointer;transition:background 0.18s;white-space:nowrap;}
+.lock-field button:hover{background:var(--red);}
+.lock-error{font-size:0.75rem;color:var(--red);margin-top:12px;display:none;}
+
+.admin-content{display:none;position:relative;z-index:1;}
+
+/* LAYOUT */
+.dash-layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{background:var(--ink);padding:0;display:flex;flex-direction:column;}
+.sidebar-header{padding:24px 20px 20px;}
+.sidebar-brand{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:0.06em;color:var(--bg);line-height:1;}
+.sidebar-role{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(242,237,230,0.4);margin-top:4px;}
+
+.sidebar-profile{display:flex;align-items:center;gap:12px;padding:16px 20px;border-top:1px solid rgba(242,237,230,0.08);border-bottom:1px solid rgba(242,237,230,0.08);}
+.profile-avatar{width:34px;height:34px;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:1rem;color:white;flex-shrink:0;}
+.profile-info{}
+.profile-name{font-family:'Bebas Neue',sans-serif;font-size:0.95rem;letter-spacing:0.06em;color:var(--bg);}
+.profile-sub{font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(242,237,230,0.4);}
+
+.sidebar-nav{padding:16px 0;flex:1;}
+.sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;font-family:'Inconsolata',monospace;font-size:0.8rem;letter-spacing:0.06em;color:rgba(242,237,230,0.55);text-decoration:none;transition:all 0.15s;border-left:3px solid transparent;}
+.sidebar-nav a:hover{color:var(--bg);background:rgba(242,237,230,0.04);}
+.sidebar-nav a.active{color:var(--bg);border-left-color:var(--red);background:rgba(242,237,230,0.06);}
+.sidebar-nav .nav-divider{height:1px;background:rgba(242,237,230,0.06);margin:10px 20px;}
+
+.sidebar-actions{padding:16px 20px;border-top:1px solid rgba(242,237,230,0.08);}
+.sidebar-actions .section-label-s{font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(242,237,230,0.3);margin-bottom:10px;}
+.action-btn{display:block;width:100%;font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;padding:10px 14px;border:none;cursor:pointer;transition:all 0.15s;text-align:left;margin-bottom:4px;text-decoration:none;}
+.action-btn-primary{background:var(--red);color:white;}
+.action-btn-primary:hover{background:var(--red-dk);}
+.action-btn-secondary{background:rgba(242,237,230,0.06);color:rgba(242,237,230,0.6);border:1px solid rgba(242,237,230,0.1);}
+.action-btn-secondary:hover{color:var(--bg);border-color:rgba(242,237,230,0.2);}
+
+.sidebar-footer{padding:12px 20px;border-top:1px solid rgba(242,237,230,0.08);}
+.sidebar-footer a{font-size:0.65rem;color:rgba(242,237,230,0.35);text-decoration:none;letter-spacing:0.06em;}
+.sidebar-footer a:hover{color:var(--bg);}
+.sidebar-footer button{font-size:0.65rem;color:rgba(242,237,230,0.35);background:none;border:none;cursor:pointer;letter-spacing:0.06em;padding:0;font-family:'Inconsolata',monospace;}
+.sidebar-footer button:hover{color:var(--red);}
+
+/* MAIN */
+.main{padding:32px 36px 60px;overflow-x:auto;}
+.main-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;}
+.main-title{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:0.04em;color:var(--ink);}
+.refresh-btn{font-family:'Inconsolata',monospace;font-size:0.72rem;letter-spacing:0.08em;color:var(--mid);background:none;border:1px solid var(--border);padding:8px 16px;cursor:pointer;transition:all 0.15s;}
+.refresh-btn:hover{color:var(--red);border-color:var(--red);}
+
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--ink);margin-bottom:24px;}
+.tab{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.1em;padding:12px 24px;cursor:pointer;color:var(--mid);background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;}
+.tab:hover{color:var(--ink);}
+.tab.active{color:var(--ink);border-bottom-color:var(--red);}
+
+/* TAB PANELS */
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* FILTERS (archive) */
+.filter-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;}
+.filter-bar label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
+.filter-bar input,.filter-bar select{font-family:'Inconsolata',monospace;font-size:0.82rem;padding:8px 10px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--red);}
+
+/* TABLE */
+.data-table{width:100%;border-collapse:collapse;font-size:0.82rem;}
+.data-table th{font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--mid);text-align:left;padding:10px 12px;border-bottom:2px solid var(--ink);background:var(--off);white-space:nowrap;}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+.data-table tr:hover td{background:rgba(193,59,42,0.03);}
+.data-table .no-data{text-align:center;color:var(--mid);font-style:italic;padding:40px 12px;}
+
+/* STATUS BADGES */
+.badge{display:inline-block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;padding:3px 10px;font-weight:500;white-space:nowrap;}
+.badge-new{background:var(--blue-bg);color:var(--blue);}
+.badge-active{background:var(--amber-bg);color:var(--amber);}
+.badge-complete{background:var(--green-bg);color:var(--green);}
+
+/* ROW ACTIONS */
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.row-btn{font-family:'Inconsolata',monospace;font-size:0.68rem;letter-spacing:0.06em;padding:5px 10px;border:1px solid var(--border);background:white;color:var(--ink);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
+.row-btn:hover{border-color:var(--red);color:var(--red);}
+.row-btn-done{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+
+/* EXPANDABLE DETAIL */
+.detail-row{display:none;}
+.detail-row.open{display:table-row;}
+.detail-row td{background:var(--off);padding:16px 20px;}
+.detail-content{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:0.78rem;}
+.detail-content .dk{font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);}
+.detail-content .dv{color:var(--ink);margin-bottom:8px;word-break:break-word;}
+
+/* LOADING */
+.loading{text-align:center;padding:48px;color:var(--mid);font-size:0.85rem;}
+.loading-spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin 0.6s linear infinite;margin-right:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* COUNTS */
+.stat-row{display:flex;gap:2px;margin-bottom:24px;}
+.stat-card{flex:1;background:white;border:1px solid var(--border);padding:16px 18px;}
+.stat-num{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--ink);line-height:1;}
+.stat-label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-top:4px;}
+
+/* RESPONSIVE */
+@media(max-width:800px){
+  .dash-layout{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .main{padding:20px 16px 40px;}
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tab{padding:10px 16px;font-size:0.8rem;}
+  .data-table{font-size:0.75rem;}
+  .data-table th,.data-table td{padding:8px 8px;}
+  .stat-row{flex-wrap:wrap;}
+  .stat-card{min-width:120px;}
+  .detail-content{grid-template-columns:1fr;}
+  .filter-bar{flex-direction:column;align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+
+<!-- LOCK SCREEN -->
+<div class="lock-screen" id="lockScreen">
+  <div class="lock-brand">Come With</div>
+  <div class="lock-sub">Business Dashboard</div>
+  <div class="lock-field">
+    <input type="password" id="pinInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')authenticate()">
+    <button onclick="authenticate()">Unlock</button>
+  </div>
+  <div class="lock-error" id="lockError">Incorrect password. Try again.</div>
+</div>
+
+<!-- ADMIN CONTENT -->
+<div class="admin-content" id="adminContent">
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">Come With</div>
+        <div class="sidebar-role">Business Dashboard</div>
+      </div>
+
+      <div class="sidebar-profile">
+        <div class="profile-avatar">B</div>
+        <div class="profile-info">
+          <div class="profile-name">Berky</div>
+          <div class="profile-sub">Come With Admin</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#" class="active" data-tab="inquiries">Inquiries</a>
+        <a href="#" data-tab="agreements">Agreements</a>
+        <a href="#" data-tab="rentals">Equipment Rentals</a>
+        <a href="#" data-tab="archive">Archive</a>
+        <div class="nav-divider"></div>
+        <a href="index.html">&larr; Back to site</a>
+      </nav>
+
+      <div class="sidebar-actions">
+        <div class="section-label-s">Quick actions</div>
+        <a href="send_agreement.html" class="action-btn action-btn-primary">New Agreement</a>
+        <a href="ComeWith_Equipment_Rental_Agreement.html" class="action-btn action-btn-secondary">Equipment Rental Form</a>
+        <a href="ComeWith_Events_Services_Agreement.html" class="action-btn action-btn-secondary">Events Agreement Form</a>
+        <a href="come_with_equipment_list.html" class="action-btn action-btn-secondary">Equipment List</a>
+      </div>
+
+      <div class="sidebar-footer">
+        <button onclick="logout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <div class="main-header">
+        <div class="main-title">Dashboard</div>
+        <button class="refresh-btn" onclick="loadAllData()">Refresh data</button>
+      </div>
+
+      <!-- STATS -->
+      <div class="stat-row" id="statRow">
+        <div class="stat-card"><div class="stat-num" id="statInquiries">—</div><div class="stat-label">Inquiries</div></div>
+        <div class="stat-card"><div class="stat-num" id="statAgreements">—</div><div class="stat-label">Agreements</div></div>
+        <div class="stat-card"><div class="stat-num" id="statRentals">—</div><div class="stat-label">Rentals</div></div>
+        <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total records</div></div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" data-tab="inquiries">Inquiries</button>
+        <button class="tab" data-tab="agreements">Agreements</button>
+        <button class="tab" data-tab="rentals">Equipment Rentals</button>
+        <button class="tab" data-tab="archive">Archive</button>
+      </div>
+
+      <!-- INQUIRIES TAB -->
+      <div class="tab-panel active" id="panel-inquiries">
+        <div class="loading" id="loading-inquiries"><span class="loading-spinner"></span>Loading inquiries...</div>
+        <table class="data-table" id="table-inquiries" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Email</th>
+              <th>Service</th>
+              <th>Event Date</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-inquiries"></tbody>
+        </table>
+      </div>
+
+      <!-- AGREEMENTS TAB -->
+      <div class="tab-panel" id="panel-agreements">
+        <div class="loading" id="loading-agreements"><span class="loading-spinner"></span>Loading agreements...</div>
+        <table class="data-table" id="table-agreements" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Event Date</th>
+              <th>Total Fee</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-agreements"></tbody>
+        </table>
+      </div>
+
+      <!-- RENTALS TAB -->
+      <div class="tab-panel" id="panel-rentals">
+        <div class="loading" id="loading-rentals"><span class="loading-spinner"></span>Loading rentals...</div>
+        <table class="data-table" id="table-rentals" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Renter</th>
+              <th>Pickup</th>
+              <th>Return</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-rentals"></tbody>
+        </table>
+      </div>
+
+      <!-- ARCHIVE TAB -->
+      <div class="tab-panel" id="panel-archive">
+        <div class="filter-bar">
+          <div>
+            <label>From</label>
+            <input type="date" id="archiveFrom">
+          </div>
+          <div>
+            <label>To</label>
+            <input type="date" id="archiveTo">
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="archiveType">
+              <option value="all">All types</option>
+              <option value="inquiry">Inquiries</option>
+              <option value="agreement">Agreements</option>
+              <option value="rental">Rentals</option>
+            </select>
+          </div>
+          <button class="refresh-btn" onclick="filterArchive()">Filter</button>
+        </div>
+        <div class="loading" id="loading-archive"><span class="loading-spinner"></span>Loading archive...</div>
+        <table class="data-table" id="table-archive" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>Details</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-archive"></tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script>
+// ── AUTH ──────────────────────────────────────────────────
+var ADMIN_PASSWORD = 'comewith2025';
+function authenticate(){
+  var input=document.getElementById('pinInput');
+  if(input.value===ADMIN_PASSWORD){
+    document.getElementById('lockScreen').style.display='none';
+    document.getElementById('adminContent').style.display='block';
+    sessionStorage.setItem('cw_admin','1');
+    loadAllData();
+  } else {
+    document.getElementById('lockError').style.display='block';
+    input.value='';input.focus();
+  }
+}
+function logout(){
+  sessionStorage.removeItem('cw_admin');
+  document.getElementById('adminContent').style.display='none';
+  document.getElementById('lockScreen').style.display='flex';
+  document.getElementById('pinInput').value='';
+  document.getElementById('lockError').style.display='none';
+}
+if(sessionStorage.getItem('cw_admin')==='1'){
+  document.getElementById('lockScreen').style.display='none';
+  document.getElementById('adminContent').style.display='block';
+  loadAllData();
+}
+
+// ── TABS ─────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+    document.querySelectorAll('.tab-panel').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+    document.getElementById('panel-'+t.getAttribute('data-tab')).classList.add('active');
+    // sync sidebar
+    document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
+      a.classList.toggle('active',a.getAttribute('data-tab')===t.getAttribute('data-tab'));
+    });
+  });
+});
+document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    var tab=a.getAttribute('data-tab');
+    document.querySelector('.tab[data-tab="'+tab+'"]').click();
+  });
+});
+
+// ── DATA ─────────────────────────────────────────────────
+var APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
+
+var store={inquiries:[],agreements:[],rentals:[]};
+
+function loadAllData(){
+  loadInquiries();
+  loadAgreements();
+  loadRentals();
+}
+
+function fetchData(action,cb){
+  fetch(APPS_SCRIPT_URL+'?action='+action)
+    .then(function(r){return r.json();})
+    .then(cb)
+    .catch(function(err){
+      console.error('Fetch error for '+action+':',err);
+      cb([]);
+    });
+}
+
+// Helper: safely read a field from a row object using fuzzy key matching
+function getField(row,keys){
+  if(!row)return '';
+  for(var i=0;i<keys.length;i++){
+    // exact match
+    if(row[keys[i]]!==undefined && row[keys[i]]!==null) return String(row[keys[i]]);
+    // case-insensitive search
+    var lk=keys[i].toLowerCase();
+    for(var k in row){
+      if(k.toLowerCase()===lk) return String(row[k]);
+    }
+  }
+  return '';
+}
+
+function esc(s){
+  var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;
+}
+
+function fmtDate(s){
+  if(!s)return '—';
+  var d=new Date(s);
+  if(isNaN(d.getTime()))return esc(s);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function getBaseUrl(){
+  var loc=window.location;
+  return loc.protocol+'//'+loc.host+loc.pathname.replace(/[^/]*$/,'');
+}
+
+// ── INQUIRIES ────────────────────────────────────────────
+function loadInquiries(){
+  document.getElementById('loading-inquiries').style.display='block';
+  document.getElementById('table-inquiries').style.display='none';
+  fetchData('getInquiries',function(data){
+    store.inquiries=Array.isArray(data)?data:[];
+    renderInquiries();
+    updateStats();
+  });
+}
+
+function renderInquiries(){
+  var tbody=document.getElementById('tbody-inquiries');
+  var rows=store.inquiries;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="7">No inquiries found. Make sure your Apps Script doGet handler is deployed.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['firstName','first name','First Name','name','Name'])+' '+getField(r,['lastName','last name','Last Name']);
+      name=name.trim()||getField(r,['clientName','client name','Client Name']);
+      var email=getField(r,['email','Email']);
+      var service=getField(r,['service','Service','services','Services']);
+      var eventDate=getField(r,['eventDate','event date','Event Date']);
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var status=getField(r,['status','Status'])||'New';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':(status.toLowerCase()==='active'?'badge-active':'badge-new');
+      var base=getBaseUrl();
+      var agrLink=base+'send_agreement.html';
+      var svcLink=base+'services_selection.html?'+new URLSearchParams({name:name.trim(),email:email}).toString();
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+esc(email)+'</td>';
+      html+='<td>'+esc(service)+'</td>';
+      html+='<td>'+fmtDate(eventDate)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td><div class="row-actions">';
+      html+='<a href="'+esc(agrLink)+'" class="row-btn" target="_blank">Send Agreement</a>';
+      html+='<a href="'+esc(svcLink)+'" class="row-btn" target="_blank">Services Selection</a>';
+      html+='<button class="row-btn row-btn-done" onclick="markComplete(this,'+i+')">Complete</button>';
+      html+='</div></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-inquiries').style.display='none';
+  document.getElementById('table-inquiries').style.display='table';
+}
+
+function markComplete(btn,idx){
+  btn.textContent='Done';
+  btn.disabled=true;
+  btn.style.opacity='0.5';
+  // Send status update to Apps Script
+  var r=store.inquiries[idx];
+  var email=getField(r,['email','Email']);
+  fetch(APPS_SCRIPT_URL,{
+    method:'POST',mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({type:'updateStatus',email:email,status:'Complete'})
+  });
+}
+
+// ── AGREEMENTS ───────────────────────────────────────────
+function loadAgreements(){
+  document.getElementById('loading-agreements').style.display='block';
+  document.getElementById('table-agreements').style.display='none';
+  fetchData('getAgreements',function(data){
+    store.agreements=Array.isArray(data)?data:[];
+    renderAgreements();
+    updateStats();
+  });
+}
+
+function renderAgreements(){
+  var tbody=document.getElementById('tbody-agreements');
+  var rows=store.agreements;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="5">No agreements found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['clientName','client name','Client Name','name','Name']);
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var eventDate=getField(r,['eventDate','event date','Event Date']);
+      var total=getField(r,['totalFee','total fee','Total Fee','total','Total']);
+      var status=getField(r,['status','Status'])||'Submitted';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':'badge-active';
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+fmtDate(eventDate)+'</td>';
+      html+='<td>'+esc(total)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-agreements').style.display='none';
+  document.getElementById('table-agreements').style.display='table';
+}
+
+// ── RENTALS ──────────────────────────────────────────────
+function loadRentals(){
+  document.getElementById('loading-rentals').style.display='block';
+  document.getElementById('table-rentals').style.display='none';
+  fetchData('getRentals',function(data){
+    store.rentals=Array.isArray(data)?data:[];
+    renderRentals();
+    updateStats();
+    renderArchive();
+  });
+}
+
+function renderRentals(){
+  var tbody=document.getElementById('tbody-rentals');
+  var rows=store.rentals;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No rental agreements found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['renterName','renter name','Renter Name','name','Name']);
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var pickup=getField(r,['pickupDate','pickup date','Pickup Date']);
+      var ret=getField(r,['returnDate','return date','Return Date']);
+      var total=getField(r,['totalFee','total fee','Total Fee','total','Total']);
+      var status=getField(r,['status','Status'])||'Submitted';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':'badge-active';
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+fmtDate(pickup)+'</td>';
+      html+='<td>'+fmtDate(ret)+'</td>';
+      html+='<td>'+esc(total)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-rentals').style.display='none';
+  document.getElementById('table-rentals').style.display='table';
+}
+
+// ── ARCHIVE ──────────────────────────────────────────────
+var archiveData=[];
+
+function buildArchive(){
+  var all=[];
+  store.inquiries.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'inquiry',_typeName:'Inquiry',
+      _name:(getField(r,['firstName','First Name'])+' '+getField(r,['lastName','Last Name'])).trim()||getField(r,['clientName','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:getField(r,['service','Service'])+' — '+getField(r,['message','Message']).substring(0,80)
+    }));
+  });
+  store.agreements.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'agreement',_typeName:'Agreement',
+      _name:getField(r,['clientName','client name','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:'Event: '+getField(r,['eventType','Event Type'])+' — Total: '+getField(r,['totalFee','Total Fee'])
+    }));
+  });
+  store.rentals.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'rental',_typeName:'Rental',
+      _name:getField(r,['renterName','renter name','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:'Equipment: '+getField(r,['equipment','Equipment']).substring(0,80)+' — Total: '+getField(r,['totalFee','Total Fee'])
+    }));
+  });
+  // sort by date desc
+  all.sort(function(a,b){
+    var da=new Date(a._date)||0,db=new Date(b._date)||0;
+    return db-da;
+  });
+  return all;
+}
+
+function renderArchive(filtered){
+  var data=filtered||buildArchive();
+  archiveData=data;
+  var tbody=document.getElementById('tbody-archive');
+  if(!data.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No records found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=0;i<data.length;i++){
+      var r=data[i];
+      var status=getField(r,['status','Status'])||'—';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':(status.toLowerCase()==='new'?'badge-new':'badge-active');
+      var typeClass=r._type==='inquiry'?'badge-new':(r._type==='agreement'?'badge-active':'badge-complete');
+      html+='<tr>';
+      html+='<td>'+fmtDate(r._date)+'</td>';
+      html+='<td><span class="badge '+typeClass+'">'+esc(r._typeName)+'</span></td>';
+      html+='<td><strong>'+esc(r._name)+'</strong></td>';
+      html+='<td style="max-width:260px;">'+esc(r._detail)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td><button class="row-btn" onclick="toggleDetail(this,'+i+')">Details</button></td>';
+      html+='</tr>';
+      // Detail row
+      html+='<tr class="detail-row" id="detail-'+i+'"><td colspan="6"><div class="detail-content">';
+      var keys=Object.keys(r);
+      for(var k=0;k<keys.length;k++){
+        if(keys[k].charAt(0)==='_')continue;
+        var val=r[keys[k]];
+        if(val===''||val===null||val===undefined)continue;
+        html+='<div><div class="dk">'+esc(keys[k])+'</div><div class="dv">'+esc(String(val))+'</div></div>';
+      }
+      html+='</div></td></tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-archive').style.display='none';
+  document.getElementById('table-archive').style.display='table';
+}
+
+function toggleDetail(btn,idx){
+  var row=document.getElementById('detail-'+idx);
+  if(row){
+    row.classList.toggle('open');
+    btn.textContent=row.classList.contains('open')?'Hide':'Details';
+  }
+}
+
+function filterArchive(){
+  var from=document.getElementById('archiveFrom').value;
+  var to=document.getElementById('archiveTo').value;
+  var type=document.getElementById('archiveType').value;
+  var all=buildArchive();
+  var filtered=all.filter(function(r){
+    if(type!=='all'&&r._type!==type)return false;
+    if(from){
+      var d=new Date(r._date);
+      if(!isNaN(d.getTime())&&d<new Date(from))return false;
+    }
+    if(to){
+      var d2=new Date(r._date);
+      if(!isNaN(d2.getTime())&&d2>new Date(to+'T23:59:59'))return false;
+    }
+    return true;
+  });
+  renderArchive(filtered);
+}
+
+// ── STATS ────────────────────────────────────────────────
+function updateStats(){
+  document.getElementById('statInquiries').textContent=store.inquiries.length;
+  document.getElementById('statAgreements').textContent=store.agreements.length;
+  document.getElementById('statRentals').textContent=store.rentals.length;
+  document.getElementById('statTotal').textContent=store.inquiries.length+store.agreements.length+store.rentals.length;
+}
+</script>
+</body>
+</html>
