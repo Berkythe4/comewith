@@ -315,12 +315,84 @@
     background: rgba(242,237,230,0.1);
   }
 
+  /* ── SERVICES SECTION ── */
+  .svc-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: #1A1410;
+    border: 2px solid #1A1410;
+    margin-bottom: 32px;
+  }
+
+  .svc-card {
+    background: #F2EDE6;
+    padding: 24px 22px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: background 0.2s;
+  }
+
+  .svc-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 2px;
+    background: #C13B2A;
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.25s ease;
+  }
+
+  .svc-card:hover { background: #FAE8E6; }
+  .svc-card:hover::after { transform: scaleX(1); }
+
+  .svc-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.3rem;
+    letter-spacing: 0.04em;
+    color: #1A1410;
+    line-height: 1.1;
+    margin-bottom: 8px;
+  }
+
+  .svc-desc {
+    font-size: 0.75rem;
+    color: #8A7F72;
+    line-height: 1.55;
+    letter-spacing: 0.02em;
+  }
+
+  /* ── CTA BUTTON ── */
+  .cta-bar {
+    margin-bottom: 48px;
+  }
+
+  .cta-btn {
+    display: block;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.12em;
+    background: #C13B2A;
+    color: #F2EDE6;
+    padding: 20px 36px;
+    text-align: center;
+    text-decoration: none;
+    transition: background 0.18s;
+    border: none;
+    cursor: pointer;
+    width: 100%;
+  }
+
+  .cta-btn:hover { background: #8C2A1C; }
+
   @media (max-width: 600px) {
     body { padding: 28px 16px 48px; }
     .brand-name { font-size: 2.4rem; }
     .header { flex-direction: column; align-items: flex-start; }
     .header-right { text-align: left; }
     .details-grid { grid-template-columns: 1fr; }
+    .svc-grid { grid-template-columns: 1fr; }
     .footer-divider { display: none; }
     .footer-bar { flex-direction: column; align-items: flex-start; }
   }
@@ -397,6 +469,15 @@
       <div class="gear-note">Available individually or as part of stereo pair</div>
     </div>
 
+    <div class="gear-card">
+      <div class="gear-badge badge-purple">Pair</div>
+      <div class="gear-name">KRK Rokit 5</div>
+      <div class="gear-brand">KRK · Studio monitors</div>
+      <div class="gear-rate">Ask</div>
+      <div class="gear-rate-unit">Per day · Both monitors</div>
+      <div class="gear-note">5" powered studio monitors · Great for smaller venues and monitoring</div>
+    </div>
+
   </div>
 
   <!-- ACCESSORIES -->
@@ -465,6 +546,32 @@
       <div class="detail-dash">—</div>
       <div class="detail-text">Renter assumes full liability for damage or loss during rental period</div>
     </div>
+  </div>
+
+  <!-- SERVICES -->
+  <div class="section-label">Services</div>
+  <div class="svc-grid">
+    <div class="svc-card">
+      <div class="svc-name">DJ Services</div>
+      <div class="svc-desc">Live DJ sets for events of any size. House, deep house, dance music, and open format. Pre-event consultation, full setup, and flexible set lengths.</div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-name">Event Production</div>
+      <div class="svc-desc">End-to-end event planning, talent coordination, vendor management, and day-of production. From private parties to fundraisers and brand activations.</div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-name">A/V Recording</div>
+      <div class="svc-desc">Audio and video capture of DJ sets and live performances with basic editing. Delivered in SoundCloud, Mixcloud, YouTube, or custom format.</div>
+    </div>
+    <div class="svc-card">
+      <div class="svc-name">Equipment Consultation</div>
+      <div class="svc-desc">Not sure what gear you need? We'll help you figure out the right setup for your event, venue size, and budget. No commitment required.</div>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <div class="cta-bar">
+    <a href="index.html#booking" class="cta-btn">Request This Gear + Services →</a>
   </div>
 
   <!-- FOOTER -->

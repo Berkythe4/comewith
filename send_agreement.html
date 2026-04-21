@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Come With — Send Agreement</title>
+<title>Come With — Admin</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
@@ -16,6 +16,32 @@
 body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
 body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
 .page{position:relative;z-index:1;max-width:640px;margin:0 auto;}
+
+/* ── LOCK SCREEN ── */
+.lock-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;}
+.lock-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;margin-bottom:6px;}
+.lock-sub{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);margin-bottom:40px;}
+.lock-field{display:flex;gap:0;border:2px solid var(--ink);width:100%;max-width:340px;}
+.lock-field input{flex:1;font-family:'Inconsolata',monospace;font-size:0.95rem;padding:14px 16px;border:none;background:white;color:var(--ink);outline:none;}
+.lock-field button{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:14px 24px;border:none;cursor:pointer;transition:background 0.18s;white-space:nowrap;}
+.lock-field button:hover{background:var(--red);}
+.lock-error{font-size:0.75rem;color:var(--red);margin-top:12px;display:none;}
+
+/* ── ADMIN CONTENT ── */
+.admin-content{display:none;}
+
+/* ── NAV BAR ── */
+.admin-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.nav-back{font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;color:var(--mid);text-decoration:none;transition:color 0.15s;display:flex;align-items:center;gap:6px;}
+.nav-back:hover{color:var(--red);}
+.nav-logout{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--mid);background:none;border:1px solid var(--border);padding:6px 14px;cursor:pointer;transition:color 0.15s,border-color 0.15s;font-family:'Inconsolata',monospace;}
+.nav-logout:hover{color:var(--red);border-color:var(--red);}
+
+/* ── PROFILE HEADER ── */
+.admin-profile{background:var(--ink);padding:20px 24px;display:flex;align-items:center;gap:16px;margin-bottom:36px;}
+.profile-avatar{width:40px;height:40px;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:white;letter-spacing:0.04em;flex-shrink:0;}
+.profile-name{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.08em;color:var(--bg);}
+.profile-role{font-size:0.65rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(242,237,230,0.45);margin-top:2px;}
 
 .doc-header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:40px;}
 .doc-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;}
@@ -33,7 +59,6 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .field-group input,.field-group select{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;}
 .field-group input:focus,.field-group select:focus{border-color:var(--red);}
 
-/* Agreement type cards */
 .agr-cards{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);margin-bottom:24px;}
 .agr-card{background:var(--bg);padding:24px 20px;cursor:pointer;transition:background 0.18s;user-select:none;position:relative;}
 .agr-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
@@ -61,99 +86,157 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .services-link-box a{color:var(--red);text-decoration:none;font-size:0.85rem;word-break:break-all;}
 .services-link-box a:hover{text-decoration:underline;}
 
-.success-banner{display:none;background:#DFF0D0;border:1px solid #3B6D11;padding:16px 20px;margin-top:20px;font-size:0.85rem;color:#3B6D11;line-height:1.5;}
-
 .divider{height:1px;background:var(--border);margin:32px 0;}
-
 .help-text{font-size:0.75rem;color:var(--mid);line-height:1.6;margin-bottom:16px;}
 
 @media(max-width:600px){
   body{padding:28px 16px 60px;}
   .agr-cards{grid-template-columns:1fr;}
   .field-grid.cols-2{grid-template-columns:1fr;}
+  .admin-profile{padding:16px 18px;}
 }
 </style>
 </head>
 <body>
 <div class="page">
 
-  <header class="doc-header">
-    <div class="doc-brand">Come With</div>
-    <div class="doc-title">Admin — Send Agreement</div>
-    <div class="doc-sub">Generate agreement links and services selection links for clients</div>
-  </header>
-
-  <!-- CLIENT INFO -->
-  <div class="section">
-    <div class="section-label">Client details</div>
-    <p class="help-text">Enter the client's info. This pre-fills the agreement form when they open the link.</p>
-    <div class="field-grid cols-2">
-      <div class="field-group">
-        <label>Client name *</label>
-        <input type="text" id="clientName" required placeholder="Full name">
-      </div>
-      <div class="field-group">
-        <label>Client email *</label>
-        <input type="email" id="clientEmail" required placeholder="client@email.com">
-      </div>
-      <div class="field-group">
-        <label>Phone</label>
-        <input type="tel" id="clientPhone" placeholder="(555) 000-0000">
-      </div>
-      <div class="field-group">
-        <label>Instagram</label>
-        <input type="text" id="clientIG" placeholder="@handle">
-      </div>
+  <!-- ══ LOCK SCREEN ══ -->
+  <div class="lock-screen" id="lockScreen">
+    <div class="lock-brand">Come With</div>
+    <div class="lock-sub">Admin access</div>
+    <div class="lock-field">
+      <input type="password" id="pinInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')authenticate()">
+      <button onclick="authenticate()">Unlock</button>
     </div>
+    <div class="lock-error" id="lockError">Incorrect password. Try again.</div>
   </div>
 
-  <!-- AGREEMENT TYPE -->
-  <div class="section">
-    <div class="section-label">Select agreement type</div>
-    <div class="agr-cards">
-      <div class="agr-card" onclick="selectAgreement(this, 'events')">
-        <input type="radio" name="agrType" value="events">
-        <div class="agr-card-dot"></div>
-        <div class="agr-card-title">Events Services Agreement</div>
-        <div class="agr-card-desc">DJ performance, event production, A/V recording — full event services contract</div>
+  <!-- ══ ADMIN CONTENT (hidden until authenticated) ══ -->
+  <div class="admin-content" id="adminContent">
+
+    <!-- NAV -->
+    <nav class="admin-nav">
+      <a href="index.html" class="nav-back">← Back to site</a>
+      <button class="nav-logout" onclick="logout()">Log out</button>
+    </nav>
+
+    <!-- PROFILE -->
+    <div class="admin-profile">
+      <div class="profile-avatar">B</div>
+      <div>
+        <div class="profile-name">Berky</div>
+        <div class="profile-role">Come With Admin</div>
       </div>
-      <div class="agr-card" onclick="selectAgreement(this, 'rental')">
-        <input type="radio" name="agrType" value="rental">
-        <div class="agr-card-dot"></div>
-        <div class="agr-card-title">Equipment Rental Agreement</div>
-        <div class="agr-card-desc">CDJ, speakers, controllers — equipment rental terms and liability</div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="doc-header">
+      <div class="doc-title">Send Agreement</div>
+      <div class="doc-sub">Generate agreement links and services selection links for clients</div>
+    </header>
+
+    <!-- CLIENT INFO -->
+    <div class="section">
+      <div class="section-label">Client details</div>
+      <p class="help-text">Enter the client's info. This pre-fills the agreement form when they open the link.</p>
+      <div class="field-grid cols-2">
+        <div class="field-group">
+          <label>Client name *</label>
+          <input type="text" id="clientName" required placeholder="Full name">
+        </div>
+        <div class="field-group">
+          <label>Client email *</label>
+          <input type="email" id="clientEmail" required placeholder="client@email.com">
+        </div>
+        <div class="field-group">
+          <label>Phone</label>
+          <input type="tel" id="clientPhone" placeholder="(555) 000-0000">
+        </div>
+        <div class="field-group">
+          <label>Instagram</label>
+          <input type="text" id="clientIG" placeholder="@handle">
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- GENERATE LINK -->
-  <div class="section">
-    <div class="section-label">Generate &amp; send</div>
-    <button type="button" class="btn-primary" onclick="generateLink()">Generate Agreement Link</button>
-    <div class="link-box" id="agrLinkBox">
-      <button class="copy-btn" onclick="copyLink('agrLink')">Copy</button>
-      <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Agreement Link:</strong>
-      <a id="agrLink" href="#" target="_blank"></a>
+    <!-- AGREEMENT TYPE -->
+    <div class="section">
+      <div class="section-label">Select agreement type</div>
+      <div class="agr-cards">
+        <div class="agr-card" onclick="selectAgreement(this, 'events')">
+          <input type="radio" name="agrType" value="events">
+          <div class="agr-card-dot"></div>
+          <div class="agr-card-title">Events Services Agreement</div>
+          <div class="agr-card-desc">DJ performance, event production, A/V recording — full event services contract</div>
+        </div>
+        <div class="agr-card" onclick="selectAgreement(this, 'rental')">
+          <input type="radio" name="agrType" value="rental">
+          <div class="agr-card-dot"></div>
+          <div class="agr-card-title">Equipment Rental Agreement</div>
+          <div class="agr-card-desc">CDJ, speakers, controllers — equipment rental terms and liability</div>
+        </div>
+      </div>
     </div>
-  </div>
 
-  <div class="divider"></div>
-
-  <!-- SERVICES SELECTION LINK -->
-  <div class="section">
-    <div class="section-label">Services selection link (Step 2)</div>
-    <p class="help-text">Generate a services selection link for a client who has already submitted an inquiry. They'll pick DJ Services, Equipment Rental, Event Production, or A/V Recording.</p>
-    <button type="button" class="btn-primary" onclick="generateServicesLink()">Generate Services Selection Link</button>
-    <div class="services-link-box" id="svcLinkBox">
-      <button class="copy-btn" onclick="copyLink('svcLink')" style="position:relative;float:right;">Copy</button>
-      <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Services Selection Link:</strong>
-      <a id="svcLink" href="#" target="_blank"></a>
+    <!-- GENERATE LINK -->
+    <div class="section">
+      <div class="section-label">Generate &amp; send</div>
+      <button type="button" class="btn-primary" onclick="generateLink()">Generate Agreement Link</button>
+      <div class="link-box" id="agrLinkBox">
+        <button class="copy-btn" onclick="copyLink('agrLink')">Copy</button>
+        <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Agreement Link:</strong>
+        <a id="agrLink" href="#" target="_blank"></a>
+      </div>
     </div>
-  </div>
+
+    <div class="divider"></div>
+
+    <!-- SERVICES SELECTION LINK -->
+    <div class="section">
+      <div class="section-label">Services selection link (Step 2)</div>
+      <p class="help-text">Generate a services selection link for a client who has already submitted an inquiry. They'll pick DJ Services, Equipment Rental, Event Production, or A/V Recording.</p>
+      <button type="button" class="btn-primary" onclick="generateServicesLink()">Generate Services Selection Link</button>
+      <div class="services-link-box" id="svcLinkBox">
+        <button class="copy-btn" onclick="copyLink('svcLink')" style="position:relative;float:right;">Copy</button>
+        <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Services Selection Link:</strong>
+        <a id="svcLink" href="#" target="_blank"></a>
+      </div>
+    </div>
+
+  </div><!-- /admin-content -->
 
 </div>
 
 <script>
+const ADMIN_PASSWORD = 'comewith2025';
+
+function authenticate() {
+  const input = document.getElementById('pinInput');
+  if (input.value === ADMIN_PASSWORD) {
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('adminContent').style.display = 'block';
+    sessionStorage.setItem('cw_admin', '1');
+  } else {
+    document.getElementById('lockError').style.display = 'block';
+    input.value = '';
+    input.focus();
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('cw_admin');
+  document.getElementById('adminContent').style.display = 'none';
+  document.getElementById('lockScreen').style.display = 'flex';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('lockError').style.display = 'none';
+}
+
+// Persist session within tab
+if (sessionStorage.getItem('cw_admin') === '1') {
+  document.getElementById('lockScreen').style.display = 'none';
+  document.getElementById('adminContent').style.display = 'block';
+}
+
 let selectedType = '';
 
 function selectAgreement(el, type) {
