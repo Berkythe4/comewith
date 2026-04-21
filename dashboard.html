@@ -32,6 +32,22 @@
         rentals: sheetToArray(ss.getSheetByName('Equipment Rental Agreements'))
       });
     }
+    if (action === 'getCustomerData') {
+      var email = (e.parameter.email || '').toLowerCase().trim();
+      var filterByEmail = function(rows) {
+        return rows.filter(function(r) {
+          for (var k in r) {
+            if (k.toLowerCase() === 'email' && String(r[k]).toLowerCase().trim() === email) return true;
+          }
+          return false;
+        });
+      };
+      return jsonResponse({
+        inquiries: filterByEmail(sheetToArray(ss.getSheetByName('Bookings Intake'))),
+        agreements: filterByEmail(sheetToArray(ss.getSheetByName('Events Services Agreements'))),
+        rentals: filterByEmail(sheetToArray(ss.getSheetByName('Equipment Rental Agreements')))
+      });
+    }
     return jsonResponse({error: 'Unknown action'});
   }
 
