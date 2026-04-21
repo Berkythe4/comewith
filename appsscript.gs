@@ -37,18 +37,30 @@ function getSheet(name) {
   return sheet;
 }
 
+/**
+ * SHEET LAYOUT: Row 1 = title, Row 2 = subtitle, Row 3 = headers, Row 4+ = data.
+ * All read functions use HEADER_ROW (3) as the header source.
+ */
+var HEADER_ROW = 3; // 1-based row number where column headers live
+var DATA_START_ROW = 4; // 1-based row number where data begins
+
 function sheetToArray(sheet) {
   if (!sheet) return [];
   var data = sheet.getDataRange().getValues();
-  if (data.length < 2) return [];
-  var headers = data[0];
+  if (data.length < HEADER_ROW) return []; // not enough rows for headers
+  var headers = data[HEADER_ROW - 1]; // 0-based index
   var rows = [];
-  for (var i = 1; i < data.length; i++) {
+  for (var i = DATA_START_ROW - 1; i < data.length; i++) {
     var obj = {};
+    var hasContent = false;
     for (var j = 0; j < headers.length; j++) {
-      obj[String(headers[j])] = data[i][j];
+      var h = String(headers[j]).trim();
+      if (h) {
+        obj[h] = data[i][j];
+        if (String(data[i][j]).trim() !== '') hasContent = true;
+      }
     }
-    rows.push(obj);
+    if (hasContent) rows.push(obj);
   }
   return rows;
 }
@@ -79,7 +91,7 @@ function findRowByColumn(sheet, colIndex, value) {
   if (!sheet || !value) return -1;
   var data = sheet.getDataRange().getValues();
   var target = String(value).toLowerCase().trim();
-  for (var i = 1; i < data.length; i++) {
+  for (var i = DATA_START_ROW - 1; i < data.length; i++) {
     if (String(data[i][colIndex]).toLowerCase().trim() === target) {
       return i + 1; // 1-based row number
     }
@@ -91,7 +103,9 @@ function findRowByColumn(sheet, colIndex, value) {
  * Get column index (0-based) by header name.
  */
 function getColIndex(sheet, headerName) {
-  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) return -1;
+  var headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
   for (var i = 0; i < headers.length; i++) {
     if (String(headers[i]).toLowerCase().trim() === headerName.toLowerCase().trim()) {
       return i;
@@ -101,13 +115,18 @@ function getColIndex(sheet, headerName) {
 }
 
 /**
- * Ensure headers exist on a sheet. If row 1 is empty, write them.
+ * Ensure headers exist in HEADER_ROW. If that row is empty, write them.
  */
 function ensureHeaders(sheet, headers) {
-  var existing = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1) {
+    sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([headers]);
+    return;
+  }
+  var existing = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
   var hasHeaders = existing.some(function(h) { return String(h).trim() !== ''; });
   if (!hasHeaders) {
-    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+    sheet.getRange(HEADER_ROW, 1, 1, headers.length).setValues([headers]);
   }
 }
 
@@ -217,7 +236,7 @@ function _doGetInner(e) {
     }
 
     var rowData = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var headers = sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     var user = {};
     for (var i = 0; i < headers.length; i++) {
@@ -266,7 +285,7 @@ function _doGetInner(e) {
     }
 
     var rowData = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
-    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var headers = sheet.getRange(HEADER_ROW, 1, 1, sheet.getLastColumn()).getValues()[0];
 
     var user = {};
     for (var i = 0; i < headers.length; i++) {
@@ -426,7 +445,7 @@ function handleServicesSelection(d) {
   // Find the most recent row matching this email (search from bottom)
   var data = sheet.getDataRange().getValues();
   var targetRow = -1;
-  for (var i = data.length - 1; i >= 1; i--) {
+  for (var i = data.length - 1; i >= DATA_START_ROW - 1; i--) {
     if (String(data[i][emailCol]).toLowerCase().trim() === email) {
       targetRow = i + 1;
       break;
@@ -604,7 +623,7 @@ function updateInquiryStatus(email, newStatus) {
   var data = sheet.getDataRange().getValues();
   var target = String(email).toLowerCase().trim();
 
-  for (var i = data.length - 1; i >= 1; i--) {
+  for (var i = data.length - 1; i >= DATA_START_ROW - 1; i--) {
     if (String(data[i][emailCol]).toLowerCase().trim() === target) {
       sheet.getRange(i + 1, statusCol + 1).setValue(newStatus);
       return;
