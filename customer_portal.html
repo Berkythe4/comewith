@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — My Account</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;--mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);--border-strong:rgba(26,20,16,0.3);}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+.page{position:relative;z-index:1;max-width:800px;margin:0 auto;}
+
+.top-bar{display:flex;align-items:center;justify-content:space-between;padding-bottom:20px;border-bottom:2px solid var(--ink);margin-bottom:36px;flex-wrap:wrap;gap:12px;}
+.top-bar a{text-decoration:none;color:var(--ink);}
+.brand-name{font-family:'Bebas Neue',sans-serif;font-size:2.4rem;letter-spacing:0.06em;line-height:1;}
+.top-right{display:flex;align-items:center;gap:16px;}
+.user-badge{font-size:0.75rem;color:var(--mid);}
+.user-badge strong{color:var(--ink);}
+.logout-btn{font-family:'Inconsolata',monospace;font-size:0.7rem;letter-spacing:0.08em;color:var(--mid);background:none;border:1px solid var(--border);padding:6px 14px;cursor:pointer;transition:all 0.15s;}
+.logout-btn:hover{color:var(--red);border-color:var(--red);}
+
+.welcome{margin-bottom:36px;}
+.welcome-title{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:0.04em;line-height:1;margin-bottom:8px;}
+.welcome-sub{font-size:0.85rem;color:var(--mid);line-height:1.6;}
+
+.section-label{font-size:0.6rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:rgba(193,59,42,0.25);}
+
+.section{margin-bottom:36px;}
+
+/* Quick links */
+.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:2px;background:var(--ink);border:2px solid var(--ink);margin-bottom:36px;}
+.quick-card{background:var(--bg);padding:20px 18px;text-decoration:none;color:var(--ink);transition:background 0.18s;position:relative;}
+.quick-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
+.quick-card:hover{background:var(--off);}
+.quick-card:hover::after{transform:scaleX(1);}
+.quick-card-title{font-family:'Bebas Neue',sans-serif;font-size:1.1rem;letter-spacing:0.06em;margin-bottom:4px;}
+.quick-card-desc{font-size:0.7rem;color:var(--mid);line-height:1.4;}
+
+/* Table */
+.data-table{width:100%;border-collapse:collapse;font-size:0.8rem;}
+.data-table th{font-size:0.56rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--mid);text-align:left;padding:10px 12px;border-bottom:2px solid var(--ink);background:var(--off);white-space:nowrap;}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);}
+.data-table .no-data{text-align:center;color:var(--mid);font-style:italic;padding:32px 12px;}
+
+.badge{display:inline-block;font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;padding:3px 10px;font-weight:500;}
+.badge-new{background:#DCEEFF;color:#185FA5;}
+.badge-active{background:#FFF0D0;color:#854F0B;}
+.badge-complete{background:#DFF0D0;color:#3B6D11;}
+
+.loading{text-align:center;padding:32px;color:var(--mid);font-size:0.85rem;}
+.loading-spinner{display:inline-block;width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin 0.6s linear infinite;margin-right:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+@media(max-width:600px){
+  body{padding:28px 16px 60px;}
+  .brand-name{font-size:1.8rem;}
+  .quick-grid{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="top-bar">
+    <a href="index.html"><div class="brand-name">Come With</div></a>
+    <div class="top-right">
+      <div class="user-badge"><strong id="userName">—</strong></div>
+      <button class="logout-btn" onclick="CW_AUTH.logout()">Log out</button>
+    </div>
+  </div>
+
+  <div class="welcome">
+    <div class="welcome-title" id="welcomeTitle">Welcome back</div>
+    <div class="welcome-sub">View your inquiries and agreements with Come With.</div>
+  </div>
+
+  <div class="section-label">Quick links</div>
+  <div class="quick-grid">
+    <a href="come_with_equipment_list.html" class="quick-card">
+      <div class="quick-card-title">Equipment Catalog</div>
+      <div class="quick-card-desc">Browse available DJ gear and speakers for rent.</div>
+    </a>
+    <a href="services_selection.html" class="quick-card">
+      <div class="quick-card-title">Services</div>
+      <div class="quick-card-desc">Select DJ, production, A/V, or rental services.</div>
+    </a>
+    <a href="index.html#booking" class="quick-card">
+      <div class="quick-card-title">New Inquiry</div>
+      <div class="quick-card-desc">Submit a new booking request.</div>
+    </a>
+  </div>
+
+  <div class="section">
+    <div class="section-label">My inquiries</div>
+    <div class="loading" id="loadingInquiries"><span class="loading-spinner"></span>Loading...</div>
+    <table class="data-table" id="tableInquiries" style="display:none;">
+      <thead><tr><th>Date</th><th>Service</th><th>Event Date</th><th>Status</th></tr></thead>
+      <tbody id="tbodyInquiries"></tbody>
+    </table>
+  </div>
+
+  <div class="section">
+    <div class="section-label">My agreements</div>
+    <div class="loading" id="loadingAgr"><span class="loading-spinner"></span>Loading...</div>
+    <table class="data-table" id="tableAgr" style="display:none;">
+      <thead><tr><th>Date</th><th>Type</th><th>Total</th><th>Status</th></tr></thead>
+      <tbody id="tbodyAgr"></tbody>
+    </table>
+  </div>
+
+</div>
+
+<script src="users.js"></script>
+<script>
+var SCRIPT_URL = CW_AUTH.SCRIPT_URL;
+var userEmail = '';
+
+CW_AUTH.init({
+  requireAuth: true,
+  allowedRoles: [CW_AUTH.ROLES.CUSTOMER],
+  onReady: function(user) {
+    userEmail = user.email;
+    document.getElementById('userName').textContent = user.name || user.email;
+    document.getElementById('welcomeTitle').textContent = 'Welcome, ' + (user.name || 'there').split(' ')[0];
+    loadMyData();
+  }
+});
+
+function esc(s){var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;}
+function fmtDate(s){if(!s)return '—';var d=new Date(s);return isNaN(d.getTime())?esc(s):d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+
+function loadMyData() {
+  // Inquiries
+  fetch(SCRIPT_URL + '?action=getInquiries')
+    .then(function(r){return r.json();})
+    .then(function(data){
+      var rows = (Array.isArray(data)?data:[]).filter(function(r){
+        var email = '';
+        for(var k in r){if(k.toLowerCase()==='email')email=String(r[k]).toLowerCase();}
+        return email === userEmail.toLowerCase();
+      });
+      renderInquiries(rows);
+    })
+    .catch(function(){renderInquiries([]);});
+
+  // Agreements (both types)
+  Promise.all([
+    fetch(SCRIPT_URL+'?action=getAgreements').then(function(r){return r.json();}).catch(function(){return [];}),
+    fetch(SCRIPT_URL+'?action=getRentals').then(function(r){return r.json();}).catch(function(){return [];})
+  ]).then(function(results){
+    var agr = (Array.isArray(results[0])?results[0]:[]).filter(function(r){
+      var e='';for(var k in r){if(k.toLowerCase()==='email')e=String(r[k]).toLowerCase();}
+      return e===userEmail.toLowerCase();
+    }).map(function(r){r._type='Events Services';return r;});
+    var rent = (Array.isArray(results[1])?results[1]:[]).filter(function(r){
+      var e='';for(var k in r){if(k.toLowerCase()==='email')e=String(r[k]).toLowerCase();}
+      return e===userEmail.toLowerCase();
+    }).map(function(r){r._type='Equipment Rental';return r;});
+    renderAgreements(agr.concat(rent));
+  });
+}
+
+function renderInquiries(rows){
+  var tbody=document.getElementById('tbodyInquiries');
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="4">No inquiries yet.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var ts='',svc='',ed='',st='';
+      for(var k in r){
+        var lk=k.toLowerCase();
+        if(lk==='timestamp'||lk==='date')ts=String(r[k]);
+        if(lk==='service'||lk==='services')svc=String(r[k]);
+        if(lk==='eventdate'||lk==='event date')ed=String(r[k]);
+        if(lk==='status')st=String(r[k]);
+      }
+      st=st||'New';
+      var bc=st.toLowerCase()==='complete'?'badge-complete':(st.toLowerCase()==='active'?'badge-active':'badge-new');
+      html+='<tr><td>'+fmtDate(ts)+'</td><td>'+esc(svc)+'</td><td>'+fmtDate(ed)+'</td><td><span class="badge '+bc+'">'+esc(st)+'</span></td></tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loadingInquiries').style.display='none';
+  document.getElementById('tableInquiries').style.display='table';
+}
+
+function renderAgreements(rows){
+  var tbody=document.getElementById('tbodyAgr');
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="4">No agreements yet.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var ts='',total='',st='';
+      for(var k in r){
+        var lk=k.toLowerCase();
+        if(lk==='timestamp'||lk==='date')ts=String(r[k]);
+        if(lk==='totalfee'||lk==='total fee'||lk==='total')total=String(r[k]);
+        if(lk==='status')st=String(r[k]);
+      }
+      st=st||'Submitted';
+      var bc=st.toLowerCase()==='complete'?'badge-complete':'badge-active';
+      html+='<tr><td>'+fmtDate(ts)+'</td><td>'+esc(r._type)+'</td><td>'+esc(total)+'</td><td><span class="badge '+bc+'">'+esc(st)+'</span></td></tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loadingAgr').style.display='none';
+  document.getElementById('tableAgr').style.display='table';
+}
+</script>
+</body>
+</html>

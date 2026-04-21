@@ -69,7 +69,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 <div class="page">
 
   <header class="doc-header">
-    <div class="doc-brand">Come With</div>
+    <a href="index.html" style="text-decoration:none;color:var(--ink);"><div class="doc-brand">Come With</div></a>
     <div class="doc-title">Services Selection</div>
     <div class="doc-sub">Step 2 — Please select the services you're interested in</div>
   </header>
@@ -131,18 +131,31 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       Something went wrong. Please email hello@comewith.org with your selection.
     </div>
 
+    <!-- Account created screen -->
+    <div id="accountCreated" style="display:none;margin-top:20px;border:2px solid var(--ink);padding:24px;background:white;">
+      <div style="font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.08em;margin-bottom:8px;">Your Account Has Been Created</div>
+      <div style="font-size:0.82rem;color:var(--mid);line-height:1.6;margin-bottom:16px;">You can now log in to track your inquiries and agreements.</div>
+      <div style="background:var(--off);padding:14px 16px;margin-bottom:12px;">
+        <div style="font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Your temporary password</div>
+        <div style="font-family:'Inconsolata',monospace;font-size:1.1rem;font-weight:500;color:var(--red);letter-spacing:0.06em;" id="tempPasswordDisplay"></div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--mid);line-height:1.5;">You'll be prompted to change this on your first login.</div>
+      <a href="auth.html" style="display:block;margin-top:16px;font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.1em;background:var(--ink);color:var(--bg);padding:14px 20px;text-align:center;text-decoration:none;transition:background 0.18s;">Sign In Now</a>
+    </div>
+
   </form>
 
 </div>
 
+<script src="users.js"></script>
 <script>
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
+var APPS_SCRIPT_URL = CW_AUTH.SCRIPT_URL;
 
 // Read query params to identify the client
-const params = new URLSearchParams(window.location.search);
-const clientEmail = params.get('email') || '';
-const clientName = params.get('name') || '';
-const inquiryId = params.get('id') || '';
+var params = new URLSearchParams(window.location.search);
+var clientEmail = params.get('email') || '';
+var clientName = params.get('name') || '';
+var inquiryId = params.get('id') || '';
 
 document.getElementById('clientName').textContent = clientName || '—';
 document.getElementById('clientEmail').textContent = clientEmail || '—';
@@ -158,10 +171,11 @@ function toggleSvc(el) {
 
 async function handleSubmit(e) {
   e.preventDefault();
-  const form = e.target;
-  const btn = form.querySelector('.btn-primary');
+  var form = e.target;
+  var btn = form.querySelector('.btn-primary');
 
-  const selected = [...form.querySelectorAll('[name=services]:checked')].map(c => c.value);
+  var selected = [];
+  form.querySelectorAll('[name=services]:checked').forEach(function(c) { selected.push(c.value); });
   if (selected.length === 0) {
     alert('Please select at least one service.');
     return;
@@ -170,7 +184,7 @@ async function handleSubmit(e) {
   btn.textContent = 'Submitting...';
   btn.disabled = true;
 
-  const data = {
+  var data = {
     type: 'Services Selection',
     timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     email: clientEmail,
@@ -189,6 +203,15 @@ async function handleSubmit(e) {
     });
     document.getElementById('successBanner').style.display = 'block';
     btn.style.display = 'none';
+
+    // Auto-create customer account if email is present
+    if (clientEmail) {
+      var tempPw = CW_AUTH.generatePassword(8);
+      CW_AUTH.createUser(clientEmail, clientName, tempPw, CW_AUTH.ROLES.CUSTOMER, true).then(function() {
+        document.getElementById('tempPasswordDisplay').textContent = tempPw;
+        document.getElementById('accountCreated').style.display = 'block';
+      });
+    }
   } catch (err) {
     document.getElementById('errorBanner').style.display = 'block';
     btn.textContent = 'Submit Selection';

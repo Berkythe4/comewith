@@ -69,17 +69,7 @@
 body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:0;margin:0;min-height:100vh;}
 body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
 
-/* LOCK */
-.lock-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:100vh;text-align:center;position:relative;z-index:1;}
-.lock-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;margin-bottom:6px;}
-.lock-sub{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);margin-bottom:40px;}
-.lock-field{display:flex;gap:0;border:2px solid var(--ink);width:100%;max-width:340px;}
-.lock-field input{flex:1;font-family:'Inconsolata',monospace;font-size:0.95rem;padding:14px 16px;border:none;background:white;color:var(--ink);outline:none;}
-.lock-field button{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:14px 24px;border:none;cursor:pointer;transition:background 0.18s;white-space:nowrap;}
-.lock-field button:hover{background:var(--red);}
-.lock-error{font-size:0.75rem;color:var(--red);margin-top:12px;display:none;}
-
-.admin-content{display:none;position:relative;z-index:1;}
+.admin-content{position:relative;z-index:1;}
 
 /* LAYOUT */
 .dash-layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;}
@@ -195,25 +185,14 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 </head>
 <body>
 
-<!-- LOCK SCREEN -->
-<div class="lock-screen" id="lockScreen">
-  <div class="lock-brand">Come With</div>
-  <div class="lock-sub">Business Dashboard</div>
-  <div class="lock-field">
-    <input type="password" id="pinInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')authenticate()">
-    <button onclick="authenticate()">Unlock</button>
-  </div>
-  <div class="lock-error" id="lockError">Incorrect password. Try again.</div>
-</div>
-
-<!-- ADMIN CONTENT -->
-<div class="admin-content" id="adminContent">
+<!-- ADMIN CONTENT (auth handled by users.js) -->
+<div class="admin-content" id="adminContent" style="display:none;">
   <div class="dash-layout">
 
     <!-- SIDEBAR -->
     <aside class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-brand">Come With</div>
+        <a href="index.html" style="text-decoration:none;"><div class="sidebar-brand">Come With</div></a>
         <div class="sidebar-role">Business Dashboard</div>
       </div>
 
@@ -230,6 +209,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <a href="#" data-tab="agreements">Agreements</a>
         <a href="#" data-tab="rentals">Equipment Rentals</a>
         <a href="#" data-tab="archive">Archive</a>
+        <a href="#" data-tab="users" id="navUsers" style="display:none;">Users</a>
         <div class="nav-divider"></div>
         <a href="index.html">&larr; Back to site</a>
       </nav>
@@ -269,6 +249,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <button class="tab" data-tab="agreements">Agreements</button>
         <button class="tab" data-tab="rentals">Equipment Rentals</button>
         <button class="tab" data-tab="archive">Archive</button>
+        <button class="tab" data-tab="users" id="tabUsers" style="display:none;">Users</button>
       </div>
 
       <!-- INQUIRIES TAB -->
@@ -363,36 +344,70 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         </table>
       </div>
 
+      <!-- USERS TAB (master admin only) -->
+      <div class="tab-panel" id="panel-users">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div style="font-size:0.75rem;color:var(--mid);">Manage user accounts. Master admin only.</div>
+          <button class="refresh-btn" id="createAdminBtn" onclick="showCreateAdmin()" style="background:var(--red);color:white;border-color:var(--red);">+ Create Admin Account</button>
+        </div>
+
+        <!-- Create admin inline form -->
+        <div id="createAdminForm" style="display:none;background:white;border:2px solid var(--ink);padding:20px;margin-bottom:20px;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.08em;margin-bottom:12px;">Create Admin Account</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Name</label><input type="text" id="newAdminName" placeholder="Full name" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;"></div>
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Email</label><input type="email" id="newAdminEmail" placeholder="admin@email.com" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;"></div>
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Role</label><select id="newAdminRole" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;background:white;"><option value="sub_admin">Sub Admin</option><option value="master_admin">Master Admin</option></select></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="refresh-btn" style="background:var(--ink);color:var(--bg);border-color:var(--ink);" onclick="doCreateAdmin()">Create Account</button>
+            <button class="refresh-btn" onclick="document.getElementById('createAdminForm').style.display='none'">Cancel</button>
+          </div>
+          <div id="createAdminResult" style="display:none;margin-top:10px;font-size:0.78rem;padding:10px;background:#DFF0D0;border:1px solid #3B6D11;color:#3B6D11;"></div>
+        </div>
+
+        <div class="loading" id="loading-users"><span class="loading-spinner"></span>Loading users...</div>
+        <table class="data-table" id="table-users" style="display:none;">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-users"></tbody>
+        </table>
+      </div>
+
     </main>
   </div>
 </div>
 
+<script src="users.js"></script>
 <script>
-// ── AUTH ──────────────────────────────────────────────────
-var ADMIN_PASSWORD = 'comewith2025';
-function authenticate(){
-  var input=document.getElementById('pinInput');
-  if(input.value===ADMIN_PASSWORD){
-    document.getElementById('lockScreen').style.display='none';
-    document.getElementById('adminContent').style.display='block';
-    sessionStorage.setItem('cw_admin','1');
+// ── AUTH (role-based via users.js) ────────────��──────────
+CW_AUTH.init({
+  requireAuth: true,
+  allowedRoles: [CW_AUTH.ROLES.MASTER_ADMIN, CW_AUTH.ROLES.SUB_ADMIN],
+  onReady: function(user) {
+    document.getElementById('adminContent').style.display = 'block';
+    // Show profile
+    var pn = document.querySelector('.profile-name');
+    if (pn) pn.textContent = user.name || user.email;
+    // Show Users tab for master admin only
+    if (CW_AUTH.isMasterAdmin(user)) {
+      document.getElementById('navUsers').style.display = '';
+      document.getElementById('tabUsers').style.display = '';
+    }
     loadAllData();
-  } else {
-    document.getElementById('lockError').style.display='block';
-    input.value='';input.focus();
   }
-}
-function logout(){
-  sessionStorage.removeItem('cw_admin');
-  document.getElementById('adminContent').style.display='none';
-  document.getElementById('lockScreen').style.display='flex';
-  document.getElementById('pinInput').value='';
-  document.getElementById('lockError').style.display='none';
-}
-if(sessionStorage.getItem('cw_admin')==='1'){
-  document.getElementById('lockScreen').style.display='none';
-  document.getElementById('adminContent').style.display='block';
-  loadAllData();
+});
+
+function logout() {
+  CW_AUTH.logout();
 }
 
 // ── TABS ─────────────────────────────────────────────────
@@ -723,6 +738,104 @@ function updateStats(){
   document.getElementById('statRentals').textContent=store.rentals.length;
   document.getElementById('statTotal').textContent=store.inquiries.length+store.agreements.length+store.rentals.length;
 }
+
+// ── USERS TAB ────────────────────────────────────────────
+function loadUsers() {
+  document.getElementById('loading-users').style.display = 'block';
+  document.getElementById('table-users').style.display = 'none';
+  CW_AUTH.getUsers().then(function(data) {
+    var rows = Array.isArray(data) ? data : [];
+    renderUsers(rows);
+  }).catch(function() { renderUsers([]); });
+}
+
+function renderUsers(rows) {
+  var tbody = document.getElementById('tbody-users');
+  var isMaster = CW_AUTH.isMasterAdmin();
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td class="no-data" colspan="6">No users found. Make sure Users sheet exists in Google Sheets.</td></tr>';
+  } else {
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var email = getField(r, ['email', 'Email']);
+      var name = getField(r, ['name', 'Name']);
+      var role = getField(r, ['role', 'Role']);
+      var created = getField(r, ['created', 'Created']);
+      var lastLogin = getField(r, ['lastLogin', 'Last Login', 'lastlogin']);
+      var roleBadge = role === 'master_admin' ? 'badge-complete' : (role === 'sub_admin' ? 'badge-active' : 'badge-new');
+      var roleLabel = role === 'master_admin' ? 'Master Admin' : (role === 'sub_admin' ? 'Sub Admin' : 'Customer');
+      html += '<tr>';
+      html += '<td>' + esc(email) + '</td>';
+      html += '<td>' + esc(name) + '</td>';
+      html += '<td><span class="badge ' + roleBadge + '">' + roleLabel + '</span></td>';
+      html += '<td>' + fmtDate(created) + '</td>';
+      html += '<td>' + (lastLogin ? fmtDate(lastLogin) : '—') + '</td>';
+      html += '<td><div class="row-actions">';
+      if (isMaster && role === 'customer') {
+        html += '<button class="row-btn" onclick="promoteUser(\'' + esc(email) + '\')">Promote to Admin</button>';
+      }
+      if (isMaster && role === 'sub_admin') {
+        html += '<button class="row-btn" onclick="demoteUser(\'' + esc(email) + '\')">Demote to Customer</button>';
+      }
+      if (isMaster && email !== CW_AUTH.MASTER_EMAIL) {
+        html += '<button class="row-btn" onclick="removeUser(\'' + esc(email) + '\',this)" style="color:var(--red);border-color:var(--red);">Delete</button>';
+      }
+      html += '</div></td>';
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+  document.getElementById('loading-users').style.display = 'none';
+  document.getElementById('table-users').style.display = 'table';
+}
+
+function promoteUser(email) {
+  if (!confirm('Promote ' + email + ' to Sub Admin?')) return;
+  CW_AUTH.updateUserRole(email, 'sub_admin');
+  setTimeout(loadUsers, 1000);
+}
+
+function demoteUser(email) {
+  if (!confirm('Demote ' + email + ' to Customer?')) return;
+  CW_AUTH.updateUserRole(email, 'customer');
+  setTimeout(loadUsers, 1000);
+}
+
+function removeUser(email, btn) {
+  if (!confirm('Delete user ' + email + '? This cannot be undone.')) return;
+  CW_AUTH.deleteUser(email);
+  btn.closest('tr').style.opacity = '0.3';
+  setTimeout(loadUsers, 1000);
+}
+
+function showCreateAdmin() {
+  document.getElementById('createAdminForm').style.display = 'block';
+  document.getElementById('createAdminResult').style.display = 'none';
+}
+
+function doCreateAdmin() {
+  var name = document.getElementById('newAdminName').value.trim();
+  var email = document.getElementById('newAdminEmail').value.trim();
+  var role = document.getElementById('newAdminRole').value;
+  if (!name || !email) { alert('Name and email required.'); return; }
+
+  var tempPw = CW_AUTH.generatePassword(12);
+  CW_AUTH.createUser(email, name, tempPw, role, true).then(function() {
+    var result = document.getElementById('createAdminResult');
+    result.innerHTML = 'Account created for <strong>' + esc(email) + '</strong>.<br>Temporary password: <strong>' + esc(tempPw) + '</strong><br>They must change it on first login.';
+    result.style.display = 'block';
+    setTimeout(loadUsers, 1000);
+  });
+}
+
+// Load users when Users tab is clicked
+var origTabClick = null;
+document.querySelectorAll('.tab').forEach(function(t) {
+  if (t.getAttribute('data-tab') === 'users') {
+    t.addEventListener('click', function() { loadUsers(); });
+  }
+});
 </script>
 </body>
 </html>

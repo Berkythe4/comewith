@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Sign In</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{--ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;--mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);--border-strong:rgba(26,20,16,0.3);}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:0;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+.auth-wrap{position:relative;z-index:1;width:100%;max-width:400px;padding:24px;}
+
+.brand{text-align:center;margin-bottom:40px;}
+.brand a{text-decoration:none;color:var(--ink);}
+.brand-name{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;line-height:1;}
+.brand-sub{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);margin-top:6px;}
+
+.card{border:2px solid var(--ink);background:white;padding:32px 28px;}
+.card-title{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.08em;margin-bottom:6px;}
+.card-sub{font-size:0.75rem;color:var(--mid);margin-bottom:24px;line-height:1.5;}
+
+.field{margin-bottom:16px;}
+.field label{display:block;font-size:0.6rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--mid);margin-bottom:6px;}
+.field input{width:100%;font-family:'Inconsolata',monospace;font-size:0.9rem;padding:12px 14px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;}
+.field input:focus{border-color:var(--red);}
+
+.btn{display:block;width:100%;font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:16px;border:none;cursor:pointer;transition:background 0.18s;margin-top:20px;}
+.btn:hover{background:var(--red);}
+.btn:disabled{opacity:0.5;cursor:default;}
+
+.error-msg{display:none;font-size:0.78rem;color:var(--red);margin-top:12px;line-height:1.5;}
+.success-msg{display:none;font-size:0.78rem;color:#3B6D11;margin-top:12px;line-height:1.5;background:#DFF0D0;border:1px solid #3B6D11;padding:12px 14px;}
+
+.link-row{margin-top:16px;font-size:0.75rem;color:var(--mid);text-align:center;}
+.link-row a{color:var(--red);text-decoration:none;cursor:pointer;}
+.link-row a:hover{text-decoration:underline;}
+
+.pw-rules{font-size:0.68rem;color:var(--mid);line-height:1.5;margin-top:6px;}
+
+/* Panels */
+.panel{display:none;}
+.panel.active{display:block;}
+
+@media(max-width:480px){
+  .auth-wrap{padding:16px;}
+  .card{padding:24px 20px;}
+}
+</style>
+</head>
+<body>
+<div class="auth-wrap">
+
+  <div class="brand">
+    <a href="index.html">
+      <div class="brand-name">Come With</div>
+    </a>
+    <div class="brand-sub">Sign in to your account</div>
+  </div>
+
+  <!-- LOGIN PANEL -->
+  <div class="panel active" id="panelLogin">
+    <div class="card">
+      <div class="card-title">Sign In</div>
+      <div class="card-sub">Enter your email and password to continue.</div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="you@email.com" autofocus>
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="loginPassword" placeholder="Your password" onkeydown="if(event.key==='Enter')doLogin()">
+      </div>
+      <button class="btn" id="loginBtn" onclick="doLogin()">Sign In</button>
+      <div class="error-msg" id="loginError"></div>
+    </div>
+    <div class="link-row">
+      <a onclick="showPanel('panelFirstTime')">First time? Set your password</a>
+      &nbsp;&middot;&nbsp;
+      <a onclick="showPanel('panelForgot')">Forgot password?</a>
+    </div>
+  </div>
+
+  <!-- FIRST TIME PANEL -->
+  <div class="panel" id="panelFirstTime">
+    <div class="card">
+      <div class="card-title">Set Your Password</div>
+      <div class="card-sub">Enter the email address associated with your account and choose a password.</div>
+      <div class="field">
+        <label>Email</label>
+        <input type="email" id="ftEmail" placeholder="you@email.com">
+      </div>
+      <button class="btn" id="ftCheckBtn" onclick="doFirstTimeCheck()">Check Account</button>
+
+      <div id="ftStep2" style="display:none;margin-top:20px;padding-top:20px;border-top:1px solid var(--border);">
+        <div class="field">
+          <label>New Password</label>
+          <input type="password" id="ftPassword" placeholder="Choose a password">
+          <div class="pw-rules" id="ftRules"></div>
+        </div>
+        <div class="field">
+          <label>Confirm Password</label>
+          <input type="password" id="ftConfirm" placeholder="Re-enter password" onkeydown="if(event.key==='Enter')doFirstTimeSet()">
+        </div>
+        <button class="btn" onclick="doFirstTimeSet()">Set Password</button>
+      </div>
+
+      <div class="error-msg" id="ftError"></div>
+      <div class="success-msg" id="ftSuccess"></div>
+    </div>
+    <div class="link-row">
+      <a onclick="showPanel('panelLogin')">&larr; Back to sign in</a>
+    </div>
+  </div>
+
+  <!-- CHANGE PASSWORD PANEL (forced on first login) -->
+  <div class="panel" id="panelChangePassword">
+    <div class="card">
+      <div class="card-title">Change Your Password</div>
+      <div class="card-sub">You must set a new password before continuing.</div>
+      <div class="field">
+        <label>New Password</label>
+        <input type="password" id="cpPassword" placeholder="Choose a new password">
+        <div class="pw-rules" id="cpRules"></div>
+      </div>
+      <div class="field">
+        <label>Confirm Password</label>
+        <input type="password" id="cpConfirm" placeholder="Re-enter password" onkeydown="if(event.key==='Enter')doChangePassword()">
+      </div>
+      <button class="btn" onclick="doChangePassword()">Update Password</button>
+      <div class="error-msg" id="cpError"></div>
+    </div>
+  </div>
+
+  <!-- FORGOT PASSWORD PANEL -->
+  <div class="panel" id="panelForgot">
+    <div class="card">
+      <div class="card-title">Forgot Password?</div>
+      <div class="card-sub">Contact the Come With team to reset your password:</div>
+      <div style="background:var(--off);padding:16px;margin-top:8px;font-size:0.85rem;line-height:1.6;">
+        <strong>Email:</strong> berky@comewith.org<br>
+        Include the email address associated with your account and we'll reset it for you.
+      </div>
+    </div>
+    <div class="link-row">
+      <a onclick="showPanel('panelLogin')">&larr; Back to sign in</a>
+    </div>
+  </div>
+
+</div>
+
+<script src="users.js"></script>
+<script>
+// If already logged in and not here to change password, redirect
+var params = new URLSearchParams(window.location.search);
+if (params.get('changePassword') === '1') {
+  var user = CW_AUTH.getUser();
+  if (user) {
+    showPanel('panelChangePassword');
+    var role = user.role;
+    document.getElementById('cpRules').textContent =
+      role === CW_AUTH.ROLES.CUSTOMER
+        ? 'Minimum 6 characters.'
+        : 'Minimum 10 characters, must include 1 number and 1 special character.';
+  } else {
+    showPanel('panelLogin');
+  }
+} else if (CW_AUTH.isLoggedIn()) {
+  var u = CW_AUTH.getUser();
+  if (u.mustChangePassword) {
+    showPanel('panelChangePassword');
+  } else {
+    window.location.href = CW_AUTH.getLoginRedirect(u);
+  }
+}
+
+function showPanel(id) {
+  document.querySelectorAll('.panel').forEach(function(p) { p.classList.remove('active'); });
+  document.getElementById(id).classList.add('active');
+  // Clear errors
+  document.querySelectorAll('.error-msg,.success-msg').forEach(function(e) { e.style.display = 'none'; });
+}
+
+// ── LOGIN ────────────────────────────────────────────────
+function doLogin() {
+  var email = document.getElementById('loginEmail').value.trim();
+  var pw = document.getElementById('loginPassword').value;
+  var btn = document.getElementById('loginBtn');
+  var err = document.getElementById('loginError');
+
+  if (!email || !pw) {
+    err.textContent = 'Please enter both email and password.';
+    err.style.display = 'block';
+    return;
+  }
+
+  btn.textContent = 'Signing in...';
+  btn.disabled = true;
+  err.style.display = 'none';
+
+  CW_AUTH.login(email, pw).then(function(result) {
+    if (result.success) {
+      if (result.user.mustChangePassword) {
+        showPanel('panelChangePassword');
+        var role = result.user.role;
+        document.getElementById('cpRules').textContent =
+          role === CW_AUTH.ROLES.CUSTOMER
+            ? 'Minimum 6 characters.'
+            : 'Minimum 10 characters, must include 1 number and 1 special character.';
+        btn.textContent = 'Sign In';
+        btn.disabled = false;
+      } else {
+        window.location.href = CW_AUTH.getLoginRedirect(result.user);
+      }
+    } else {
+      err.textContent = result.error;
+      err.style.display = 'block';
+      btn.textContent = 'Sign In';
+      btn.disabled = false;
+    }
+  }).catch(function() {
+    err.textContent = 'Connection error. Please try again.';
+    err.style.display = 'block';
+    btn.textContent = 'Sign In';
+    btn.disabled = false;
+  });
+}
+
+// ── FIRST TIME CHECK ─────────────────────────────────────
+var ftUserRole = 'customer';
+
+function doFirstTimeCheck() {
+  var email = document.getElementById('ftEmail').value.trim();
+  var btn = document.getElementById('ftCheckBtn');
+  var err = document.getElementById('ftError');
+
+  if (!email) {
+    err.textContent = 'Please enter your email.';
+    err.style.display = 'block';
+    return;
+  }
+
+  btn.textContent = 'Checking...';
+  btn.disabled = true;
+  err.style.display = 'none';
+
+  CW_AUTH.checkUser(email).then(function(resp) {
+    btn.textContent = 'Check Account';
+    btn.disabled = false;
+
+    if (!resp || !resp.exists) {
+      err.textContent = 'No account found for this email. Accounts are created when you submit an inquiry or are set up by an admin.';
+      err.style.display = 'block';
+      return;
+    }
+    if (!resp.mustSetPassword) {
+      err.textContent = 'This account already has a password set. Use "Sign In" or "Forgot password?" instead.';
+      err.style.display = 'block';
+      return;
+    }
+
+    ftUserRole = resp.role || 'customer';
+    document.getElementById('ftRules').textContent =
+      ftUserRole === CW_AUTH.ROLES.CUSTOMER
+        ? 'Minimum 6 characters.'
+        : 'Minimum 10 characters, must include 1 number and 1 special character.';
+    document.getElementById('ftStep2').style.display = 'block';
+    btn.style.display = 'none';
+  }).catch(function() {
+    err.textContent = 'Connection error. Please try again.';
+    err.style.display = 'block';
+    btn.textContent = 'Check Account';
+    btn.disabled = false;
+  });
+}
+
+function doFirstTimeSet() {
+  var email = document.getElementById('ftEmail').value.trim();
+  var pw = document.getElementById('ftPassword').value;
+  var confirm = document.getElementById('ftConfirm').value;
+  var err = document.getElementById('ftError');
+  var success = document.getElementById('ftSuccess');
+
+  var errors = CW_AUTH.validatePassword(pw, ftUserRole);
+  if (errors.length) {
+    err.textContent = errors.join(' ');
+    err.style.display = 'block';
+    return;
+  }
+  if (pw !== confirm) {
+    err.textContent = 'Passwords do not match.';
+    err.style.display = 'block';
+    return;
+  }
+
+  err.style.display = 'none';
+  CW_AUTH.updatePassword(email, pw).then(function() {
+    success.textContent = 'Password set successfully! You can now sign in.';
+    success.style.display = 'block';
+    setTimeout(function() { showPanel('panelLogin'); document.getElementById('loginEmail').value = email; }, 2000);
+  });
+}
+
+// ── CHANGE PASSWORD (forced) ─────────────────────────────
+function doChangePassword() {
+  var user = CW_AUTH.getUser();
+  if (!user) { showPanel('panelLogin'); return; }
+
+  var pw = document.getElementById('cpPassword').value;
+  var confirm = document.getElementById('cpConfirm').value;
+  var err = document.getElementById('cpError');
+
+  var errors = CW_AUTH.validatePassword(pw, user.role);
+  if (errors.length) {
+    err.textContent = errors.join(' ');
+    err.style.display = 'block';
+    return;
+  }
+  if (pw !== confirm) {
+    err.textContent = 'Passwords do not match.';
+    err.style.display = 'block';
+    return;
+  }
+
+  err.style.display = 'none';
+  CW_AUTH.updatePassword(user.email, pw).then(function() {
+    // Update session
+    user.mustChangePassword = false;
+    CW_AUTH.setSession(user);
+    window.location.href = CW_AUTH.getLoginRedirect(user);
+  });
+}
+</script>
+</body>
+</html>
