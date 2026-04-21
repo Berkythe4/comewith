@@ -53,6 +53,19 @@ function sheetToArray(sheet) {
   return rows;
 }
 
+/**
+ * CORS NOTE: Google Apps Script web apps deployed as "Anyone" automatically
+ * include Access-Control-Allow-Origin: * on responses. However, if the
+ * script throws an uncaught error, Google returns an HTML error page
+ * which the browser interprets as a CORS failure. The doGet function
+ * below is wrapped in try/catch to ensure it ALWAYS returns valid JSON.
+ *
+ * ContentService does not support custom headers — CORS is handled by
+ * the Apps Script infrastructure when deployed correctly:
+ *   Deploy → Web app → Execute as: Me → Who has access: Anyone
+ *
+ * If you get CORS errors, redeploy as a NEW deployment (not edit existing).
+ */
 function jsonResponse(data) {
   return ContentService.createTextOutput(JSON.stringify(data))
     .setMimeType(ContentService.MimeType.JSON);
@@ -119,7 +132,15 @@ function filterByEmail(rows, email) {
 // ═══════════════════════════════════════════════════════════════════
 
 function doGet(e) {
-  var action = e.parameter.action || '';
+  try {
+    return _doGetInner(e);
+  } catch (err) {
+    return jsonResponse({ error: 'Server error: ' + String(err) });
+  }
+}
+
+function _doGetInner(e) {
+  var action = (e && e.parameter && e.parameter.action) || '';
 
   // ── Get Inquiries ──────────────────────────────────────
   if (action === 'getInquiries') {
@@ -264,7 +285,7 @@ function doGet(e) {
   }
 
   return jsonResponse({ error: 'Unknown action: ' + action });
-}
+} // end _doGetInner
 
 
 // ═══════════════════════════════════════════════════════════════════
@@ -272,6 +293,14 @@ function doGet(e) {
 // ═══════════════════════════════════════════════════════════════════
 
 function doPost(e) {
+  try {
+    return _doPostInner(e);
+  } catch (err) {
+    return jsonResponse({ error: 'Server error: ' + String(err) });
+  }
+}
+
+function _doPostInner(e) {
   var body;
   try {
     body = JSON.parse(e.postData.contents);
