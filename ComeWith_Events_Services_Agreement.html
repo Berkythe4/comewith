@@ -475,6 +475,24 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 <script>
 document.getElementById('agr-date').valueAsDate = new Date();
 
+// ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const fieldMap = {
+    name: 'clientName',
+    email: 'email',
+    phone: 'phone',
+    instagram: 'instagram',
+  };
+  const form = document.getElementById('esaForm');
+  for (const [param, fieldName] of Object.entries(fieldMap)) {
+    const val = params.get(param);
+    if (val && form[fieldName]) {
+      form[fieldName].value = val;
+    }
+  }
+})();
+
 // Equipment provider rows
 const equipItems = [
   'DJ Controller / Decks (XDJ-AZ or CDJ-3000s)',
@@ -554,9 +572,11 @@ async function handleSubmit(e){
   const payment  = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
   const promoRights = [...form.querySelectorAll('[name=promoRights]:checked')].map(c=>c.value).join(', ');
   const depositOpt = [...form.querySelectorAll('[name=depositOpt]:checked')].map(r=>r.value)[0]||'';
+  const params = new URLSearchParams(window.location.search);
   const data={
     type:'Events Services Agreement',
     timestamp:new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
+    inquiryEmail: params.get('email') || '',
     agreementNum:document.getElementById('agr-num').value,
     clientName:form.clientName.value,
     email:form.email.value,

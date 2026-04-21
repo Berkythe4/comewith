@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Send Agreement</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
+  --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
+  --border-strong:rgba(26,20,16,0.3);
+}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+.page{position:relative;z-index:1;max-width:640px;margin:0 auto;}
+
+.doc-header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:40px;}
+.doc-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;}
+.doc-title{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.12em;color:var(--red);margin-top:4px;}
+.doc-sub{font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--mid);margin-top:6px;}
+
+.section{margin-bottom:36px;}
+.section-label{font-size:0.6rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:rgba(193,59,42,0.25);}
+
+.field-grid{display:grid;gap:14px;}
+.field-grid.cols-2{grid-template-columns:1fr 1fr;}
+.field-group{display:flex;flex-direction:column;gap:5px;}
+.field-group label{font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
+.field-group input,.field-group select{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;}
+.field-group input:focus,.field-group select:focus{border-color:var(--red);}
+
+/* Agreement type cards */
+.agr-cards{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);margin-bottom:24px;}
+.agr-card{background:var(--bg);padding:24px 20px;cursor:pointer;transition:background 0.18s;user-select:none;position:relative;}
+.agr-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
+.agr-card:hover{background:var(--off);}
+.agr-card.selected{background:#FAE8E6;}
+.agr-card.selected::after{transform:scaleX(1);}
+.agr-card input{position:absolute;opacity:0;pointer-events:none;}
+.agr-card-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;margin-bottom:12px;transition:border-color 0.15s;}
+.agr-card.selected .agr-card-dot{border-color:var(--red);}
+.agr-card-dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--red);display:none;}
+.agr-card.selected .agr-card-dot::after{display:block;}
+.agr-card-title{font-family:'Bebas Neue',sans-serif;font-size:1.15rem;letter-spacing:0.06em;color:var(--ink);margin-bottom:4px;}
+.agr-card-desc{font-size:0.7rem;color:var(--mid);line-height:1.5;}
+
+.link-box{background:white;border:2px solid var(--ink);padding:16px 20px;font-size:0.85rem;word-break:break-all;display:none;margin-top:16px;position:relative;}
+.link-box a{color:var(--red);text-decoration:none;}
+.link-box a:hover{text-decoration:underline;}
+.copy-btn{position:absolute;top:8px;right:8px;font-family:'Bebas Neue',sans-serif;font-size:0.75rem;letter-spacing:0.1em;background:var(--ink);color:var(--bg);padding:6px 14px;border:none;cursor:pointer;transition:background 0.15s;}
+.copy-btn:hover{background:var(--red);}
+
+.btn-primary{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:16px 36px;border:none;cursor:pointer;transition:background 0.18s;width:100%;}
+.btn-primary:hover{background:var(--red);}
+
+.services-link-box{background:var(--off);border:1px solid var(--border-strong);padding:16px 20px;margin-top:16px;display:none;}
+.services-link-box a{color:var(--red);text-decoration:none;font-size:0.85rem;word-break:break-all;}
+.services-link-box a:hover{text-decoration:underline;}
+
+.success-banner{display:none;background:#DFF0D0;border:1px solid #3B6D11;padding:16px 20px;margin-top:20px;font-size:0.85rem;color:#3B6D11;line-height:1.5;}
+
+.divider{height:1px;background:var(--border);margin:32px 0;}
+
+.help-text{font-size:0.75rem;color:var(--mid);line-height:1.6;margin-bottom:16px;}
+
+@media(max-width:600px){
+  body{padding:28px 16px 60px;}
+  .agr-cards{grid-template-columns:1fr;}
+  .field-grid.cols-2{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <div class="doc-brand">Come With</div>
+    <div class="doc-title">Admin — Send Agreement</div>
+    <div class="doc-sub">Generate agreement links and services selection links for clients</div>
+  </header>
+
+  <!-- CLIENT INFO -->
+  <div class="section">
+    <div class="section-label">Client details</div>
+    <p class="help-text">Enter the client's info. This pre-fills the agreement form when they open the link.</p>
+    <div class="field-grid cols-2">
+      <div class="field-group">
+        <label>Client name *</label>
+        <input type="text" id="clientName" required placeholder="Full name">
+      </div>
+      <div class="field-group">
+        <label>Client email *</label>
+        <input type="email" id="clientEmail" required placeholder="client@email.com">
+      </div>
+      <div class="field-group">
+        <label>Phone</label>
+        <input type="tel" id="clientPhone" placeholder="(555) 000-0000">
+      </div>
+      <div class="field-group">
+        <label>Instagram</label>
+        <input type="text" id="clientIG" placeholder="@handle">
+      </div>
+    </div>
+  </div>
+
+  <!-- AGREEMENT TYPE -->
+  <div class="section">
+    <div class="section-label">Select agreement type</div>
+    <div class="agr-cards">
+      <div class="agr-card" onclick="selectAgreement(this, 'events')">
+        <input type="radio" name="agrType" value="events">
+        <div class="agr-card-dot"></div>
+        <div class="agr-card-title">Events Services Agreement</div>
+        <div class="agr-card-desc">DJ performance, event production, A/V recording — full event services contract</div>
+      </div>
+      <div class="agr-card" onclick="selectAgreement(this, 'rental')">
+        <input type="radio" name="agrType" value="rental">
+        <div class="agr-card-dot"></div>
+        <div class="agr-card-title">Equipment Rental Agreement</div>
+        <div class="agr-card-desc">CDJ, speakers, controllers — equipment rental terms and liability</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- GENERATE LINK -->
+  <div class="section">
+    <div class="section-label">Generate &amp; send</div>
+    <button type="button" class="btn-primary" onclick="generateLink()">Generate Agreement Link</button>
+    <div class="link-box" id="agrLinkBox">
+      <button class="copy-btn" onclick="copyLink('agrLink')">Copy</button>
+      <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Agreement Link:</strong>
+      <a id="agrLink" href="#" target="_blank"></a>
+    </div>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- SERVICES SELECTION LINK -->
+  <div class="section">
+    <div class="section-label">Services selection link (Step 2)</div>
+    <p class="help-text">Generate a services selection link for a client who has already submitted an inquiry. They'll pick DJ Services, Equipment Rental, Event Production, or A/V Recording.</p>
+    <button type="button" class="btn-primary" onclick="generateServicesLink()">Generate Services Selection Link</button>
+    <div class="services-link-box" id="svcLinkBox">
+      <button class="copy-btn" onclick="copyLink('svcLink')" style="position:relative;float:right;">Copy</button>
+      <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Services Selection Link:</strong>
+      <a id="svcLink" href="#" target="_blank"></a>
+    </div>
+  </div>
+
+</div>
+
+<script>
+let selectedType = '';
+
+function selectAgreement(el, type) {
+  document.querySelectorAll('.agr-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  el.querySelector('input[type=radio]').checked = true;
+  selectedType = type;
+}
+
+function getBaseUrl() {
+  const loc = window.location;
+  return loc.protocol + '//' + loc.host + loc.pathname.replace(/[^/]*$/, '');
+}
+
+function generateLink() {
+  const name = document.getElementById('clientName').value.trim();
+  const email = document.getElementById('clientEmail').value.trim();
+  const phone = document.getElementById('clientPhone').value.trim();
+  const ig = document.getElementById('clientIG').value.trim();
+
+  if (!name || !email) {
+    alert('Please enter the client name and email.');
+    return;
+  }
+  if (!selectedType) {
+    alert('Please select an agreement type.');
+    return;
+  }
+
+  const base = getBaseUrl();
+  const file = selectedType === 'events'
+    ? 'ComeWith_Events_Services_Agreement.html'
+    : 'ComeWith_Equipment_Rental_Agreement.html';
+
+  const params = new URLSearchParams({
+    name: name,
+    email: email,
+    phone: phone,
+    instagram: ig,
+  });
+
+  const url = base + file + '?' + params.toString();
+  const linkEl = document.getElementById('agrLink');
+  linkEl.href = url;
+  linkEl.textContent = url;
+  document.getElementById('agrLinkBox').style.display = 'block';
+}
+
+function generateServicesLink() {
+  const name = document.getElementById('clientName').value.trim();
+  const email = document.getElementById('clientEmail').value.trim();
+
+  if (!name || !email) {
+    alert('Please enter the client name and email.');
+    return;
+  }
+
+  const base = getBaseUrl();
+  const params = new URLSearchParams({
+    name: name,
+    email: email,
+  });
+
+  const url = base + 'services_selection.html?' + params.toString();
+  const linkEl = document.getElementById('svcLink');
+  linkEl.href = url;
+  linkEl.textContent = url;
+  document.getElementById('svcLinkBox').style.display = 'block';
+}
+
+function copyLink(linkId) {
+  const text = document.getElementById(linkId).textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('#' + linkId).closest('.link-box, .services-link-box').querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+  });
+}
+</script>
+</body>
+</html>

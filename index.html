@@ -550,6 +550,7 @@
     transform: translateX(100%);
     transition: transform 0.3s cubic-bezier(0.4,0,0.2,1);
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     border-left: 2px solid var(--ink);
     display: flex;
     flex-direction: column;
@@ -668,12 +669,34 @@
     .hero-right { text-align: left; }
     .menu-grid { grid-template-columns: 1fr; }
     .tile-featured { grid-column: span 1; }
+    .tile { min-height: 200px; padding: 28px 24px 24px; }
     .roster-strip { grid-template-columns: 1fr; }
     .roster-label-col { padding: 16px 24px; }
     .roster-label-text { writing-mode: horizontal-tb; transform: none; }
     .booking-section { grid-template-columns: 1fr; gap: 36px; }
     .form-row-grid { grid-template-columns: 1fr; }
     .field.full { grid-column: span 1; }
+
+    /* Mobile panel: full screen takeover */
+    .panel {
+      width: 100vw;
+      border-left: none;
+    }
+    .panel-header {
+      padding: 20px 16px 16px;
+    }
+    .panel-body {
+      padding: 20px 16px;
+    }
+    .panel-title {
+      font-size: 1.4rem;
+    }
+    .panel-text {
+      font-size: 0.85rem;
+    }
+    .panel-cta {
+      padding: 16px 24px;
+    }
   }
 </style>
 </head>
@@ -892,6 +915,7 @@
     <ul class="footer-links">
       <li><a href="#booking">Book</a></li>
       <li><a href="mailto:berky@comewith.org">Email</a></li>
+      <li><a href="send_agreement.html">Admin</a></li>
       <li><a href="https://instagram.com/comewithnyc" target="_blank">Instagram</a></li>
     </ul>
     <span class="footer-copy">© 2026 Come With · Brooklyn, NY</span>

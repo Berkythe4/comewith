@@ -449,6 +449,24 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 // ── TODAY'S DATE DEFAULT ──────────────────────────────────
 document.getElementById('agr-date').valueAsDate = new Date();
 
+// ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
+(function() {
+  const params = new URLSearchParams(window.location.search);
+  const fieldMap = {
+    name: 'renterName',
+    email: 'email',
+    phone: 'phone',
+    instagram: 'instagram',
+  };
+  const form = document.getElementById('rentalForm');
+  for (const [param, fieldName] of Object.entries(fieldMap)) {
+    const val = params.get(param);
+    if (val && form[fieldName]) {
+      form[fieldName].value = val;
+    }
+  }
+})();
+
 // ── CHECKBOX TOGGLE ───────────────────────────────────────
 function toggleCheck(el){
   el.classList.toggle('selected');
@@ -511,9 +529,11 @@ async function handleSubmit(e){
   const avAddon   = [...form.querySelectorAll('[name=avAddon]:checked')].map(c=>c.value).join(', ');
   const payment   = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
 
+  const params = new URLSearchParams(window.location.search);
   const data = {
     type: 'Equipment Rental Agreement',
     timestamp: new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
+    inquiryEmail: params.get('email') || '',
     agreementNum:  document.getElementById('agr-num').value,
     renterName:    form.renterName.value,
     djName:        form.djName.value,

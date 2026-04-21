@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Select Your Services</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
+  --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
+  --border-strong:rgba(26,20,16,0.3);
+}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+.page{position:relative;z-index:1;max-width:640px;margin:0 auto;}
+
+.doc-header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:40px;}
+.doc-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;}
+.doc-title{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.12em;color:var(--red);margin-top:4px;}
+.doc-sub{font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--mid);margin-top:6px;}
+
+.section{margin-bottom:36px;}
+.section-label{font-size:0.6rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
+.section-label::after{content:'';flex:1;height:1px;background:rgba(193,59,42,0.25);}
+
+.client-info{background:var(--off);padding:16px 20px;margin-bottom:32px;font-size:0.85rem;line-height:1.6;}
+.client-info strong{color:var(--ink);}
+.client-info span{color:var(--mid);}
+
+/* Service cards */
+.service-cards{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);}
+.svc-card{background:var(--bg);padding:28px 22px 24px;cursor:pointer;transition:background 0.18s;user-select:none;position:relative;}
+.svc-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
+.svc-card:hover{background:var(--off);}
+.svc-card:hover::after{transform:scaleX(1);}
+.svc-card.selected{background:#FAE8E6;}
+.svc-card.selected::after{transform:scaleX(1);}
+.svc-card input{position:absolute;opacity:0;pointer-events:none;}
+.svc-card-check{width:18px;height:18px;border:1.5px solid var(--border-strong);display:flex;align-items:center;justify-content:center;margin-bottom:14px;transition:border-color 0.15s,background 0.15s;}
+.svc-card.selected .svc-card-check{border-color:var(--red);background:var(--red);}
+.svc-card-check svg{display:none;}
+.svc-card.selected .svc-card-check svg{display:block;}
+.svc-card-title{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;color:var(--ink);margin-bottom:6px;}
+.svc-card-desc{font-size:0.72rem;color:var(--mid);line-height:1.5;}
+
+.field-group{display:flex;flex-direction:column;gap:5px;margin-top:16px;}
+.field-group label{font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
+.field-group textarea{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;resize:vertical;min-height:72px;}
+.field-group textarea:focus{border-color:var(--red);}
+
+.submit-bar{margin-top:32px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
+.btn-primary{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:16px 36px;border:none;cursor:pointer;transition:background 0.18s;}
+.btn-primary:hover{background:var(--red);}
+.submit-note{font-size:0.68rem;color:var(--mid);letter-spacing:0.06em;}
+.success-banner{display:none;background:#DFF0D0;border:1px solid #3B6D11;padding:16px 20px;margin-top:20px;font-size:0.85rem;color:#3B6D11;line-height:1.5;}
+.error-banner{display:none;background:#FFE8E4;border:1px solid var(--red);padding:16px 20px;margin-top:20px;font-size:0.85rem;color:var(--red-dk);line-height:1.5;}
+
+@media(max-width:600px){
+  body{padding:28px 16px 60px;}
+  .service-cards{grid-template-columns:1fr;}
+  .svc-card{padding:22px 18px 20px;}
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header class="doc-header">
+    <div class="doc-brand">Come With</div>
+    <div class="doc-title">Services Selection</div>
+    <div class="doc-sub">Step 2 — Please select the services you're interested in</div>
+  </header>
+
+  <div class="client-info" id="clientInfo">
+    <strong>Client:</strong> <span id="clientName">—</span><br>
+    <strong>Email:</strong> <span id="clientEmail">—</span>
+  </div>
+
+  <form id="servicesForm" onsubmit="handleSubmit(event)">
+
+    <div class="section">
+      <div class="section-label">Select all services that apply</div>
+      <div class="service-cards">
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="DJ Services">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">DJ Services</div>
+          <div class="svc-card-desc">Live DJ sets for events of any size. House, deep house, dance music, and beyond.</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="Equipment Rental">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">Equipment Rental</div>
+          <div class="svc-card-desc">Pioneer XDJ-AZ, CDJ-3000s, Alpha Theta Wave 8 speakers, and accessories.</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="Event Production">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">Event Production</div>
+          <div class="svc-card-desc">End-to-end planning, coordination, vendor management, and day-of production.</div>
+        </div>
+        <div class="svc-card" onclick="toggleSvc(this)">
+          <input type="checkbox" name="services" value="A/V Recording">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">A/V Recording</div>
+          <div class="svc-card-desc">Audio and video capture with basic editing. SoundCloud, Mixcloud, YouTube ready.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-label">Additional details</div>
+      <div class="field-group">
+        <label>Anything else we should know?</label>
+        <textarea name="serviceNotes" placeholder="Specific needs, dates, budget range, etc."></textarea>
+      </div>
+    </div>
+
+    <div class="submit-bar">
+      <button type="submit" class="btn-primary">Submit Selection</button>
+      <span class="submit-note">This updates your existing inquiry with Come With</span>
+    </div>
+
+    <div class="success-banner" id="successBanner">
+      Services selection submitted. We'll follow up with next steps shortly.
+    </div>
+    <div class="error-banner" id="errorBanner">
+      Something went wrong. Please email hello@comewith.org with your selection.
+    </div>
+
+  </form>
+
+</div>
+
+<script>
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
+
+// Read query params to identify the client
+const params = new URLSearchParams(window.location.search);
+const clientEmail = params.get('email') || '';
+const clientName = params.get('name') || '';
+const inquiryId = params.get('id') || '';
+
+document.getElementById('clientName').textContent = clientName || '—';
+document.getElementById('clientEmail').textContent = clientEmail || '—';
+
+if (!clientEmail) {
+  document.getElementById('clientInfo').innerHTML = '<span style="color:var(--red);">No client identified. This link should include ?email=...&name=... parameters.</span>';
+}
+
+function toggleSvc(el) {
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+}
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('.btn-primary');
+
+  const selected = [...form.querySelectorAll('[name=services]:checked')].map(c => c.value);
+  if (selected.length === 0) {
+    alert('Please select at least one service.');
+    return;
+  }
+
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+
+  const data = {
+    type: 'Services Selection',
+    timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    email: clientEmail,
+    name: clientName,
+    inquiryId: inquiryId,
+    servicesSelected: selected.join(', '),
+    serviceNotes: form.serviceNotes.value,
+  };
+
+  try {
+    await fetch(APPS_SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    document.getElementById('successBanner').style.display = 'block';
+    btn.style.display = 'none';
+  } catch (err) {
+    document.getElementById('errorBanner').style.display = 'block';
+    btn.textContent = 'Submit Selection';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>
