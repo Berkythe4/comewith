@@ -1,0 +1,710 @@
+/**
+ * ══════════════════════════════════════════════════════════════════
+ *  Come With — Google Apps Script (Production)
+ *  Handles all form submissions, user auth, and data retrieval.
+ *  Master admin: berky@comewith.org
+ * ══════════════════════════════════════════════════════════════════
+ *
+ *  GOOGLE SHEET TAB STRUCTURE:
+ *
+ *  Tab: "Bookings Intake"
+ *  Columns: timestamp | firstName | lastName | email | phone | service | eventDate | instagram | message | servicesSelected | serviceNotes | status
+ *
+ *  Tab: "Agreements"
+ *  Columns: timestamp | type | agreementNum | inquiryEmail | clientName | email | phone | instagram | services | eventType | eventDate | venueName | setStart | setEnd | genre | totalFee | depositOpt | depositAmt | payment | promoRights | clientSigName | clientDate | notes | status
+ *
+ *  Tab: "Rental Intake"
+ *  Columns: timestamp | agreementNum | inquiryEmail | renterName | djName | email | phone | instagram | equipment | numDays | avAddon | pickupDate | pickupTime | returnDate | returnTime | intendedUse | rentalFee | totalFee | deposit | depositAmount | payment | lateFee | renterSigName | renterDate | notes | status
+ *
+ *  Tab: "Users"
+ *  Columns: email | name | passwordHash | role | mustChangePassword | created | lastLogin
+ *
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+var MASTER_EMAIL = 'berky@comewith.org';
+
+// ═══════════════════════════════════════════════════════════════════
+//  UTILITIES
+// ═══════════════════════════════════════════════════════════════════
+
+function getSheet(name) {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(name);
+  if (!sheet) {
+    sheet = ss.insertSheet(name);
+  }
+  return sheet;
+}
+
+function sheetToArray(sheet) {
+  if (!sheet) return [];
+  var data = sheet.getDataRange().getValues();
+  if (data.length < 2) return [];
+  var headers = data[0];
+  var rows = [];
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[String(headers[j])] = data[i][j];
+    }
+    rows.push(obj);
+  }
+  return rows;
+}
+
+function jsonResponse(data) {
+  return ContentService.createTextOutput(JSON.stringify(data))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+/**
+ * Find a row index (1-based) by matching a column value.
+ * Returns -1 if not found.
+ */
+function findRowByColumn(sheet, colIndex, value) {
+  if (!sheet || !value) return -1;
+  var data = sheet.getDataRange().getValues();
+  var target = String(value).toLowerCase().trim();
+  for (var i = 1; i < data.length; i++) {
+    if (String(data[i][colIndex]).toLowerCase().trim() === target) {
+      return i + 1; // 1-based row number
+    }
+  }
+  return -1;
+}
+
+/**
+ * Get column index (0-based) by header name.
+ */
+function getColIndex(sheet, headerName) {
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  for (var i = 0; i < headers.length; i++) {
+    if (String(headers[i]).toLowerCase().trim() === headerName.toLowerCase().trim()) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Ensure headers exist on a sheet. If row 1 is empty, write them.
+ */
+function ensureHeaders(sheet, headers) {
+  var existing = sheet.getRange(1, 1, 1, Math.max(sheet.getLastColumn(), 1)).getValues()[0];
+  var hasHeaders = existing.some(function(h) { return String(h).trim() !== ''; });
+  if (!hasHeaders) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+}
+
+/**
+ * Filter rows by email across a sheet.
+ */
+function filterByEmail(rows, email) {
+  var target = String(email).toLowerCase().trim();
+  return rows.filter(function(r) {
+    for (var k in r) {
+      if (k.toLowerCase() === 'email' && String(r[k]).toLowerCase().trim() === target) {
+        return true;
+      }
+    }
+    return false;
+  });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  doGet — ALL READ OPERATIONS
+// ═══════════════════════════════════════════════════════════════════
+
+function doGet(e) {
+  var action = e.parameter.action || '';
+
+  // ── Get Inquiries ──────────────────────────────────────
+  if (action === 'getInquiries') {
+    var sheet = getSheet('Bookings Intake');
+    return jsonResponse(sheetToArray(sheet));
+  }
+
+  // ── Get Agreements ─────────────────────────────────────
+  if (action === 'getAgreements') {
+    var sheet = getSheet('Agreements');
+    return jsonResponse(sheetToArray(sheet));
+  }
+
+  // ── Get Rentals ────────────────────────────────────────
+  if (action === 'getRentals') {
+    var sheet = getSheet('Rental Intake');
+    return jsonResponse(sheetToArray(sheet));
+  }
+
+  // ── Get All ────────────────────────────────────────────
+  if (action === 'getAll') {
+    return jsonResponse({
+      inquiries: sheetToArray(getSheet('Bookings Intake')),
+      agreements: sheetToArray(getSheet('Agreements')),
+      rentals: sheetToArray(getSheet('Rental Intake'))
+    });
+  }
+
+  // ── Get Customer Data (filtered by email) ──────────────
+  if (action === 'getCustomerData') {
+    var email = (e.parameter.email || '').toLowerCase().trim();
+    return jsonResponse({
+      inquiries: filterByEmail(sheetToArray(getSheet('Bookings Intake')), email),
+      agreements: filterByEmail(sheetToArray(getSheet('Agreements')), email),
+      rentals: filterByEmail(sheetToArray(getSheet('Rental Intake')), email)
+    });
+  }
+
+  // ── Get Users ──────────────────────────────────────────
+  if (action === 'getUsers') {
+    var sheet = getSheet('Users');
+    var rows = sheetToArray(sheet);
+    // Strip passwordHash from response
+    rows = rows.map(function(r) {
+      return {
+        email: r.email || '',
+        name: r.name || '',
+        role: r.role || 'customer',
+        mustChangePassword: r.mustChangePassword,
+        created: r.created || '',
+        lastLogin: r.lastLogin || ''
+      };
+    });
+    return jsonResponse(rows);
+  }
+
+  // ── Login ──────────────────────────────────────────────
+  if (action === 'login') {
+    var email = (e.parameter.email || '').toLowerCase().trim();
+    var hash = (e.parameter.hash || '').trim();
+
+    if (!email || !hash) {
+      return jsonResponse({ success: false, error: 'Email and password are required.' });
+    }
+
+    var sheet = getSheet('Users');
+    ensureHeaders(sheet, ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin']);
+
+    var emailCol = getColIndex(sheet, 'email');
+    var rowNum = findRowByColumn(sheet, emailCol, email);
+
+    if (rowNum === -1) {
+      return jsonResponse({ success: false, error: 'No account found for this email.' });
+    }
+
+    var rowData = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    var user = {};
+    for (var i = 0; i < headers.length; i++) {
+      user[String(headers[i])] = rowData[i];
+    }
+
+    var storedHash = String(user.passwordHash || '').trim();
+
+    if (storedHash === '' || storedHash !== hash) {
+      return jsonResponse({ success: false, error: 'Invalid email or password.' });
+    }
+
+    // Return user object (without hash)
+    var mcp = user.mustChangePassword;
+    var mustChange = (mcp === true || mcp === 'true' || mcp === 'TRUE' || mcp === 1);
+
+    return jsonResponse({
+      success: true,
+      user: {
+        email: String(user.email || '').toLowerCase().trim(),
+        name: user.name || '',
+        role: user.role || 'customer',
+        mustChangePassword: mustChange,
+        created: user.created || '',
+        lastLogin: user.lastLogin || ''
+      }
+    });
+  }
+
+  // ── Check User ─────────────────────────────────────────
+  if (action === 'checkUser') {
+    var email = (e.parameter.email || '').toLowerCase().trim();
+
+    if (!email) {
+      return jsonResponse({ exists: false });
+    }
+
+    var sheet = getSheet('Users');
+    ensureHeaders(sheet, ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin']);
+
+    var emailCol = getColIndex(sheet, 'email');
+    var rowNum = findRowByColumn(sheet, emailCol, email);
+
+    if (rowNum === -1) {
+      return jsonResponse({ exists: false });
+    }
+
+    var rowData = sheet.getRange(rowNum, 1, 1, sheet.getLastColumn()).getValues()[0];
+    var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+
+    var user = {};
+    for (var i = 0; i < headers.length; i++) {
+      user[String(headers[i])] = rowData[i];
+    }
+
+    var storedHash = String(user.passwordHash || '').trim();
+    var mcp = user.mustChangePassword;
+    var mustSet = (storedHash === '' || mcp === true || mcp === 'true' || mcp === 'TRUE' || mcp === 1);
+
+    return jsonResponse({
+      exists: true,
+      mustSetPassword: mustSet,
+      role: user.role || 'customer'
+    });
+  }
+
+  return jsonResponse({ error: 'Unknown action: ' + action });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  doPost — ALL WRITE OPERATIONS
+// ═══════════════════════════════════════════════════════════════════
+
+function doPost(e) {
+  var body;
+  try {
+    body = JSON.parse(e.postData.contents);
+  } catch (err) {
+    return jsonResponse({ error: 'Invalid JSON payload.' });
+  }
+
+  var type = body.type || '';
+
+  // ═════════════════════════════════════════════════════════
+  //  BOOKING INQUIRY (no type field — from index.html)
+  // ═════════════════════════════════════════════════════════
+  if (!type && body.firstName !== undefined) {
+    return handleBookingInquiry(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
+  //  SERVICES SELECTION
+  // ═════════════════════════════════════════════════════════
+  if (type === 'Services Selection') {
+    return handleServicesSelection(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
+  //  EVENTS SERVICES AGREEMENT
+  // ═════════════════════════════════════════════════════════
+  if (type === 'Events Services Agreement') {
+    return handleEventsAgreement(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
+  //  EQUIPMENT RENTAL AGREEMENT
+  // ═════════════════════════════════════════════════════════
+  if (type === 'Equipment Rental Agreement') {
+    return handleEquipmentRental(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
+  //  UPDATE STATUS (from dashboard "Mark Complete")
+  // ═════════════════════════════════════════════════════════
+  if (type === 'updateStatus') {
+    return handleUpdateStatus(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
+  //  USER MANAGEMENT
+  // ═════════════════════════════════════════════════════════
+  if (type === 'createUser')      return handleCreateUser(body);
+  if (type === 'updatePassword')  return handleUpdatePassword(body);
+  if (type === 'updateUser')      return handleUpdateUser(body);
+  if (type === 'deleteUser')      return handleDeleteUser(body);
+  if (type === 'updateLastLogin') return handleUpdateLastLogin(body);
+
+  return jsonResponse({ error: 'Unknown type: ' + type });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  HANDLERS — FORMS
+// ═══════════════════════════════════════════════════════════════════
+
+function handleBookingInquiry(d) {
+  var sheet = getSheet('Bookings Intake');
+  var headers = ['timestamp', 'firstName', 'lastName', 'email', 'phone', 'service', 'eventDate', 'instagram', 'message', 'servicesSelected', 'serviceNotes', 'status'];
+  ensureHeaders(sheet, headers);
+
+  sheet.appendRow([
+    d.timestamp || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    d.firstName || '',
+    d.lastName || '',
+    d.email || '',
+    d.phone || '',
+    d.service || '',
+    d.eventDate || '',
+    d.instagram || '',
+    d.message || '',
+    '',  // servicesSelected — filled later via Services Selection
+    '',  // serviceNotes — filled later
+    'New'
+  ]);
+
+  // Notify admin
+  try {
+    MailApp.sendEmail({
+      to: MASTER_EMAIL,
+      subject: 'New Inquiry — ' + (d.firstName || '') + ' ' + (d.lastName || ''),
+      htmlBody: '<h2>New Booking Inquiry</h2>' +
+        '<p><strong>Name:</strong> ' + (d.firstName || '') + ' ' + (d.lastName || '') + '</p>' +
+        '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
+        '<p><strong>Phone:</strong> ' + (d.phone || '') + '</p>' +
+        '<p><strong>Service:</strong> ' + (d.service || '') + '</p>' +
+        '<p><strong>Event Date:</strong> ' + (d.eventDate || '') + '</p>' +
+        '<p><strong>Instagram:</strong> ' + (d.instagram || '') + '</p>' +
+        '<p><strong>Message:</strong> ' + (d.message || '') + '</p>'
+    });
+  } catch (emailErr) {
+    Logger.log('Email error: ' + emailErr);
+  }
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleServicesSelection(d) {
+  var sheet = getSheet('Bookings Intake');
+  var headers = ['timestamp', 'firstName', 'lastName', 'email', 'phone', 'service', 'eventDate', 'instagram', 'message', 'servicesSelected', 'serviceNotes', 'status'];
+  ensureHeaders(sheet, headers);
+
+  var email = (d.email || '').toLowerCase().trim();
+  var emailCol = getColIndex(sheet, 'email');
+  var svcCol = getColIndex(sheet, 'servicesSelected');
+  var notesCol = getColIndex(sheet, 'serviceNotes');
+
+  if (emailCol === -1 || svcCol === -1) {
+    // Columns don't exist — append as new row
+    sheet.appendRow([
+      d.timestamp || '', '', '', d.email || '', '', '', '', '', '',
+      d.servicesSelected || '', d.serviceNotes || '', 'New'
+    ]);
+    return jsonResponse({ success: true });
+  }
+
+  // Find the most recent row matching this email (search from bottom)
+  var data = sheet.getDataRange().getValues();
+  var targetRow = -1;
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][emailCol]).toLowerCase().trim() === email) {
+      targetRow = i + 1;
+      break;
+    }
+  }
+
+  if (targetRow === -1) {
+    // No existing row — append new
+    sheet.appendRow([
+      d.timestamp || '', d.name || '', '', d.email || '', '', '', '', '', '',
+      d.servicesSelected || '', d.serviceNotes || '', 'New'
+    ]);
+  } else {
+    // Update existing row
+    sheet.getRange(targetRow, svcCol + 1).setValue(d.servicesSelected || '');
+    sheet.getRange(targetRow, notesCol + 1).setValue(d.serviceNotes || '');
+  }
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleEventsAgreement(d) {
+  var sheet = getSheet('Agreements');
+  var headers = ['timestamp', 'type', 'agreementNum', 'inquiryEmail', 'clientName', 'email', 'phone', 'instagram', 'services', 'eventType', 'eventDate', 'venueName', 'setStart', 'setEnd', 'genre', 'totalFee', 'depositOpt', 'depositAmt', 'payment', 'promoRights', 'clientSigName', 'clientDate', 'notes', 'status'];
+  ensureHeaders(sheet, headers);
+
+  sheet.appendRow([
+    d.timestamp || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    d.type || 'Events Services Agreement',
+    d.agreementNum || '',
+    d.inquiryEmail || '',
+    d.clientName || '',
+    d.email || '',
+    d.phone || '',
+    d.instagram || '',
+    d.services || '',
+    d.eventType || '',
+    d.eventDate || '',
+    d.venueName || '',
+    d.setStart || '',
+    d.setEnd || '',
+    d.genre || '',
+    d.totalFee || '',
+    d.depositOpt || '',
+    d.depositAmt || '',
+    d.payment || '',
+    d.promoRights || '',
+    d.clientSigName || '',
+    d.clientDate || '',
+    d.notes || '',
+    'Submitted'
+  ]);
+
+  // Also update Bookings Intake status if inquiryEmail exists
+  if (d.inquiryEmail || d.email) {
+    updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+  }
+
+  // Notify admin
+  try {
+    MailApp.sendEmail({
+      to: MASTER_EMAIL,
+      subject: 'Events Agreement Submitted — ' + (d.clientName || d.email || ''),
+      htmlBody: '<h2>Events Services Agreement</h2>' +
+        '<p><strong>Client:</strong> ' + (d.clientName || '') + '</p>' +
+        '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
+        '<p><strong>Event:</strong> ' + (d.eventType || '') + ' on ' + (d.eventDate || '') + '</p>' +
+        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>'
+    });
+  } catch (emailErr) {
+    Logger.log('Email error: ' + emailErr);
+  }
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleEquipmentRental(d) {
+  var sheet = getSheet('Rental Intake');
+  var headers = ['timestamp', 'agreementNum', 'inquiryEmail', 'renterName', 'djName', 'email', 'phone', 'instagram', 'equipment', 'numDays', 'avAddon', 'pickupDate', 'pickupTime', 'returnDate', 'returnTime', 'intendedUse', 'rentalFee', 'totalFee', 'deposit', 'depositAmount', 'payment', 'lateFee', 'renterSigName', 'renterDate', 'notes', 'status'];
+  ensureHeaders(sheet, headers);
+
+  sheet.appendRow([
+    d.timestamp || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    d.agreementNum || '',
+    d.inquiryEmail || '',
+    d.renterName || '',
+    d.djName || '',
+    d.email || '',
+    d.phone || '',
+    d.instagram || '',
+    d.equipment || '',
+    d.numDays || '',
+    d.avAddon || '',
+    d.pickupDate || '',
+    d.pickupTime || '',
+    d.returnDate || '',
+    d.returnTime || '',
+    d.intendedUse || '',
+    d.rentalFee || '',
+    d.totalFee || '',
+    d.deposit || '',
+    d.depositAmount || '',
+    d.payment || '',
+    d.lateFee || '',
+    d.renterSigName || '',
+    d.renterDate || '',
+    d.notes || '',
+    'Submitted'
+  ]);
+
+  // Update Bookings Intake status if inquiryEmail exists
+  if (d.inquiryEmail || d.email) {
+    updateInquiryStatus(d.inquiryEmail || d.email, 'Rental Agreement Sent');
+  }
+
+  // Notify admin
+  try {
+    MailApp.sendEmail({
+      to: MASTER_EMAIL,
+      subject: 'Equipment Rental Agreement — ' + (d.renterName || d.email || ''),
+      htmlBody: '<h2>Equipment Rental Agreement</h2>' +
+        '<p><strong>Renter:</strong> ' + (d.renterName || '') + '</p>' +
+        '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
+        '<p><strong>Equipment:</strong> ' + (d.equipment || '') + '</p>' +
+        '<p><strong>Pickup:</strong> ' + (d.pickupDate || '') + ' at ' + (d.pickupTime || '') + '</p>' +
+        '<p><strong>Return:</strong> ' + (d.returnDate || '') + ' at ' + (d.returnTime || '') + '</p>' +
+        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>'
+    });
+  } catch (emailErr) {
+    Logger.log('Email error: ' + emailErr);
+  }
+
+  // Send confirmation email to renter if flag is set
+  if (d.sendConfirmationEmail && d.email) {
+    try {
+      MailApp.sendEmail({
+        to: d.email,
+        subject: 'Come With — Equipment Rental Agreement Confirmation',
+        htmlBody: '<div style="font-family:Arial,sans-serif;max-width:600px;">' +
+          '<h2 style="color:#1A1410;">Equipment Rental Agreement Confirmed</h2>' +
+          '<p>Hi ' + (d.renterName || 'there') + ',</p>' +
+          '<p>Your Equipment Rental Agreement has been submitted and received by Come With.</p>' +
+          '<table style="width:100%;border-collapse:collapse;margin:16px 0;">' +
+          '<tr><td style="padding:8px;border-bottom:1px solid #ddd;color:#888;font-size:12px;">AGREEMENT #</td><td style="padding:8px;border-bottom:1px solid #ddd;">' + (d.agreementNum || '—') + '</td></tr>' +
+          '<tr><td style="padding:8px;border-bottom:1px solid #ddd;color:#888;font-size:12px;">EQUIPMENT</td><td style="padding:8px;border-bottom:1px solid #ddd;">' + (d.equipment || '—') + '</td></tr>' +
+          '<tr><td style="padding:8px;border-bottom:1px solid #ddd;color:#888;font-size:12px;">RENTAL PERIOD</td><td style="padding:8px;border-bottom:1px solid #ddd;">' + (d.pickupDate || '') + ' — ' + (d.returnDate || '') + ' (' + (d.numDays || '1') + ' days)</td></tr>' +
+          '<tr><td style="padding:8px;border-bottom:1px solid #ddd;color:#888;font-size:12px;">TOTAL</td><td style="padding:8px;border-bottom:1px solid #ddd;font-weight:bold;">' + (d.totalFee || '—') + '</td></tr>' +
+          '<tr><td style="padding:8px;border-bottom:1px solid #ddd;color:#888;font-size:12px;">PAYMENT</td><td style="padding:8px;border-bottom:1px solid #ddd;">' + (d.payment || '—') + '</td></tr>' +
+          '</table>' +
+          '<p>If you have any questions, reply to this email or contact us at berky@comewith.org.</p>' +
+          '<p style="color:#888;font-size:12px;margin-top:24px;">Come With · Brooklyn, NY · comewith.org</p>' +
+          '</div>'
+      });
+    } catch (confirmErr) {
+      Logger.log('Confirmation email error: ' + confirmErr);
+    }
+  }
+
+  return jsonResponse({ success: true });
+}
+
+
+/**
+ * Update the status column on the most recent matching inquiry.
+ */
+function updateInquiryStatus(email, newStatus) {
+  var sheet = getSheet('Bookings Intake');
+  var emailCol = getColIndex(sheet, 'email');
+  var statusCol = getColIndex(sheet, 'status');
+
+  if (emailCol === -1 || statusCol === -1) return;
+
+  var data = sheet.getDataRange().getValues();
+  var target = String(email).toLowerCase().trim();
+
+  for (var i = data.length - 1; i >= 1; i--) {
+    if (String(data[i][emailCol]).toLowerCase().trim() === target) {
+      sheet.getRange(i + 1, statusCol + 1).setValue(newStatus);
+      return;
+    }
+  }
+}
+
+
+function handleUpdateStatus(d) {
+  var email = (d.email || '').toLowerCase().trim();
+  var status = d.status || 'Complete';
+
+  if (!email) return jsonResponse({ error: 'Email required.' });
+
+  updateInquiryStatus(email, status);
+  return jsonResponse({ success: true });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  HANDLERS — USER MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════
+
+function handleCreateUser(d) {
+  var sheet = getSheet('Users');
+  var headers = ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin'];
+  ensureHeaders(sheet, headers);
+
+  var email = (d.email || '').toLowerCase().trim();
+  if (!email) return jsonResponse({ error: 'Email required.' });
+
+  // Check if user already exists
+  var emailCol = getColIndex(sheet, 'email');
+  var existingRow = findRowByColumn(sheet, emailCol, email);
+
+  if (existingRow !== -1) {
+    // User exists — don't overwrite, just return success
+    return jsonResponse({ success: true, note: 'User already exists.' });
+  }
+
+  sheet.appendRow([
+    email,
+    d.name || '',
+    d.passwordHash || '',
+    d.role || 'customer',
+    d.mustChangePassword !== false ? 'true' : 'false',
+    d.created || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    ''
+  ]);
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleUpdatePassword(d) {
+  var sheet = getSheet('Users');
+  var headers = ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin'];
+  ensureHeaders(sheet, headers);
+
+  var email = (d.email || '').toLowerCase().trim();
+  if (!email) return jsonResponse({ error: 'Email required.' });
+
+  var emailCol = getColIndex(sheet, 'email');
+  var hashCol = getColIndex(sheet, 'passwordHash');
+  var mcpCol = getColIndex(sheet, 'mustChangePassword');
+  var rowNum = findRowByColumn(sheet, emailCol, email);
+
+  if (rowNum === -1) return jsonResponse({ error: 'User not found.' });
+
+  if (hashCol !== -1) sheet.getRange(rowNum, hashCol + 1).setValue(d.newPasswordHash || '');
+  if (mcpCol !== -1) sheet.getRange(rowNum, mcpCol + 1).setValue(d.mustChangePassword === false ? 'false' : 'true');
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleUpdateUser(d) {
+  var sheet = getSheet('Users');
+  var headers = ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin'];
+  ensureHeaders(sheet, headers);
+
+  var email = (d.email || '').toLowerCase().trim();
+  if (!email) return jsonResponse({ error: 'Email required.' });
+
+  var emailCol = getColIndex(sheet, 'email');
+  var roleCol = getColIndex(sheet, 'role');
+  var rowNum = findRowByColumn(sheet, emailCol, email);
+
+  if (rowNum === -1) return jsonResponse({ error: 'User not found.' });
+  if (roleCol !== -1) sheet.getRange(rowNum, roleCol + 1).setValue(d.role || 'customer');
+
+  return jsonResponse({ success: true });
+}
+
+
+function handleDeleteUser(d) {
+  var sheet = getSheet('Users');
+  var email = (d.email || '').toLowerCase().trim();
+  if (!email) return jsonResponse({ error: 'Email required.' });
+
+  // Prevent deleting master admin
+  if (email === MASTER_EMAIL.toLowerCase()) {
+    return jsonResponse({ error: 'Cannot delete master admin.' });
+  }
+
+  var emailCol = getColIndex(sheet, 'email');
+  var rowNum = findRowByColumn(sheet, emailCol, email);
+
+  if (rowNum === -1) return jsonResponse({ error: 'User not found.' });
+
+  sheet.deleteRow(rowNum);
+  return jsonResponse({ success: true });
+}
+
+
+function handleUpdateLastLogin(d) {
+  var sheet = getSheet('Users');
+  var headers = ['email', 'name', 'passwordHash', 'role', 'mustChangePassword', 'created', 'lastLogin'];
+  ensureHeaders(sheet, headers);
+
+  var email = (d.email || '').toLowerCase().trim();
+  if (!email) return jsonResponse({ success: true }); // Silent no-op
+
+  var emailCol = getColIndex(sheet, 'email');
+  var loginCol = getColIndex(sheet, 'lastLogin');
+  var rowNum = findRowByColumn(sheet, emailCol, email);
+
+  if (rowNum === -1) return jsonResponse({ success: true });
+  if (loginCol !== -1) sheet.getRange(rowNum, loginCol + 1).setValue(d.lastLogin || '');
+
+  return jsonResponse({ success: true });
+}
