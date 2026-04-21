@@ -1092,16 +1092,20 @@ async function submitForm(e) {
     message: form.message.value,
   };
 
-  // Fire and forget — no-cors mode always returns opaque response, so we show success immediately
+  // Fire and forget — no-cors mode always returns opaque response
   fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   });
-  form.reset();
-  success.style.display = 'block';
-  btn.style.display = 'none';
+
+  // Redirect to services selection as confirmation
+  const rParams = new URLSearchParams({
+    name: data.firstName + ' ' + data.lastName,
+    email: data.email,
+  });
+  window.location.href = 'services_selection.html?' + rParams.toString();
 }
 
 // Pre-fill from equipment list page interests

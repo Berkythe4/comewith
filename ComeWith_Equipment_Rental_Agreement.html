@@ -11,15 +11,39 @@
 :root{
   --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
   --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
-  --border-strong:rgba(26,20,16,0.3);--gold:#C9A84C;
+  --border-strong:rgba(26,20,16,0.3);
 }
 body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:48px 24px 80px;}
 body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
 .page{position:relative;z-index:1;max-width:800px;margin:0 auto;}
 
+/* LOCK SCREEN */
+.lock-screen{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:60vh;text-align:center;}
+.lock-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;margin-bottom:6px;}
+.lock-sub{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);margin-bottom:40px;}
+.lock-field{display:flex;gap:0;border:2px solid var(--ink);width:100%;max-width:340px;}
+.lock-field input{flex:1;font-family:'Inconsolata',monospace;font-size:0.95rem;padding:14px 16px;border:none;background:white;color:var(--ink);outline:none;}
+.lock-field button{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:14px 24px;border:none;cursor:pointer;transition:background 0.18s;white-space:nowrap;}
+.lock-field button:hover{background:var(--red);}
+.lock-error{font-size:0.75rem;color:var(--red);margin-top:12px;display:none;}
+
+.admin-content{display:none;}
+
+/* NAV BAR */
+.admin-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:32px;padding-bottom:16px;border-bottom:1px solid var(--border);}
+.nav-back{font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;color:var(--mid);text-decoration:none;transition:color 0.15s;display:flex;align-items:center;gap:6px;}
+.nav-back:hover{color:var(--red);}
+.nav-logout{font-size:0.7rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--mid);background:none;border:1px solid var(--border);padding:6px 14px;cursor:pointer;transition:color 0.15s,border-color 0.15s;font-family:'Inconsolata',monospace;}
+.nav-logout:hover{color:var(--red);border-color:var(--red);}
+
+/* PROFILE */
+.admin-profile{background:var(--ink);padding:20px 24px;display:flex;align-items:center;gap:16px;margin-bottom:36px;}
+.profile-avatar{width:40px;height:40px;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:1.2rem;color:white;letter-spacing:0.04em;flex-shrink:0;}
+.profile-name{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.08em;color:var(--bg);}
+.profile-role{font-size:0.65rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(242,237,230,0.45);margin-top:2px;}
+
 /* HEADER */
 .doc-header{border-bottom:2px solid var(--ink);padding-bottom:20px;margin-bottom:40px;display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;}
-.doc-brand{font-family:'Bebas Neue',sans-serif;font-size:2.8rem;letter-spacing:0.06em;color:var(--ink);line-height:1;}
 .doc-title{font-family:'Bebas Neue',sans-serif;font-size:1.2rem;letter-spacing:0.12em;color:var(--red);}
 .doc-sub{font-size:0.65rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--mid);margin-top:3px;}
 .ref-row{display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap;}
@@ -32,26 +56,19 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .section-label{font-size:0.6rem;letter-spacing:0.22em;text-transform:uppercase;color:var(--red);margin-bottom:14px;display:flex;align-items:center;gap:10px;}
 .section-label::after{content:'';flex:1;height:1px;background:rgba(193,59,42,0.25);}
 
-/* FIELD ROWS */
+/* FIELDS */
 .field-grid{display:grid;gap:14px;}
 .field-grid.cols-2{grid-template-columns:1fr 1fr;}
 .field-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
 .field-group{display:flex;flex-direction:column;gap:5px;}
 .field-group label{font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
-.field-group input,.field-group select,.field-group textarea{
-  font-family:'Inconsolata',monospace;font-size:0.9rem;
-  background:white;border:1px solid var(--border-strong);
-  padding:10px 12px;color:var(--ink);outline:none;
-  transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;
-}
+.field-group input,.field-group select,.field-group textarea{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;}
 .field-group input:focus,.field-group select:focus,.field-group textarea:focus{border-color:var(--red);}
 .field-group textarea{resize:vertical;min-height:72px;}
-.field-group select option{background:white;}
 
 /* CHECKBOXES */
 .check-grid{display:grid;gap:8px;}
 .check-grid.cols-2{grid-template-columns:1fr 1fr;}
-.check-grid.cols-3{grid-template-columns:1fr 1fr 1fr;}
 .check-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:white;border:1px solid var(--border);cursor:pointer;transition:border-color 0.15s,background 0.15s;user-select:none;}
 .check-item:hover{border-color:var(--border-strong);background:var(--off);}
 .check-item.selected{border-color:var(--red);background:#FAE8E6;}
@@ -63,7 +80,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .check-label{font-size:0.82rem;color:var(--ink);line-height:1.3;}
 .check-sub{font-size:0.68rem;color:var(--mid);margin-top:1px;}
 
-/* RADIO ITEMS */
+/* RADIO */
 .radio-item{display:flex;align-items:center;gap:10px;padding:10px 14px;background:white;border:1px solid var(--border);cursor:pointer;transition:border-color 0.15s,background 0.15s;user-select:none;}
 .radio-item:hover{border-color:var(--border-strong);background:var(--off);}
 .radio-item.selected{border-color:var(--red);background:#FAE8E6;}
@@ -73,17 +90,21 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .radio-dot::after{content:'';width:8px;height:8px;border-radius:50%;background:var(--red);display:none;}
 .radio-item.selected .radio-dot::after{display:block;}
 
-/* DEPOSIT CONDITIONAL */
 .deposit-amount{display:none;margin-top:10px;}
 .deposit-amount.visible{display:block;}
 
 /* FEE TABLE */
 .fee-table{width:100%;border-collapse:collapse;margin-top:4px;}
 .fee-table th{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);text-align:left;padding:8px 12px;border-bottom:1px solid var(--border-strong);background:var(--off);}
-.fee-table td{padding:6px 12px;border-bottom:1px solid var(--border);vertical-align:middle;}
+.fee-table td{padding:6px 12px;border-bottom:1px solid var(--border);vertical-align:middle;font-size:0.85rem;}
 .fee-table td input{font-family:'Inconsolata',monospace;font-size:0.88rem;background:transparent;border:none;border-bottom:1px dashed var(--border);width:100%;outline:none;padding:2px 0;color:var(--ink);}
 .fee-table td input:focus{border-bottom-color:var(--red);}
+.fee-table td input[readonly]{border-bottom-style:solid;color:var(--ink);font-weight:500;}
 .fee-total td{font-weight:500;background:var(--off);}
+
+/* AUTO-CALC HIGHLIGHT */
+.auto-total{font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.04em;color:var(--red);background:var(--off);border:2px solid var(--ink);padding:16px 20px;display:flex;justify-content:space-between;align-items:center;margin-top:12px;}
+.auto-total-label{font-size:0.65rem;letter-spacing:0.18em;text-transform:uppercase;color:var(--mid);font-family:'Inconsolata',monospace;}
 
 /* PAYMENT PILLS */
 .pay-grid{display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;}
@@ -99,7 +120,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .clause-fill{background:transparent;border:none;border-bottom:1px dashed var(--border-strong);font-family:'Inconsolata',monospace;font-size:0.8rem;color:var(--ink);outline:none;padding:0 2px;min-width:60px;}
 .clause-fill:focus{border-bottom-color:var(--red);}
 
-/* SIGNATURE BLOCK */
+/* SIGNATURE */
 .sig-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);margin-top:8px;}
 .sig-panel{background:var(--bg);padding:28px 24px;}
 .sig-party{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.1em;color:var(--ink);margin-bottom:20px;}
@@ -115,24 +136,20 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .btn-secondary{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:transparent;color:var(--ink);padding:14px 28px;border:2px solid var(--ink);cursor:pointer;transition:all 0.18s;}
 .btn-secondary:hover{border-color:var(--red);color:var(--red);}
 .submit-note{font-size:0.68rem;color:var(--mid);letter-spacing:0.06em;}
-
-/* DIVIDER */
-.divider{height:1px;background:var(--border);margin:32px 0;}
-
-/* SUCCESS */
 .success-banner{display:none;background:#DFF0D0;border:1px solid #3B6D11;padding:16px 20px;margin-top:20px;font-size:0.85rem;color:#3B6D11;line-height:1.5;}
 
 @media(max-width:600px){
   body{padding:28px 16px 60px;}
   .doc-header{flex-direction:column;align-items:flex-start;}
   .field-grid.cols-2,.field-grid.cols-3{grid-template-columns:1fr;}
-  .check-grid.cols-2,.check-grid.cols-3{grid-template-columns:1fr;}
+  .check-grid.cols-2{grid-template-columns:1fr;}
   .sig-grid{grid-template-columns:1fr;}
+  .admin-profile{padding:16px 18px;}
 }
-
 @media print{
   body::before{display:none;}
-  .submit-bar,.success-banner{display:none!important;}
+  .submit-bar,.success-banner,.lock-screen,.admin-nav,.admin-profile{display:none!important;}
+  .admin-content{display:block!important;}
   .check-item.selected{background:#FAE8E6!important;-webkit-print-color-adjust:exact;}
 }
 </style>
@@ -140,446 +157,547 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 <body>
 <div class="page">
 
-  <!-- HEADER -->
-  <header class="doc-header">
-    <div>
-      <div class="doc-brand">Come With</div>
-      <div class="doc-title">Equipment Rental Agreement</div>
-      <div class="doc-sub">hello@comewith.org · comewith.org · Brooklyn, NY</div>
+  <!-- LOCK SCREEN -->
+  <div class="lock-screen" id="lockScreen">
+    <div class="lock-brand">Come With</div>
+    <div class="lock-sub">Equipment Rental Agreement — Admin</div>
+    <div class="lock-field">
+      <input type="password" id="pinInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')authenticate()">
+      <button onclick="authenticate()">Unlock</button>
     </div>
-    <div>
-      <div class="ref-row">
-        <div class="ref-block">
-          <label>Agreement #</label>
-          <input type="text" id="agr-num" placeholder="ERA-____">
-        </div>
-        <div class="ref-block">
-          <label>Date</label>
-          <input type="date" id="agr-date">
-        </div>
-      </div>
-    </div>
-  </header>
+    <div class="lock-error" id="lockError">Incorrect password. Try again.</div>
+  </div>
 
-  <form id="rentalForm" onsubmit="handleSubmit(event)">
+  <!-- ADMIN CONTENT -->
+  <div class="admin-content" id="adminContent">
 
-    <!-- RENTER INFO -->
-    <div class="section">
-      <div class="section-label">Renter information</div>
-      <div class="field-grid cols-2">
-        <div class="field-group">
-          <label>Full legal name *</label>
-          <input type="text" name="renterName" required placeholder="First and last name">
-        </div>
-        <div class="field-group">
-          <label>DJ / Artist name</label>
-          <input type="text" name="djName" placeholder="Stage name (if applicable)">
-        </div>
-        <div class="field-group">
-          <label>Email *</label>
-          <input type="email" name="email" required placeholder="your@email.com">
-        </div>
-        <div class="field-group">
-          <label>Phone</label>
-          <input type="tel" name="phone" placeholder="(555) 000-0000">
-        </div>
-        <div class="field-group">
-          <label>Instagram</label>
-          <input type="text" name="instagram" placeholder="@handle">
-        </div>
-        <div class="field-group">
-          <label>City / State</label>
-          <input type="text" name="location" placeholder="Brooklyn, NY">
-        </div>
+    <nav class="admin-nav">
+      <a href="index.html" class="nav-back">&larr; Back to site</a>
+      <button class="nav-logout" onclick="logout()">Log out</button>
+    </nav>
+
+    <div class="admin-profile">
+      <div class="profile-avatar">B</div>
+      <div>
+        <div class="profile-name">Berky</div>
+        <div class="profile-role">Come With Admin</div>
       </div>
     </div>
 
-    <!-- EQUIPMENT SELECTION -->
-    <div class="section">
-      <div class="section-label">Equipment — select all items being rented</div>
-      <div class="check-grid cols-2" id="equipmentGrid">
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Pioneer XDJ-AZ">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Pioneer XDJ-AZ</div><div class="check-sub">4-channel all-in-one · $175/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Pioneer CDJ-3000 Pair">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Pioneer CDJ-3000 (Pair)</div><div class="check-sub">Both units · $300/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Pioneer CDJ-3000 Unit A">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Pioneer CDJ-3000 — Unit A</div><div class="check-sub">Single unit · $175/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Pioneer CDJ-3000 Unit B">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Pioneer CDJ-3000 — Unit B</div><div class="check-sub">Single unit · $175/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Alpha Theta Wave 8 Pair">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Alpha Theta Wave 8 (Pair)</div><div class="check-sub">Both speakers · $120/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Alpha Theta Wave 8 Unit A">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Wave 8 — Speaker A</div><div class="check-sub">Single unit · $70/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Alpha Theta Wave 8 Unit B">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Wave 8 — Speaker B</div><div class="check-sub">Single unit · $70/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="CDJ Dual Stand">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">CDJ Dual Stand</div><div class="check-sub">Included with CDJ pair</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="DJ Headphones">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">DJ Headphones</div><div class="check-sub">$25/day</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="equipment" value="Cables and Accessories">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Cables &amp; accessories</div><div class="check-sub">Included on request</div></div>
-        </label>
+    <header class="doc-header">
+      <div>
+        <div class="doc-title">Equipment Rental Agreement</div>
+        <div class="doc-sub">Internal — generate and submit rental agreements</div>
       </div>
-      <div class="field-grid" style="margin-top:12px;">
-        <div class="field-group">
-          <label>Other / additional items</label>
-          <input type="text" name="equipOther" placeholder="Describe any additional items">
+      <div>
+        <div class="ref-row">
+          <div class="ref-block">
+            <label>Agreement #</label>
+            <input type="text" id="agr-num" placeholder="ERA-____">
+          </div>
+          <div class="ref-block">
+            <label>Date</label>
+            <input type="date" id="agr-date">
+          </div>
         </div>
       </div>
-    </div>
+    </header>
 
-    <!-- RENTAL PERIOD -->
-    <div class="section">
-      <div class="section-label">Rental period</div>
-      <div class="field-grid cols-2">
-        <div class="field-group">
-          <label>Pickup date *</label>
-          <input type="date" name="pickupDate" required>
-        </div>
-        <div class="field-group">
-          <label>Pickup time *</label>
-          <input type="time" name="pickupTime" required>
-        </div>
-        <div class="field-group">
-          <label>Return date *</label>
-          <input type="date" name="returnDate" required>
-        </div>
-        <div class="field-group">
-          <label>Return time (deadline) *</label>
-          <input type="time" name="returnTime" required>
-        </div>
-        <div class="field-group">
-          <label>Pickup location</label>
-          <input type="text" name="pickupLocation" placeholder="Brooklyn, NY — confirmed at booking">
-        </div>
-        <div class="field-group">
-          <label>Intended use / event name</label>
-          <input type="text" name="intendedUse" placeholder="Private party, club night, etc.">
-        </div>
-      </div>
-    </div>
+    <form id="rentalForm" onsubmit="handleSubmit(event)">
 
-    <!-- A/V RECORDING ADD-ON -->
-    <div class="section">
-      <div class="section-label">A/V recording add-on</div>
-      <div class="check-grid cols-2">
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="avAddon" value="Audio recording + basic edit">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Audio recording + basic edit</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="avAddon" value="Video recording + basic edit">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Video recording + basic edit</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="avAddon" value="Audio + video + basic edit">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">Audio + video bundle</div></div>
-        </label>
-        <label class="check-item" onclick="toggleCheck(this)">
-          <input type="checkbox" name="avAddon" value="No A/V recording">
-          <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-          <div><div class="check-label">No A/V recording needed</div></div>
-        </label>
-      </div>
-    </div>
-
-    <!-- FEES & PAYMENT -->
-    <div class="section">
-      <div class="section-label">Fees &amp; payment</div>
-      <table class="fee-table">
-        <thead>
-          <tr><th>Item</th><th style="width:140px;">Amount</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Rental fee</td><td><input type="text" name="rentalFee" placeholder="$0.00"></td></tr>
-          <tr><td>A/V recording add-on (if applicable)</td><td><input type="text" name="avFee" placeholder="$0.00"></td></tr>
-          <tr><td>Other charges</td><td><input type="text" name="otherFee" placeholder="$0.00"></td></tr>
-        </tbody>
-        <tfoot>
-          <tr class="fee-total"><td><strong>Total</strong></td><td><input type="text" name="totalFee" placeholder="$0.00"></td></tr>
-        </tfoot>
-      </table>
-
-      <div style="margin-top:18px;">
-        <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Damage deposit</div>
-        <div class="check-grid cols-2" style="margin-bottom:10px;">
-          <label class="radio-item" onclick="toggleDeposit(this,'required')">
-            <input type="radio" name="deposit" value="required">
-            <div class="radio-dot"></div>
-            <div class="check-label">Required</div>
-          </label>
-          <label class="radio-item" onclick="toggleDeposit(this,'waived')">
-            <input type="radio" name="deposit" value="waived">
-            <div class="radio-dot"></div>
-            <div class="check-label">Waived</div>
-          </label>
-        </div>
-        <div class="deposit-amount" id="depositAmtRow">
+      <!-- RENTER INFO -->
+      <div class="section">
+        <div class="section-label">Renter information</div>
+        <div class="field-grid cols-2">
           <div class="field-group">
-            <label>Deposit amount</label>
-            <input type="text" name="depositAmount" placeholder="$0.00">
+            <label>Full legal name *</label>
+            <input type="text" name="renterName" required placeholder="First and last name">
+          </div>
+          <div class="field-group">
+            <label>DJ / Artist name</label>
+            <input type="text" name="djName" placeholder="Stage name (if applicable)">
+          </div>
+          <div class="field-group">
+            <label>Email *</label>
+            <input type="email" name="email" required placeholder="your@email.com">
+          </div>
+          <div class="field-group">
+            <label>Phone</label>
+            <input type="tel" name="phone" placeholder="(555) 000-0000">
+          </div>
+          <div class="field-group">
+            <label>Instagram</label>
+            <input type="text" name="instagram" placeholder="@handle">
+          </div>
+          <div class="field-group">
+            <label>City / State</label>
+            <input type="text" name="location" placeholder="Brooklyn, NY">
           </div>
         </div>
       </div>
 
-      <div style="margin-top:18px;">
-        <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Payment method</div>
-        <div class="pay-grid">
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Venmo">Venmo</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Zelle">Zelle</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Cash">Cash</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Check">Check</label>
-        </div>
-      </div>
-    </div>
-
-    <!-- TERMS -->
-    <div class="section">
-      <div class="section-label">Terms &amp; conditions</div>
-      <div class="clause-block">
-        <div class="clause-num">1 — Renter responsibilities</div>
-        <div class="clause-text">Renter agrees to use all equipment safely and for its intended purpose. Renter assumes full financial liability for any damage, theft, loss, or destruction during the rental period. Equipment must be returned in the same condition as received. Normal wear does not include scratches, dents, liquid damage, or functional impairment.</div>
-      </div>
-      <div class="clause-block">
-        <div class="clause-num">2 — Late returns</div>
-        <div class="clause-text">Equipment not returned by the agreed deadline will incur a late fee of $<input class="clause-fill" name="lateFee" size="5" placeholder="___"> per day. Come With reserves the right to report unreturned equipment as theft after <input class="clause-fill" name="lateTheft" size="4" placeholder="___"> days past the return deadline.</div>
-      </div>
-      <div class="clause-block">
-        <div class="clause-num">3 — Damage &amp; liability</div>
-        <div class="clause-text">In the event of damage, Renter is responsible for the full cost of repair or replacement at current market value. Come With is not responsible for injury, loss, or damage to third parties. Renter agrees to indemnify and hold harmless Come With from any claims arising from Renter's use of the equipment.</div>
-      </div>
-      <div class="clause-block">
-        <div class="clause-num">4 — Cancellation</div>
-        <div class="clause-text">Cancellations with fewer than 48 hours notice may forfeit any deposit paid. Cancellations with 48+ hours notice are eligible for a full refund of any deposit.</div>
-      </div>
-      <div class="clause-block">
-        <div class="clause-num">5 — Governing law</div>
-        <div class="clause-text">This Agreement is governed by the laws of the State of New York. Disputes shall be resolved in the courts of New York County.</div>
-      </div>
-    </div>
-
-    <!-- ADDITIONAL NOTES -->
-    <div class="section">
-      <div class="section-label">Additional notes</div>
-      <div class="field-group">
-        <textarea name="notes" placeholder="Any additional terms, special arrangements, or notes for this rental..."></textarea>
-      </div>
-    </div>
-
-    <!-- SIGNATURES -->
-    <div class="section">
-      <div class="section-label">Signatures</div>
-      <p style="font-size:0.75rem;color:var(--mid);margin-bottom:16px;line-height:1.6;">By signing below, both parties confirm they have read and agreed to the terms of this Equipment Rental Agreement. This agreement is legally binding upon execution.</p>
-      <div class="sig-grid">
-        <div class="sig-panel">
-          <div class="sig-party">Come With — Owner</div>
-          <div class="sig-label">Signature</div>
-          <canvas class="sig-line" id="ownerSigCanvas" width="320" height="44"></canvas>
-          <div class="sig-label">Printed name</div>
-          <input class="sig-input" type="text" name="ownerName" value="Berky (Keith Berkman)" readonly style="background:var(--off);">
-          <div style="margin-top:10px;">
-            <div class="sig-label">Date signed</div>
-            <input class="sig-input" type="date" name="ownerDate">
+      <!-- EQUIPMENT SELECTION -->
+      <div class="section">
+        <div class="section-label">Equipment — select all items being rented</div>
+        <div class="check-grid cols-2" id="equipmentGrid">
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Pioneer XDJ-AZ" data-rate="220">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Pioneer XDJ-AZ</div><div class="check-sub">4-channel all-in-one &middot; $220/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Pioneer CDJ-3000 Pair" data-rate="440">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Pioneer CDJ-3000 (Pair)</div><div class="check-sub">Both units &middot; $440/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Pioneer CDJ-3000 Single" data-rate="175">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Pioneer CDJ-3000 (Single)</div><div class="check-sub">One unit &middot; $175/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Alpha Theta Wave 8 Pair" data-rate="132">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Alpha Theta Wave 8 (Pair)</div><div class="check-sub">Both speakers &middot; $132/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Alpha Theta Wave 8 Single" data-rate="72">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Alpha Theta Wave 8 (Single)</div><div class="check-sub">One speaker &middot; $72/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="KRK Rokit 5 Pair" data-rate="55">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">KRK Rokit 5 (Pair)</div><div class="check-sub">Studio monitors &middot; $55/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="DJ Headphones" data-rate="28">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">DJ Headphones</div><div class="check-sub">Professional monitoring &middot; $28/day</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="CDJ Dual Stand" data-rate="0">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">CDJ Dual Stand</div><div class="check-sub">Included with CDJ pair</div></div>
+          </div>
+          <div class="check-item" onclick="toggleEquip(this)">
+            <input type="checkbox" name="equipment" value="Cables and Accessories" data-rate="0">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Cables &amp; Accessories</div><div class="check-sub">Included on request</div></div>
           </div>
         </div>
-        <div class="sig-panel">
-          <div class="sig-party">Renter</div>
-          <div class="sig-label">Signature</div>
-          <canvas class="sig-line" id="renterSigCanvas" width="320" height="44" style="cursor:crosshair;"></canvas>
-          <div class="sig-label">Printed name</div>
-          <input class="sig-input" type="text" name="renterSigName" placeholder="Full legal name">
-          <div style="margin-top:10px;">
-            <div class="sig-label">Date signed</div>
-            <input class="sig-input" type="date" name="renterDate">
+        <div class="field-grid" style="margin-top:12px;">
+          <div class="field-group">
+            <label>Other / additional items</label>
+            <input type="text" name="equipOther" placeholder="Describe any additional items">
           </div>
         </div>
       </div>
-      <p style="font-size:0.65rem;color:var(--mid);margin-top:8px;">Draw your signature in the box above, or type your name to acknowledge agreement.</p>
-    </div>
 
-    <!-- SUBMIT -->
-    <div class="submit-bar">
-      <button type="submit" class="btn-primary">Submit Agreement</button>
-      <button type="button" class="btn-secondary" onclick="window.print()">Print / Save PDF</button>
-      <button type="button" class="btn-secondary" onclick="clearForm()">Clear Form</button>
-      <span class="submit-note">Submission sends a copy to hello@comewith.org</span>
-    </div>
+      <!-- RENTAL PERIOD -->
+      <div class="section">
+        <div class="section-label">Rental period</div>
+        <div class="field-grid cols-2">
+          <div class="field-group">
+            <label>Number of days *</label>
+            <input type="number" name="numDays" id="numDays" min="1" value="1" required oninput="recalcTotal()">
+          </div>
+          <div class="field-group">
+            <label>Intended use / event name</label>
+            <input type="text" name="intendedUse" placeholder="Private party, club night, etc.">
+          </div>
+          <div class="field-group">
+            <label>Pickup date *</label>
+            <input type="date" name="pickupDate" required>
+          </div>
+          <div class="field-group">
+            <label>Pickup time *</label>
+            <input type="time" name="pickupTime" required>
+          </div>
+          <div class="field-group">
+            <label>Return date *</label>
+            <input type="date" name="returnDate" required>
+          </div>
+          <div class="field-group">
+            <label>Return time (deadline) *</label>
+            <input type="time" name="returnTime" required>
+          </div>
+          <div class="field-group">
+            <label>Pickup location</label>
+            <input type="text" name="pickupLocation" placeholder="Brooklyn, NY — confirmed at booking">
+          </div>
+        </div>
+      </div>
 
-    <div class="success-banner" id="successBanner">
-      Agreement submitted successfully. A copy has been sent to hello@comewith.org. The renter should retain this page as their record.
-    </div>
+      <!-- A/V RECORDING ADD-ON -->
+      <div class="section">
+        <div class="section-label">A/V recording add-on</div>
+        <div class="check-grid cols-2">
+          <div class="check-item" onclick="toggleCheck(this)">
+            <input type="checkbox" name="avAddon" value="Audio recording + basic edit">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Audio recording + basic edit</div></div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <input type="checkbox" name="avAddon" value="Video recording + basic edit">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Video recording + basic edit</div></div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <input type="checkbox" name="avAddon" value="Audio + video + basic edit">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">Audio + video bundle</div></div>
+          </div>
+          <div class="check-item" onclick="toggleCheck(this)">
+            <input type="checkbox" name="avAddon" value="No A/V recording">
+            <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+            <div><div class="check-label">No A/V recording needed</div></div>
+          </div>
+        </div>
+      </div>
 
-  </form>
+      <!-- FEES & PAYMENT -->
+      <div class="section">
+        <div class="section-label">Fees &amp; payment</div>
+        <table class="fee-table">
+          <thead>
+            <tr><th>Item</th><th style="width:100px;">Rate/day</th><th style="width:60px;">Days</th><th style="width:100px;">Subtotal</th></tr>
+          </thead>
+          <tbody id="feeBody">
+            <!-- Populated by JS -->
+          </tbody>
+          <tfoot>
+            <tr><td colspan="2"></td><td colspan="1" style="font-size:0.65rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--mid);">Equipment</td><td><input type="text" id="equipSubtotal" readonly value="$0.00"></td></tr>
+            <tr><td>A/V recording add-on</td><td colspan="2"><input type="text" name="avFee" placeholder="$0.00"></td><td></td></tr>
+            <tr><td>Other charges</td><td colspan="2"><input type="text" name="otherFee" placeholder="$0.00" oninput="recalcTotal()"></td><td></td></tr>
+            <tr class="fee-total"><td><strong>Total</strong></td><td colspan="2"></td><td><input type="text" name="totalFee" id="totalFee" readonly value="$0.00"></td></tr>
+          </tfoot>
+        </table>
+
+        <div class="auto-total">
+          <span class="auto-total-label">Calculated total</span>
+          <span id="autoTotalDisplay">$0.00</span>
+        </div>
+
+        <div style="margin-top:18px;">
+          <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Damage deposit</div>
+          <div class="check-grid cols-2" style="margin-bottom:10px;">
+            <div class="radio-item" onclick="toggleDeposit(this,'required')">
+              <input type="radio" name="deposit" value="required">
+              <div class="radio-dot"></div>
+              <div class="check-label">Required</div>
+            </div>
+            <div class="radio-item" onclick="toggleDeposit(this,'waived')">
+              <input type="radio" name="deposit" value="waived">
+              <div class="radio-dot"></div>
+              <div class="check-label">Waived</div>
+            </div>
+          </div>
+          <div class="deposit-amount" id="depositAmtRow">
+            <div class="field-group">
+              <label>Deposit amount</label>
+              <input type="text" name="depositAmount" placeholder="$0.00">
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:18px;">
+          <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Payment method</div>
+          <div class="pay-grid">
+            <div class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Venmo">Venmo</div>
+            <div class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Zelle">Zelle</div>
+            <div class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Cash">Cash</div>
+            <div class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Check">Check</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TERMS -->
+      <div class="section">
+        <div class="section-label">Terms &amp; conditions</div>
+        <div class="clause-block">
+          <div class="clause-num">1 — Renter responsibilities</div>
+          <div class="clause-text">Renter agrees to use all equipment safely and for its intended purpose. Renter assumes full financial liability for any damage, theft, loss, or destruction during the rental period. Equipment must be returned in the same condition as received.</div>
+        </div>
+        <div class="clause-block">
+          <div class="clause-num">2 — Late returns</div>
+          <div class="clause-text">Equipment not returned by the agreed deadline will incur a late fee of $<input class="clause-fill" name="lateFee" size="5" placeholder="___"> per day. Come With reserves the right to report unreturned equipment as theft after <input class="clause-fill" name="lateTheft" size="4" placeholder="___"> days past the return deadline.</div>
+        </div>
+        <div class="clause-block">
+          <div class="clause-num">3 — Damage &amp; liability</div>
+          <div class="clause-text">In the event of damage, Renter is responsible for the full cost of repair or replacement at current market value. Come With is not responsible for injury, loss, or damage to third parties.</div>
+        </div>
+        <div class="clause-block">
+          <div class="clause-num">4 — Cancellation</div>
+          <div class="clause-text">Cancellations with fewer than 48 hours notice may forfeit any deposit paid. Cancellations with 48+ hours notice are eligible for a full refund.</div>
+        </div>
+        <div class="clause-block">
+          <div class="clause-num">5 — Governing law</div>
+          <div class="clause-text">This Agreement is governed by the laws of the State of New York. Disputes shall be resolved in the courts of New York County.</div>
+        </div>
+      </div>
+
+      <!-- ADDITIONAL NOTES -->
+      <div class="section">
+        <div class="section-label">Additional notes</div>
+        <div class="field-group">
+          <textarea name="notes" placeholder="Any additional terms, special arrangements, or notes for this rental..."></textarea>
+        </div>
+      </div>
+
+      <!-- SIGNATURES -->
+      <div class="section">
+        <div class="section-label">Signatures</div>
+        <p style="font-size:0.75rem;color:var(--mid);margin-bottom:16px;line-height:1.6;">By signing below, both parties confirm they have read and agreed to the terms of this Equipment Rental Agreement.</p>
+        <div class="sig-grid">
+          <div class="sig-panel">
+            <div class="sig-party">Come With — Owner</div>
+            <div class="sig-label">Signature</div>
+            <canvas class="sig-line" id="ownerSigCanvas" width="320" height="44"></canvas>
+            <div class="sig-label">Printed name</div>
+            <input class="sig-input" type="text" name="ownerName" value="Berky (Keith Berkman)" readonly style="background:var(--off);">
+            <div style="margin-top:10px;">
+              <div class="sig-label">Date signed</div>
+              <input class="sig-input" type="date" name="ownerDate">
+            </div>
+          </div>
+          <div class="sig-panel">
+            <div class="sig-party">Renter</div>
+            <div class="sig-label">Signature</div>
+            <canvas class="sig-line" id="renterSigCanvas" width="320" height="44" style="cursor:crosshair;"></canvas>
+            <div class="sig-label">Printed name</div>
+            <input class="sig-input" type="text" name="renterSigName" placeholder="Full legal name">
+            <div style="margin-top:10px;">
+              <div class="sig-label">Date signed</div>
+              <input class="sig-input" type="date" name="renterDate">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBMIT -->
+      <div class="submit-bar">
+        <button type="submit" class="btn-primary">Submit Agreement</button>
+        <button type="button" class="btn-secondary" onclick="window.print()">Print / Save PDF</button>
+        <button type="button" class="btn-secondary" onclick="clearForm()">Clear Form</button>
+        <span class="submit-note">Submits to Google Sheets + sends confirmation email to renter</span>
+      </div>
+
+      <div class="success-banner" id="successBanner">
+        Agreement submitted successfully. A confirmation email has been sent to the renter.
+      </div>
+
+    </form>
+
+  </div><!-- /admin-content -->
 
 </div>
 
 <script>
-// ── TODAY'S DATE DEFAULT ──────────────────────────────────
+// ── PASSWORD GATE ────────────────────────────────────────
+const ADMIN_PASSWORD = 'comewith2025';
+
+function authenticate() {
+  const input = document.getElementById('pinInput');
+  if (input.value === ADMIN_PASSWORD) {
+    document.getElementById('lockScreen').style.display = 'none';
+    document.getElementById('adminContent').style.display = 'block';
+    sessionStorage.setItem('cw_admin', '1');
+  } else {
+    document.getElementById('lockError').style.display = 'block';
+    input.value = '';
+    input.focus();
+  }
+}
+
+function logout() {
+  sessionStorage.removeItem('cw_admin');
+  document.getElementById('adminContent').style.display = 'none';
+  document.getElementById('lockScreen').style.display = 'flex';
+  document.getElementById('pinInput').value = '';
+  document.getElementById('lockError').style.display = 'none';
+}
+
+if (sessionStorage.getItem('cw_admin') === '1') {
+  document.getElementById('lockScreen').style.display = 'none';
+  document.getElementById('adminContent').style.display = 'block';
+}
+
+// ── DATE DEFAULT ─────────────────────────────────────────
 document.getElementById('agr-date').valueAsDate = new Date();
 
 // ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
 (function() {
-  const params = new URLSearchParams(window.location.search);
-  const fieldMap = {
-    name: 'renterName',
-    email: 'email',
-    phone: 'phone',
-    instagram: 'instagram',
-  };
-  const form = document.getElementById('rentalForm');
-  for (const [param, fieldName] of Object.entries(fieldMap)) {
-    const val = params.get(param);
-    if (val && form[fieldName]) {
-      form[fieldName].value = val;
-    }
+  var params = new URLSearchParams(window.location.search);
+  var map = { name:'renterName', email:'email', phone:'phone', instagram:'instagram' };
+  var form = document.getElementById('rentalForm');
+  for (var p in map) {
+    var v = params.get(p);
+    if (v && form[map[p]]) form[map[p]].value = v;
   }
 })();
 
-// ── CHECKBOX TOGGLE ───────────────────────────────────────
-function toggleCheck(el){
+// ── EQUIPMENT TOGGLE + AUTO-CALC ─────────────────────────
+function toggleEquip(el) {
+  el.classList.toggle('selected');
+  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+  recalcTotal();
+}
+
+function toggleCheck(el) {
   el.classList.toggle('selected');
   el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
 }
 
-// ── RADIO / DEPOSIT ───────────────────────────────────────
-function toggleDeposit(el, val){
-  document.querySelectorAll('[name=deposit]').forEach(r=>r.closest('.radio-item').classList.remove('selected'));
-  el.classList.add('selected');
-  el.querySelector('input[type=radio]').checked = true;
-  document.getElementById('depositAmtRow').classList.toggle('visible', val==='required');
+function recalcTotal() {
+  var days = parseInt(document.getElementById('numDays').value) || 1;
+  var equipTotal = 0;
+  var feeRows = '';
+  var checked = document.querySelectorAll('#equipmentGrid .check-item.selected input[type=checkbox]');
+
+  checked.forEach(function(cb) {
+    var rate = parseInt(cb.getAttribute('data-rate')) || 0;
+    var sub = rate * days;
+    equipTotal += sub;
+    feeRows += '<tr><td>' + cb.value + '</td><td>$' + rate.toFixed(2) + '</td><td>' + days + '</td><td>$' + sub.toFixed(2) + '</td></tr>';
+  });
+
+  document.getElementById('feeBody').innerHTML = feeRows || '<tr><td colspan="4" style="color:var(--mid);font-style:italic;">No equipment selected</td></tr>';
+  document.getElementById('equipSubtotal').value = '$' + equipTotal.toFixed(2);
+
+  // Parse other charges
+  var otherStr = (document.querySelector('[name=otherFee]').value || '').replace(/[^0-9.]/g, '');
+  var otherVal = parseFloat(otherStr) || 0;
+
+  // Parse AV fee
+  var avStr = (document.querySelector('[name=avFee]').value || '').replace(/[^0-9.]/g, '');
+  var avVal = parseFloat(avStr) || 0;
+
+  var total = equipTotal + avVal + otherVal;
+  document.getElementById('totalFee').value = '$' + total.toFixed(2);
+  document.getElementById('autoTotalDisplay').textContent = '$' + total.toFixed(2);
 }
 
-// ── PAYMENT TOGGLE ────────────────────────────────────────
-function togglePayment(el){
+// Recalc when AV or other fees change
+document.querySelector('[name=avFee]').addEventListener('input', recalcTotal);
+
+// Initial render
+recalcTotal();
+
+// ── DEPOSIT TOGGLE ───────────────────────────────────────
+function toggleDeposit(el, val) {
+  document.querySelectorAll('[name=deposit]').forEach(function(r) { r.closest('.radio-item').classList.remove('selected'); });
+  el.classList.add('selected');
+  el.querySelector('input[type=radio]').checked = true;
+  document.getElementById('depositAmtRow').classList.toggle('visible', val === 'required');
+}
+
+// ── PAYMENT TOGGLE ───────────────────────────────────────
+function togglePayment(el) {
   el.classList.toggle('selected');
   el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
 }
 
 // ── SIGNATURE CANVAS ─────────────────────────────────────
-function initCanvas(canvasId){
-  const canvas = document.getElementById(canvasId);
-  if(!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let drawing = false;
+function initCanvas(canvasId) {
+  var canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  var ctx = canvas.getContext('2d');
+  var drawing = false;
   ctx.strokeStyle = '#1A1410';
   ctx.lineWidth = 1.8;
   ctx.lineCap = 'round';
 
-  function getPos(e){
-    const r = canvas.getBoundingClientRect();
-    const t = e.touches ? e.touches[0] : e;
-    return {x:(t.clientX-r.left)*(canvas.width/r.width), y:(t.clientY-r.top)*(canvas.height/r.height)};
+  function getPos(e) {
+    var r = canvas.getBoundingClientRect();
+    var t = e.touches ? e.touches[0] : e;
+    return { x: (t.clientX - r.left) * (canvas.width / r.width), y: (t.clientY - r.top) * (canvas.height / r.height) };
   }
 
-  canvas.addEventListener('mousedown', e=>{drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);});
-  canvas.addEventListener('mousemove', e=>{if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();});
-  canvas.addEventListener('mouseup', ()=>drawing=false);
-  canvas.addEventListener('mouseleave', ()=>drawing=false);
-  canvas.addEventListener('touchstart', e=>{e.preventDefault(); drawing=true; const p=getPos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y);},{passive:false});
-  canvas.addEventListener('touchmove', e=>{e.preventDefault(); if(!drawing) return; const p=getPos(e); ctx.lineTo(p.x,p.y); ctx.stroke();},{passive:false});
-  canvas.addEventListener('touchend', ()=>drawing=false);
+  canvas.addEventListener('mousedown', function(e) { drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); });
+  canvas.addEventListener('mousemove', function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); });
+  canvas.addEventListener('mouseup', function() { drawing = false; });
+  canvas.addEventListener('mouseleave', function() { drawing = false; });
+  canvas.addEventListener('touchstart', function(e) { e.preventDefault(); drawing = true; var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); }, { passive: false });
+  canvas.addEventListener('touchmove', function(e) { e.preventDefault(); if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); }, { passive: false });
+  canvas.addEventListener('touchend', function() { drawing = false; });
 }
 
 initCanvas('ownerSigCanvas');
 initCanvas('renterSigCanvas');
 
-// ── FORM SUBMIT ───────────────────────────────────────────
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
+// ── FORM SUBMIT ──────────────────────────────────────────
+var APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzPgPQLmIV6uh2_E5SO8khmZTrTMsYGcbF-yYusdt2lyElkFrbMRAM8hkj0wonXixm8bw/exec";
 
-async function handleSubmit(e){
+async function handleSubmit(e) {
   e.preventDefault();
-  const form = e.target;
-  const btn = form.querySelector('.btn-primary');
+  var form = e.target;
+  var btn = form.querySelector('.btn-primary');
   btn.textContent = 'Submitting...';
   btn.disabled = true;
 
-  const equipment = [...form.querySelectorAll('[name=equipment]:checked')].map(c=>c.value).join(', ');
-  const avAddon   = [...form.querySelectorAll('[name=avAddon]:checked')].map(c=>c.value).join(', ');
-  const payment   = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
+  var equipment = [];
+  form.querySelectorAll('[name=equipment]:checked').forEach(function(c) { equipment.push(c.value); });
+  var avAddon = [];
+  form.querySelectorAll('[name=avAddon]:checked').forEach(function(c) { avAddon.push(c.value); });
+  var payment = [];
+  form.querySelectorAll('[name=payment]:checked').forEach(function(c) { payment.push(c.value); });
 
-  const params = new URLSearchParams(window.location.search);
-  const data = {
+  var params = new URLSearchParams(window.location.search);
+  var data = {
     type: 'Equipment Rental Agreement',
-    timestamp: new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
+    sendConfirmationEmail: true,
+    timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     inquiryEmail: params.get('email') || '',
-    agreementNum:  document.getElementById('agr-num').value,
-    renterName:    form.renterName.value,
-    djName:        form.djName.value,
-    email:         form.email.value,
-    phone:         form.phone.value,
-    instagram:     form.instagram.value,
-    equipment,
-    avAddon,
-    pickupDate:    form.pickupDate.value,
-    pickupTime:    form.pickupTime.value,
-    returnDate:    form.returnDate.value,
-    returnTime:    form.returnTime.value,
-    intendedUse:   form.intendedUse.value,
-    rentalFee:     form.rentalFee.value,
-    totalFee:      form.totalFee.value,
-    deposit:       form.deposit ? [...form.querySelectorAll('[name=deposit]:checked')].map(r=>r.value)[0]||'' : '',
+    agreementNum: document.getElementById('agr-num').value,
+    renterName: form.renterName.value,
+    djName: form.djName.value,
+    email: form.email.value,
+    phone: form.phone.value,
+    instagram: form.instagram.value,
+    equipment: equipment.join(', '),
+    numDays: form.numDays.value,
+    avAddon: avAddon.join(', '),
+    pickupDate: form.pickupDate.value,
+    pickupTime: form.pickupTime.value,
+    returnDate: form.returnDate.value,
+    returnTime: form.returnTime.value,
+    intendedUse: form.intendedUse.value,
+    rentalFee: document.getElementById('equipSubtotal').value,
+    totalFee: document.getElementById('totalFee').value,
+    deposit: form.deposit ? (function() { var c = form.querySelectorAll('[name=deposit]:checked'); return c.length ? c[0].value : ''; })() : '',
     depositAmount: form.depositAmount ? form.depositAmount.value : '',
-    payment,
-    lateFee:       form.lateFee.value,
+    payment: payment.join(', '),
+    lateFee: form.lateFee ? form.lateFee.value : '',
     renterSigName: form.renterSigName.value,
-    renterDate:    form.renterDate.value,
-    notes:         form.notes.value,
+    renterDate: form.renterDate.value,
+    notes: form.notes.value,
   };
 
-  try{
-    await fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-    document.getElementById('successBanner').style.display='block';
-    btn.style.display='none';
-  }catch(err){
-    btn.textContent='Submit Agreement';
-    btn.disabled=false;
-    alert('Submission failed. Please email the completed form to hello@comewith.org');
+  try {
+    await fetch(APPS_SCRIPT_URL, { method: 'POST', mode: 'no-cors', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+    document.getElementById('successBanner').style.display = 'block';
+    btn.style.display = 'none';
+  } catch (err) {
+    btn.textContent = 'Submit Agreement';
+    btn.disabled = false;
+    alert('Submission failed. Please try again or email hello@comewith.org');
   }
 }
 
-// ── CLEAR ─────────────────────────────────────────────────
-function clearForm(){
-  if(!confirm('Clear all fields? This cannot be undone.')) return;
+// ── CLEAR ────────────────────────────────────────────────
+function clearForm() {
+  if (!confirm('Clear all fields? This cannot be undone.')) return;
   document.getElementById('rentalForm').reset();
-  document.querySelectorAll('.check-item.selected,.radio-item.selected,.pay-item.selected').forEach(el=>el.classList.remove('selected'));
+  document.querySelectorAll('.check-item.selected,.radio-item.selected,.pay-item.selected').forEach(function(el) { el.classList.remove('selected'); });
   document.getElementById('depositAmtRow').classList.remove('visible');
-  ['ownerSigCanvas','renterSigCanvas'].forEach(id=>{
-    const c=document.getElementById(id);
-    c.getContext('2d').clearRect(0,0,c.width,c.height);
+  document.getElementById('numDays').value = 1;
+  ['ownerSigCanvas', 'renterSigCanvas'].forEach(function(id) {
+    var c = document.getElementById(id);
+    c.getContext('2d').clearRect(0, 0, c.width, c.height);
   });
-  document.getElementById('agr-date').valueAsDate=new Date();
+  document.getElementById('agr-date').valueAsDate = new Date();
+  recalcTotal();
 }
 </script>
 </body>
