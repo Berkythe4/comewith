@@ -445,9 +445,10 @@ function _doPostInner(e) {
   // ═════════════════════════════════════════════════════════
   //  AGREEMENT LINK (admin Send Agreement)
   // ═════════════════════════════════════════════════════════
-  if (type === 'storeAgreementLink') {
-    return handleStoreAgreementLink(body);
-  }
+  if (type === 'storeAgreementLink')    return handleStoreAgreementLink(body);
+  if (type === 'voidAgreement')         return handleVoidAgreement(body);
+  if (type === 'deleteAgreementLink')   return handleDeleteAgreementLink(body);
+  if (type === 'resendAgreementEmail')  return handleResendAgreementEmail(body);
 
   // ═════════════════════════════════════════════════════════
   //  USER MANAGEMENT
@@ -574,6 +575,13 @@ function handleEventsAgreement(d) {
         note: 'Agreement already signed. No further action taken.',
         agreementId: d.agreementId,
         status: 'Signed'
+      });
+    }
+    if (String(currentStatus).toLowerCase() === 'voided') {
+      return jsonResponse({
+        error: 'This agreement has been voided and can no longer be submitted.',
+        agreementId: d.agreementId,
+        status: 'Voided'
       });
     }
 
@@ -707,6 +715,13 @@ function handleEquipmentRental(d) {
         note: 'Rental agreement already signed. No further action taken.',
         agreementId: d.agreementId,
         status: 'Signed'
+      });
+    }
+    if (String(currentStatus).toLowerCase() === 'voided') {
+      return jsonResponse({
+        error: 'This rental agreement has been voided and can no longer be submitted.',
+        agreementId: d.agreementId,
+        status: 'Voided'
       });
     }
 
@@ -1048,6 +1063,103 @@ function handleStoreAgreementLink(d) {
   //   3. Client opens link, reviews + signs, submits → status Signed
 
   return jsonResponse({ success: true, agreementId: d.agreementId });
+}
+
+/**
+ * Void an agreement link. Flips Agreement Links status to 'Voided'
+ * and rolls the linked inquiry back to 'Contacted' (so the admin can
+ * restart the cycle or ignore it). Does NOT delete the row — admin
+ * can follow up with deleteAgreementLink.
+ */
+function handleVoidAgreement(d) {
+  var agreementId = (d.agreementId || '').trim();
+  if (!agreementId) return jsonResponse({ error: 'agreementId required.' });
+
+  var ok = updateAgreementLinkStatus(agreementId, 'Voided');
+  if (!ok) return jsonResponse({ error: 'Agreement not found: ' + agreementId });
+
+  // Roll the linked inquiry status back to Contacted
+  var clientEmail = getAgreementLinkClientEmail(agreementId);
+  if (clientEmail) {
+    updateInquiryStatus(clientEmail, 'Contacted');
+  }
+
+  Logger.log('[voidAgreement] id=' + agreementId + ' inquiryEmail=' + clientEmail);
+  return jsonResponse({ success: true, agreementId: agreementId, status: 'Voided' });
+}
+
+/**
+ * Permanently delete the Agreement Links row for the given id.
+ * Used for Draft (aborted) and Voided agreements.
+ */
+function handleDeleteAgreementLink(d) {
+  var agreementId = (d.agreementId || '').trim();
+  if (!agreementId) return jsonResponse({ error: 'agreementId required.' });
+
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  if (idCol === -1) return jsonResponse({ error: 'agreementId column not found.' });
+
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return jsonResponse({ error: 'Agreement not found: ' + agreementId });
+
+  sheet.deleteRow(rowNum);
+  Logger.log('[deleteAgreementLink] removed row ' + rowNum + ' for id=' + agreementId);
+  return jsonResponse({ success: true, agreementId: agreementId });
+}
+
+/**
+ * Re-send the branded client email for an existing Pending agreement.
+ * Reads the link + client details from the Agreement Links sheet so
+ * we send exactly what was originally generated.
+ */
+function handleResendAgreementEmail(d) {
+  var agreementId = (d.agreementId || '').trim();
+  if (!agreementId) return jsonResponse({ error: 'agreementId required.' });
+
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  if (idCol === -1) return jsonResponse({ error: 'agreementId column not found.' });
+
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return jsonResponse({ error: 'Agreement not found: ' + agreementId });
+
+  var lastCol = sheet.getLastColumn();
+  var rowData = sheet.getRange(rowNum, 1, 1, lastCol).getValues()[0];
+  var headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  var row = {};
+  for (var i = 0; i < headers.length; i++) {
+    row[String(headers[i]).trim()] = rowData[i];
+  }
+
+  try {
+    sendAgreementEmail({
+      clientEmail: row.clientEmail || '',
+      clientName: row.clientName || '',
+      agreementType: row.type || 'Agreement',
+      agreementId: agreementId,
+      link: row.link || ''
+    });
+  } catch (err) {
+    Logger.log('[resendAgreementEmail] send failed: ' + err);
+    return jsonResponse({ error: 'Email send failed: ' + String(err) });
+  }
+
+  Logger.log('[resendAgreementEmail] id=' + agreementId + ' → ' + row.clientEmail);
+  return jsonResponse({ success: true, agreementId: agreementId });
+}
+
+/**
+ * Read the clientEmail column for a given Agreement Links row.
+ */
+function getAgreementLinkClientEmail(agreementId) {
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  var emailCol = getColIndex(sheet, 'clientEmail');
+  if (idCol === -1 || emailCol === -1) return '';
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return '';
+  return String(sheet.getRange(rowNum, emailCol + 1).getValue() || '').trim();
 }
 
 /**

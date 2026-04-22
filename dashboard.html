@@ -158,6 +158,23 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .badge-active{background:var(--amber-bg);color:var(--amber);}
 .badge-complete{background:var(--green-bg);color:var(--green);}
 
+/* Segmented toggle for filters */
+.seg-toggle{display:inline-flex;border:1px solid var(--border-strong);background:white;}
+.seg-btn{font-family:'Inconsolata',monospace;font-size:0.72rem;letter-spacing:0.06em;padding:6px 12px;background:transparent;color:var(--mid);border:none;cursor:pointer;transition:all 0.15s;}
+.seg-btn:hover{color:var(--ink);}
+.seg-btn.seg-active{background:var(--ink);color:var(--bg);}
+
+/* Inline per-row resend/delete/void feedback */
+.row-note{display:inline-block;margin-left:8px;font-size:0.62rem;color:var(--green);letter-spacing:0.08em;opacity:0;transition:opacity 0.2s;}
+.row-note.show{opacity:1;}
+.row-note.err{color:var(--red);}
+
+/* Link action buttons that look distinct from primary row-btn */
+.row-btn-danger{color:var(--red);border-color:rgba(193,59,42,0.35);}
+.row-btn-danger:hover{background:var(--red);color:white;border-color:var(--red);}
+.row-btn-warn{color:var(--amber);border-color:rgba(133,79,11,0.35);}
+.row-btn-warn:hover{background:var(--amber);color:white;border-color:var(--amber);}
+
 /* Inline status dropdown */
 .status-select{font-family:'Inconsolata',monospace;font-size:0.72rem;padding:5px 8px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;cursor:pointer;letter-spacing:0.04em;min-width:160px;}
 .status-select:focus{border-color:var(--red);}
@@ -335,8 +352,15 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 
       <!-- LINKS TAB (agreement links) -->
       <div class="tab-panel" id="panel-links">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Agreement links generated from Send Agreement. <strong>Draft</strong> → admin needs to complete &amp; submit · <strong>Pending Client Signature</strong> → waiting on client · <strong>Signed</strong> → done.</div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;flex:1;min-width:260px;">Agreement links generated from Send Agreement. <strong>Draft</strong> → admin needs to complete &amp; submit · <strong>Pending Client Signature</strong> → waiting on client · <strong>Signed</strong> → done · <strong>Voided</strong> → link disabled.</div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div id="linksRowCount" style="font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.08em;color:var(--ink);"></div>
+            <div class="seg-toggle" role="tablist" aria-label="Agreement filter">
+              <button type="button" class="seg-btn seg-active" data-filter="active" onclick="setLinksFilter('active')">Active only</button>
+              <button type="button" class="seg-btn" data-filter="all" onclick="setLinksFilter('all')">Show all</button>
+            </div>
+          </div>
         </div>
         <div class="loading" id="loading-links"><span class="loading-spinner"></span>Loading links...</div>
         <table class="data-table" id="table-links" style="display:none;">
@@ -349,6 +373,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
               <th>Created</th>
               <th>Status</th>
               <th>Link</th>
+              <th>Actions</th>
             </tr>
           </thead>
           <tbody id="tbody-links"></tbody>
@@ -939,43 +964,117 @@ function loadLinks(){
   });
 }
 
+// Current filter mode for Links tab: 'active' (default) or 'all'.
+var linksFilter = 'active';
+
+function setLinksFilter(mode){
+  linksFilter = (mode === 'all') ? 'all' : 'active';
+  document.querySelectorAll('#panel-links .seg-btn').forEach(function(b){
+    b.classList.toggle('seg-active', b.getAttribute('data-filter') === linksFilter);
+  });
+  renderLinks();
+}
+
+// A draft is "stale" if it was created more than 24 hours ago. The
+// active view hides stale drafts (admin likely abandoned them) and
+// voided rows. Fresh drafts and anything Pending/Signed stay visible.
+function isLinkActiveView(r){
+  var status = String(getField(r,['status','Status']) || 'Draft').toLowerCase();
+  if (status === 'voided') return false;
+  if (status === 'draft') {
+    var created = getField(r,['createdDate','Created Date','created','Created']);
+    var d = new Date(created);
+    if (!isNaN(d.getTime())) {
+      var ageHrs = (Date.now() - d.getTime()) / 3600000;
+      if (ageHrs > 24) return false;
+    }
+  }
+  return true;
+}
+
 function renderLinks(){
   var tbody = document.getElementById('tbody-links');
-  var rows = store.links || [];
+  var countEl = document.getElementById('linksRowCount');
+  var allRows = store.links || [];
+
+  var rows = (linksFilter === 'active')
+    ? allRows.filter(isLinkActiveView)
+    : allRows.slice();
+
+  // Sort newest first
+  rows.sort(function(a,b){
+    var da = new Date(getField(a,['createdDate','Created Date','created','Created']))||0;
+    var db = new Date(getField(b,['createdDate','Created Date','created','Created']))||0;
+    return db - da;
+  });
+
+  if (countEl) {
+    var label = (linksFilter === 'active')
+      ? rows.length + ' active agreement' + (rows.length === 1 ? '' : 's')
+      : rows.length + ' of ' + allRows.length + ' total';
+    countEl.textContent = label;
+  }
+
   if (!rows.length) {
-    tbody.innerHTML = '<tr><td class="no-data" colspan="7">No agreement links yet. Create one from the Send Agreement page.</td></tr>';
+    var emptyMsg = (linksFilter === 'active' && allRows.length)
+      ? 'No active agreements. Switch to "Show all" to see voided/stale entries.'
+      : 'No agreement links yet. Create one from the Send Agreement page.';
+    tbody.innerHTML = '<tr><td class="no-data" colspan="8">' + esc(emptyMsg) + '</td></tr>';
   } else {
-    var sorted = rows.slice().sort(function(a,b){
-      var da = new Date(getField(a,['createdDate','Created Date','created','Created']))||0;
-      var db = new Date(getField(b,['createdDate','Created Date','created','Created']))||0;
-      return db - da;
-    });
     var html = '';
-    for (var i = 0; i < sorted.length; i++) {
-      var r = sorted[i];
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
       var id = getField(r,['agreementId','Agreement ID','id','ID']);
       var type = getField(r,['type','Type','agreementType','Agreement Type']);
       var cname = getField(r,['clientName','Client Name','name','Name']);
       var cemail = getField(r,['clientEmail','Client Email','email','Email']);
       var created = getField(r,['createdDate','Created Date','created','Created']);
-      var status = getField(r,['status','Status']) || 'Pending';
+      var status = getField(r,['status','Status']) || 'Draft';
       var link = getField(r,['link','Link','url','URL']);
       var sl = status.toLowerCase();
       var badgeClass = (sl === 'signed') ? 'badge-complete'
                      : (sl === 'draft') ? 'badge-new'
+                     : (sl === 'voided') ? 'badge-complete'
                      : 'badge-active';
-      var copyId = 'linkcopy-' + i;
+      if (sl === 'voided') badgeClass = 'badge-new'; // dim visual for voided
+      var idEsc = esc(id).replace(/'/g,"\\'");
+      var linkEsc = esc(link || '').replace(/'/g,"\\'");
+      var noteId = 'linknote-' + i;
+
       html += '<tr>';
-      html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:var(--red);letter-spacing:0.04em;">' + esc(id) + '</span></td>';
+      html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:' + (sl === 'voided' ? 'var(--mid)' : 'var(--red)') + ';letter-spacing:0.04em;' + (sl === 'voided' ? 'text-decoration:line-through;' : '') + '">' + esc(id) + '</span></td>';
       html += '<td>' + esc(type) + '</td>';
       html += '<td><strong>' + esc(cname) + '</strong></td>';
       html += '<td>' + esc(cemail) + '</td>';
       html += '<td>' + fmtDate(created) + '</td>';
       html += '<td><span class="badge ' + badgeClass + '">' + esc(status) + '</span></td>';
-      html += '<td style="max-width:340px;"><div style="display:flex;gap:6px;align-items:center;">';
-      html += '<a href="' + esc(link) + '" target="_blank" class="row-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;display:inline-block;">Open</a>';
-      html += '<button class="row-btn" id="' + copyId + '" onclick="copyAgrLink(this,\'' + esc(link).replace(/'/g,"\\'") + '\')">Copy</button>';
+      html += '<td style="max-width:260px;">';
+      if (link) {
+        html += '<a href="' + esc(link) + '" target="_blank" style="font-size:0.7rem;color:var(--mid);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:240px;">' + esc(link) + '</a>';
+      }
+      html += '</td>';
+
+      // ── ACTIONS column — varies by status ──
+      html += '<td><div class="row-actions">';
+      if (sl === 'draft') {
+        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Edit</a>';
+        html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+        html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Draft\')">Delete</button>';
+      } else if (sl === 'pending client signature' || sl === 'pending') {
+        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+        html += '<button class="row-btn" onclick="resendLink(\'' + idEsc + '\', this)">Resend Email</button>';
+        html += '<button class="row-btn row-btn-warn" onclick="voidLink(\'' + idEsc + '\')">Void</button>';
+      } else if (sl === 'signed') {
+        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+      } else if (sl === 'voided') {
+        html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Voided\')">Delete</button>';
+      } else {
+        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+      }
+      html += '<span class="row-note" id="' + noteId + '"></span>';
       html += '</div></td>';
+
       html += '</tr>';
     }
     tbody.innerHTML = html;
@@ -991,6 +1090,109 @@ function copyAgrLink(btn, url){
     btn.textContent = 'Copied';
     setTimeout(function(){ btn.textContent = orig; }, 1500);
   });
+}
+
+function showLinkNote(btn, msg, isErr){
+  // Find the row-note span next to this button (inside the same .row-actions)
+  var container = btn && btn.closest ? btn.closest('.row-actions') : null;
+  if (!container) return;
+  var note = container.querySelector('.row-note');
+  if (!note) return;
+  note.textContent = msg;
+  note.classList.toggle('err', !!isErr);
+  note.classList.add('show');
+  setTimeout(function(){ note.classList.remove('show'); }, 2000);
+}
+
+// ── Agreement link actions (void / delete / resend) ─────
+function voidLink(agreementId){
+  if (!agreementId) return;
+  if (!confirm('Void this agreement? The client link will no longer work.')) return;
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'voidAgreement', agreementId: agreementId })
+  });
+  // Optimistic local update
+  updateLocalLinkStatus(agreementId, 'Voided');
+  // Flip any matching inquiry row back to Contacted locally so the
+  // Inquiries tab reflects it without a manual reload.
+  var email = findLinkClientEmail(agreementId);
+  if (email) locallyUpdateInquiryStatus(email, 'Contacted');
+  renderLinks();
+}
+
+function deleteLink(agreementId, statusLabel){
+  if (!agreementId) return;
+  var msg = (statusLabel === 'Voided')
+    ? 'Permanently delete this voided agreement? This cannot be undone.'
+    : 'Permanently delete this draft agreement? This cannot be undone.';
+  if (!confirm(msg)) return;
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'deleteAgreementLink', agreementId: agreementId })
+  });
+  // Optimistic: remove from store
+  store.links = (store.links || []).filter(function(r){
+    return getField(r,['agreementId','Agreement ID','id','ID']) !== agreementId;
+  });
+  renderLinks();
+}
+
+function resendLink(agreementId, btn){
+  if (!agreementId) return;
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.textContent = 'Sending...';
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'resendAgreementEmail', agreementId: agreementId })
+  });
+  // no-cors returns opaque; optimistic success after a short delay
+  setTimeout(function(){
+    btn.textContent = orig;
+    btn.disabled = false;
+    showLinkNote(btn, '✓ Email resent', false);
+  }, 600);
+}
+
+function updateLocalLinkStatus(agreementId, newStatus){
+  (store.links || []).forEach(function(r){
+    if (getField(r,['agreementId','Agreement ID','id','ID']) === agreementId) {
+      for (var k in r) {
+        if (k.toLowerCase() === 'status') { r[k] = newStatus; return; }
+      }
+      r.status = newStatus;
+    }
+  });
+}
+
+function findLinkClientEmail(agreementId){
+  var match = (store.links || []).find(function(r){
+    return getField(r,['agreementId','Agreement ID','id','ID']) === agreementId;
+  });
+  return match ? getField(match,['clientEmail','Client Email','email','Email']) : '';
+}
+
+function locallyUpdateInquiryStatus(email, newStatus){
+  if (!email) return;
+  var target = String(email).toLowerCase().trim();
+  (store.inquiries || []).forEach(function(r){
+    var e = String(getField(r,['email','Email']) || '').toLowerCase().trim();
+    if (e === target) {
+      for (var k in r) {
+        if (k.toLowerCase() === 'status') { r[k] = newStatus; return; }
+      }
+      r.status = newStatus;
+    }
+  });
+  // Re-render the inquiries table so the status dropdown reflects it
+  if (typeof renderInquiries === 'function') renderInquiries();
 }
 
 // ── ARCHIVE ──────────────────────────────────────────────
