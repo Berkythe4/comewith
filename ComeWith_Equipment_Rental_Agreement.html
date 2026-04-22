@@ -491,16 +491,6 @@ function logout() { CW_AUTH.logout(); }
 // ── DATE DEFAULT ─────────────────────────────────────────
 document.getElementById('agr-date').valueAsDate = new Date();
 
-// ── AUTO-POPULATE AGREEMENT # FROM ?id= ─────────────────
-// Runs synchronously so the field is never blank even if the
-// async prefill fetch below fails.
-(function() {
-  var id = new URLSearchParams(window.location.search).get('id');
-  if (!id) return;
-  var agrNum = document.getElementById('agr-num');
-  if (agrNum && !agrNum.value) agrNum.value = id;
-})();
-
 // ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
 (function() {
   var params = new URLSearchParams(window.location.search);
@@ -510,56 +500,6 @@ document.getElementById('agr-date').valueAsDate = new Date();
     var v = params.get(p);
     if (v && form[map[p]]) form[map[p]].value = v;
   }
-})();
-
-// ── PRE-FILL BY ?id= (fetch admin-stored data) ───────────
-(function() {
-  var id = new URLSearchParams(window.location.search).get('id');
-  if (!id) return;
-  fetch(APPS_SCRIPT_URL + '?action=getAgreementData&id=' + encodeURIComponent(id))
-    .then(function(r){ return r.json(); })
-    .then(function(data){
-      if (!data || data.error || !data.prefill) return;
-      var prefill = typeof data.prefill === 'string' ? JSON.parse(data.prefill) : data.prefill;
-      var form = document.getElementById('rentalForm');
-      if (!form) return;
-      Object.keys(prefill).forEach(function(k){
-        var v = prefill[k];
-        if (v === undefined || v === null) return;
-        if (!form[k]) return;
-        // Skip group-valued form controls (handled below)
-        if (form[k].type === 'checkbox' || form[k].type === 'radio') return;
-        if (form[k].length !== undefined && form[k].tagName === undefined) return;
-        form[k].value = v;
-      });
-      // Multi-value groups stored as comma-joined
-      ['equipment','avAddon','payment'].forEach(function(groupName){
-        var joined = prefill[groupName];
-        if (!joined) return;
-        var values = String(joined).split(',').map(function(s){return s.trim();}).filter(Boolean);
-        form.querySelectorAll('input[name="' + groupName + '"]').forEach(function(inp){
-          if (values.indexOf(inp.value) !== -1) {
-            inp.checked = true;
-            var wrap = inp.closest('.check-item, .pay-item');
-            if (wrap) wrap.classList.add('selected');
-          }
-        });
-      });
-      // Deposit radio
-      if (prefill.deposit) {
-        var radio = form.querySelector('input[name="deposit"][value="' + prefill.deposit + '"]');
-        if (radio) {
-          radio.checked = true;
-          var wrap = radio.closest('.radio-item');
-          if (wrap) wrap.classList.add('selected');
-          var row = document.getElementById('depositAmtRow');
-          if (row) row.classList.toggle('visible', prefill.deposit === 'required');
-        }
-      }
-      recalcTotal();
-      form.dataset.agreementId = id;
-    })
-    .catch(function(err){ console.warn('Rental pre-fill failed:', err); });
 })();
 
 // ── EQUIPMENT TOGGLE + AUTO-CALC ─────────────────────────
@@ -666,26 +606,12 @@ async function handleSubmit(e) {
   var payment = [];
   form.querySelectorAll('[name=payment]:checked').forEach(function(c) { payment.push(c.value); });
 
-  // Detect admin submitter via CW_AUTH sessionStorage. This rental form
-  // currently requires admin auth anyway, but we include the marker so
-  // the server doesn't have to rely solely on link status.
-  var isAdmin = (function(){
-    try {
-      var raw = sessionStorage.getItem('cw_user');
-      if (!raw) return false;
-      var u = JSON.parse(raw);
-      return !!(u && (u.role === 'master_admin' || u.role === 'sub_admin'));
-    } catch(e){ return false; }
-  })();
-
   var params = new URLSearchParams(window.location.search);
   var data = {
     type: 'Equipment Rental Agreement',
     sendConfirmationEmail: true,
     timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     inquiryEmail: params.get('email') || '',
-    agreementId: form.dataset.agreementId || params.get('id') || '',
-    submitterStage: isAdmin ? 'admin' : 'client',
     agreementNum: document.getElementById('agr-num').value,
     renterName: form.renterName.value,
     djName: form.djName.value,
