@@ -454,7 +454,15 @@ document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
 });
 
 // ── DATA ─────────────────────────────────────────────────
-var APPS_SCRIPT_URL="https://script.google.com/macros/s/AKfycby32mgkHFSsdRsxKsY0wc8hdOwdyG2ud_jKHfCpUQlpCRjsIhkXFeLgCo75oZufGwgpBw/exec";
+// Prefer the single source of truth in users.js (CW_AUTH.SCRIPT_URL) so we
+// only need to update the URL in one place. Fallback to a hardcoded URL if
+// users.js didn't load for some reason.
+var APPS_SCRIPT_URL = (typeof CW_AUTH !== 'undefined' && CW_AUTH.SCRIPT_URL)
+  ? CW_AUTH.SCRIPT_URL
+  : "https://script.google.com/macros/s/AKfycby32mgkHFSsdRsxKsY0wc8hdOwdyG2ud_jKHfCpUQlpCRjsIhkXFeLgCo75oZufGwgpBw/exec";
+
+console.log('[dashboard] APPS_SCRIPT_URL =', APPS_SCRIPT_URL);
+console.log('[dashboard] CW_AUTH loaded?', typeof CW_AUTH !== 'undefined');
 
 var store={inquiries:[],agreements:[],rentals:[]};
 
@@ -465,12 +473,42 @@ function loadAllData(){
 }
 
 function fetchData(action,cb){
-  fetch(APPS_SCRIPT_URL+'?action='+action)
-    .then(function(r){return r.json();})
-    .then(cb)
+  var url = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action);
+  console.log('[dashboard] fetch →', url);
+
+  fetch(url, { redirect: 'follow' })
+    .then(function(r){
+      console.log('[dashboard] ' + action + ' response status:', r.status, 'final URL:', r.url);
+      return r.text().then(function(text){
+        return { status: r.status, ok: r.ok, text: text, finalUrl: r.url };
+      });
+    })
+    .then(function(res){
+      if (!res.ok) {
+        console.error('[dashboard] ' + action + ' HTTP error ' + res.status + '. Body (first 500):', res.text.substring(0, 500));
+        cb({ __error: 'HTTP ' + res.status });
+        return;
+      }
+      // Log the first 300 chars of the raw text so we can see HTML redirects
+      // from the Google auth flow or malformed JSON.
+      console.log('[dashboard] ' + action + ' raw (first 300):', res.text.substring(0, 300));
+      var data;
+      try {
+        data = JSON.parse(res.text);
+      } catch (parseErr) {
+        console.error('[dashboard] ' + action + ' JSON parse failed:', parseErr, 'Raw body (first 500):', res.text.substring(0, 500));
+        cb({ __error: 'Parse failed' });
+        return;
+      }
+      // Surface Apps Script error objects (e.g. {error: "Unknown action"})
+      if (data && !Array.isArray(data) && data.error) {
+        console.error('[dashboard] ' + action + ' Apps Script error:', data.error);
+      }
+      cb(data);
+    })
     .catch(function(err){
-      console.error('Fetch error for '+action+':',err);
-      cb([]);
+      console.error('[dashboard] ' + action + ' fetch failed:', err);
+      cb({ __error: String(err) });
     });
 }
 
@@ -510,6 +548,19 @@ function loadInquiries(){
   document.getElementById('loading-inquiries').style.display='block';
   document.getElementById('table-inquiries').style.display='none';
   fetchData('getInquiries',function(data){
+    if (data && data.__error) {
+      document.getElementById('loading-inquiries').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;line-height:1.6;">' +
+        '<strong>Failed to load inquiries.</strong><br>' + esc(data.__error) +
+        '<br><span style="color:var(--mid);font-size:0.72rem;">Open the browser console (F12) for details.</span></div>';
+      return;
+    }
+    if (data && !Array.isArray(data) && data.error) {
+      document.getElementById('loading-inquiries').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;line-height:1.6;">' +
+        '<strong>Apps Script error:</strong> ' + esc(data.error) + '</div>';
+      return;
+    }
     store.inquiries=Array.isArray(data)?data:[];
     renderInquiries();
     updateStats();
@@ -612,6 +663,11 @@ function loadAgreements(){
   document.getElementById('loading-agreements').style.display='block';
   document.getElementById('table-agreements').style.display='none';
   fetchData('getAgreements',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-agreements').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load agreements: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
     store.agreements=Array.isArray(data)?data:[];
     renderAgreements();
     updateStats();
@@ -652,6 +708,11 @@ function loadRentals(){
   document.getElementById('loading-rentals').style.display='block';
   document.getElementById('table-rentals').style.display='none';
   fetchData('getRentals',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-rentals').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load rentals: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
     store.rentals=Array.isArray(data)?data:[];
     renderRentals();
     updateStats();
