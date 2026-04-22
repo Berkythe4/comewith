@@ -116,6 +116,8 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .submit-bar{margin-top:40px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;}
 .btn-primary{font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.12em;background:var(--ink);color:var(--bg);padding:16px 36px;border:none;cursor:pointer;transition:background 0.18s;}
 .btn-primary:hover{background:var(--red);}
+.btn-primary.btn-disabled,.btn-primary[disabled]{background:#b9b2a7;color:#f2ede6;cursor:not-allowed;opacity:0.6;}
+.btn-primary.btn-disabled:hover,.btn-primary[disabled]:hover{background:#b9b2a7;}
 .btn-secondary{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.12em;background:transparent;color:var(--ink);padding:14px 28px;border:2px solid var(--ink);cursor:pointer;transition:all 0.18s;}
 .btn-secondary:hover{border-color:var(--red);color:var(--red);}
 .submit-note{font-size:0.68rem;color:var(--mid);letter-spacing:0.06em;}
@@ -130,7 +132,19 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
   .service-cards{grid-template-columns:1fr 1fr;}
 }
 @media print{
-  @page { margin: 1in; }
+  /* Try to blank the browser-generated header (date/title) and footer
+     (URL / page-n). Honored by engines that support CSS Paged Media
+     margin boxes; in Chrome/Edge the user still needs to uncheck
+     "Headers and footers" in the print dialog to fully suppress them. */
+  @page {
+    margin: 1in;
+    @top-left      { content: ''; }
+    @top-center    { content: ''; }
+    @top-right     { content: ''; }
+    @bottom-left   { content: ''; }
+    @bottom-center { content: ''; }
+    @bottom-right  { content: ''; }
+  }
 
   /* ── Global reset: clean serif, no background textures, no shadows ── */
   body {
@@ -295,23 +309,31 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
     font-size: 10pt !important;
   }
 
-  /* ── PROMO RIGHTS CHECK ITEMS: only selected, inline stack ── */
-  .check-grid { display: block !important; }
-  .check-item { display: none !important; }
-  .check-item.selected {
+  /* ── PROMO RIGHTS CHECK ITEMS: only selected, with ✓ prefix
+     (matching the service-card print pattern) ── */
+  .check-grid { display: block !important; background: transparent !important; border: none !important; gap: 0 !important; }
+  .check-item, label.check-item { display: none !important; }
+  .check-item.selected, label.check-item.selected {
     display: block !important;
     background: white !important;
-    border: 1px solid #000 !important;
-    padding: 6px 10px !important;
-    margin-bottom: 4px !important;
+    border: 1.5px solid #000 !important;
+    padding: 8px 12px !important;
+    margin-bottom: 6px !important;
     page-break-inside: avoid !important;
+  }
+  .check-item.selected::before {
+    content: "✓ ";
+    font-weight: bold;
+    font-family: 'Bebas Neue', Impact, sans-serif;
   }
   .check-item.selected .check-box { display: none !important; }
   .check-item.selected .check-label {
     font-family: 'Bebas Neue', Impact, sans-serif !important;
     color: #000 !important;
+    display: inline !important;
+    font-size: 11pt !important;
   }
-  .check-item.selected .check-sub { color: #555 !important; }
+  .check-item.selected .check-sub { color: #555 !important; font-size: 9pt !important; }
 
   /* ── CLAUSE FILL-IN INPUTS: stay inline, show dashed fill line ── */
   .clause-fill {
@@ -680,10 +702,10 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
     </div>
 
     <div class="submit-bar">
-      <button type="submit" class="btn-primary">Submit Agreement</button>
+      <button type="submit" class="btn-primary btn-disabled" disabled aria-disabled="true" title="Use Print / Save PDF to save this agreement. Submit coming soon.">Submit Agreement</button>
       <button type="button" class="btn-secondary" onclick="window.print()">Print / Save PDF</button>
       <button type="button" class="btn-secondary" onclick="clearForm()">Clear Form</button>
-      <span class="submit-note">Submission sends a copy to berky@comewith.org</span>
+      <span class="submit-note">Use Print / Save PDF to save this agreement. Submit coming soon.</span>
     </div>
 
     <div class="success-banner" id="successBanner">

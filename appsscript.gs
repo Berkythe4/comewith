@@ -449,6 +449,7 @@ function _doPostInner(e) {
   if (type === 'voidAgreement')         return handleVoidAgreement(body);
   if (type === 'deleteAgreementLink')   return handleDeleteAgreementLink(body);
   if (type === 'resendAgreementEmail')  return handleResendAgreementEmail(body);
+  if (type === 'uploadSignedPDF')       return handleUploadSignedPDF(body);
 
   // ═════════════════════════════════════════════════════════
   //  USER MANAGEMENT
@@ -1147,6 +1148,105 @@ function handleResendAgreementEmail(d) {
 
   Logger.log('[resendAgreementEmail] id=' + agreementId + ' → ' + row.clientEmail);
   return jsonResponse({ success: true, agreementId: agreementId });
+}
+
+/**
+ * Upload a signed PDF from the dashboard to a Google Drive folder,
+ * record the Drive URL on the Agreement Links row, flip the link
+ * status to Signed and the linked inquiry to Booked.
+ *
+ * Expected payload:
+ *   { type: 'uploadSignedPDF', agreementId, filename, fileData (base64) }
+ */
+function handleUploadSignedPDF(d) {
+  var agreementId = (d.agreementId || '').trim();
+  if (!agreementId) return jsonResponse({ error: 'agreementId required.' });
+
+  var rawB64 = String(d.fileData || '').trim();
+  if (!rawB64) return jsonResponse({ error: 'fileData required.' });
+  // Strip data URI prefix if the client sent one (e.g. "data:application/pdf;base64,...")
+  rawB64 = rawB64.replace(/^data:[^,]+,/, '');
+
+  var filename = String(d.filename || '').trim() || (agreementId + '.pdf');
+  // Force .pdf extension for clarity
+  if (!/\.pdf$/i.test(filename)) filename += '.pdf';
+
+  var bytes;
+  try {
+    bytes = Utilities.base64Decode(rawB64);
+  } catch (err) {
+    return jsonResponse({ error: 'Invalid base64 payload: ' + String(err) });
+  }
+  if (!bytes || bytes.length === 0) {
+    return jsonResponse({ error: 'Decoded file is empty.' });
+  }
+
+  var blob = Utilities.newBlob(bytes, 'application/pdf', filename);
+  var folder = getOrCreateSignedAgreementsFolder();
+  var file = folder.createFile(blob);
+  try {
+    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+  } catch (shareErr) {
+    // Some accounts can't share — file still exists, just admin-only.
+    Logger.log('setSharing warning: ' + shareErr);
+  }
+  var fileUrl = file.getUrl();
+
+  // Ensure Agreement Links sheet has the signedPDF column
+  var sheet = getSheet('Agreement Links');
+  var headers = ['agreementId', 'type', 'clientName', 'clientEmail',
+                 'clientPhone', 'clientInstagram', 'createdDate', 'link',
+                 'prefill', 'status', 'signedPDF'];
+  ensureHeaders(sheet, headers);
+
+  // If the sheet was created before signedPDF existed, ensureHeaders is
+  // a no-op — so explicitly append the column header if it's missing.
+  var pdfCol = getColIndex(sheet, 'signedPDF');
+  if (pdfCol === -1) {
+    var lastCol = sheet.getLastColumn();
+    sheet.getRange(HEADER_ROW, lastCol + 1).setValue('signedPDF');
+    pdfCol = lastCol; // 0-based index of the newly added column
+  }
+
+  var idCol = getColIndex(sheet, 'agreementId');
+  var statusCol = getColIndex(sheet, 'status');
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) {
+    return jsonResponse({
+      error: 'Agreement row not found for id=' + agreementId,
+      uploadedUrl: fileUrl
+    });
+  }
+
+  if (statusCol !== -1) sheet.getRange(rowNum, statusCol + 1).setValue('Signed');
+  sheet.getRange(rowNum, pdfCol + 1).setValue(fileUrl);
+
+  // Roll the linked inquiry to Booked
+  var clientEmail = getAgreementLinkClientEmail(agreementId);
+  if (clientEmail) {
+    updateInquiryStatus(clientEmail, 'Booked');
+  }
+
+  Logger.log('[uploadSignedPDF] id=' + agreementId + ' size=' + bytes.length +
+             ' url=' + fileUrl + ' clientEmail=' + clientEmail);
+
+  return jsonResponse({
+    success: true,
+    agreementId: agreementId,
+    url: fileUrl,
+    filename: filename
+  });
+}
+
+/**
+ * Get (or create) the Google Drive folder where signed agreement
+ * PDFs are stored. Reuses the first matching folder if one exists.
+ */
+function getOrCreateSignedAgreementsFolder() {
+  var name = 'Come With — Signed Agreements';
+  var folders = DriveApp.getFoldersByName(name);
+  if (folders.hasNext()) return folders.next();
+  return DriveApp.createFolder(name);
 }
 
 /**

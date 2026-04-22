@@ -174,6 +174,10 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .row-btn-danger:hover{background:var(--red);color:white;border-color:var(--red);}
 .row-btn-warn{color:var(--amber);border-color:rgba(133,79,11,0.35);}
 .row-btn-warn:hover{background:var(--amber);color:white;border-color:var(--amber);}
+.row-btn-upload{color:var(--ink);border-color:var(--ink);}
+.row-btn-upload:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.row-btn-done{background:var(--green-bg);color:var(--green);border-color:var(--green);text-decoration:none;}
+.row-btn-done:hover{background:var(--green);color:white;}
 
 /* Inline status dropdown */
 .status-select{font-family:'Inconsolata',monospace;font-size:0.72rem;padding:5px 8px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;cursor:pointer;letter-spacing:0.04em;min-width:160px;}
@@ -1031,6 +1035,7 @@ function renderLinks(){
       var created = getField(r,['createdDate','Created Date','created','Created']);
       var status = getField(r,['status','Status']) || 'Draft';
       var link = getField(r,['link','Link','url','URL']);
+      var signedPDF = getField(r,['signedPDF','Signed PDF','pdfUrl','PDF URL']);
       var sl = status.toLowerCase();
       var badgeClass = (sl === 'signed') ? 'badge-complete'
                      : (sl === 'draft') ? 'badge-new'
@@ -1040,6 +1045,7 @@ function renderLinks(){
       var idEsc = esc(id).replace(/'/g,"\\'");
       var linkEsc = esc(link || '').replace(/'/g,"\\'");
       var noteId = 'linknote-' + i;
+      var hasPdf = !!(signedPDF && /^https?:\/\//.test(signedPDF));
 
       html += '<tr>';
       html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:' + (sl === 'voided' ? 'var(--mid)' : 'var(--red)') + ';letter-spacing:0.04em;' + (sl === 'voided' ? 'text-decoration:line-through;' : '') + '">' + esc(id) + '</span></td>';
@@ -1047,30 +1053,38 @@ function renderLinks(){
       html += '<td><strong>' + esc(cname) + '</strong></td>';
       html += '<td>' + esc(cemail) + '</td>';
       html += '<td>' + fmtDate(created) + '</td>';
-      html += '<td><span class="badge ' + badgeClass + '">' + esc(status) + '</span></td>';
+      html += '<td><span class="badge ' + badgeClass + '">' + esc(status) + '</span>' + (hasPdf ? ' <span style="font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--green);margin-left:4px;">· PDF</span>' : '') + '</td>';
       html += '<td style="max-width:260px;">';
       if (link) {
         html += '<a href="' + esc(link) + '" target="_blank" style="font-size:0.7rem;color:var(--mid);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:240px;">' + esc(link) + '</a>';
       }
       html += '</td>';
 
-      // ── ACTIONS column — varies by status ──
+      // ── ACTIONS column — once a signed PDF is uploaded, actions
+      //    drop to a single "Open PDF" link. Otherwise status-based
+      //    actions + the Upload Signed PDF button.
       html += '<td><div class="row-actions">';
-      if (sl === 'draft') {
-        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Edit</a>';
-        html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
-        html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Draft\')">Delete</button>';
-      } else if (sl === 'pending client signature' || sl === 'pending') {
-        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
-        html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
-        html += '<button class="row-btn" onclick="resendLink(\'' + idEsc + '\', this)">Resend Email</button>';
-        html += '<button class="row-btn row-btn-warn" onclick="voidLink(\'' + idEsc + '\')">Void</button>';
-      } else if (sl === 'signed') {
-        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
-      } else if (sl === 'voided') {
-        html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Voided\')">Delete</button>';
+      if (hasPdf) {
+        html += '<a href="' + esc(signedPDF) + '" target="_blank" class="row-btn row-btn-done">Open PDF</a>';
       } else {
-        if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        if (sl === 'draft') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Edit</a>';
+          html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+          html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Draft\')">Delete</button>';
+        } else if (sl === 'pending client signature' || sl === 'pending') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+          html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+          html += '<button class="row-btn" onclick="resendLink(\'' + idEsc + '\', this)">Resend Email</button>';
+          html += '<button class="row-btn row-btn-warn" onclick="voidLink(\'' + idEsc + '\')">Void</button>';
+        } else if (sl === 'signed') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        } else if (sl === 'voided') {
+          html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Voided\')">Delete</button>';
+        } else {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        }
+        // Upload Signed PDF available on every row until one's attached
+        html += '<button class="row-btn row-btn-upload" onclick="uploadSignedPDF(\'' + idEsc + '\', this)">Upload Signed PDF</button>';
       }
       html += '<span class="row-note" id="' + noteId + '"></span>';
       html += '</div></td>';
@@ -1159,6 +1173,76 @@ function resendLink(agreementId, btn){
     btn.disabled = false;
     showLinkNote(btn, '✓ Email resent', false);
   }, 600);
+}
+
+// ── Signed PDF upload ───────────────────────────────────
+// Opens a file picker, reads the PDF, base64-encodes it, POSTs to
+// Apps Script. Apps Script saves the file to the
+// "Come With — Signed Agreements" Drive folder, flips this row's
+// status to Signed, stores the Drive URL in signedPDF, and rolls
+// the linked inquiry to Booked.
+//
+// We POST in no-cors mode so we don't get the Drive URL back in the
+// response — the dashboard polls loadLinks() a few seconds later to
+// refresh from the sheet and show the Open PDF action.
+function uploadSignedPDF(agreementId, btn){
+  if (!agreementId) return;
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/pdf,.pdf';
+  input.onchange = function(){
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (file.type && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      alert('Please select a PDF file.');
+      return;
+    }
+    // Soft size cap — Apps Script web app POST body has a 50 MB ceiling
+    // and base64 expands by ~33%, so keep uploads under ~35 MB.
+    if (file.size > 35 * 1024 * 1024) {
+      alert('PDF is too large — keep it under 35 MB, or compress before uploading.');
+      return;
+    }
+    var origLabel = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
+
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      // readAsDataURL gives "data:application/pdf;base64,<payload>"
+      var b64 = String(ev.target.result || '').replace(/^data:[^,]+,/, '');
+      fetch(getScriptUrl(), {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'uploadSignedPDF',
+          agreementId: agreementId,
+          filename: file.name,
+          fileData: b64
+        })
+      });
+
+      // Optimistic local update — flip this row to Signed and mark it
+      // as pending a refresh for the actual Drive URL.
+      updateLocalLinkStatus(agreementId, 'Signed');
+      var email = findLinkClientEmail(agreementId);
+      if (email) locallyUpdateInquiryStatus(email, 'Booked');
+
+      if (btn) { btn.textContent = origLabel; btn.disabled = false; }
+      showLinkNote(btn, '✓ PDF uploaded', false);
+      renderLinks();
+
+      // Re-fetch the sheet a beat later so the real Drive URL shows
+      // up and the row collapses to "Open PDF" only.
+      setTimeout(loadLinks, 2500);
+    };
+    reader.onerror = function(){
+      alert('Failed to read the PDF file.');
+      if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
 }
 
 function updateLocalLinkStatus(agreementId, newStatus){
