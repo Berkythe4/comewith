@@ -18,7 +18,7 @@
 var CW_AUTH = (function() {
   'use strict';
 
-  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbx67U33sFfP0h0-e2P5Z_4RnDMcOOakmdxL3lSip8E3l2Qbr5fFxGhKZY6NDDuz_4VRKQ/exec';
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzERw5Hw5KUpM1BBwjZTd3EyJg9TD5TZ2qiqQ4WhMGS91bvoET9k2pzstQMfhv9jx8Ukg/exec';
 
   var ROLES = {
     MASTER_ADMIN: 'master_admin',
