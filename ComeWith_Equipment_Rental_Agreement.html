@@ -137,10 +137,206 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
   .admin-profile{padding:16px 18px;}
 }
 @media print{
-  body::before{display:none;}
-  .submit-bar,.success-banner,.admin-nav,.admin-profile{display:none!important;}
-  .admin-content{display:block!important;}
-  .check-item.selected{background:#FAE8E6!important;-webkit-print-color-adjust:exact;}
+  @page { margin: 1in; }
+
+  /* ── Global reset ── */
+  body {
+    background: white !important;
+    color: #000 !important;
+    font-family: 'Libre Baskerville', Georgia, 'Times New Roman', serif !important;
+    font-size: 10.5pt !important;
+    line-height: 1.55 !important;
+    padding: 0 !important;
+  }
+  body::before { display: none !important; }
+  * {
+    transition: none !important;
+    animation: none !important;
+    box-shadow: none !important;
+  }
+  .page { max-width: none !important; padding: 0 !important; margin: 0 !important; }
+  .admin-content { display: block !important; }
+
+  /* ── Hide interactive / admin chrome ── */
+  .submit-bar, .success-banner, .error-banner, button,
+  .admin-nav, .admin-profile, .nav-back, .nav-logout {
+    display: none !important;
+  }
+
+  /* ── Inputs as plain text ── */
+  input, select, textarea {
+    background: transparent !important;
+    border: none !important;
+    color: #000 !important;
+    font-family: 'Libre Baskerville', Georgia, serif !important;
+    font-size: 10.5pt !important;
+    padding: 0 !important;
+    -webkit-appearance: none !important;
+    appearance: none !important;
+    resize: none !important;
+  }
+  .field-group input,
+  .field-group select,
+  input[type=text], input[type=email], input[type=tel],
+  input[type=date], input[type=number], input[type=time], select {
+    border-bottom: 1px solid #333 !important;
+    padding: 0 2px !important;
+    min-height: 1.2em !important;
+  }
+  textarea { min-height: 2em !important; }
+  ::placeholder { color: transparent !important; opacity: 0 !important; }
+
+  /* Empty fields (flagged by beforeprint JS) collapse entirely */
+  [data-print-empty] { display: none !important; }
+
+  /* ── Document header ── */
+  .doc-header {
+    border-bottom: 2px solid #000 !important;
+    margin-bottom: 20px !important;
+    padding-bottom: 12px !important;
+  }
+  .doc-brand, .doc-title {
+    color: #000 !important;
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+  }
+  .doc-sub { color: #444 !important; }
+
+  /* ── Section labels ── */
+  .section-label {
+    color: #000 !important;
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    font-size: 9pt !important;
+    letter-spacing: 0.18em !important;
+    border-bottom: 1px solid #000 !important;
+    padding-bottom: 4px !important;
+    margin-bottom: 10px !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .section-label::after { display: none !important; }
+  .section { page-break-inside: auto; margin-bottom: 16px !important; }
+
+  /* ── Field-group labels ── */
+  .field-group label, .sig-label {
+    color: #444 !important;
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    font-size: 8pt !important;
+    letter-spacing: 0.14em !important;
+  }
+
+  /* ── EQUIPMENT GRID: only show selected, bold border + ✓ ── */
+  #equipmentGrid { display: block !important; }
+  #equipmentGrid .check-item { display: none !important; }
+  #equipmentGrid .check-item.selected {
+    display: block !important;
+    background: white !important;
+    border: 1.5px solid #000 !important;
+    padding: 8px 12px !important;
+    margin-bottom: 6px !important;
+    page-break-inside: avoid !important;
+  }
+  #equipmentGrid .check-item.selected::before {
+    content: "✓ ";
+    font-weight: bold;
+    font-family: 'Bebas Neue', Impact, sans-serif;
+  }
+  #equipmentGrid .check-item.selected .check-box { display: none !important; }
+  #equipmentGrid .check-item.selected .check-label,
+  #equipmentGrid .check-item.selected .check-detail {
+    color: #000 !important;
+    display: inline !important;
+  }
+  #equipmentGrid .check-item.selected .check-rate {
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    color: #000 !important;
+    float: right !important;
+  }
+
+  /* ── GENERIC CHECK ITEMS (e.g. A/V addon): only selected ── */
+  .check-grid:not(#equipmentGrid) .check-item { display: none !important; }
+  .check-grid:not(#equipmentGrid) .check-item.selected {
+    display: block !important;
+    background: white !important;
+    border: 1px solid #000 !important;
+    padding: 6px 10px !important;
+    margin-bottom: 4px !important;
+    page-break-inside: avoid !important;
+  }
+  .check-grid:not(#equipmentGrid) .check-item.selected .check-box { display: none !important; }
+  .check-grid:not(#equipmentGrid) .check-item.selected .check-label {
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    color: #000 !important;
+  }
+
+  /* ── FEE TABLE: clean borders ── */
+  .fee-table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+  .fee-table th, .fee-table td {
+    border-bottom: 1px solid #999 !important;
+    padding: 6px 4px !important;
+    background: transparent !important;
+    color: #000 !important;
+  }
+  .fee-table td input,
+  .fee-table td input[readonly] {
+    border: none !important;
+    border-bottom: 1px solid #999 !important;
+    background: transparent !important;
+  }
+
+  /* ── DEPOSIT RADIOS: only selected ── */
+  .radio-item { display: none !important; }
+  .radio-item.selected {
+    display: inline-flex !important;
+    background: white !important;
+    border: 1px solid #000 !important;
+    padding: 4px 10px !important;
+  }
+  .radio-item.selected .radio-dot { display: none !important; }
+  .radio-item.selected .check-label,
+  .radio-item.selected label {
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    color: #000 !important;
+  }
+
+  /* ── PAYMENT METHOD: only selected ── */
+  .pay-grid { gap: 8px !important; }
+  .pay-item { display: none !important; }
+  .pay-item.selected {
+    display: inline-flex !important;
+    background: white !important;
+    color: #000 !important;
+    border: 1px solid #000 !important;
+    padding: 4px 12px !important;
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    font-size: 10pt !important;
+  }
+
+  /* ── SIGNATURE PANELS: full-quality canvas print ── */
+  .sig-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 16px !important; }
+  .sig-panel {
+    background: white !important;
+    border: 1px solid #000 !important;
+    padding: 14px !important;
+    page-break-inside: avoid !important;
+  }
+  .sig-line, #ownerSigCanvas, #renterSigCanvas, canvas.sig-line {
+    border: none !important;
+    border-bottom: 1px solid #000 !important;
+    background: white !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    image-rendering: -webkit-optimize-contrast;
+    max-width: 100% !important;
+  }
+  .sig-party {
+    font-family: 'Bebas Neue', Impact, sans-serif !important;
+    color: #000 !important;
+    font-size: 10pt !important;
+  }
+  .sig-input { border-bottom: 1px solid #333 !important; }
 }
 </style>
 </head>
@@ -590,6 +786,25 @@ function initCanvas(canvasId) {
 
 initCanvas('ownerSigCanvas');
 initCanvas('renterSigCanvas');
+
+// ── PRINT: flag empty fields (or value === placeholder) so they
+//   collapse in @media print.
+function flagEmptyFieldsForPrint(){
+  document.querySelectorAll('input, textarea, select').forEach(function(el){
+    var val = String(el.value || '').trim();
+    var ph = String(el.placeholder || '').trim();
+    if (!val || (ph && val === ph)) {
+      el.setAttribute('data-print-empty', '1');
+    }
+  });
+}
+function unflagEmptyFieldsForPrint(){
+  document.querySelectorAll('[data-print-empty]').forEach(function(el){
+    el.removeAttribute('data-print-empty');
+  });
+}
+window.addEventListener('beforeprint', flagEmptyFieldsForPrint);
+window.addEventListener('afterprint', unflagEmptyFieldsForPrint);
 
 // ── FORM SUBMIT ──────────────────────────────────────────
 async function handleSubmit(e) {
