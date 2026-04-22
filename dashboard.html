@@ -493,7 +493,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 // ── SCRIPT URL (resolved per-fetch, never at module load time) ─────
 // Hardcoded fallback lives here so the dashboard still works even if
 // users.js failed to load or CW_AUTH isn't initialized yet.
-const FALLBACK_URL = "https://script.google.com/macros/s/AKfycbyKAwXCfEyaHC-OzmVyoV1wLM4YpE9Wkcq0JPvVlMqgUYpzTEcIhWL2rNxx80630xp7Cw/exec";
+const FALLBACK_URL = "https://script.google.com/macros/s/AKfycbwnLfoiRuLwOZfGjeTvXiKF9yX9_KbaVk7T_1iqDQFsQow8qaA0HuPFCuJRWk1Xw9IjXw/exec";
 
 function getScriptUrl() {
   const url = (window.CW_AUTH && CW_AUTH.SCRIPT_URL) ? CW_AUTH.SCRIPT_URL : FALLBACK_URL;
