@@ -410,23 +410,52 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 
 <script src="users.js"></script>
 <script>
-// ── AUTH (role-based via users.js) ────────────��──────────
-CW_AUTH.init({
-  requireAuth: true,
-  allowedRoles: [CW_AUTH.ROLES.MASTER_ADMIN, CW_AUTH.ROLES.SUB_ADMIN],
-  onReady: function(user) {
-    document.getElementById('adminContent').style.display = 'block';
-    // Show profile
-    var pn = document.querySelector('.profile-name');
-    if (pn) pn.textContent = user.name || user.email;
-    // Show Users tab for master admin only
-    if (CW_AUTH.isMasterAdmin(user)) {
-      document.getElementById('navUsers').style.display = '';
-      document.getElementById('tabUsers').style.display = '';
-    }
-    loadAllData();
+// ── SCRIPT URL (resolved per-fetch, never at module load time) ─────
+// Hardcoded fallback lives here so the dashboard still works even if
+// users.js failed to load or CW_AUTH isn't initialized yet.
+const FALLBACK_URL = "https://script.google.com/macros/s/AKfycby32mgkHFSsdRsxKsY0wc8hdOwdyG2ud_jKHfCpUQlpCRjsIhkXFeLgCo75oZufGwgpBw/exec";
+
+function getScriptUrl() {
+  const url = (window.CW_AUTH && CW_AUTH.SCRIPT_URL) ? CW_AUTH.SCRIPT_URL : FALLBACK_URL;
+  return url;
+}
+
+console.log('[dashboard] users.js loaded?', typeof CW_AUTH !== 'undefined');
+console.log('[dashboard] CW_AUTH.SCRIPT_URL =', (window.CW_AUTH && CW_AUTH.SCRIPT_URL) || '(unset)');
+console.log('[dashboard] FALLBACK_URL =', FALLBACK_URL);
+
+// ── AUTH (role-based via users.js) ─────────────────────────
+// Wait for DOM + users.js before wiring anything up.
+function bootstrapDashboard() {
+  if (typeof CW_AUTH === 'undefined') {
+    console.error('[dashboard] users.js did not load — CW_AUTH is undefined. Check <script src="users.js"> path.');
+    document.getElementById('loading-inquiries').innerHTML =
+      '<div style="color:var(--red);font-size:0.82rem;">users.js failed to load. Check the browser Network tab for a 404 on users.js.</div>';
+    return;
   }
-});
+
+  CW_AUTH.init({
+    requireAuth: true,
+    allowedRoles: [CW_AUTH.ROLES.MASTER_ADMIN, CW_AUTH.ROLES.SUB_ADMIN],
+    onReady: function(user) {
+      document.getElementById('adminContent').style.display = 'block';
+      var pn = document.querySelector('.profile-name');
+      if (pn) pn.textContent = user.name || user.email;
+      if (CW_AUTH.isMasterAdmin(user)) {
+        document.getElementById('navUsers').style.display = '';
+        document.getElementById('tabUsers').style.display = '';
+      }
+      loadAllData();
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapDashboard);
+} else {
+  // DOM already ready (users.js is synchronous so it has also finished here)
+  bootstrapDashboard();
+}
 
 function logout() {
   CW_AUTH.logout();
@@ -454,16 +483,6 @@ document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
 });
 
 // ── DATA ─────────────────────────────────────────────────
-// Prefer the single source of truth in users.js (CW_AUTH.SCRIPT_URL) so we
-// only need to update the URL in one place. Fallback to a hardcoded URL if
-// users.js didn't load for some reason.
-var APPS_SCRIPT_URL = (typeof CW_AUTH !== 'undefined' && CW_AUTH.SCRIPT_URL)
-  ? CW_AUTH.SCRIPT_URL
-  : "https://script.google.com/macros/s/AKfycby32mgkHFSsdRsxKsY0wc8hdOwdyG2ud_jKHfCpUQlpCRjsIhkXFeLgCo75oZufGwgpBw/exec";
-
-console.log('[dashboard] APPS_SCRIPT_URL =', APPS_SCRIPT_URL);
-console.log('[dashboard] CW_AUTH loaded?', typeof CW_AUTH !== 'undefined');
-
 var store={inquiries:[],agreements:[],rentals:[]};
 
 function loadAllData(){
@@ -473,7 +492,13 @@ function loadAllData(){
 }
 
 function fetchData(action,cb){
-  var url = APPS_SCRIPT_URL + '?action=' + encodeURIComponent(action);
+  var scriptUrl = getScriptUrl();
+  if (!scriptUrl) {
+    console.error('[dashboard] No script URL available for ' + action);
+    cb({ __error: 'No script URL configured.' });
+    return;
+  }
+  var url = scriptUrl + '?action=' + encodeURIComponent(action);
   console.log('[dashboard] fetch →', url);
 
   fetch(url, { redirect: 'follow' })
@@ -638,7 +663,7 @@ function updateRowStatus(sel,email,idx){
   var newStatus=sel.value;
   sel.classList.add('updating');
   var saved=document.getElementById('saved-'+idx);
-  fetch(APPS_SCRIPT_URL,{
+  fetch(getScriptUrl(),{
     method:'POST',mode:'no-cors',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({type:'updateStatus',email:email,status:newStatus})
