@@ -555,45 +555,75 @@ function handleServicesSelection(d) {
 
 
 function handleEventsAgreement(d) {
-  // ── STAGE 1: Admin submission (link status is "Draft" / legacy) ──
-  // Admin has completed + signed the agreement. Stash the full form
-  // payload as the updated prefill, flip link status to
-  // "Pending Client Signature", email the client, and return before
-  // writing the final Agreements row.
+  // ── STAGE ROUTING ──────────────────────────────────────────────
+  // Preferred signal: d.submitterStage ('admin' or 'client') sent by
+  // the form. When missing (legacy clients), fall back to link status.
+  // This guards against the admin accidentally re-submitting from
+  // stage 1 and flipping the inquiry to 'Booked' prematurely.
   if (d.agreementId) {
     var currentStatus = getAgreementLinkStatus(d.agreementId);
-    if (isDraftStage(currentStatus)) {
+    var stage = (d.submitterStage || '').toLowerCase();
+    if (!stage) {
+      stage = isDraftStage(currentStatus) ? 'admin' : 'client';
+    }
+    // Never regress a Signed agreement. Both admin re-opens and stray
+    // resubmits hit this and bail out.
+    if (String(currentStatus).toLowerCase() === 'signed') {
+      return jsonResponse({
+        success: true,
+        note: 'Agreement already signed. No further action taken.',
+        agreementId: d.agreementId,
+        status: 'Signed'
+      });
+    }
+
+    // Admin stage: save prefill, and only email/flip statuses on the
+    // FIRST admin submission (when link status is still Draft/legacy).
+    if (stage === 'admin') {
       var prefillSaved = updateAgreementLinkPrefill(d.agreementId, d);
       Logger.log('[admin-stage events] id=' + d.agreementId + ' prefill-saved=' + prefillSaved +
-                 ' payload-keys=' + Object.keys(d).length);
+                 ' payload-keys=' + Object.keys(d).length + ' link-status=' + currentStatus);
       if (!prefillSaved) {
         return jsonResponse({
           error: 'Failed to save prefill data. Check that the Agreement Links sheet has agreementId and prefill columns and the row exists.',
           agreementId: d.agreementId
         });
       }
-      updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
-      if (d.inquiryEmail || d.email) {
-        updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
-      }
-      try {
-        sendAgreementEmail({
-          clientEmail: d.email || d.clientEmail,
-          clientName: d.clientName,
-          agreementType: d.type || 'Events Services Agreement',
-          agreementId: d.agreementId,
-          link: getAgreementLink(d.agreementId)
-        });
-      } catch (emailErr) {
-        Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+      var firstAdminSubmit = isDraftStage(currentStatus);
+      if (firstAdminSubmit) {
+        updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
+        if (d.inquiryEmail || d.email) {
+          updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+        }
+        try {
+          sendAgreementEmail({
+            clientEmail: d.email || d.clientEmail,
+            clientName: d.clientName,
+            agreementType: d.type || 'Events Services Agreement',
+            agreementId: d.agreementId,
+            link: getAgreementLink(d.agreementId)
+          });
+        } catch (emailErr) {
+          Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+        }
       }
       return jsonResponse({
         success: true,
         stage: 'admin',
+        firstAdminSubmit: firstAdminSubmit,
         status: 'Pending Client Signature',
         agreementId: d.agreementId
       });
     }
+    // Reject a client submission if the admin hasn't completed+sent yet
+    if (stage === 'client' && isDraftStage(currentStatus)) {
+      return jsonResponse({
+        error: 'This agreement is still in Draft — the admin needs to complete and send it first.',
+        agreementId: d.agreementId,
+        status: currentStatus
+      });
+    }
+    // stage === 'client' falls through to Stage 2 below
   }
 
   // ── STAGE 2: Client submission (or legacy no-id submit) ─────────
@@ -664,41 +694,66 @@ function handleEventsAgreement(d) {
 
 
 function handleEquipmentRental(d) {
-  // ── STAGE 1: Admin submission (link status is "Draft" / legacy) ──
+  // ── STAGE ROUTING ──────────────────────────────────────────────
   if (d.agreementId) {
     var currentStatus = getAgreementLinkStatus(d.agreementId);
-    if (isDraftStage(currentStatus)) {
+    var stage = (d.submitterStage || '').toLowerCase();
+    if (!stage) {
+      stage = isDraftStage(currentStatus) ? 'admin' : 'client';
+    }
+    if (String(currentStatus).toLowerCase() === 'signed') {
+      return jsonResponse({
+        success: true,
+        note: 'Rental agreement already signed. No further action taken.',
+        agreementId: d.agreementId,
+        status: 'Signed'
+      });
+    }
+
+    if (stage === 'admin') {
       var prefillSaved = updateAgreementLinkPrefill(d.agreementId, d);
       Logger.log('[admin-stage rental] id=' + d.agreementId + ' prefill-saved=' + prefillSaved +
-                 ' payload-keys=' + Object.keys(d).length);
+                 ' payload-keys=' + Object.keys(d).length + ' link-status=' + currentStatus);
       if (!prefillSaved) {
         return jsonResponse({
           error: 'Failed to save prefill data. Check that the Agreement Links sheet has agreementId and prefill columns and the row exists.',
           agreementId: d.agreementId
         });
       }
-      updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
-      if (d.inquiryEmail || d.email) {
-        updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
-      }
-      try {
-        sendAgreementEmail({
-          clientEmail: d.email || d.clientEmail,
-          clientName: d.renterName || d.clientName,
-          agreementType: d.type || 'Equipment Rental Agreement',
-          agreementId: d.agreementId,
-          link: getAgreementLink(d.agreementId)
-        });
-      } catch (emailErr) {
-        Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+      var firstAdminSubmit = isDraftStage(currentStatus);
+      if (firstAdminSubmit) {
+        updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
+        if (d.inquiryEmail || d.email) {
+          updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+        }
+        try {
+          sendAgreementEmail({
+            clientEmail: d.email || d.clientEmail,
+            clientName: d.renterName || d.clientName,
+            agreementType: d.type || 'Equipment Rental Agreement',
+            agreementId: d.agreementId,
+            link: getAgreementLink(d.agreementId)
+          });
+        } catch (emailErr) {
+          Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+        }
       }
       return jsonResponse({
         success: true,
         stage: 'admin',
+        firstAdminSubmit: firstAdminSubmit,
         status: 'Pending Client Signature',
         agreementId: d.agreementId
       });
     }
+    if (stage === 'client' && isDraftStage(currentStatus)) {
+      return jsonResponse({
+        error: 'This rental agreement is still in Draft — the admin needs to complete and send it first.',
+        agreementId: d.agreementId,
+        status: currentStatus
+      });
+    }
+    // stage === 'client' falls through to Stage 2 below
   }
 
   // ── STAGE 2: Client submission (or legacy no-id submit) ─────────

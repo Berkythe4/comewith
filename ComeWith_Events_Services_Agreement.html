@@ -593,28 +593,47 @@ function recalcTotal(){
 (async function loadByAgreementId(){
   const id = new URLSearchParams(window.location.search).get('id');
   if (!id) return;
+  // Stash the id up front so submit always carries it even if the
+  // fetch below fails or the record doesn't have prefill data yet.
+  const form = document.getElementById('esaForm');
+  if (form) form.dataset.agreementId = id;
+
   try {
     const res = await fetch(APPS_SCRIPT_URL + '?action=getAgreementData&id=' + encodeURIComponent(id));
     const data = await res.json();
     if (!data || data.error || !data.prefill) return;
     const prefill = typeof data.prefill === 'string' ? JSON.parse(data.prefill) : data.prefill;
-    const form = document.getElementById('esaForm');
     if (!form) return;
-    // Populate any named input/textarea/select whose key exists in prefill
+
+    // Group names are handled explicitly below — skip them in the generic
+    // loop so we don't accidentally overwrite their checked state.
+    const groupFields = new Set(['services','payment','promoRights','depositOpt']);
+
+    // Populate every named input/textarea/select whose key exists in prefill.
+    // This catches all dynamically-generated fields too: equipment provider
+    // selects (equip_0..equip_N), fee inputs (djFee/prodFee/avFee/rentFee),
+    // ownerDate, clause-fill inputs (arrivalHrs, extRate), etc.
     Object.entries(prefill).forEach(([k, v]) => {
-      if (form[k] && v !== undefined && v !== null) {
-        if (form[k].type === 'checkbox' || form[k].type === 'radio') {
-          // For multi-value groups we'll handle below; skip single checkbox/radio here
-          return;
-        }
-        form[k].value = v;
-      }
+      if (groupFields.has(k)) return;
+      if (v === undefined || v === null) return;
+      const el = form[k];
+      if (!el) return;
+      // Skip RadioNodeList / collections (no .tagName) — we only want single elements
+      if (!el.tagName) return;
+      // Skip individual checkbox/radio inputs (single ones aren't used here,
+      // but guard anyway)
+      if (el.type === 'checkbox' || el.type === 'radio') return;
+      // Don't clobber the hardcoded owner printed name if the saved value
+      // is empty; keep whatever the HTML had.
+      if (k === 'ownerName' && String(v).trim() === '') return;
+      el.value = v;
     });
+
     // Multi-value fields stored as comma-joined strings: services, payment, promoRights
     ['services','payment','promoRights'].forEach(groupName => {
       const joined = prefill[groupName];
       if (!joined) return;
-      const values = joined.split(',').map(s=>s.trim()).filter(Boolean);
+      const values = String(joined).split(',').map(s=>s.trim()).filter(Boolean);
       form.querySelectorAll(`input[name="${groupName}"]`).forEach(inp => {
         if (values.includes(inp.value)) {
           inp.checked = true;
@@ -629,8 +648,6 @@ function recalcTotal(){
     }
     // Trigger total recalc after fees are populated
     recalcTotal();
-    // Stash the agreement id on the form for submission status update
-    form.dataset.agreementId = id;
   } catch (err) {
     console.warn('Agreement pre-fill load failed:', err);
   }
@@ -655,42 +672,64 @@ function initCanvas(id){
 initCanvas('ownerSigCanvas');
 initCanvas('clientSigCanvas');
 
+// Detect whether the current submitter is an admin (via the CW_AUTH
+// sessionStorage record written by users.js on other pages). We don't
+// import users.js into this form because it's public-facing; we just
+// peek at the session value.
+function isAdminSubmitter(){
+  try {
+    const raw = sessionStorage.getItem('cw_user');
+    if (!raw) return false;
+    const u = JSON.parse(raw);
+    return !!(u && (u.role === 'master_admin' || u.role === 'sub_admin'));
+  } catch(e){ return false; }
+}
+
 async function handleSubmit(e){
   e.preventDefault();
   const form = e.target;
   const btn = form.querySelector('.btn-primary');
   btn.textContent='Submitting...'; btn.disabled=true;
-  const services = [...form.querySelectorAll('[name=services]:checked')].map(c=>c.value).join(', ');
-  const payment  = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
+
+  // Multi-value groups — join checked values into comma-separated strings
+  const groupNames = new Set(['services','payment','promoRights','depositOpt']);
+  const services    = [...form.querySelectorAll('[name=services]:checked')].map(c=>c.value).join(', ');
+  const payment     = [...form.querySelectorAll('[name=payment]:checked')].map(c=>c.value).join(', ');
   const promoRights = [...form.querySelectorAll('[name=promoRights]:checked')].map(c=>c.value).join(', ');
-  const depositOpt = [...form.querySelectorAll('[name=depositOpt]:checked')].map(r=>r.value)[0]||'';
+  const depositOpt  = [...form.querySelectorAll('[name=depositOpt]:checked')].map(r=>r.value)[0]||'';
+
+  // Capture EVERY named input/select/textarea so dynamically-generated
+  // fields (equip_0..equip_N), fee inputs, owner signature fields,
+  // and any future fields get round-tripped correctly. Without this
+  // the prefill save is missing fields and the client can't see what
+  // admin filled in.
+  const allFields = {};
+  form.querySelectorAll('input[name], select[name], textarea[name]').forEach(el => {
+    const n = el.name;
+    if (!n || groupNames.has(n)) return;
+    // Skip radio/checkbox singletons — they're either part of a group
+    // handled above or are unused in this form
+    if (el.type === 'checkbox' || el.type === 'radio') return;
+    allFields[n] = el.value;
+  });
+
   const params = new URLSearchParams(window.location.search);
-  const data={
-    type:'Events Services Agreement',
-    timestamp:new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
+  const data = Object.assign({}, allFields, {
+    type: 'Events Services Agreement',
+    timestamp: new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
     inquiryEmail: params.get('email') || '',
     agreementId: form.dataset.agreementId || params.get('id') || '',
-    agreementNum:document.getElementById('agr-num').value,
-    clientName:form.clientName.value,
-    email:form.email.value,
-    phone:form.phone.value,
-    instagram:form.instagram.value,
+    agreementNum: document.getElementById('agr-num').value,
+    // Explicit stage marker so the server can distinguish admin vs client
+    // without relying solely on the current link status (which can be
+    // ambiguous on double-submits).
+    submitterStage: isAdminSubmitter() ? 'admin' : 'client',
     services,
-    eventType:form.eventType.value,
-    eventDate:form.eventDate.value,
-    venueName:form.venueName.value,
-    setStart:form.setStart.value,
-    setEnd:form.setEnd.value,
-    genre:form.genre.value,
-    totalFee:form.totalFee.value,
-    depositOpt,
-    depositAmt:form.depositAmt?form.depositAmt.value:'',
     payment,
     promoRights,
-    clientSigName:form.clientSigName.value,
-    clientDate:form.clientDate.value,
-    notes:form.notes.value,
-  };
+    depositOpt,
+  });
+
   try{
     await fetch(APPS_SCRIPT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     document.getElementById('successBanner').style.display='block';

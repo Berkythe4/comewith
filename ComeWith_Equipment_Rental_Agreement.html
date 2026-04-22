@@ -666,6 +666,18 @@ async function handleSubmit(e) {
   var payment = [];
   form.querySelectorAll('[name=payment]:checked').forEach(function(c) { payment.push(c.value); });
 
+  // Detect admin submitter via CW_AUTH sessionStorage. This rental form
+  // currently requires admin auth anyway, but we include the marker so
+  // the server doesn't have to rely solely on link status.
+  var isAdmin = (function(){
+    try {
+      var raw = sessionStorage.getItem('cw_user');
+      if (!raw) return false;
+      var u = JSON.parse(raw);
+      return !!(u && (u.role === 'master_admin' || u.role === 'sub_admin'));
+    } catch(e){ return false; }
+  })();
+
   var params = new URLSearchParams(window.location.search);
   var data = {
     type: 'Equipment Rental Agreement',
@@ -673,6 +685,7 @@ async function handleSubmit(e) {
     timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     inquiryEmail: params.get('email') || '',
     agreementId: form.dataset.agreementId || params.get('id') || '',
+    submitterStage: isAdmin ? 'admin' : 'client',
     agreementNum: document.getElementById('agr-num').value,
     renterName: form.renterName.value,
     djName: form.djName.value,
