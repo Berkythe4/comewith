@@ -232,6 +232,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <a href="#" data-tab="agreements">Agreements</a>
         <a href="#" data-tab="rentals">Equipment Rentals</a>
         <a href="#" data-tab="income">Events &amp; Income</a>
+        <a href="#" data-tab="links">Links</a>
         <a href="#" data-tab="archive">Archive</a>
         <a href="#" data-tab="users" id="navUsers" style="display:none;">Users</a>
         <div class="nav-divider"></div>
@@ -274,6 +275,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <button class="tab" data-tab="agreements">Agreements</button>
         <button class="tab" data-tab="rentals">Equipment Rentals</button>
         <button class="tab" data-tab="income">Events &amp; Income</button>
+        <button class="tab" data-tab="links">Links</button>
         <button class="tab" data-tab="archive">Archive</button>
         <button class="tab" data-tab="users" id="tabUsers" style="display:none;">Users</button>
       </div>
@@ -328,6 +330,28 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
             </tr>
           </thead>
           <tbody id="tbody-rentals"></tbody>
+        </table>
+      </div>
+
+      <!-- LINKS TAB (agreement links) -->
+      <div class="tab-panel" id="panel-links">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Agreement links generated from Send Agreement. Status flips to "Signed" when the client submits the agreement form.</div>
+        </div>
+        <div class="loading" id="loading-links"><span class="loading-spinner"></span>Loading links...</div>
+        <table class="data-table" id="table-links" style="display:none;">
+          <thead>
+            <tr>
+              <th>Agreement ID</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>Email</th>
+              <th>Created</th>
+              <th>Status</th>
+              <th>Link</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-links"></tbody>
         </table>
       </div>
 
@@ -510,13 +534,14 @@ document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
 });
 
 // ── DATA ─────────────────────────────────────────────────
-var store={inquiries:[],agreements:[],rentals:[],income:[],incomeYTD:0,incomeAll:0};
+var store={inquiries:[],agreements:[],rentals:[],income:[],links:[],incomeYTD:0,incomeAll:0};
 
 function loadAllData(){
   loadInquiries();
   loadAgreements();
   loadRentals();
   loadIncome();
+  loadLinks();
 }
 
 function fetchData(action,cb){
@@ -649,6 +674,8 @@ function renderInquiries(){
       var name=getField(r,['firstName','first name','First Name','name','Name'])+' '+getField(r,['lastName','last name','Last Name']);
       name=name.trim()||getField(r,['clientName','client name','Client Name']);
       var email=getField(r,['email','Email']);
+      var phone=getField(r,['phone','Phone']);
+      var instagram=getField(r,['instagram','Instagram','ig','IG']);
       var servicesSelected=getField(r,['servicesSelected','services selected','Services Selected']);
       var service=getField(r,['service','Service']);
       var servicesDisplay=servicesSelected||service||'—';
@@ -657,7 +684,8 @@ function renderInquiries(){
       // Normalize legacy statuses
       if(status.toLowerCase()==='complete')status='Completed';
       var base=getBaseUrl();
-      var agrLink=base+'send_agreement.html';
+      var clientQs=new URLSearchParams({name:name.trim(),email:email,phone:phone,instagram:instagram}).toString();
+      var agrLink=base+'send_agreement.html?'+clientQs;
       var svcLink=base+'services_selection.html?'+new URLSearchParams({name:name.trim(),email:email}).toString();
       var selId='status-'+i;
       var savedId='saved-'+i;
@@ -894,6 +922,73 @@ function renderIncome(){
 
   document.getElementById('loading-income').style.display='none';
   document.getElementById('table-income').style.display='table';
+}
+
+// ── LINKS (Agreement Links) ─────────────────────────────
+function loadLinks(){
+  document.getElementById('loading-links').style.display='block';
+  document.getElementById('table-links').style.display='none';
+  fetchData('getAgreementLinks', function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-links').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load agreement links: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.links = Array.isArray(data) ? data : [];
+    renderLinks();
+  });
+}
+
+function renderLinks(){
+  var tbody = document.getElementById('tbody-links');
+  var rows = store.links || [];
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td class="no-data" colspan="7">No agreement links yet. Create one from the Send Agreement page.</td></tr>';
+  } else {
+    var sorted = rows.slice().sort(function(a,b){
+      var da = new Date(getField(a,['createdDate','Created Date','created','Created']))||0;
+      var db = new Date(getField(b,['createdDate','Created Date','created','Created']))||0;
+      return db - da;
+    });
+    var html = '';
+    for (var i = 0; i < sorted.length; i++) {
+      var r = sorted[i];
+      var id = getField(r,['agreementId','Agreement ID','id','ID']);
+      var type = getField(r,['type','Type','agreementType','Agreement Type']);
+      var cname = getField(r,['clientName','Client Name','name','Name']);
+      var cemail = getField(r,['clientEmail','Client Email','email','Email']);
+      var created = getField(r,['createdDate','Created Date','created','Created']);
+      var status = getField(r,['status','Status']) || 'Pending';
+      var link = getField(r,['link','Link','url','URL']);
+      var sl = status.toLowerCase();
+      var badgeClass = (sl === 'signed') ? 'badge-complete' : 'badge-active';
+      var copyId = 'linkcopy-' + i;
+      html += '<tr>';
+      html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:var(--red);letter-spacing:0.04em;">' + esc(id) + '</span></td>';
+      html += '<td>' + esc(type) + '</td>';
+      html += '<td><strong>' + esc(cname) + '</strong></td>';
+      html += '<td>' + esc(cemail) + '</td>';
+      html += '<td>' + fmtDate(created) + '</td>';
+      html += '<td><span class="badge ' + badgeClass + '">' + esc(status) + '</span></td>';
+      html += '<td style="max-width:340px;"><div style="display:flex;gap:6px;align-items:center;">';
+      html += '<a href="' + esc(link) + '" target="_blank" class="row-btn" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:220px;display:inline-block;">Open</a>';
+      html += '<button class="row-btn" id="' + copyId + '" onclick="copyAgrLink(this,\'' + esc(link).replace(/'/g,"\\'") + '\')">Copy</button>';
+      html += '</div></td>';
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+  document.getElementById('loading-links').style.display = 'none';
+  document.getElementById('table-links').style.display = 'table';
+}
+
+function copyAgrLink(btn, url){
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(function(){
+    var orig = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function(){ btn.textContent = orig; }, 1500);
+  });
 }
 
 // ── ARCHIVE ──────────────────────────────────────────────

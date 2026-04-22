@@ -167,11 +167,18 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
     <!-- GENERATE LINK -->
     <div class="section">
       <div class="section-label">Generate &amp; send</div>
-      <button type="button" class="btn-primary" onclick="generateLink()">Generate Agreement Link</button>
+      <p class="help-text">Generates a unique agreement ID, stores the pre-fill data, emails the client the link, and shows it here for you to copy.</p>
+      <button type="button" class="btn-primary" onclick="generateLink()">Generate &amp; Send Agreement</button>
       <div class="link-box" id="agrLinkBox">
         <button class="copy-btn" onclick="copyLink('agrLink')">Copy</button>
         <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Agreement Link:</strong>
         <a id="agrLink" href="#" target="_blank"></a>
+        <div style="margin-top:10px;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);">
+          Agreement ID: <span id="agrIdBadge" style="display:none;font-family:'Inconsolata',monospace;font-size:0.75rem;color:var(--red);letter-spacing:0.05em;text-transform:none;padding:2px 8px;background:rgba(193,59,42,0.08);border:1px solid rgba(193,59,42,0.2);margin-left:6px;"></span>
+        </div>
+        <div id="agrEmailNote" style="display:none;margin-top:10px;font-size:0.75rem;color:var(--mid);line-height:1.5;">
+          ✓ A link email was sent to the client from berky@comewith.org.
+        </div>
       </div>
     </div>
 
@@ -202,10 +209,20 @@ CW_AUTH.init({
     document.getElementById('adminContent').style.display = 'block';
     var pn = document.querySelector('.profile-name');
     if (pn) pn.textContent = user.name || user.email;
+    prefillFromQuery();
   }
 });
 
 function logout() { CW_AUTH.logout(); }
+
+// ── Pre-fill client fields from query params (from dashboard) ───
+function prefillFromQuery() {
+  const p = new URLSearchParams(window.location.search);
+  const n = p.get('name'); if (n) document.getElementById('clientName').value = n;
+  const e = p.get('email'); if (e) document.getElementById('clientEmail').value = e;
+  const ph = p.get('phone'); if (ph) document.getElementById('clientPhone').value = ph;
+  const ig = p.get('instagram'); if (ig) document.getElementById('clientIG').value = ig;
+}
 
 let selectedType = '';
 
@@ -221,7 +238,20 @@ function getBaseUrl() {
   return loc.protocol + '//' + loc.host + loc.pathname.replace(/[^/]*$/, '');
 }
 
-function generateLink() {
+// ── Unique agreement ID: PREFIX-YYYYMMDD-XXXXXX ─────────────
+function generateAgreementId(type) {
+  const prefix = type === 'rental' ? 'ERA' : 'ESA';
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous chars
+  let rand = '';
+  for (let i = 0; i < 6; i++) rand += chars[Math.floor(Math.random() * chars.length)];
+  return prefix + '-' + yyyy + mm + dd + '-' + rand;
+}
+
+async function generateLink() {
   const name = document.getElementById('clientName').value.trim();
   const email = document.getElementById('clientEmail').value.trim();
   const phone = document.getElementById('clientPhone').value.trim();
@@ -236,30 +266,66 @@ function generateLink() {
     return;
   }
 
-  const base = getBaseUrl();
-  let file;
-  if (selectedType === 'rental') {
-    file = 'ComeWith_Equipment_Rental_Agreement.html';
-  } else {
-    // 'events' and 'remote' both use the Events Services Agreement template
-    file = 'ComeWith_Events_Services_Agreement.html';
-  }
+  const btn = document.querySelector('.btn-primary');
+  const origLabel = btn.textContent;
+  btn.textContent = 'Generating & sending...';
+  btn.disabled = true;
 
-  const params = new URLSearchParams({
-    name: name,
+  const agreementId = generateAgreementId(selectedType);
+  const base = getBaseUrl();
+  const file = selectedType === 'rental'
+    ? 'ComeWith_Equipment_Rental_Agreement.html'
+    : 'ComeWith_Events_Services_Agreement.html';
+  const link = base + file + '?id=' + encodeURIComponent(agreementId);
+
+  // Pre-fill data that the client form will load when they open the link
+  const prefill = {
+    clientName: name,
+    renterName: name,         // rental template uses renterName
     email: email,
     phone: phone,
     instagram: ig,
-  });
+  };
   if (selectedType === 'remote') {
-    params.set('agreementLabel', 'Remote Event Agreement');
+    prefill.agreementLabel = 'Remote Event Agreement';
   }
 
-  const url = base + file + '?' + params.toString();
+  const payload = {
+    type: 'storeAgreementLink',
+    agreementId: agreementId,
+    agreementType: selectedType === 'rental'
+      ? 'Equipment Rental Agreement'
+      : (selectedType === 'remote' ? 'Remote Event Agreement' : 'Events Services Agreement'),
+    clientName: name,
+    clientEmail: email,
+    clientPhone: phone,
+    clientInstagram: ig,
+    link: link,
+    prefill: JSON.stringify(prefill),
+    createdDate: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+  };
+
+  try {
+    await fetch(CW_AUTH.SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+  } catch (err) {
+    console.error('storeAgreementLink failed:', err);
+  }
+
   const linkEl = document.getElementById('agrLink');
-  linkEl.href = url;
-  linkEl.textContent = url;
+  linkEl.href = link;
+  linkEl.textContent = link;
   document.getElementById('agrLinkBox').style.display = 'block';
+  document.getElementById('agrIdBadge').textContent = agreementId;
+  document.getElementById('agrIdBadge').style.display = 'inline-block';
+  document.getElementById('agrEmailNote').style.display = 'block';
+
+  btn.textContent = origLabel;
+  btn.disabled = false;
 }
 
 function generateServicesLink() {

@@ -214,6 +214,48 @@ function _doGetInner(e) {
     return jsonResponse(sheetToArrayWithLayout(sheet, 5, 6));
   }
 
+  // ── Get Agreement Links ────────────────────────────────
+  if (action === 'getAgreementLinks') {
+    var sheet = getSheet('Agreement Links');
+    // Strip the prefill blob before returning — it can be large and isn't
+    // needed in the dashboard list view.
+    var rows = sheetToArray(sheet).map(function(r) {
+      var copy = {};
+      for (var k in r) if (k !== 'prefill') copy[k] = r[k];
+      return copy;
+    });
+    return jsonResponse(rows);
+  }
+
+  // ── Get Agreement Data by ID (for client pre-fill) ─────
+  if (action === 'getAgreementData') {
+    var id = (e.parameter.id || '').trim();
+    if (!id) return jsonResponse({ error: 'Missing id parameter.' });
+    var sheet = getSheet('Agreement Links');
+    var idCol = getColIndex(sheet, 'agreementId');
+    if (idCol === -1) return jsonResponse({ error: 'Agreement Links sheet missing agreementId column.' });
+    var rowNum = findRowByColumn(sheet, idCol, id);
+    if (rowNum === -1) return jsonResponse({ error: 'Agreement not found: ' + id });
+    var lastCol = sheet.getLastColumn();
+    var rowData = sheet.getRange(rowNum, 1, 1, lastCol).getValues()[0];
+    var headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
+    var obj = {};
+    for (var i = 0; i < headers.length; i++) {
+      obj[String(headers[i]).trim()] = rowData[i];
+    }
+    return jsonResponse(obj);
+  }
+
+  // ── Update Agreement Status (GET convenience) ──────────
+  // e.g. ?action=updateAgreementStatus&id=ESA-20260422-X7K2P1&status=Signed
+  if (action === 'updateAgreementStatus') {
+    var id = (e.parameter.id || '').trim();
+    var newStatus = (e.parameter.status || '').trim();
+    if (!id || !newStatus) return jsonResponse({ error: 'id and status required.' });
+    var ok = updateAgreementLinkStatus(id, newStatus);
+    return jsonResponse({ success: ok });
+  }
+
   // ── Get All ────────────────────────────────────────────
   if (action === 'getAll') {
     return jsonResponse({
@@ -401,6 +443,13 @@ function _doPostInner(e) {
   }
 
   // ═════════════════════════════════════════════════════════
+  //  AGREEMENT LINK (admin Send Agreement)
+  // ═════════════════════════════════════════════════════════
+  if (type === 'storeAgreementLink') {
+    return handleStoreAgreementLink(body);
+  }
+
+  // ═════════════════════════════════════════════════════════
   //  USER MANAGEMENT
   // ═════════════════════════════════════════════════════════
   if (type === 'createUser')      return handleCreateUser(body);
@@ -542,6 +591,11 @@ function handleEventsAgreement(d) {
     updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
   }
 
+  // If this submission came from a ?id=... link, flip the link's status to Signed
+  if (d.agreementId) {
+    updateAgreementLinkStatus(d.agreementId, 'Signed');
+  }
+
   // Notify admin
   try {
     MailApp.sendEmail({
@@ -598,6 +652,11 @@ function handleEquipmentRental(d) {
   // Update Bookings Intake status if inquiryEmail exists
   if (d.inquiryEmail || d.email) {
     updateInquiryStatus(d.inquiryEmail || d.email, 'Rental Agreement Sent');
+  }
+
+  // If this submission came from a ?id=... link, flip the link's status to Signed
+  if (d.agreementId) {
+    updateAgreementLinkStatus(d.agreementId, 'Signed');
   }
 
   // Notify admin
@@ -792,4 +851,169 @@ function handleUpdateLastLogin(d) {
   if (loginCol !== -1) sheet.getRange(rowNum, loginCol + 1).setValue(d.lastLogin || '');
 
   return jsonResponse({ success: true });
+}
+
+
+// ═══════════════════════════════════════════════════════════════════
+//  AGREEMENT LINKS — admin pre-generates a shareable, unique agreement URL
+// ═══════════════════════════════════════════════════════════════════
+
+/**
+ * Agreement Links tab layout (default: headers row 3, data row 4+).
+ * Columns: agreementId, type, clientName, clientEmail, clientPhone,
+ *          clientInstagram, createdDate, link, prefill, status
+ *
+ * 'prefill' is a JSON string containing the fields the client form will
+ * populate on load. 'status' is "Pending" until the client submits the
+ * agreement, at which point updateAgreementLinkStatus flips it to "Signed".
+ */
+function handleStoreAgreementLink(d) {
+  var sheet = getSheet('Agreement Links');
+  var headers = ['agreementId', 'type', 'clientName', 'clientEmail',
+                 'clientPhone', 'clientInstagram', 'createdDate', 'link',
+                 'prefill', 'status'];
+  ensureHeaders(sheet, headers);
+
+  if (!d.agreementId) return jsonResponse({ error: 'agreementId required.' });
+
+  // Don't double-write if an admin clicks Generate twice — return success.
+  var idCol = getColIndex(sheet, 'agreementId');
+  if (findRowByColumn(sheet, idCol, d.agreementId) !== -1) {
+    return jsonResponse({ success: true, note: 'Agreement already exists.' });
+  }
+
+  sheet.appendRow([
+    d.agreementId,
+    d.agreementType || '',
+    d.clientName || '',
+    d.clientEmail || '',
+    d.clientPhone || '',
+    d.clientInstagram || '',
+    d.createdDate || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    d.link || '',
+    d.prefill || '',
+    'Pending'
+  ]);
+
+  // Email the client from berky@comewith.org
+  try {
+    sendAgreementEmail(d);
+  } catch (emailErr) {
+    Logger.log('sendAgreementEmail error: ' + emailErr);
+  }
+
+  return jsonResponse({ success: true, agreementId: d.agreementId });
+}
+
+/**
+ * Find the Agreement Links row for a given agreementId and set its status.
+ * Returns true if a row was updated, false otherwise.
+ */
+function updateAgreementLinkStatus(agreementId, newStatus) {
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  var statusCol = getColIndex(sheet, 'status');
+  if (idCol === -1 || statusCol === -1) return false;
+
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return false;
+
+  sheet.getRange(rowNum, statusCol + 1).setValue(newStatus);
+  return true;
+}
+
+/**
+ * Sends the agreement link email to the client from berky@comewith.org.
+ *
+ * Note on the From alias: MailApp doesn't support custom From headers
+ * for non-Workspace accounts. GmailApp.sendEmail supports a `from` option
+ * but only if the alias is configured on the sending account's Gmail
+ * settings. We try GmailApp with the alias and fall back to MailApp
+ * (which sends from the Apps Script owner's address — berky@comewith.org
+ * if the project is owned by that account).
+ */
+function sendAgreementEmail(d) {
+  var clientEmail = (d.clientEmail || '').trim();
+  if (!clientEmail) return;
+
+  var clientName = d.clientName || 'there';
+  var agreementType = d.agreementType || 'Agreement';
+  var link = d.link || '';
+  var agreementId = d.agreementId || '';
+  var fromAddress = 'berky@comewith.org';
+
+  var subject = 'Your ' + agreementType + ' from Come With';
+
+  var htmlBody =
+    '<div style="font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;max-width:560px;color:#1A1410;line-height:1.6;">' +
+      '<div style="border-bottom:2px solid #1A1410;padding-bottom:16px;margin-bottom:24px;">' +
+        '<div style="font-family:\'Bebas Neue\',Helvetica,sans-serif;font-size:28px;letter-spacing:0.06em;color:#1A1410;">COME WITH</div>' +
+        '<div style="font-size:11px;letter-spacing:0.18em;text-transform:uppercase;color:#8A7F72;margin-top:4px;">' + escapeHtml(agreementType) + '</div>' +
+      '</div>' +
+
+      '<p style="margin:0 0 14px;">Hi ' + escapeHtml(clientName) + ',</p>' +
+
+      '<p style="margin:0 0 14px;">Thanks for working with us. Your ' + escapeHtml(agreementType) +
+      ' is ready for your review and signature. Most fields are already filled in — you\'ll just need to look it over, add any final details, sign, and submit.</p>' +
+
+      '<div style="background:#F2EDE6;border-left:3px solid #C13B2A;padding:16px 18px;margin:20px 0;">' +
+        '<div style="font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:#8A7F72;margin-bottom:6px;">Agreement ID</div>' +
+        '<div style="font-family:\'Courier New\',monospace;font-size:14px;color:#C13B2A;letter-spacing:0.02em;">' + escapeHtml(agreementId) + '</div>' +
+      '</div>' +
+
+      '<div style="margin:28px 0;">' +
+        '<a href="' + escapeHtml(link) + '" style="display:inline-block;background:#C13B2A;color:#F2EDE6;font-family:\'Bebas Neue\',Helvetica,sans-serif;font-size:15px;letter-spacing:0.12em;text-decoration:none;padding:14px 28px;border-radius:0;">REVIEW &amp; SIGN &rarr;</a>' +
+      '</div>' +
+
+      '<p style="margin:0 0 10px;font-size:13px;color:#8A7F72;">Or copy &amp; paste this link into your browser:</p>' +
+      '<p style="margin:0 0 24px;font-size:12px;word-break:break-all;color:#1A1410;"><a href="' + escapeHtml(link) + '" style="color:#C13B2A;">' + escapeHtml(link) + '</a></p>' +
+
+      '<p style="margin:0 0 14px;">If anything looks off or you have questions, just reply to this email — I\'ll be right here.</p>' +
+
+      '<p style="margin:0 0 6px;">— Berky</p>' +
+      '<p style="margin:0 0 28px;font-size:12px;color:#8A7F72;">Come With · Brooklyn, NY</p>' +
+
+      '<div style="border-top:1px solid rgba(26,20,16,0.12);padding-top:14px;font-size:11px;color:#8A7F72;line-height:1.5;">' +
+        'This link is unique to you. Keep it private. If you didn\'t request this agreement, you can ignore this email.' +
+      '</div>' +
+    '</div>';
+
+  var plainBody =
+    'Hi ' + clientName + ',\n\n' +
+    'Thanks for working with us. Your ' + agreementType + ' is ready for your review and signature. Most fields are already filled in — you\'ll just need to look it over, sign, and submit.\n\n' +
+    'Agreement ID: ' + agreementId + '\n\n' +
+    'Review & sign: ' + link + '\n\n' +
+    'Reply to this email if you have any questions.\n\n' +
+    '— Berky\n' +
+    'Come With · Brooklyn, NY';
+
+  // Try GmailApp with the alias; fall back to MailApp on error.
+  try {
+    GmailApp.sendEmail(clientEmail, subject, plainBody, {
+      htmlBody: htmlBody,
+      from: fromAddress,
+      name: 'Berky — Come With'
+    });
+  } catch (gmailErr) {
+    Logger.log('GmailApp alias failed, falling back to MailApp: ' + gmailErr);
+    MailApp.sendEmail({
+      to: clientEmail,
+      subject: subject,
+      body: plainBody,
+      htmlBody: htmlBody,
+      name: 'Berky — Come With'
+    });
+  }
+}
+
+/**
+ * Minimal HTML escaper for email template fields.
+ */
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }

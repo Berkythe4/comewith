@@ -325,12 +325,12 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <div style="margin-top:20px;">
         <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Deposit</div>
         <div class="check-grid cols-2" style="margin-bottom:0;">
-          <label class="radio-item" onclick="toggleRadioGroup(this,'depositOpt','required')">
+          <label class="radio-item">
             <input type="radio" name="depositOpt" value="required">
             <div class="radio-dot"></div>
             <div class="check-label">Required</div>
           </label>
-          <label class="radio-item" onclick="toggleRadioGroup(this,'depositOpt','waived')">
+          <label class="radio-item">
             <input type="radio" name="depositOpt" value="waived">
             <div class="radio-dot"></div>
             <div class="check-label">Waived</div>
@@ -358,10 +358,10 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <div style="margin-top:18px;">
         <div class="section-label" style="font-size:0.58rem;margin-bottom:10px;">Payment method</div>
         <div class="pay-grid">
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Venmo">Venmo</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Zelle">Zelle</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Cash">Cash</label>
-          <label class="pay-item" onclick="togglePayment(this)"><input type="checkbox" name="payment" value="Check">Check</label>
+          <label class="pay-item"><input type="checkbox" name="payment" value="Venmo">Venmo</label>
+          <label class="pay-item"><input type="checkbox" name="payment" value="Zelle">Zelle</label>
+          <label class="pay-item"><input type="checkbox" name="payment" value="Cash">Cash</label>
+          <label class="pay-item"><input type="checkbox" name="payment" value="Check">Check</label>
         </div>
       </div>
     </div>
@@ -371,22 +371,22 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <div class="section-label">Recording &amp; promotional rights</div>
       <p style="font-size:0.72rem;color:var(--mid);margin-bottom:14px;">Client grants Come With the following rights to content captured at this event:</p>
       <div class="check-grid cols-2">
-        <label class="check-item" onclick="toggleCheck(this)">
+        <label class="check-item">
           <input type="checkbox" name="promoRights" value="Social media posts">
           <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <div><div class="check-label">Social media posts</div><div class="check-sub">Instagram, TikTok, etc.</div></div>
         </label>
-        <label class="check-item" onclick="toggleCheck(this)">
+        <label class="check-item">
           <input type="checkbox" name="promoRights" value="YouTube / SoundCloud upload">
           <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <div><div class="check-label">YouTube / SoundCloud</div><div class="check-sub">Full set upload</div></div>
         </label>
-        <label class="check-item" onclick="toggleCheck(this)">
+        <label class="check-item">
           <input type="checkbox" name="promoRights" value="Website use">
           <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <div><div class="check-label">Website use</div><div class="check-sub">comewith.org portfolio</div></div>
         </label>
-        <label class="check-item" onclick="toggleCheck(this)">
+        <label class="check-item">
           <input type="checkbox" name="promoRights" value="No promotional use">
           <div class="check-box"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <div><div class="check-label">No promotional use</div><div class="check-sub">Client restricts all use</div></div>
@@ -473,6 +473,8 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 </div>
 
 <script>
+const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxmlzmcEN31rbi725KQYM9vi9at6U266YSu4bIyT_n9bOTRnwQ0263gljrLdsAJCUFYaw/exec";
+
 document.getElementById('agr-date').valueAsDate = new Date();
 
 // ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
@@ -521,26 +523,108 @@ equipItems.forEach((item, i) => {
   equipDiv.appendChild(row);
 });
 
+// .svc-card wraps a hidden checkbox (input has pointer-events:none), so a
+// div onclick toggle is safe — clicking the div is the only way to flip state.
 function toggleSvc(el){
-  el.classList.toggle('selected');
-  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+  const cb = el.querySelector('input[type=checkbox]');
+  cb.checked = !cb.checked;
+  el.classList.toggle('selected', cb.checked);
 }
-function toggleCheck(el){
-  el.classList.toggle('selected');
-  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+
+// For the .check-item / .pay-item (label wrapping a visible checkbox) and
+// .radio-item (label wrapping a radio), rely on native label click behavior
+// and sync the `selected` class from the input's change event. This fixes
+// the bug where an onclick handler on the label fought with the browser's
+// native label-click-toggles-input behavior and flipped the value back.
+document.querySelectorAll('.check-item input[type=checkbox], .pay-item input[type=checkbox]').forEach(cb => {
+  cb.addEventListener('change', () => {
+    const item = cb.closest('.check-item, .pay-item');
+    if (item) item.classList.toggle('selected', cb.checked);
+  });
+});
+document.querySelectorAll('.radio-item input[type=radio]').forEach(r => {
+  r.addEventListener('change', () => {
+    // Clear 'selected' from all siblings in the same group, set on the newly-checked one
+    document.querySelectorAll(`input[type=radio][name="${r.name}"]`).forEach(sib => {
+      const sibItem = sib.closest('.radio-item');
+      if (sibItem) sibItem.classList.toggle('selected', sib.checked);
+    });
+    // Deposit-specific: show/hide details
+    if (r.name === 'depositOpt') {
+      const details = document.getElementById('depositDetails');
+      if (details) details.classList.toggle('visible', r.value === 'required');
+    }
+  });
+});
+
+// ── FEE TOTAL: auto-sum individual fees into totalFee in real time ───
+function parseFeeVal(s){
+  if(!s) return 0;
+  const cleaned = String(s).replace(/[$,\s]/g,'').replace(/^\((.+)\)$/, '-$1');
+  const n = parseFloat(cleaned);
+  return isFinite(n) ? n : 0;
 }
-function togglePayment(el){
-  el.classList.toggle('selected');
-  el.querySelector('input[type=checkbox]').checked = el.classList.contains('selected');
+function recalcTotal(){
+  const form = document.getElementById('esaForm');
+  if(!form) return;
+  const total = parseFeeVal(form.djFee?.value) + parseFeeVal(form.prodFee?.value) +
+                parseFeeVal(form.avFee?.value) + parseFeeVal(form.rentFee?.value);
+  // Format consistent with how the rest of the form uses USD
+  form.totalFee.value = '$' + total.toFixed(2);
 }
-function toggleRadioGroup(el, groupName, val){
-  document.querySelectorAll(`[name=${groupName}]`).forEach(r=>r.closest('.radio-item').classList.remove('selected'));
-  el.classList.add('selected');
-  el.querySelector('input[type=radio]').checked = true;
-  if(groupName==='depositOpt'){
-    document.getElementById('depositDetails').classList.toggle('visible', val==='required');
+['djFee','prodFee','avFee','rentFee'].forEach(n => {
+  const el = document.querySelector(`[name="${n}"]`);
+  if (el) el.addEventListener('input', recalcTotal);
+});
+
+// ── AGREEMENT PRE-FILL BY ?id= ──────────────────────────
+// If the URL has ?id=ESA-... fetch the stored pre-fill JSON and populate fields.
+// Always runs after the query-param field map above, so id-based pre-fill wins.
+(async function loadByAgreementId(){
+  const id = new URLSearchParams(window.location.search).get('id');
+  if (!id) return;
+  try {
+    const res = await fetch(APPS_SCRIPT_URL + '?action=getAgreementData&id=' + encodeURIComponent(id));
+    const data = await res.json();
+    if (!data || data.error || !data.prefill) return;
+    const prefill = typeof data.prefill === 'string' ? JSON.parse(data.prefill) : data.prefill;
+    const form = document.getElementById('esaForm');
+    if (!form) return;
+    // Populate any named input/textarea/select whose key exists in prefill
+    Object.entries(prefill).forEach(([k, v]) => {
+      if (form[k] && v !== undefined && v !== null) {
+        if (form[k].type === 'checkbox' || form[k].type === 'radio') {
+          // For multi-value groups we'll handle below; skip single checkbox/radio here
+          return;
+        }
+        form[k].value = v;
+      }
+    });
+    // Multi-value fields stored as comma-joined strings: services, payment, promoRights
+    ['services','payment','promoRights'].forEach(groupName => {
+      const joined = prefill[groupName];
+      if (!joined) return;
+      const values = joined.split(',').map(s=>s.trim()).filter(Boolean);
+      form.querySelectorAll(`input[name="${groupName}"]`).forEach(inp => {
+        if (values.includes(inp.value)) {
+          inp.checked = true;
+          inp.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    });
+    // Radios stored as a single value: depositOpt
+    if (prefill.depositOpt) {
+      const radio = form.querySelector(`input[name="depositOpt"][value="${prefill.depositOpt}"]`);
+      if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    // Trigger total recalc after fees are populated
+    recalcTotal();
+    // Stash the agreement id on the form for submission status update
+    form.dataset.agreementId = id;
+  } catch (err) {
+    console.warn('Agreement pre-fill load failed:', err);
   }
-}
+})();
 
 // Signature canvases
 function initCanvas(id){
@@ -561,8 +645,6 @@ function initCanvas(id){
 initCanvas('ownerSigCanvas');
 initCanvas('clientSigCanvas');
 
-const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxmlzmcEN31rbi725KQYM9vi9at6U266YSu4bIyT_n9bOTRnwQ0263gljrLdsAJCUFYaw/exec";
-
 async function handleSubmit(e){
   e.preventDefault();
   const form = e.target;
@@ -577,6 +659,7 @@ async function handleSubmit(e){
     type:'Events Services Agreement',
     timestamp:new Date().toLocaleString('en-US',{timeZone:'America/New_York'}),
     inquiryEmail: params.get('email') || '',
+    agreementId: form.dataset.agreementId || params.get('id') || '',
     agreementNum:document.getElementById('agr-num').value,
     clientName:form.clientName.value,
     email:form.email.value,
