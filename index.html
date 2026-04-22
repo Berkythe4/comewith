@@ -227,6 +227,33 @@
   .tile-featured:hover { background: #2A211A; }
   .tile-featured::after { background: var(--red); }
 
+  /* Remote / off-grid accent tile */
+  .tile-remote {
+    background: var(--ink);
+    color: var(--bg);
+    position: relative;
+  }
+  .tile-remote:hover { background: #2A211A; }
+  .tile-remote .tile-num { color: var(--red); }
+  .tile-remote .tile-title { color: var(--bg); }
+  .tile-remote .tile-desc { color: rgba(242,237,230,0.6); }
+  .tile-remote .tile-list li { color: rgba(242,237,230,0.5); }
+  .tile-remote .tile-list li::before { color: var(--red); }
+  .tile-remote .tile-arrow { color: var(--red); }
+  .tile-remote::before {
+    content: 'OFF-GRID';
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.14em;
+    background: var(--red);
+    color: white;
+    padding: 4px 10px;
+  }
+  .tile-remote::after { background: var(--red); }
+
   .tile-num {
     font-family: 'Bebas Neue', sans-serif;
     font-size: 0.75rem;
@@ -484,6 +511,215 @@
     font-size: 0.9rem;
     color: var(--red-dark);
     text-align: center;
+  }
+
+  /* ── INLINE STEP 2 (slides in after inquiry submit) ── */
+  .inline-step2 {
+    max-height: 0;
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-6px);
+    transition: max-height 0.55s cubic-bezier(0.4,0,0.2,1),
+                opacity 0.4s ease 0.1s,
+                transform 0.4s ease 0.1s,
+                margin-top 0.4s ease;
+    margin-top: 0;
+  }
+  .inline-step2.open {
+    max-height: 1600px;
+    opacity: 1;
+    transform: translateY(0);
+    margin-top: 28px;
+  }
+  .step2-inner {
+    border: 2px solid var(--ink);
+    background: var(--bg);
+    padding: 28px 24px;
+  }
+  .step2-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--red);
+    margin-bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .step2-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--border-red);
+  }
+  .step2-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2rem;
+    letter-spacing: 0.04em;
+    line-height: 1;
+    margin-bottom: 8px;
+  }
+  .step2-sub {
+    font-family: 'Libre Baskerville', serif;
+    font-size: 0.88rem;
+    color: var(--mid);
+    line-height: 1.6;
+    margin-bottom: 22px;
+  }
+  .step2-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px;
+    background: var(--ink);
+    border: 2px solid var(--ink);
+    margin-bottom: 20px;
+  }
+  .step2-card {
+    background: var(--bg);
+    padding: 20px 18px 18px;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    transition: background 0.18s;
+  }
+  .step2-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--red);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.2s;
+  }
+  .step2-card:hover { background: var(--red-pale); }
+  .step2-card.selected { background: #FAE8E6; }
+  .step2-card.selected::after { transform: scaleX(1); }
+  .step2-card-check {
+    width: 18px;
+    height: 18px;
+    border: 1.5px solid rgba(26,20,16,0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 12px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .step2-card.selected .step2-card-check { border-color: var(--red); background: var(--red); }
+  .step2-card-check svg { display: none; }
+  .step2-card.selected .step2-card-check svg { display: block; }
+  .step2-card-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.2rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 5px;
+  }
+  .step2-card-desc {
+    font-size: 0.73rem;
+    color: var(--mid);
+    line-height: 1.5;
+  }
+
+  /* Accent card for Remote/Off-Grid */
+  .step2-card-accent {
+    grid-column: span 2;
+    border: 2px solid var(--red);
+    outline: 0;
+    margin: -2px;
+    background: #FFF4F1;
+  }
+  .step2-card-accent:hover { background: #FDE4DD; }
+  .step2-card-accent.selected { background: #F9D4CA; }
+  .step2-card-flag {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    background: var(--red);
+    color: white;
+    padding: 3px 9px;
+  }
+
+  .step2-submit {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1rem;
+    letter-spacing: 0.14em;
+    background: var(--ink);
+    color: var(--bg);
+    border: none;
+    padding: 18px 36px;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.18s;
+  }
+  .step2-submit:hover { background: var(--red); }
+  .step2-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .inline-final {
+    display: none;
+    margin-top: 28px;
+    padding: 36px 28px;
+    border: 2px solid var(--ink);
+    background: var(--ink);
+    color: var(--bg);
+    text-align: center;
+    animation: fadeIn 0.5s ease both;
+  }
+  .inline-final-check {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 2.4rem;
+    color: var(--red);
+    line-height: 1;
+    margin-bottom: 12px;
+  }
+  .inline-final-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.8rem;
+    letter-spacing: 0.05em;
+    margin-bottom: 6px;
+  }
+  .inline-final-sub {
+    font-family: 'Libre Baskerville', serif;
+    font-style: italic;
+    font-size: 0.95rem;
+    color: rgba(242,237,230,0.65);
+  }
+
+  /* ── OFF-GRID CALLOUT STRIP ── */
+  .offgrid-strip {
+    background: var(--ink);
+    color: var(--bg);
+    padding: 22px 32px;
+    margin-top: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    flex-wrap: wrap;
+    border: 2px solid var(--ink);
+    border-top: none;
+    text-align: center;
+  }
+  .offgrid-strip-lead {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 1.1rem;
+    letter-spacing: 0.14em;
+    color: var(--red);
+  }
+  .offgrid-strip-text {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 0.95rem;
+    letter-spacing: 0.12em;
+    color: var(--bg);
+  }
+  .offgrid-strip-divider {
+    width: 4px;
+    height: 4px;
+    background: var(--red);
+    border-radius: 50%;
+    flex-shrink: 0;
   }
 
   /* ── FOOTER ───────────────────────────────────── */
@@ -795,9 +1031,23 @@
       <div class="tile-arrow">ADD ON ——</div>
     </div>
 
+    <!-- Remote / Off-Grid Events -->
+    <div class="tile tile-remote" onclick="openPanel('remote')">
+      <div class="tile-num">05 — OFF-GRID</div>
+      <div class="tile-title">Remote<br>Events</div>
+      <p class="tile-desc">No venue? No power? No problem. Battery + solar capable. Rooftops, parks, private land, beaches — anywhere.</p>
+      <ul class="tile-list">
+        <li>Battery-powered setup</li>
+        <li>Solar panel capable</li>
+        <li>Full DJ rig off-grid</li>
+        <li>No venue restrictions</li>
+      </ul>
+      <div class="tile-arrow">GO REMOTE ——</div>
+    </div>
+
     <!-- About / Berky -->
     <div class="tile" onclick="openPanel('about')">
-      <div class="tile-num">05 — ABOUT</div>
+      <div class="tile-num">06 — ABOUT</div>
       <div class="tile-title">Berky &amp;<br>Come With</div>
       <p class="tile-desc">Brooklyn-based DJ and producer. Founder of Come With and Dance Infusion. Built for the nights that matter.</p>
       <ul class="tile-list">
@@ -809,6 +1059,13 @@
       <div class="tile-arrow">OUR STORY ——</div>
     </div>
 
+  </div>
+
+  <!-- OFF-GRID CALLOUT STRIP -->
+  <div class="offgrid-strip">
+    <span class="offgrid-strip-lead">Off-Grid Capable</span>
+    <span class="offgrid-strip-divider"></span>
+    <span class="offgrid-strip-text">Battery + Solar · Rooftops · Parks · Private Land · Anywhere</span>
   </div>
 
   <!-- ROSTER STRIP -->
@@ -872,23 +1129,6 @@
           </div>
         </div>
         <div class="form-row-grid">
-          <div class="field">
-            <label>Service *</label>
-            <select name="service" required>
-              <option value="" disabled selected>Select...</option>
-              <option value="DJ Services">DJ Services</option>
-              <option value="Equipment Rental">Equipment Rental</option>
-              <option value="Event Production">Event Production</option>
-              <option value="A/V Recording">A/V Recording</option>
-              <option value="Multiple">Multiple Services</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Event / Rental Date</label>
-            <input type="date" name="eventDate">
-          </div>
-        </div>
-        <div class="form-row-grid">
           <div class="field full">
             <label>Instagram Handle</label>
             <input type="text" name="instagram" placeholder="@yourhandle">
@@ -896,17 +1136,59 @@
         </div>
         <div class="form-row-grid">
           <div class="field full">
-            <label>Tell us about your event or request *</label>
-            <textarea name="message" required placeholder="Event type, venue, guest count, music vibe, gear needed — anything helps."></textarea>
+            <label>Tell us about your event or what you're looking for *</label>
+            <textarea name="message" required placeholder="Event type, date, venue, guest count, music vibe, gear needed — anything helps."></textarea>
           </div>
         </div>
         <div class="form-submit-row">
           <button type="submit" class="submit-btn">Send Inquiry →</button>
         </div>
-        <div class="form-success" id="formSuccess">
-          ✓ &nbsp; Sent. We'll be in touch within 24 hours.
-        </div>
       </form>
+
+      <!-- STEP 2 — SERVICES SELECTION (inline, slides in) -->
+      <div class="inline-step2" id="inlineStep2">
+        <div class="step2-inner">
+          <div class="step2-label">Step 2 of 2 — What services are you interested in?</div>
+          <div class="step2-title">Select All That Apply</div>
+          <p class="step2-sub">Pick one or more — we'll tailor the follow-up to what you actually need.</p>
+          <div class="step2-cards" id="step2Cards">
+            <div class="step2-card" data-value="DJ Services" onclick="toggleStep2Card(this)">
+              <div class="step2-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="step2-card-title">DJ Services</div>
+              <div class="step2-card-desc">Live DJ performance — private, corporate, or venue events.</div>
+            </div>
+            <div class="step2-card" data-value="Equipment Rental" onclick="toggleStep2Card(this)">
+              <div class="step2-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="step2-card-title">Equipment Rental</div>
+              <div class="step2-card-desc">Pioneer, Alpha Theta, KRK — pro gear, maintained &amp; ready.</div>
+            </div>
+            <div class="step2-card" data-value="Event Production" onclick="toggleStep2Card(this)">
+              <div class="step2-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="step2-card-title">Event Production</div>
+              <div class="step2-card-desc">Concept through close — talent, vendors, logistics, day-of.</div>
+            </div>
+            <div class="step2-card" data-value="A/V Recording" onclick="toggleStep2Card(this)">
+              <div class="step2-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="step2-card-title">A/V Recording</div>
+              <div class="step2-card-desc">Audio + video capture of your set or event, basic editing included.</div>
+            </div>
+            <div class="step2-card step2-card-accent" data-value="Remote / Off-Grid Event" onclick="toggleStep2Card(this)">
+              <div class="step2-card-flag">Off-Grid</div>
+              <div class="step2-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+              <div class="step2-card-title">Remote / Off-Grid Event</div>
+              <div class="step2-card-desc">No venue? No power? Battery + solar capable — rooftops, parks, private land, beaches.</div>
+            </div>
+          </div>
+          <button type="button" class="step2-submit" id="step2Submit" onclick="submitStep2()">Submit Selection →</button>
+        </div>
+      </div>
+
+      <!-- FINAL CONFIRMATION -->
+      <div class="inline-final" id="inlineFinal">
+        <div class="inline-final-check">✓</div>
+        <div class="inline-final-title">You're all set.</div>
+        <div class="inline-final-sub">We'll be in touch within 24 hours.</div>
+      </div>
     </div>
   </div>
 
@@ -936,6 +1218,7 @@
   <div class="panel-body" id="panelBody"></div>
 </div>
 
+<script src="users.js"></script>
 <script>
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx67U33sFfP0h0-e2P5Z_4RnDMcOOakmdxL3lSip8E3l2Qbr5fFxGhKZY6NDDuz_4VRKQ/exec";
 
@@ -1033,6 +1316,36 @@ const panelContent = {
       <a href="#booking" class="panel-cta" onclick="closePanel()">Add A/V Recording →</a>
     `
   },
+  remote: {
+    title: "Remote / Off-Grid Events",
+    html: `
+      <div class="panel-section-label">Anywhere capable</div>
+      <p class="panel-text">No venue? No power outlet? That's not a blocker. Come With runs a fully battery-powered DJ rig with solar charging capability, so your event can happen on a rooftop, in a park, on private land, at a beach, or anywhere the moment calls for.</p>
+      <div class="panel-section-label">The off-grid setup</div>
+      <ul class="panel-item-list">
+        <li>Portable battery pack (high-capacity power station) — runs DJ gear and PA for hours</li>
+        <li>Solar panel — recharges the battery during daylight events for extended runtime</li>
+        <li>AlphaTheta Wave 8 speakers — IPX4 outdoor-rated, 8-hour internal battery, stereo pair</li>
+        <li>Pioneer XDJ-AZ or CDJ-3000 pair — runs directly off the battery pack</li>
+        <li>No venue restrictions, no generator noise, no cable runs</li>
+      </ul>
+      <div class="panel-section-label">Pair with</div>
+      <p class="panel-text">Remote events can be combined with any of our other services:</p>
+      <ul class="panel-item-list">
+        <li>DJ Services — live performance, off-grid</li>
+        <li>Equipment Rental — battery pack and solar panel available as part of our rental inventory</li>
+        <li>Event Production — full-service planning for unconventional venues</li>
+      </ul>
+      <div class="panel-section-label">Good for</div>
+      <ul class="panel-item-list">
+        <li>Rooftop parties and unpermitted venues</li>
+        <li>Parks, beaches, and outdoor pop-ups</li>
+        <li>Private land and remote property events</li>
+        <li>Brand activations where power logistics are a headache</li>
+      </ul>
+      <a href="#booking" class="panel-cta" onclick="closePanel()">Plan a Remote Event →</a>
+    `
+  },
   about: {
     title: "Come With",
     html: `
@@ -1071,65 +1384,120 @@ function closePanel() {
 
 document.addEventListener('keydown', e => { if (e.key === 'Escape') closePanel(); });
 
-// Form submission
+// ── Two-step inquiry flow ─────────────────────────────
+var inquiryState = {
+  firstName: '',
+  lastName: '',
+  email: '',
+  phone: '',
+  instagram: '',
+  message: '',
+  timestamp: ''
+};
+
 async function submitForm(e) {
   e.preventDefault();
   const form = document.getElementById('bookingForm');
   const btn = form.querySelector('.submit-btn');
-  const success = document.getElementById('formSuccess');
 
   btn.textContent = 'Sending...';
   btn.disabled = true;
 
-  const data = {
+  inquiryState = {
     timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     firstName: form.firstName.value,
     lastName: form.lastName.value,
     email: form.email.value,
     phone: form.phone.value,
-    service: form.service.value,
-    eventDate: form.eventDate.value,
     instagram: form.instagram.value,
     message: form.message.value,
   };
 
-  // Fire and forget — no-cors mode always returns opaque response
+  // Fire-and-forget inquiry write to Apps Script
   fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     mode: 'no-cors',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
+    body: JSON.stringify(inquiryState)
   });
 
-  // Redirect to services selection as confirmation
-  const rParams = new URLSearchParams({
-    name: data.firstName + ' ' + data.lastName,
-    email: data.email,
-  });
-  window.location.href = 'services_selection.html?' + rParams.toString();
+  // Collapse the form (visually lock) and slide in step 2
+  form.querySelectorAll('input,textarea,button').forEach(function(el) { el.disabled = true; });
+  btn.textContent = '✓ Inquiry received';
+  btn.style.background = 'var(--ink)';
+
+  var step2 = document.getElementById('inlineStep2');
+  step2.classList.add('open');
+  // Smooth scroll to step 2
+  setTimeout(function() {
+    step2.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, 120);
 }
 
-// Pre-fill from equipment list page interests
+function toggleStep2Card(el) {
+  el.classList.toggle('selected');
+}
+
+function submitStep2() {
+  var cards = document.querySelectorAll('#step2Cards .step2-card.selected');
+  var selected = [];
+  cards.forEach(function(c) { selected.push(c.getAttribute('data-value')); });
+
+  if (selected.length === 0) {
+    alert('Please select at least one service.');
+    return;
+  }
+
+  var btn = document.getElementById('step2Submit');
+  btn.textContent = 'Submitting...';
+  btn.disabled = true;
+
+  var payload = {
+    type: 'Services Selection',
+    timestamp: new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
+    email: inquiryState.email,
+    name: (inquiryState.firstName + ' ' + inquiryState.lastName).trim(),
+    servicesSelected: selected.join(', '),
+    serviceNotes: ''
+  };
+
+  fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload)
+  });
+
+  // Silent account creation in background (no password display)
+  if (inquiryState.email && typeof CW_AUTH !== 'undefined') {
+    try {
+      var tempPw = CW_AUTH.generatePassword(10);
+      CW_AUTH.createUser(
+        inquiryState.email,
+        (inquiryState.firstName + ' ' + inquiryState.lastName).trim(),
+        tempPw,
+        CW_AUTH.ROLES.CUSTOMER,
+        true
+      );
+    } catch (err) { /* non-blocking */ }
+  }
+
+  // Hide step 2, reveal final confirmation
+  var step2 = document.getElementById('inlineStep2');
+  step2.classList.remove('open');
+  var finalBlock = document.getElementById('inlineFinal');
+  finalBlock.style.display = 'block';
+  setTimeout(function() {
+    finalBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 300);
+}
+
+// Pre-fill message from equipment list page interests
 (function() {
   const params = new URLSearchParams(window.location.search);
   const interests = params.get('interests');
   if (interests) {
     const form = document.getElementById('bookingForm');
-    // Set service dropdown to "Multiple" if more than one interest, else match first
-    const values = interests.split(', ');
-    const serviceSelect = form.service;
-    if (values.length > 1) {
-      serviceSelect.value = 'Multiple';
-    } else {
-      // Try exact match
-      for (let i = 0; i < serviceSelect.options.length; i++) {
-        if (serviceSelect.options[i].value === values[0]) {
-          serviceSelect.value = values[0];
-          break;
-        }
-      }
-    }
-    // Prepend to message
     form.message.value = 'Interested in: ' + interests + '\n';
     form.message.focus();
   }

@@ -158,6 +158,13 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .badge-active{background:var(--amber-bg);color:var(--amber);}
 .badge-complete{background:var(--green-bg);color:var(--green);}
 
+/* Inline status dropdown */
+.status-select{font-family:'Inconsolata',monospace;font-size:0.72rem;padding:5px 8px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;cursor:pointer;letter-spacing:0.04em;min-width:160px;}
+.status-select:focus{border-color:var(--red);}
+.status-select.updating{opacity:0.5;}
+.status-saved{display:inline-block;margin-left:6px;font-size:0.62rem;color:var(--green);letter-spacing:0.08em;opacity:0;transition:opacity 0.2s;}
+.status-saved.show{opacity:1;}
+
 /* ROW ACTIONS */
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;}
 .row-btn{font-family:'Inconsolata',monospace;font-size:0.68rem;letter-spacing:0.06em;padding:5px 10px;border:1px solid var(--border);background:white;color:var(--ink);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
@@ -277,8 +284,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
               <th>Date</th>
               <th>Client</th>
               <th>Email</th>
-              <th>Service</th>
-              <th>Event Date</th>
+              <th>Services Interested</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
@@ -510,11 +516,28 @@ function loadInquiries(){
   });
 }
 
+var PIPELINE_STATUSES = [
+  'New',
+  'Contacted',
+  'Discovery Call Scheduled',
+  'Agreement Sent',
+  'Booked',
+  'Completed'
+];
+
+function statusBadgeClass(status){
+  var s=(status||'').toLowerCase();
+  if(s==='completed'||s==='complete')return 'badge-complete';
+  if(s==='booked')return 'badge-complete';
+  if(s==='new')return 'badge-new';
+  return 'badge-active';
+}
+
 function renderInquiries(){
   var tbody=document.getElementById('tbody-inquiries');
   var rows=store.inquiries;
   if(!rows.length){
-    tbody.innerHTML='<tr><td class="no-data" colspan="7">No inquiries found. Make sure your Apps Script doGet handler is deployed.</td></tr>';
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No inquiries found. Make sure your Apps Script doGet handler is deployed.</td></tr>';
   } else {
     var html='';
     for(var i=rows.length-1;i>=0;i--){
@@ -522,25 +545,35 @@ function renderInquiries(){
       var name=getField(r,['firstName','first name','First Name','name','Name'])+' '+getField(r,['lastName','last name','Last Name']);
       name=name.trim()||getField(r,['clientName','client name','Client Name']);
       var email=getField(r,['email','Email']);
-      var service=getField(r,['service','Service','services','Services']);
-      var eventDate=getField(r,['eventDate','event date','Event Date']);
+      var servicesSelected=getField(r,['servicesSelected','services selected','Services Selected']);
+      var service=getField(r,['service','Service']);
+      var servicesDisplay=servicesSelected||service||'—';
       var ts=getField(r,['timestamp','Timestamp','date','Date']);
       var status=getField(r,['status','Status'])||'New';
-      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':(status.toLowerCase()==='active'?'badge-active':'badge-new');
+      // Normalize legacy statuses
+      if(status.toLowerCase()==='complete')status='Completed';
       var base=getBaseUrl();
       var agrLink=base+'send_agreement.html';
       var svcLink=base+'services_selection.html?'+new URLSearchParams({name:name.trim(),email:email}).toString();
+      var selId='status-'+i;
+      var savedId='saved-'+i;
+
+      var options='';
+      for(var s=0;s<PIPELINE_STATUSES.length;s++){
+        var sv=PIPELINE_STATUSES[s];
+        options+='<option value="'+esc(sv)+'"'+(sv===status?' selected':'')+'>'+esc(sv)+'</option>';
+      }
+
       html+='<tr>';
       html+='<td>'+fmtDate(ts)+'</td>';
       html+='<td><strong>'+esc(name)+'</strong></td>';
       html+='<td>'+esc(email)+'</td>';
-      html+='<td>'+esc(service)+'</td>';
-      html+='<td>'+fmtDate(eventDate)+'</td>';
-      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td>'+esc(servicesDisplay)+'</td>';
+      html+='<td><select id="'+selId+'" class="status-select" onchange="updateRowStatus(this,\''+esc(email).replace(/'/g,"\\'")+'\','+i+')">'+options+'</select>';
+      html+='<span class="status-saved" id="'+savedId+'">✓ saved</span></td>';
       html+='<td><div class="row-actions">';
       html+='<a href="'+esc(agrLink)+'" class="row-btn" target="_blank">Send Agreement</a>';
-      html+='<a href="'+esc(svcLink)+'" class="row-btn" target="_blank">Services Selection</a>';
-      html+='<button class="row-btn row-btn-done" onclick="markComplete(this,'+i+')">Complete</button>';
+      html+='<a href="'+esc(svcLink)+'" class="row-btn" target="_blank">Services Link</a>';
       html+='</div></td>';
       html+='</tr>';
     }
@@ -550,18 +583,28 @@ function renderInquiries(){
   document.getElementById('table-inquiries').style.display='table';
 }
 
-function markComplete(btn,idx){
-  btn.textContent='Done';
-  btn.disabled=true;
-  btn.style.opacity='0.5';
-  // Send status update to Apps Script
-  var r=store.inquiries[idx];
-  var email=getField(r,['email','Email']);
+function updateRowStatus(sel,email,idx){
+  var newStatus=sel.value;
+  sel.classList.add('updating');
+  var saved=document.getElementById('saved-'+idx);
   fetch(APPS_SCRIPT_URL,{
     method:'POST',mode:'no-cors',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({type:'updateStatus',email:email,status:'Complete'})
+    body:JSON.stringify({type:'updateStatus',email:email,status:newStatus})
   });
+  // Optimistic local update
+  if(store.inquiries[idx]){
+    for(var k in store.inquiries[idx]){
+      if(k.toLowerCase()==='status'){store.inquiries[idx][k]=newStatus;break;}
+    }
+  }
+  setTimeout(function(){
+    sel.classList.remove('updating');
+    if(saved){
+      saved.classList.add('show');
+      setTimeout(function(){saved.classList.remove('show');},1500);
+    }
+  },400);
 }
 
 // ── AGREEMENTS ───────────────────────────────────────────
@@ -692,7 +735,8 @@ function renderArchive(filtered){
     for(var i=0;i<data.length;i++){
       var r=data[i];
       var status=getField(r,['status','Status'])||'—';
-      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':(status.toLowerCase()==='new'?'badge-new':'badge-active');
+      var sl=status.toLowerCase();
+      var badgeClass=(sl==='complete'||sl==='completed'||sl==='booked')?'badge-complete':(sl==='new'?'badge-new':'badge-active');
       var typeClass=r._type==='inquiry'?'badge-new':(r._type==='agreement'?'badge-active':'badge-complete');
       html+='<tr>';
       html+='<td>'+fmtDate(r._date)+'</td>';

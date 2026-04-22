@@ -46,6 +46,17 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .svc-card-title{font-family:'Bebas Neue',sans-serif;font-size:1.3rem;letter-spacing:0.06em;color:var(--ink);margin-bottom:6px;}
 .svc-card-desc{font-size:0.72rem;color:var(--mid);line-height:1.5;}
 
+/* Remote/Off-Grid accent card */
+.svc-card-accent{grid-column:span 2;background:#1A1410 !important;border:2px solid var(--red);margin:-2px;position:relative;}
+.svc-card-accent .svc-card-title{color:var(--bg);}
+.svc-card-accent .svc-card-desc{color:rgba(242,237,230,0.6);}
+.svc-card-accent:hover{background:#2A211A !important;}
+.svc-card-accent.selected{background:#2A211A !important;}
+.svc-card-accent .svc-card-check{border-color:rgba(242,237,230,0.4);}
+.svc-card-accent.selected .svc-card-check{border-color:var(--red);background:var(--red);}
+.svc-card-accent-flag{position:absolute;top:10px;right:10px;font-family:'Bebas Neue',sans-serif;font-size:0.62rem;letter-spacing:0.14em;background:var(--red);color:white;padding:3px 9px;}
+@media(max-width:600px){.svc-card-accent{grid-column:span 1;}}
+
 .field-group{display:flex;flex-direction:column;gap:5px;margin-top:16px;}
 .field-group label{font-size:0.62rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
 .field-group textarea{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;resize:vertical;min-height:72px;}
@@ -107,6 +118,13 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
           <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
           <div class="svc-card-title">A/V Recording</div>
           <div class="svc-card-desc">Audio and video capture with basic editing. SoundCloud, Mixcloud, YouTube ready.</div>
+        </div>
+        <div class="svc-card svc-card-accent" onclick="toggleSvc(this)">
+          <span class="svc-card-accent-flag">Off-Grid</span>
+          <input type="checkbox" name="services" value="Remote / Off-Grid Event">
+          <div class="svc-card-check"><svg width="10" height="8" viewBox="0 0 10 8" fill="none"><path d="M1 4L3.5 6.5L9 1" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+          <div class="svc-card-title">Remote / Off-Grid Event</div>
+          <div class="svc-card-desc">No venue? No power? Battery + solar capable. Rooftops, parks, private land, beaches — anywhere.</div>
         </div>
       </div>
     </div>

@@ -49,7 +49,8 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 .field-group input,.field-group select{font-family:'Inconsolata',monospace;font-size:0.9rem;background:white;border:1px solid var(--border-strong);padding:10px 12px;color:var(--ink);outline:none;transition:border-color 0.15s;border-radius:0;-webkit-appearance:none;}
 .field-group input:focus,.field-group select:focus{border-color:var(--red);}
 
-.agr-cards{display:grid;grid-template-columns:1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);margin-bottom:24px;}
+.agr-cards{display:grid;grid-template-columns:1fr 1fr 1fr;gap:2px;background:var(--ink);border:2px solid var(--ink);margin-bottom:24px;}
+@media(max-width:760px){.agr-cards{grid-template-columns:1fr;}}
 .agr-card{background:var(--bg);padding:24px 20px;cursor:pointer;transition:background 0.18s;user-select:none;position:relative;}
 .agr-card::after{content:'';position:absolute;bottom:0;left:0;right:0;height:3px;background:var(--red);transform:scaleX(0);transform-origin:left;transition:transform 0.2s;}
 .agr-card:hover{background:var(--off);}
@@ -154,6 +155,12 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
           <div class="agr-card-title">Equipment Rental Agreement</div>
           <div class="agr-card-desc">CDJ, speakers, controllers — equipment rental terms and liability</div>
         </div>
+        <div class="agr-card" onclick="selectAgreement(this, 'remote')" style="border-left:3px solid var(--red);">
+          <input type="radio" name="agrType" value="remote">
+          <div class="agr-card-dot"></div>
+          <div class="agr-card-title">Remote Event Agreement</div>
+          <div class="agr-card-desc">Off-grid events — battery + solar. Same terms as events services, tailored for remote setups</div>
+        </div>
       </div>
     </div>
 
@@ -230,9 +237,13 @@ function generateLink() {
   }
 
   const base = getBaseUrl();
-  const file = selectedType === 'events'
-    ? 'ComeWith_Events_Services_Agreement.html'
-    : 'ComeWith_Equipment_Rental_Agreement.html';
+  let file;
+  if (selectedType === 'rental') {
+    file = 'ComeWith_Equipment_Rental_Agreement.html';
+  } else {
+    // 'events' and 'remote' both use the Events Services Agreement template
+    file = 'ComeWith_Events_Services_Agreement.html';
+  }
 
   const params = new URLSearchParams({
     name: name,
@@ -240,6 +251,9 @@ function generateLink() {
     phone: phone,
     instagram: ig,
   });
+  if (selectedType === 'remote') {
+    params.set('agreementLabel', 'Remote Event Agreement');
+  }
 
   const url = base + file + '?' + params.toString();
   const linkEl = document.getElementById('agrLink');

@@ -383,6 +383,8 @@ function _doPostInner(e) {
 
 function handleBookingInquiry(d) {
   var sheet = getSheet('Bookings Intake');
+  // Kept legacy 'service' and 'eventDate' columns for backwards compatibility with prior data.
+  // New simplified inquiry form sends: firstName, lastName, email, phone, instagram, message, (optional) servicesSelected.
   var headers = ['timestamp', 'firstName', 'lastName', 'email', 'phone', 'service', 'eventDate', 'instagram', 'message', 'servicesSelected', 'serviceNotes', 'status'];
   ensureHeaders(sheet, headers);
 
@@ -392,12 +394,12 @@ function handleBookingInquiry(d) {
     d.lastName || '',
     d.email || '',
     d.phone || '',
-    d.service || '',
-    d.eventDate || '',
+    d.service || '',                       // legacy, usually empty now
+    d.eventDate || '',                     // legacy, usually empty now
     d.instagram || '',
     d.message || '',
-    '',  // servicesSelected — filled later via Services Selection
-    '',  // serviceNotes — filled later
+    d.servicesSelected || '',              // may be filled immediately or by Services Selection step
+    d.serviceNotes || '',
     'New'
   ]);
 
@@ -410,10 +412,9 @@ function handleBookingInquiry(d) {
         '<p><strong>Name:</strong> ' + (d.firstName || '') + ' ' + (d.lastName || '') + '</p>' +
         '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
         '<p><strong>Phone:</strong> ' + (d.phone || '') + '</p>' +
-        '<p><strong>Service:</strong> ' + (d.service || '') + '</p>' +
-        '<p><strong>Event Date:</strong> ' + (d.eventDate || '') + '</p>' +
         '<p><strong>Instagram:</strong> ' + (d.instagram || '') + '</p>' +
-        '<p><strong>Message:</strong> ' + (d.message || '') + '</p>'
+        '<p><strong>Message:</strong> ' + (d.message || '') + '</p>' +
+        (d.servicesSelected ? '<p><strong>Services Interested:</strong> ' + d.servicesSelected + '</p>' : '')
     });
   } catch (emailErr) {
     Logger.log('Email error: ' + emailErr);
