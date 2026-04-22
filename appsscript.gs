@@ -46,18 +46,34 @@ var DATA_START_ROW = 4; // 1-based row number where data begins
 
 function sheetToArray(sheet) {
   if (!sheet) return [];
-  var data = sheet.getDataRange().getValues();
-  if (data.length < HEADER_ROW) return []; // not enough rows for headers
-  var headers = data[HEADER_ROW - 1]; // 0-based index
+  var lastRow = sheet.getLastRow();
+  var lastCol = sheet.getLastColumn();
+  if (lastCol < 1 || lastRow < DATA_START_ROW) return []; // no data rows yet
+
+  // Read headers explicitly from HEADER_ROW (row 3)
+  var headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
+
+  // Read data explicitly starting from DATA_START_ROW (row 4) — this guarantees
+  // the header row is never returned as a data record.
+  var numDataRows = lastRow - DATA_START_ROW + 1;
+  var dataRows = sheet.getRange(DATA_START_ROW, 1, numDataRows, lastCol).getValues();
+
+  // Build a normalized lowercase set of header values so we can defensively
+  // skip any row that accidentally contains the headers (belt-and-suspenders).
+  var headerFingerprint = headers.map(function(h) { return String(h).toLowerCase().trim(); }).join('|');
+
   var rows = [];
-  for (var i = DATA_START_ROW - 1; i < data.length; i++) {
+  for (var i = 0; i < dataRows.length; i++) {
+    var rowFingerprint = dataRows[i].map(function(v) { return String(v).toLowerCase().trim(); }).join('|');
+    if (rowFingerprint === headerFingerprint) continue; // skip an accidental duplicate of the header row
+
     var obj = {};
     var hasContent = false;
     for (var j = 0; j < headers.length; j++) {
       var h = String(headers[j]).trim();
       if (h) {
-        obj[h] = data[i][j];
-        if (String(data[i][j]).trim() !== '') hasContent = true;
+        obj[h] = dataRows[i][j];
+        if (String(dataRows[i][j]).trim() !== '') hasContent = true;
       }
     }
     if (hasContent) rows.push(obj);
