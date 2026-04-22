@@ -462,11 +462,11 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <button type="submit" class="btn-primary">Submit Agreement</button>
       <button type="button" class="btn-secondary" onclick="window.print()">Print / Save PDF</button>
       <button type="button" class="btn-secondary" onclick="clearForm()">Clear Form</button>
-      <span class="submit-note">Submission sends a copy to hello@comewith.org</span>
+      <span class="submit-note">Submission sends a copy to berky@comewith.org</span>
     </div>
 
     <div class="success-banner" id="successBanner">
-      Agreement submitted successfully. A copy has been sent to hello@comewith.org. The client should retain this page as their record.
+      Agreement submitted successfully. A copy has been sent to berky@comewith.org. The client should retain this page as their record.
     </div>
 
   </form>
@@ -687,7 +687,7 @@ async function handleSubmit(e){
     btn.style.display='none';
   }catch(err){
     btn.textContent='Submit Agreement'; btn.disabled=false;
-    alert('Submission failed. Please email the completed form to hello@comewith.org');
+    alert('Submission failed. Please email the completed form to berky@comewith.org');
   }
 }
 
