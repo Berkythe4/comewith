@@ -231,6 +231,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <a href="#" class="active" data-tab="inquiries">Inquiries</a>
         <a href="#" data-tab="agreements">Agreements</a>
         <a href="#" data-tab="rentals">Equipment Rentals</a>
+        <a href="#" data-tab="income">Events &amp; Income</a>
         <a href="#" data-tab="archive">Archive</a>
         <a href="#" data-tab="users" id="navUsers" style="display:none;">Users</a>
         <div class="nav-divider"></div>
@@ -263,6 +264,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <div class="stat-card"><div class="stat-num" id="statInquiries">—</div><div class="stat-label">Inquiries</div></div>
         <div class="stat-card"><div class="stat-num" id="statAgreements">—</div><div class="stat-label">Agreements</div></div>
         <div class="stat-card"><div class="stat-num" id="statRentals">—</div><div class="stat-label">Rentals</div></div>
+        <div class="stat-card" style="border-color:var(--red);"><div class="stat-num" id="statIncomeYTD" style="color:var(--red);">—</div><div class="stat-label">Income (YTD)</div></div>
         <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total records</div></div>
       </div>
 
@@ -271,6 +273,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
         <button class="tab active" data-tab="inquiries">Inquiries</button>
         <button class="tab" data-tab="agreements">Agreements</button>
         <button class="tab" data-tab="rentals">Equipment Rentals</button>
+        <button class="tab" data-tab="income">Events &amp; Income</button>
         <button class="tab" data-tab="archive">Archive</button>
         <button class="tab" data-tab="users" id="tabUsers" style="display:none;">Users</button>
       </div>
@@ -325,6 +328,30 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
             </tr>
           </thead>
           <tbody id="tbody-rentals"></tbody>
+        </table>
+      </div>
+
+      <!-- EVENTS & INCOME TAB -->
+      <div class="tab-panel" id="panel-income">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Income entries from the Income sheet. YTD total reflects the current calendar year.</div>
+          <div id="incomeSummary" style="font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.08em;color:var(--ink);"></div>
+        </div>
+        <div class="loading" id="loading-income"><span class="loading-spinner"></span>Loading income...</div>
+        <table class="data-table" id="table-income" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Invoice #</th>
+              <th>Client</th>
+              <th>Service Type</th>
+              <th style="text-align:right;">Amount</th>
+              <th>Payment Method</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-income"></tbody>
         </table>
       </div>
 
@@ -483,12 +510,13 @@ document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
 });
 
 // ── DATA ─────────────────────────────────────────────────
-var store={inquiries:[],agreements:[],rentals:[]};
+var store={inquiries:[],agreements:[],rentals:[],income:[],incomeYTD:0,incomeAll:0};
 
 function loadAllData(){
   loadInquiries();
   loadAgreements();
   loadRentals();
+  loadIncome();
 }
 
 function fetchData(action,cb){
@@ -776,6 +804,98 @@ function renderRentals(){
   document.getElementById('table-rentals').style.display='table';
 }
 
+// ── INCOME ──────────────────────────────────────────────
+function parseAmount(val){
+  if(val===null||val===undefined)return 0;
+  if(typeof val==='number')return isFinite(val)?val:0;
+  var s=String(val).replace(/[$,\s]/g,'').replace(/^\((.+)\)$/, '-$1');
+  var n=parseFloat(s);
+  return isNaN(n)?0:n;
+}
+
+function fmtCurrency(n){
+  var sign=n<0?'-':'';
+  var abs=Math.abs(n);
+  return sign+'$'+abs.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function loadIncome(){
+  document.getElementById('loading-income').style.display='block';
+  document.getElementById('table-income').style.display='none';
+  fetchData('getIncome',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-income').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load income: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.income = Array.isArray(data) ? data : [];
+    renderIncome();
+    updateStats();
+  });
+}
+
+function renderIncome(){
+  var tbody=document.getElementById('tbody-income');
+  var rows=store.income||[];
+  var currentYear=new Date().getFullYear();
+  var ytdTotal=0;
+  var allTotal=0;
+
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="8">No income entries found. Make sure the Income sheet exists and your Apps Script doGet handler supports getIncome.</td></tr>';
+  } else {
+    var html='';
+    // sort by date desc
+    var sorted=rows.slice().sort(function(a,b){
+      var da=new Date(getField(a,['date','Date']))||0;
+      var db=new Date(getField(b,['date','Date']))||0;
+      return db-da;
+    });
+    for(var i=0;i<sorted.length;i++){
+      var r=sorted[i];
+      var date=getField(r,['date','Date']);
+      var invoice=getField(r,['invoice','Invoice','invoice #','Invoice #','invoiceNum','Invoice Number']);
+      var client=getField(r,['client','Client','clientName','Client Name','name','Name']);
+      var svcType=getField(r,['serviceType','Service Type','service','Service','type','Type']);
+      var amountRaw=getField(r,['amount','Amount','totalFee','Total Fee','total','Total']);
+      var amt=parseAmount(amountRaw);
+      allTotal+=amt;
+      var dObj=new Date(date);
+      if(!isNaN(dObj.getTime())&&dObj.getFullYear()===currentYear)ytdTotal+=amt;
+      var payment=getField(r,['paymentMethod','Payment Method','payment','Payment']);
+      var status=getField(r,['status','Status'])||'—';
+      var sl=status.toLowerCase();
+      var badgeClass=(sl==='paid'||sl==='complete'||sl==='completed')?'badge-complete':(sl==='pending'||sl==='sent'?'badge-active':'badge-new');
+      var notes=getField(r,['notes','Notes']);
+
+      html+='<tr>';
+      html+='<td>'+fmtDate(date)+'</td>';
+      html+='<td>'+esc(invoice)+'</td>';
+      html+='<td><strong>'+esc(client)+'</strong></td>';
+      html+='<td>'+esc(svcType)+'</td>';
+      html+='<td style="text-align:right;font-family:\'Bebas Neue\',sans-serif;letter-spacing:0.04em;">'+esc(fmtCurrency(amt))+'</td>';
+      html+='<td>'+esc(payment)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td style="max-width:260px;color:var(--mid);">'+esc(notes)+'</td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+
+  // Update summary line above the table
+  var summary=document.getElementById('incomeSummary');
+  if(summary){
+    summary.innerHTML = 'YTD ' + currentYear + ': <span style="color:var(--red);">' + esc(fmtCurrency(ytdTotal)) + '</span>'
+      + ' &nbsp;·&nbsp; All-time: <span style="color:var(--ink);">' + esc(fmtCurrency(allTotal)) + '</span>';
+  }
+  // Expose for stats card
+  store.incomeYTD = ytdTotal;
+  store.incomeAll = allTotal;
+
+  document.getElementById('loading-income').style.display='none';
+  document.getElementById('table-income').style.display='table';
+}
+
 // ── ARCHIVE ──────────────────────────────────────────────
 var archiveData=[];
 
@@ -882,7 +1002,9 @@ function updateStats(){
   document.getElementById('statInquiries').textContent=store.inquiries.length;
   document.getElementById('statAgreements').textContent=store.agreements.length;
   document.getElementById('statRentals').textContent=store.rentals.length;
-  document.getElementById('statTotal').textContent=store.inquiries.length+store.agreements.length+store.rentals.length;
+  var ytd=store.incomeYTD||0;
+  document.getElementById('statIncomeYTD').textContent=fmtCurrency(ytd);
+  document.getElementById('statTotal').textContent=store.inquiries.length+store.agreements.length+store.rentals.length+(store.income?store.income.length:0);
 }
 
 // ── USERS TAB ────────────────────────────────────────────

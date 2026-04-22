@@ -45,18 +45,29 @@ var HEADER_ROW = 3; // 1-based row number where column headers live
 var DATA_START_ROW = 4; // 1-based row number where data begins
 
 function sheetToArray(sheet) {
+  return sheetToArrayWithLayout(sheet, HEADER_ROW, DATA_START_ROW);
+}
+
+/**
+ * Generalized sheet reader. Lets callers specify a custom header row and
+ * data start row for sheets that don't use the default layout.
+ *
+ * Example: the Income sheet uses rows 1-4 as title rows, row 5 as headers,
+ * and row 6 as the first data row — call sheetToArrayWithLayout(sheet, 5, 6).
+ */
+function sheetToArrayWithLayout(sheet, headerRow, dataStartRow) {
   if (!sheet) return [];
   var lastRow = sheet.getLastRow();
   var lastCol = sheet.getLastColumn();
-  if (lastCol < 1 || lastRow < DATA_START_ROW) return []; // no data rows yet
+  if (lastCol < 1 || lastRow < dataStartRow) return []; // no data rows yet
 
-  // Read headers explicitly from HEADER_ROW (row 3)
-  var headers = sheet.getRange(HEADER_ROW, 1, 1, lastCol).getValues()[0];
+  // Read headers explicitly from headerRow
+  var headers = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0];
 
-  // Read data explicitly starting from DATA_START_ROW (row 4) — this guarantees
+  // Read data explicitly starting from dataStartRow — this guarantees
   // the header row is never returned as a data record.
-  var numDataRows = lastRow - DATA_START_ROW + 1;
-  var dataRows = sheet.getRange(DATA_START_ROW, 1, numDataRows, lastCol).getValues();
+  var numDataRows = lastRow - dataStartRow + 1;
+  var dataRows = sheet.getRange(dataStartRow, 1, numDataRows, lastCol).getValues();
 
   // Build a normalized lowercase set of header values so we can defensively
   // skip any row that accidentally contains the headers (belt-and-suspenders).
@@ -195,12 +206,21 @@ function _doGetInner(e) {
     return jsonResponse(sheetToArray(sheet));
   }
 
+  // ── Get Income ─────────────────────────────────────────
+  // Income sheet layout: rows 1-4 are title rows, row 5 is headers,
+  // data starts at row 6. Use the generalized reader with custom offsets.
+  if (action === 'getIncome') {
+    var sheet = getSheet('Income');
+    return jsonResponse(sheetToArrayWithLayout(sheet, 5, 6));
+  }
+
   // ── Get All ────────────────────────────────────────────
   if (action === 'getAll') {
     return jsonResponse({
       inquiries: sheetToArray(getSheet('Bookings Intake')),
       agreements: sheetToArray(getSheet('Agreements')),
-      rentals: sheetToArray(getSheet('Rental Intake'))
+      rentals: sheetToArray(getSheet('Rental Intake')),
+      income: sheetToArrayWithLayout(getSheet('Income'), 5, 6)
     });
   }
 
