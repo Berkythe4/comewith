@@ -555,15 +555,23 @@ function handleServicesSelection(d) {
 
 
 function handleEventsAgreement(d) {
-  // ── STAGE 1: Admin submission (link status is "Draft") ──────────
+  // ── STAGE 1: Admin submission (link status is "Draft" / legacy) ──
   // Admin has completed + signed the agreement. Stash the full form
   // payload as the updated prefill, flip link status to
   // "Pending Client Signature", email the client, and return before
   // writing the final Agreements row.
   if (d.agreementId) {
     var currentStatus = getAgreementLinkStatus(d.agreementId);
-    if (currentStatus === 'Draft') {
-      updateAgreementLinkPrefill(d.agreementId, d);
+    if (isDraftStage(currentStatus)) {
+      var prefillSaved = updateAgreementLinkPrefill(d.agreementId, d);
+      Logger.log('[admin-stage events] id=' + d.agreementId + ' prefill-saved=' + prefillSaved +
+                 ' payload-keys=' + Object.keys(d).length);
+      if (!prefillSaved) {
+        return jsonResponse({
+          error: 'Failed to save prefill data. Check that the Agreement Links sheet has agreementId and prefill columns and the row exists.',
+          agreementId: d.agreementId
+        });
+      }
       updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
       if (d.inquiryEmail || d.email) {
         updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
@@ -635,6 +643,7 @@ function handleEventsAgreement(d) {
 
   // Notify admin that the client signed
   try {
+    var eventsAgrLink = d.agreementId ? getAgreementLink(d.agreementId) : '';
     MailApp.sendEmail({
       to: MASTER_EMAIL,
       subject: 'Events Agreement Signed — ' + (d.clientName || d.email || ''),
@@ -643,7 +652,8 @@ function handleEventsAgreement(d) {
         '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
         '<p><strong>Event:</strong> ' + (d.eventType || '') + ' on ' + (d.eventDate || '') + '</p>' +
         '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>' +
-        (d.agreementId ? '<p><strong>Agreement ID:</strong> ' + d.agreementId + '</p>' : '')
+        (d.agreementId ? '<p><strong>Agreement ID:</strong> ' + d.agreementId + '</p>' : '') +
+        (eventsAgrLink ? '<p><strong>Agreement Link:</strong> <a href="' + eventsAgrLink + '">' + eventsAgrLink + '</a></p>' : '')
     });
   } catch (emailErr) {
     Logger.log('Email error: ' + emailErr);
@@ -654,11 +664,19 @@ function handleEventsAgreement(d) {
 
 
 function handleEquipmentRental(d) {
-  // ── STAGE 1: Admin submission (link status is "Draft") ──────────
+  // ── STAGE 1: Admin submission (link status is "Draft" / legacy) ──
   if (d.agreementId) {
     var currentStatus = getAgreementLinkStatus(d.agreementId);
-    if (currentStatus === 'Draft') {
-      updateAgreementLinkPrefill(d.agreementId, d);
+    if (isDraftStage(currentStatus)) {
+      var prefillSaved = updateAgreementLinkPrefill(d.agreementId, d);
+      Logger.log('[admin-stage rental] id=' + d.agreementId + ' prefill-saved=' + prefillSaved +
+                 ' payload-keys=' + Object.keys(d).length);
+      if (!prefillSaved) {
+        return jsonResponse({
+          error: 'Failed to save prefill data. Check that the Agreement Links sheet has agreementId and prefill columns and the row exists.',
+          agreementId: d.agreementId
+        });
+      }
       updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
       if (d.inquiryEmail || d.email) {
         updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
@@ -730,6 +748,7 @@ function handleEquipmentRental(d) {
 
   // Notify admin that the renter signed
   try {
+    var rentalAgrLink = d.agreementId ? getAgreementLink(d.agreementId) : '';
     MailApp.sendEmail({
       to: MASTER_EMAIL,
       subject: 'Equipment Rental Agreement Signed — ' + (d.renterName || d.email || ''),
@@ -739,7 +758,9 @@ function handleEquipmentRental(d) {
         '<p><strong>Equipment:</strong> ' + (d.equipment || '') + '</p>' +
         '<p><strong>Pickup:</strong> ' + (d.pickupDate || '') + ' at ' + (d.pickupTime || '') + '</p>' +
         '<p><strong>Return:</strong> ' + (d.returnDate || '') + ' at ' + (d.returnTime || '') + '</p>' +
-        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>'
+        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>' +
+        (d.agreementId ? '<p><strong>Agreement ID:</strong> ' + d.agreementId + '</p>' : '') +
+        (rentalAgrLink ? '<p><strong>Agreement Link:</strong> <a href="' + rentalAgrLink + '">' + rentalAgrLink + '</a></p>' : '')
     });
   } catch (emailErr) {
     Logger.log('Email error: ' + emailErr);
@@ -992,6 +1013,18 @@ function updateAgreementLinkStatus(agreementId, newStatus) {
 }
 
 /**
+ * Whether a given agreement status should be treated as "admin hasn't
+ * finished yet." Accepts Draft (new name), Pending (legacy name from
+ * before the flow rework), and empty (missing status cell). Anything
+ * else (Pending Client Signature, Signed) means the admin stage is
+ * already done and we should route to client/final stage logic.
+ */
+function isDraftStage(status) {
+  var s = String(status || '').toLowerCase().trim();
+  return s === '' || s === 'draft' || s === 'pending';
+}
+
+/**
  * Read the current status from the Agreement Links sheet for a given id.
  * Returns '' if the row doesn't exist.
  */
@@ -1030,10 +1063,21 @@ function updateAgreementLinkPrefill(agreementId, prefillObj) {
   var sheet = getSheet('Agreement Links');
   var idCol = getColIndex(sheet, 'agreementId');
   var prefillCol = getColIndex(sheet, 'prefill');
-  if (idCol === -1 || prefillCol === -1) return false;
+  if (idCol === -1) {
+    Logger.log('updateAgreementLinkPrefill: "agreementId" column not found in Agreement Links sheet.');
+    return false;
+  }
+  if (prefillCol === -1) {
+    Logger.log('updateAgreementLinkPrefill: "prefill" column not found in Agreement Links sheet.');
+    return false;
+  }
   var rowNum = findRowByColumn(sheet, idCol, agreementId);
-  if (rowNum === -1) return false;
+  if (rowNum === -1) {
+    Logger.log('updateAgreementLinkPrefill: row not found for id=' + agreementId);
+    return false;
+  }
   var json = typeof prefillObj === 'string' ? prefillObj : JSON.stringify(prefillObj);
+  Logger.log('updateAgreementLinkPrefill: writing ' + json.length + ' chars to row ' + rowNum + ' for id=' + agreementId);
   sheet.getRange(rowNum, prefillCol + 1).setValue(json);
   return true;
 }

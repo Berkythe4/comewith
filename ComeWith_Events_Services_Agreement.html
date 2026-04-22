@@ -477,6 +477,16 @@ const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxM-cixH5nNp7u7
 
 document.getElementById('agr-date').valueAsDate = new Date();
 
+// ── AUTO-POPULATE AGREEMENT # FROM ?id= ─────────────────
+// Runs synchronously so the field is never blank even if the
+// async prefill fetch below fails or the admin hasn't submitted yet.
+(function() {
+  const id = new URLSearchParams(window.location.search).get('id');
+  if (!id) return;
+  const agrNum = document.getElementById('agr-num');
+  if (agrNum && !agrNum.value) agrNum.value = id;
+})();
+
 // ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
 (function() {
   const params = new URLSearchParams(window.location.search);

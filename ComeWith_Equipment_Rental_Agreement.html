@@ -491,6 +491,16 @@ function logout() { CW_AUTH.logout(); }
 // ── DATE DEFAULT ─────────────────────────────────────────
 document.getElementById('agr-date').valueAsDate = new Date();
 
+// ── AUTO-POPULATE AGREEMENT # FROM ?id= ─────────────────
+// Runs synchronously so the field is never blank even if the
+// async prefill fetch below fails.
+(function() {
+  var id = new URLSearchParams(window.location.search).get('id');
+  if (!id) return;
+  var agrNum = document.getElementById('agr-num');
+  if (agrNum && !agrNum.value) agrNum.value = id;
+})();
+
 // ── PRE-FILL FROM QUERY PARAMS ───────────────────────────
 (function() {
   var params = new URLSearchParams(window.location.search);
