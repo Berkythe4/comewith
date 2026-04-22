@@ -336,7 +336,7 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
       <!-- LINKS TAB (agreement links) -->
       <div class="tab-panel" id="panel-links">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
-          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Agreement links generated from Send Agreement. Status flips to "Signed" when the client submits the agreement form.</div>
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Agreement links generated from Send Agreement. <strong>Draft</strong> → admin needs to complete &amp; submit · <strong>Pending Client Signature</strong> → waiting on client · <strong>Signed</strong> → done.</div>
         </div>
         <div class="loading" id="loading-links"><span class="loading-spinner"></span>Loading links...</div>
         <table class="data-table" id="table-links" style="display:none;">
@@ -961,7 +961,9 @@ function renderLinks(){
       var status = getField(r,['status','Status']) || 'Pending';
       var link = getField(r,['link','Link','url','URL']);
       var sl = status.toLowerCase();
-      var badgeClass = (sl === 'signed') ? 'badge-complete' : 'badge-active';
+      var badgeClass = (sl === 'signed') ? 'badge-complete'
+                     : (sl === 'draft') ? 'badge-new'
+                     : 'badge-active';
       var copyId = 'linkcopy-' + i;
       html += '<tr>';
       html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:var(--red);letter-spacing:0.04em;">' + esc(id) + '</span></td>';

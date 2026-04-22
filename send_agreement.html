@@ -166,18 +166,19 @@ body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(
 
     <!-- GENERATE LINK -->
     <div class="section">
-      <div class="section-label">Generate &amp; send</div>
-      <p class="help-text">Generates a unique agreement ID, stores the pre-fill data, emails the client the link, and shows it here for you to copy.</p>
-      <button type="button" class="btn-primary" onclick="generateLink()">Generate &amp; Send Agreement</button>
+      <div class="section-label">Generate link</div>
+      <p class="help-text">Creates a unique agreement ID and pre-filled link in Draft status. Open the link yourself, complete and sign the agreement as owner, then hit Submit — the client email is sent then, not now.</p>
+      <button type="button" class="btn-primary" onclick="generateLink()">Generate Agreement Link</button>
       <div class="link-box" id="agrLinkBox">
         <button class="copy-btn" onclick="copyLink('agrLink')">Copy</button>
         <strong style="font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);display:block;margin-bottom:6px;">Agreement Link:</strong>
         <a id="agrLink" href="#" target="_blank"></a>
         <div style="margin-top:10px;font-size:0.65rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);">
           Agreement ID: <span id="agrIdBadge" style="display:none;font-family:'Inconsolata',monospace;font-size:0.75rem;color:var(--red);letter-spacing:0.05em;text-transform:none;padding:2px 8px;background:rgba(193,59,42,0.08);border:1px solid rgba(193,59,42,0.2);margin-left:6px;"></span>
+          · <span style="color:var(--amber);letter-spacing:0.05em;text-transform:none;">Status: Draft</span>
         </div>
-        <div id="agrEmailNote" style="display:none;margin-top:10px;font-size:0.75rem;color:var(--mid);line-height:1.5;">
-          ✓ A link email was sent to the client from berky@comewith.org.
+        <div style="margin-top:10px;font-size:0.75rem;color:var(--mid);line-height:1.5;">
+          <strong>Next step:</strong> open the link, fill out the agreement, sign as owner, then hit Submit. That's when the client email is sent and status flips to Pending Client Signature.
         </div>
       </div>
     </div>
@@ -268,7 +269,7 @@ async function generateLink() {
 
   const btn = document.querySelector('.btn-primary');
   const origLabel = btn.textContent;
-  btn.textContent = 'Generating & sending...';
+  btn.textContent = 'Generating...';
   btn.disabled = true;
 
   const agreementId = generateAgreementId(selectedType);

@@ -555,8 +555,44 @@ function handleServicesSelection(d) {
 
 
 function handleEventsAgreement(d) {
+  // ── STAGE 1: Admin submission (link status is "Draft") ──────────
+  // Admin has completed + signed the agreement. Stash the full form
+  // payload as the updated prefill, flip link status to
+  // "Pending Client Signature", email the client, and return before
+  // writing the final Agreements row.
+  if (d.agreementId) {
+    var currentStatus = getAgreementLinkStatus(d.agreementId);
+    if (currentStatus === 'Draft') {
+      updateAgreementLinkPrefill(d.agreementId, d);
+      updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
+      if (d.inquiryEmail || d.email) {
+        updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+      }
+      try {
+        sendAgreementEmail({
+          clientEmail: d.email || d.clientEmail,
+          clientName: d.clientName,
+          agreementType: d.type || 'Events Services Agreement',
+          agreementId: d.agreementId,
+          link: getAgreementLink(d.agreementId)
+        });
+      } catch (emailErr) {
+        Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+      }
+      return jsonResponse({
+        success: true,
+        stage: 'admin',
+        status: 'Pending Client Signature',
+        agreementId: d.agreementId
+      });
+    }
+  }
+
+  // ── STAGE 2: Client submission (or legacy no-id submit) ─────────
+  // Writes the final Agreements row + flips link status to Signed
+  // (if this came from a ?id=... link).
   var sheet = getSheet('Agreements');
-  var headers = ['timestamp', 'type', 'agreementNum', 'inquiryEmail', 'clientName', 'email', 'phone', 'instagram', 'services', 'eventType', 'eventDate', 'venueName', 'setStart', 'setEnd', 'genre', 'totalFee', 'depositOpt', 'depositAmt', 'payment', 'promoRights', 'clientSigName', 'clientDate', 'notes', 'status'];
+  var headers = ['timestamp', 'type', 'agreementNum', 'inquiryEmail', 'clientName', 'email', 'phone', 'instagram', 'services', 'eventType', 'eventDate', 'venueName', 'setStart', 'setEnd', 'genre', 'totalFee', 'depositOpt', 'depositAmt', 'payment', 'promoRights', 'clientSigName', 'clientDate', 'notes', 'status', 'agreementId'];
   ensureHeaders(sheet, headers);
 
   sheet.appendRow([
@@ -583,41 +619,73 @@ function handleEventsAgreement(d) {
     d.clientSigName || '',
     d.clientDate || '',
     d.notes || '',
-    'Submitted'
+    'Signed',
+    d.agreementId || ''
   ]);
 
   // Also update Bookings Intake status if inquiryEmail exists
   if (d.inquiryEmail || d.email) {
-    updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+    updateInquiryStatus(d.inquiryEmail || d.email, 'Booked');
   }
 
-  // If this submission came from a ?id=... link, flip the link's status to Signed
+  // Flip the link's status to Signed
   if (d.agreementId) {
     updateAgreementLinkStatus(d.agreementId, 'Signed');
   }
 
-  // Notify admin
+  // Notify admin that the client signed
   try {
     MailApp.sendEmail({
       to: MASTER_EMAIL,
-      subject: 'Events Agreement Submitted — ' + (d.clientName || d.email || ''),
-      htmlBody: '<h2>Events Services Agreement</h2>' +
+      subject: 'Events Agreement Signed — ' + (d.clientName || d.email || ''),
+      htmlBody: '<h2>Events Services Agreement — Client Signed</h2>' +
         '<p><strong>Client:</strong> ' + (d.clientName || '') + '</p>' +
         '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
         '<p><strong>Event:</strong> ' + (d.eventType || '') + ' on ' + (d.eventDate || '') + '</p>' +
-        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>'
+        '<p><strong>Total:</strong> ' + (d.totalFee || '') + '</p>' +
+        (d.agreementId ? '<p><strong>Agreement ID:</strong> ' + d.agreementId + '</p>' : '')
     });
   } catch (emailErr) {
     Logger.log('Email error: ' + emailErr);
   }
 
-  return jsonResponse({ success: true });
+  return jsonResponse({ success: true, stage: 'client', status: 'Signed' });
 }
 
 
 function handleEquipmentRental(d) {
+  // ── STAGE 1: Admin submission (link status is "Draft") ──────────
+  if (d.agreementId) {
+    var currentStatus = getAgreementLinkStatus(d.agreementId);
+    if (currentStatus === 'Draft') {
+      updateAgreementLinkPrefill(d.agreementId, d);
+      updateAgreementLinkStatus(d.agreementId, 'Pending Client Signature');
+      if (d.inquiryEmail || d.email) {
+        updateInquiryStatus(d.inquiryEmail || d.email, 'Agreement Sent');
+      }
+      try {
+        sendAgreementEmail({
+          clientEmail: d.email || d.clientEmail,
+          clientName: d.renterName || d.clientName,
+          agreementType: d.type || 'Equipment Rental Agreement',
+          agreementId: d.agreementId,
+          link: getAgreementLink(d.agreementId)
+        });
+      } catch (emailErr) {
+        Logger.log('sendAgreementEmail (admin stage) error: ' + emailErr);
+      }
+      return jsonResponse({
+        success: true,
+        stage: 'admin',
+        status: 'Pending Client Signature',
+        agreementId: d.agreementId
+      });
+    }
+  }
+
+  // ── STAGE 2: Client submission (or legacy no-id submit) ─────────
   var sheet = getSheet('Rental Intake');
-  var headers = ['timestamp', 'agreementNum', 'inquiryEmail', 'renterName', 'djName', 'email', 'phone', 'instagram', 'equipment', 'numDays', 'avAddon', 'pickupDate', 'pickupTime', 'returnDate', 'returnTime', 'intendedUse', 'rentalFee', 'totalFee', 'deposit', 'depositAmount', 'payment', 'lateFee', 'renterSigName', 'renterDate', 'notes', 'status'];
+  var headers = ['timestamp', 'agreementNum', 'inquiryEmail', 'renterName', 'djName', 'email', 'phone', 'instagram', 'equipment', 'numDays', 'avAddon', 'pickupDate', 'pickupTime', 'returnDate', 'returnTime', 'intendedUse', 'rentalFee', 'totalFee', 'deposit', 'depositAmount', 'payment', 'lateFee', 'renterSigName', 'renterDate', 'notes', 'status', 'agreementId'];
   ensureHeaders(sheet, headers);
 
   sheet.appendRow([
@@ -646,24 +714,25 @@ function handleEquipmentRental(d) {
     d.renterSigName || '',
     d.renterDate || '',
     d.notes || '',
-    'Submitted'
+    'Signed',
+    d.agreementId || ''
   ]);
 
   // Update Bookings Intake status if inquiryEmail exists
   if (d.inquiryEmail || d.email) {
-    updateInquiryStatus(d.inquiryEmail || d.email, 'Rental Agreement Sent');
+    updateInquiryStatus(d.inquiryEmail || d.email, 'Booked');
   }
 
-  // If this submission came from a ?id=... link, flip the link's status to Signed
+  // Flip the link's status to Signed
   if (d.agreementId) {
     updateAgreementLinkStatus(d.agreementId, 'Signed');
   }
 
-  // Notify admin
+  // Notify admin that the renter signed
   try {
     MailApp.sendEmail({
       to: MASTER_EMAIL,
-      subject: 'Equipment Rental Agreement — ' + (d.renterName || d.email || ''),
+      subject: 'Equipment Rental Agreement Signed — ' + (d.renterName || d.email || ''),
       htmlBody: '<h2>Equipment Rental Agreement</h2>' +
         '<p><strong>Renter:</strong> ' + (d.renterName || '') + '</p>' +
         '<p><strong>Email:</strong> ' + (d.email || '') + '</p>' +
@@ -702,7 +771,7 @@ function handleEquipmentRental(d) {
     }
   }
 
-  return jsonResponse({ success: true });
+  return jsonResponse({ success: true, stage: 'client', status: 'Signed' });
 }
 
 
@@ -892,15 +961,15 @@ function handleStoreAgreementLink(d) {
     d.createdDate || new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }),
     d.link || '',
     d.prefill || '',
-    'Pending'
+    'Draft'
   ]);
 
-  // Email the client from berky@comewith.org
-  try {
-    sendAgreementEmail(d);
-  } catch (emailErr) {
-    Logger.log('sendAgreementEmail error: ' + emailErr);
-  }
+  // NOTE: No client email sent at this stage. The flow is:
+  //   1. Generate link → status Draft (this handler)
+  //   2. Admin opens link, completes + signs agreement, hits Submit →
+  //      status flips to Pending Client Signature and email is sent
+  //      (handled in handleEventsAgreement / handleEquipmentRental)
+  //   3. Client opens link, reviews + signs, submits → status Signed
 
   return jsonResponse({ success: true, agreementId: d.agreementId });
 }
@@ -919,6 +988,53 @@ function updateAgreementLinkStatus(agreementId, newStatus) {
   if (rowNum === -1) return false;
 
   sheet.getRange(rowNum, statusCol + 1).setValue(newStatus);
+  return true;
+}
+
+/**
+ * Read the current status from the Agreement Links sheet for a given id.
+ * Returns '' if the row doesn't exist.
+ */
+function getAgreementLinkStatus(agreementId) {
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  var statusCol = getColIndex(sheet, 'status');
+  if (idCol === -1 || statusCol === -1) return '';
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return '';
+  return String(sheet.getRange(rowNum, statusCol + 1).getValue() || '').trim();
+}
+
+/**
+ * Overwrite the prefill JSON blob on the Agreement Links row.
+ * Used when the admin completes and "submits" the agreement — we stash the
+ * full form data so the client sees everything pre-filled when they open
+ * the same link.
+ */
+/**
+ * Read the stored link URL for a given agreementId. Used when the admin
+ * submission triggers the client email — we want to send the actual link
+ * the admin generated rather than reconstructing it.
+ */
+function getAgreementLink(agreementId) {
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  var linkCol = getColIndex(sheet, 'link');
+  if (idCol === -1 || linkCol === -1) return '';
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return '';
+  return String(sheet.getRange(rowNum, linkCol + 1).getValue() || '');
+}
+
+function updateAgreementLinkPrefill(agreementId, prefillObj) {
+  var sheet = getSheet('Agreement Links');
+  var idCol = getColIndex(sheet, 'agreementId');
+  var prefillCol = getColIndex(sheet, 'prefill');
+  if (idCol === -1 || prefillCol === -1) return false;
+  var rowNum = findRowByColumn(sheet, idCol, agreementId);
+  if (rowNum === -1) return false;
+  var json = typeof prefillObj === 'string' ? prefillObj : JSON.stringify(prefillObj);
+  sheet.getRange(rowNum, prefillCol + 1).setValue(json);
   return true;
 }
 
