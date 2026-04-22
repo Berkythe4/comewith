@@ -1106,16 +1106,20 @@ function copyAgrLink(btn, url){
   });
 }
 
-function showLinkNote(btn, msg, isErr){
+function showLinkNote(btn, msg, isErr, durationMs){
   // Find the row-note span next to this button (inside the same .row-actions)
   var container = btn && btn.closest ? btn.closest('.row-actions') : null;
   if (!container) return;
   var note = container.querySelector('.row-note');
   if (!note) return;
   note.textContent = msg;
+  note.title = msg; // full text on hover when truncated
   note.classList.toggle('err', !!isErr);
   note.classList.add('show');
-  setTimeout(function(){ note.classList.remove('show'); }, 2000);
+  // Errors stick around longer so admin can actually read them
+  var ms = typeof durationMs === 'number' ? durationMs : (isErr ? 10000 : 2000);
+  clearTimeout(note._hideTimer);
+  note._hideTimer = setTimeout(function(){ note.classList.remove('show'); }, ms);
 }
 
 // ── Agreement link actions (void / delete / resend) ─────
@@ -1182,9 +1186,13 @@ function resendLink(agreementId, btn){
 // status to Signed, stores the Drive URL in signedPDF, and rolls
 // the linked inquiry to Booked.
 //
-// We POST in no-cors mode so we don't get the Drive URL back in the
-// response — the dashboard polls loadLinks() a few seconds later to
-// refresh from the sheet and show the Open PDF action.
+// We POST with Content-Type: text/plain (NOT application/json and NOT
+// no-cors) so the request is a CORS "simple request" — no preflight,
+// but the response is still readable. Apps Script's e.postData.contents
+// gives us the raw body regardless of content-type, so JSON.parse on
+// the server side still works. Reading the response lets us log it,
+// show server errors in the row, and update state with the actual
+// Drive URL in a single step (no 2.5s poll that could revert the UI).
 function uploadSignedPDF(agreementId, btn){
   if (!agreementId) return;
   var input = document.createElement('input');
@@ -1204,45 +1212,116 @@ function uploadSignedPDF(agreementId, btn){
       return;
     }
     var origLabel = btn ? btn.textContent : '';
+    var resetBtn = function(){ if (btn) { btn.textContent = origLabel; btn.disabled = false; } };
     if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
 
     var reader = new FileReader();
     reader.onload = function(ev){
-      // readAsDataURL gives "data:application/pdf;base64,<payload>"
       var b64 = String(ev.target.result || '').replace(/^data:[^,]+,/, '');
-      fetch(getScriptUrl(), {
-        method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'uploadSignedPDF',
-          agreementId: agreementId,
-          filename: file.name,
-          fileData: b64
-        })
+      var payload = {
+        type: 'uploadSignedPDF',
+        agreementId: agreementId,
+        filename: file.name,
+        fileData: b64
+      };
+      console.log('[uploadSignedPDF] POST', {
+        agreementId: agreementId,
+        filename: file.name,
+        fileSizeBytes: file.size,
+        base64Length: b64.length,
+        scriptUrl: getScriptUrl()
       });
 
-      // Optimistic local update — flip this row to Signed and mark it
-      // as pending a refresh for the actual Drive URL.
-      updateLocalLinkStatus(agreementId, 'Signed');
-      var email = findLinkClientEmail(agreementId);
-      if (email) locallyUpdateInquiryStatus(email, 'Booked');
+      fetch(getScriptUrl(), {
+        method: 'POST',
+        // text/plain avoids a CORS preflight while still being parsed
+        // server-side via e.postData.contents + JSON.parse
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
+      })
+      .then(function(r){
+        console.log('[uploadSignedPDF] HTTP ' + r.status + ' (ok=' + r.ok + ') final URL:', r.url);
+        return r.text().then(function(text){
+          return { status: r.status, ok: r.ok, text: text };
+        });
+      })
+      .then(function(res){
+        console.log('[uploadSignedPDF] raw response (first 500 chars):',
+          res.text.length > 500 ? res.text.substring(0, 500) + '…' : res.text);
 
-      if (btn) { btn.textContent = origLabel; btn.disabled = false; }
-      showLinkNote(btn, '✓ PDF uploaded', false);
-      renderLinks();
+        if (!res.ok) {
+          resetBtn();
+          showLinkNote(btn, '✗ HTTP ' + res.status + ' — check console', true);
+          return;
+        }
 
-      // Re-fetch the sheet a beat later so the real Drive URL shows
-      // up and the row collapses to "Open PDF" only.
-      setTimeout(loadLinks, 2500);
+        var data;
+        try {
+          data = JSON.parse(res.text);
+        } catch (parseErr) {
+          console.error('[uploadSignedPDF] JSON parse failed:', parseErr);
+          resetBtn();
+          showLinkNote(btn, '✗ Bad server response — check console', true);
+          return;
+        }
+
+        console.log('[uploadSignedPDF] parsed response:', data);
+
+        if (data.error) {
+          resetBtn();
+          var msg = String(data.error);
+          showLinkNote(btn, '✗ ' + (msg.length > 80 ? msg.substring(0, 80) + '…' : msg), true);
+          return;
+        }
+
+        if (!data.success || !data.url) {
+          resetBtn();
+          showLinkNote(btn, '✗ Server returned no URL — check console', true);
+          return;
+        }
+
+        // ✓ Success — the server committed the row. Update local state
+        //   with the real Drive URL so the row collapses to "Open PDF"
+        //   immediately, no re-poll that could revert it.
+        updateLocalLinkStatus(agreementId, 'Signed');
+        updateLocalLinkPdf(agreementId, data.url);
+        var email = findLinkClientEmail(agreementId);
+        if (email) locallyUpdateInquiryStatus(email, 'Booked');
+
+        resetBtn();
+        showLinkNote(btn, '✓ PDF uploaded', false);
+        renderLinks();
+      })
+      .catch(function(err){
+        console.error('[uploadSignedPDF] fetch failed:', err);
+        resetBtn();
+        var m = String(err && err.message || err);
+        showLinkNote(btn, '✗ ' + (m.length > 80 ? m.substring(0, 80) + '…' : m), true);
+      });
     };
     reader.onerror = function(){
       alert('Failed to read the PDF file.');
-      if (btn) { btn.disabled = false; btn.textContent = origLabel; }
+      resetBtn();
     };
     reader.readAsDataURL(file);
   };
   input.click();
+}
+
+// Write the signedPDF URL onto the local store entry so renderLinks
+// shows the "Open PDF" action without having to re-fetch the sheet.
+function updateLocalLinkPdf(agreementId, pdfUrl){
+  if (!pdfUrl) return;
+  (store.links || []).forEach(function(r){
+    if (getField(r,['agreementId','Agreement ID','id','ID']) === agreementId) {
+      var written = false;
+      for (var k in r) {
+        if (k.toLowerCase() === 'signedpdf') { r[k] = pdfUrl; written = true; }
+      }
+      if (!written) r.signedPDF = pdfUrl;
+    }
+  });
 }
 
 function updateLocalLinkStatus(agreementId, newStatus){
