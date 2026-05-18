@@ -4,6 +4,12 @@
 -- Run this FIRST on both staging and production projects.
 -- =============================================================================
 
+begin;
+
+-- Allow function bodies to reference tables created in later migrations.
+-- The helper functions below reference public.profiles, which is created in 002.
+set local check_function_bodies = off;
+
 -- UUID generation
 create extension if not exists "pgcrypto";
 
@@ -80,3 +86,5 @@ begin
   return new;
 end;
 $$;
+
+commit;
