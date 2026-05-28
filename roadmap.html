@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Come With — Platform Roadmap</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --panel: #1e293b;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+      --accent: #60a5fa;
+      --done: #22c55e;
+      --next: #eab308;
+      --planned: #64748b;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 40px 24px 80px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+    }
+    h1 {
+      font-size: 2rem;
+      margin: 0 0 8px;
+      letter-spacing: -0.02em;
+    }
+    h2 {
+      font-size: 1.4rem;
+      margin: 48px 0 16px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      letter-spacing: -0.01em;
+    }
+    h3 {
+      font-size: 1.05rem;
+      margin: 32px 0 12px;
+      color: var(--accent);
+    }
+    p, li { color: var(--text); }
+    .lede { color: var(--muted); margin: 0 0 8px; }
+    .as-of { color: var(--muted); font-size: 0.9rem; }
+    .callout {
+      background: var(--panel);
+      border-left: 3px solid var(--accent);
+      padding: 14px 18px;
+      border-radius: 4px;
+      margin: 20px 0;
+      color: var(--text);
+      font-size: 0.95rem;
+    }
+    .legend {
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+      margin: 16px 0;
+      font-size: 0.9rem;
+    }
+    .legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .swatch {
+      width: 14px; height: 14px; border-radius: 3px;
+      display: inline-block;
+    }
+    .swatch.done { background: var(--done); }
+    .swatch.next { background: var(--next); }
+    .swatch.planned { background: var(--planned); }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0;
+      font-size: 0.92rem;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    th {
+      background: var(--panel);
+      color: var(--muted);
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+      font-size: 0.78rem;
+    }
+    td code, p code {
+      background: var(--panel);
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 0.88em;
+      color: #fbbf24;
+    }
+    .phase-num { width: 64px; }
+    .status-done { color: var(--done); font-weight: 600; }
+    .status-next { color: var(--next); font-weight: 600; }
+    .mermaid {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      margin: 20px 0;
+      overflow-x: auto;
+      display: flex;
+      justify-content: center;
+    }
+    .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-top: 60px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+<main>
+
+  <h1>Come With — Platform Roadmap</h1>
+  <p class="lede">Single source of truth for the Supabase migration plan and target architecture.</p>
+  <p class="as-of">Status as of <strong>2026-05-28</strong> (Phase 2 close).</p>
+
+  <div class="callout">
+    The phase numbering is a redesign of the original Claude-generated plan.
+    The original numbered 0–12 but left phases 4, 6, 7, 10, 11, 12 unspecified
+    and lumped every frontend rewrite into a single Phase 3. This version
+    uses 12 phases (0–11), each independently shippable on staging.
+  </div>
+
+  <h2>Phase roadmap</h2>
+
+  <div class="legend">
+    <span><i class="swatch done"></i> done — validated on staging</span>
+    <span><i class="swatch next"></i> next up</span>
+    <span><i class="swatch planned"></i> planned</span>
+  </div>
+
+  <pre class="mermaid">
+flowchart TD
+    classDef done fill:#22c55e,stroke:#166534,color:#fff
+    classDef next fill:#eab308,stroke:#854d0e,color:#000
+    classDef planned fill:#64748b,stroke:#1e293b,color:#fff
+
+    P0["<b>Phase 0</b><br/>Schema + RLS + Storage<br/><i>migrations 001-012</i>"]
+    P1["<b>Phase 1</b><br/>Data migration<br/><i>88 rows from Sheets</i>"]
+    P2["<b>Phase 2</b><br/>Auth bootstrap<br/><i>magic-link + RLS proven</i>"]
+    P3["<b>Phase 3</b><br/>Admin dashboard — read<br/><i>dashboard.html ↔ Supabase</i>"]
+    P4["<b>Phase 4</b><br/>Admin dashboard — write<br/><i>agreements, income, equipment</i>"]
+    P5["<b>Phase 5</b><br/>Edge Functions: transactional<br/><i>send-agreement, inquiry-notify</i>"]
+    P6["<b>Phase 6</b><br/>Customer-facing flows<br/><i>inquiry form, customer portal</i>"]
+    P7["<b>Phase 7</b><br/>Dance Infusion event hub<br/><i>event pages, ticketing import</i>"]
+    P8["<b>Phase 8</b><br/>Mailing list<br/><i>subscribe, confirm, unsubscribe</i>"]
+    P9["<b>Phase 9</b><br/>Resend broadcasts + webhooks<br/><i>Audiences sync, delivery events</i>"]
+    P10["<b>Phase 10</b><br/>pg_cron automation<br/><i>nightly mv refresh, scheduled sends</i>"]
+    P11["<b>Phase 11</b><br/>Production cutover + hardening<br/><i>DNS, sunset Apps Script, monitoring</i>"]
+
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5
+    P5 --> P6
+    P5 --> P7
+    P6 --> P8
+    P8 --> P9
+    P4 --> P10
+    P9 --> P11
+    P10 --> P11
+    P7 --> P11
+
+    class P0,P1,P2 done
+    class P3 next
+    class P4,P5,P6,P7,P8,P9,P10,P11 planned
+  </pre>
+
+  <h3>Per-phase descriptions</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th class="phase-num">#</th>
+        <th>Name</th>
+        <th>What it produces</th>
+        <th>Depends on</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="phase-num status-done">0 ✓</td>
+        <td>Schema + RLS + Storage</td>
+        <td>30 tables, helper fns, audit triggers, 6 buckets, RLS policies</td>
+        <td>—</td>
+      </tr>
+      <tr>
+        <td class="phase-num status-done">1 ✓</td>
+        <td>Data migration</td>
+        <td>88 rows imported from Google Sheets (clients, contractors, equipment, expenses, income)</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td class="phase-num status-done">2 ✓</td>
+        <td>Auth bootstrap</td>
+        <td>magic-link configured, Berky=master_admin, RLS isolation proven</td>
+        <td>0</td>
+      </tr>
+      <tr>
+        <td class="phase-num status-next">3 →</td>
+        <td>Admin dashboard — read</td>
+        <td><code>dashboard.html</code> rewritten to read from Supabase (inquiries, agreements, income, expenses, equipment). Berky logs in via magic-link, sees real data. No writes yet — read-only de-risks the schema before exposing edits</td>
+        <td>2</td>
+      </tr>
+      <tr>
+        <td class="phase-num">4</td>
+        <td>Admin dashboard — write</td>
+        <td>CRUD on agreements, inquiry status updates, income/expense entry, equipment management. Berky stops using Sheets day-to-day</td>
+        <td>3</td>
+      </tr>
+      <tr>
+        <td class="phase-num">5</td>
+        <td>Edge Functions: transactional</td>
+        <td><code>send-agreement</code> (PDF gen + storage upload + Resend email), <code>inquiry-notify</code> (Resend on new inquiry), <code>magic-link-redirect</code> (post-login routing). Bridges Phase 4 admin writes to outbound email</td>
+        <td>4</td>
+      </tr>
+      <tr>
+        <td class="phase-num">6</td>
+        <td>Customer-facing flows</td>
+        <td><code>index.html</code> inquiry form posts to Supabase; <code>customer_portal.html</code> shows the signed-in customer's agreements; services selection + send-agreement + equipment list — all rewired. <strong>First real test of anon-RLS</strong> (see Phase 2's anon-RLS memory)</td>
+        <td>5</td>
+      </tr>
+      <tr>
+        <td class="phase-num">7</td>
+        <td>Dance Infusion event hub</td>
+        <td>Public <code>/events/dance-infusion-2</code> page reads from <code>events</code>, <code>sponsors</code>, <code>artists</code>; ticketing import from Zeffy + Resident Advisor; sponsor admin UI. Can run in parallel with Phase 6 since it's a separate domain</td>
+        <td>5</td>
+      </tr>
+      <tr>
+        <td class="phase-num">8</td>
+        <td>Mailing list</td>
+        <td>Public subscribe form, double-opt-in confirmation, unsubscribe via tokenized URL, segments. Self-hosted per decision #8</td>
+        <td>6</td>
+      </tr>
+      <tr>
+        <td class="phase-num">9</td>
+        <td>Resend broadcasts + webhooks</td>
+        <td>Audiences sync, campaign drafting UI, send queue, webhook handler for <code>delivered</code>/<code>bounced</code>/<code>complained</code> → <code>mailing_events</code> table</td>
+        <td>8</td>
+      </tr>
+      <tr>
+        <td class="phase-num">10</td>
+        <td>pg_cron automation</td>
+        <td>Nightly materialized view refresh, scheduled mailing sends, audit log retention, weekly digest emails. Lives in <code>automation_jobs</code> table; pg_cron calls Edge Functions via pg_net</td>
+        <td>4</td>
+      </tr>
+      <tr>
+        <td class="phase-num">11</td>
+        <td>Production cutover + hardening</td>
+        <td>Run migrations on <code>comewith-prod</code>, DNS swap if needed, Netlify env vars updated, Apps Script triggers disabled and code archived, monitoring dashboards, backup verification</td>
+        <td>7, 9, 10</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>Why this re-decomposition</h3>
+
+  <ul>
+    <li>Original Phase 3 = "frontend rewrites + real-time admin dash" tried to fit every HTML page rewrite into one phase. In practice that's weeks of work. Splitting into admin-read (P3), admin-write (P4), customer-facing (P6), and event hub (P7) lets each ship and prove itself independently.</li>
+    <li>Edge Functions weren't in the original plan as their own phase — they were implicit in "Phase 9: pg_cron + Edge Functions". But transactional functions (send agreement, inquiry notification) need to exist <em>before</em> the customer-facing pages can rely on them (P5 → P6).</li>
+    <li>Original Phase 5 = "production cutover" was placed early, but it can't meaningfully happen until P10 (automation) is verified on staging. Renamed P11 and pushed to the end where it belongs.</li>
+    <li>Phases 4, 6, 7, 10, 11, 12 in the original were never specified. This proposal fills them.</li>
+  </ul>
+
+  <h2>End-state architecture</h2>
+
+  <p>Target state after Phase 11. Apps Script + Google Sheets are sunset and don't appear.</p>
+
+  <pre class="mermaid">
+flowchart LR
+    classDef user fill:#dbeafe,stroke:#1d4ed8,color:#000
+    classDef page fill:#fef3c7,stroke:#a16207,color:#000
+    classDef sb fill:#86efac,stroke:#166534,color:#000
+    classDef ext fill:#fbcfe8,stroke:#9d174d,color:#000
+
+    subgraph USERS["👥 Users"]
+        direction TB
+        VIS[Visitor]
+        CUST[Signed-in customer]
+        ADMIN[Berky — master_admin]
+    end
+
+    subgraph NETLIFY["🌐 Netlify (comewith.org)"]
+        direction TB
+        IDX[index.html<br/>marketing + inquiry form]
+        EQP[equipment_list.html<br/>public rental catalog]
+        EVT["/events/dance-infusion-*<br/>event hub pages"]
+        AUTH_PG[auth.html<br/>magic-link entry]
+        PORT[customer_portal.html<br/>my agreements + PDFs]
+        DASH[dashboard.html<br/>admin workspace]
+    end
+
+    subgraph SB["🟩 Supabase platform"]
+        direction TB
+        SBA[Auth<br/>magic-link, JWT]
+        REST[PostgREST API<br/>CRUD with RLS]
+        STG[Storage<br/>6 buckets: agreements,<br/>photos, receipts, logos]
+        EDGE[Edge Functions<br/>send-agreement, inquiry-notify,<br/>mailing-confirm, resend-webhook,<br/>mailing-send, mv-refresh]
+        CRON[pg_cron<br/>scheduled triggers]
+        DB[(Postgres<br/>30 tables + views<br/>RLS policies<br/>audit_log)]
+    end
+
+    subgraph EXT["📨 External"]
+        direction TB
+        RES[Resend<br/>transactional + broadcast]
+        DNS[Namecheap DNS<br/>SPF, DKIM, MX]
+        ZEF[Zeffy / Resident Advisor<br/>ticketing CSVs]
+    end
+
+    VIS --> IDX
+    VIS --> EQP
+    VIS --> EVT
+    VIS --> AUTH_PG
+    CUST --> PORT
+    CUST --> AUTH_PG
+    ADMIN --> DASH
+    ADMIN --> AUTH_PG
+
+    IDX -->|insert inquiry| REST
+    EQP -->|read available| REST
+    EVT -->|read event, sponsors,<br/>artists| REST
+    AUTH_PG -->|sign in| SBA
+    PORT -->|read own agreements| REST
+    PORT -->|signed URLs| STG
+    DASH -->|CRUD all tables| REST
+    DASH -->|upload receipts,<br/>signed PDFs| STG
+    DASH -->|trigger sends| EDGE
+
+    REST --> DB
+    EDGE -->|service-role| DB
+    EDGE -->|send| RES
+    EDGE -->|sign URLs| STG
+    SBA -.->|JWT to anon/<br/>authenticated| REST
+    CRON -.->|via pg_net| EDGE
+    CRON -->|refresh mv| DB
+    RES -.->|delivery webhooks| EDGE
+    DNS -.->|verifies| RES
+    ZEF -.->|periodic import| EDGE
+
+    class VIS,CUST,ADMIN user
+    class IDX,EQP,EVT,AUTH_PG,PORT,DASH page
+    class SBA,REST,STG,EDGE,CRON,DB sb
+    class RES,DNS,ZEF ext
+  </pre>
+
+  <h3>Request-flow examples</h3>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Scenario</th>
+        <th>Path through the system</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>New website inquiry</td>
+        <td><code>index.html</code> → PostgREST → <code>inquiries</code> table (anon INSERT policy) → Resend trigger via <code>inquiry-notify</code> Edge Function → Berky's email</td>
+      </tr>
+      <tr>
+        <td>Customer signs agreement</td>
+        <td>Berky drafts in <code>dashboard.html</code> → PostgREST → <code>agreements</code> (admin policy) → <code>send-agreement</code> Edge Function generates PDF → uploads to <code>agreements</code> Storage bucket → Resend sends signing link → customer clicks tokenized <code>agreement_links</code> URL</td>
+      </tr>
+      <tr>
+        <td>Customer logs in</td>
+        <td><code>auth.html</code> magic-link form → Supabase Auth sends email → click sets JWT → <code>customer_portal.html</code> reads JWT, calls PostgREST with <code>auth.uid()</code> → RLS filters <code>agreements</code> to their own client only</td>
+      </tr>
+      <tr>
+        <td>Nightly KPI refresh</td>
+        <td><code>pg_cron</code> job fires at 03:00 → <code>pg_net</code> calls <code>mv-refresh</code> Edge Function → executes <code>refresh materialized view concurrently mv_cross_event_kpis</code> (+ other MVs)</td>
+      </tr>
+      <tr>
+        <td>Bounce handling</td>
+        <td>Resend webhook → <code>resend-webhook</code> Edge Function (verifies signing secret) → inserts row in <code>mailing_events</code> → if event is <code>bounced</code>/<code>complained</code>, updates <code>subscribers.status</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="meta">
+    Rendered locally from <code>roadmap.html</code>. The same content (in source form) lives in <code>ROADMAP.md</code> at the repo root.
+    Update status colors by editing the <code>class P# done|next|planned</code> lines in the Mermaid blocks.
+  </p>
+
+</main>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#1e293b',
+      primaryColor: '#1e293b',
+      primaryTextColor: '#e2e8f0',
+      lineColor: '#64748b',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+    },
+    flowchart: { htmlLabels: true, curve: 'basis' }
+  });
+</script>
+
+</body>
+</html>
