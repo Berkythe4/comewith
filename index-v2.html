@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Come With — Inquiry</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #1A1410; --bg: #F2EDE6; --red: #C13B2A; --red-dk: #8C2A1C;
+  --mid: #8A7F72; --off: #E8E2D9; --border: rgba(26,20,16,0.14);
+  --border-strong: rgba(26,20,16,0.3); --green: #3B6D11; --green-bg: #DFF0D0;
+}
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'Inconsolata', monospace; font-weight: 400;
+  min-height: 100vh; line-height: 1.55;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(26,20,16,0.05) 1px, transparent 1px);
+  background-size: 18px 18px; pointer-events: none; z-index: 0;
+}
+
+.page { position: relative; z-index: 1; max-width: 620px; margin: 0 auto; padding: 40px 24px 80px; }
+
+header { text-align: center; margin-bottom: 32px; }
+.brand {
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.6rem;
+  letter-spacing: 0.06em; color: var(--ink); line-height: 1;
+}
+.brand-sub {
+  font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--mid); margin-top: 8px;
+}
+
+.card { background: white; border: 1px solid var(--border); padding: 32px 32px; }
+
+.intro {
+  font-family: 'Libre Baskerville', serif; font-size: 1.05rem;
+  margin-bottom: 24px; color: var(--ink); line-height: 1.6;
+}
+
+.form-row { margin-bottom: 18px; }
+.form-row.half-row { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.form-label {
+  display: block; font-size: 0.6rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--mid); margin-bottom: 8px;
+}
+.form-label .req { color: var(--red); }
+.form-input, .form-select, .form-textarea {
+  width: 100%; font-family: 'Inconsolata', monospace; font-size: 0.95rem;
+  padding: 12px 14px; border: 1px solid var(--border-strong);
+  background: white; color: var(--ink); outline: none; border-radius: 0;
+}
+.form-input:focus, .form-select:focus, .form-textarea:focus { border-color: var(--red); }
+.form-textarea { resize: vertical; min-height: 100px; }
+
+.checkbox-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+}
+.check-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 12px; border: 1px solid var(--border);
+  background: white; cursor: pointer; transition: border-color 0.12s;
+  font-size: 0.85rem;
+}
+.check-item:hover { border-color: var(--red); }
+.check-item input[type=checkbox] {
+  width: 16px; height: 16px; accent-color: var(--red); cursor: pointer;
+}
+.check-item input[type=checkbox]:checked + span { color: var(--red); font-weight: 500; }
+
+.submit-btn {
+  width: 100%; margin-top: 12px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.1rem; letter-spacing: 0.1em;
+  padding: 16px; background: var(--red); color: white; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.submit-btn:hover:not(:disabled) { background: var(--red-dk); }
+.submit-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.msg {
+  margin-top: 18px; padding: 16px;
+  font-size: 0.9rem; line-height: 1.5;
+}
+.msg.ok  { background: var(--green-bg); color: var(--green); border-left: 3px solid var(--green); }
+.msg.err { background: #fbe6e1;          color: var(--red-dk); border-left: 3px solid var(--red); }
+.msg:empty { display: none; }
+
+footer {
+  text-align: center; margin-top: 28px;
+  font-size: 0.7rem; letter-spacing: 0.08em; color: var(--mid);
+}
+footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">Come With</div>
+    <div class="brand-sub">Event services · equipment rental</div>
+  </header>
+
+  <div class="card">
+    <p class="intro">Tell us about your event. Berky will respond within a day or two.</p>
+
+    <form id="inquiryForm">
+      <div class="form-row half-row">
+        <div>
+          <label class="form-label" for="full_name">Your name <span class="req">*</span></label>
+          <input class="form-input" type="text" id="full_name" name="full_name" required autocomplete="name" />
+        </div>
+        <div>
+          <label class="form-label" for="phone">Phone</label>
+          <input class="form-input" type="tel" id="phone" name="phone" autocomplete="tel" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label" for="email">Email <span class="req">*</span></label>
+        <input class="form-input" type="email" id="email" name="email" required autocomplete="email" />
+      </div>
+
+      <div class="form-row half-row">
+        <div>
+          <label class="form-label" for="event_type">Event type</label>
+          <input class="form-input" type="text" id="event_type" name="event_type" placeholder="e.g. wedding, club night, corporate" />
+        </div>
+        <div>
+          <label class="form-label" for="event_date">Event date</label>
+          <input class="form-input" type="date" id="event_date" name="event_date" />
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label" for="venue">Venue</label>
+        <input class="form-input" type="text" id="venue" name="venue" placeholder="Optional — name or address" />
+      </div>
+
+      <div class="form-row">
+        <label class="form-label">Services you're interested in</label>
+        <div class="checkbox-grid">
+          <label class="check-item"><input type="checkbox" name="service" value="DJ" /><span>DJ</span></label>
+          <label class="check-item"><input type="checkbox" name="service" value="Sound" /><span>Sound</span></label>
+          <label class="check-item"><input type="checkbox" name="service" value="Lighting" /><span>Lighting</span></label>
+          <label class="check-item"><input type="checkbox" name="service" value="Photography" /><span>Photography</span></label>
+          <label class="check-item"><input type="checkbox" name="service" value="Videography" /><span>Videography</span></label>
+          <label class="check-item"><input type="checkbox" name="service" value="Equipment Rental" /><span>Equipment</span></label>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <label class="form-label" for="message">Tell us more</label>
+        <textarea class="form-textarea" id="message" name="message" placeholder="Anything else we should know — guest count, vibe, budget, anything"></textarea>
+      </div>
+
+      <button class="submit-btn" type="submit" id="submitBtn">Send inquiry</button>
+      <div class="msg" id="msg"></div>
+    </form>
+  </div>
+
+  <footer>
+    Or email <a href="mailto:berky@comewith.org">berky@comewith.org</a> directly
+  </footer>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// PUBLIC values — safe to embed.
+const SUPABASE_URL = 'https://qjosjafbizxdtkisyrqm.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aks4D0QB6tuO8pZYxCqB4A_TdBnUdYe';
+
+const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+
+const $ = (id) => document.getElementById(id);
+
+function setMsg(text, kind) {
+  const el = $('msg');
+  el.className = 'msg ' + (kind || '');
+  el.textContent = text || '';
+}
+
+$('inquiryForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = $('submitBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  setMsg('', '');
+
+  const fd = new FormData(e.target);
+  const services = fd.getAll('service');
+  const payload = {
+    full_name:         fd.get('full_name'),
+    email:             fd.get('email'),
+    phone:             fd.get('phone') || null,
+    event_type:        fd.get('event_type') || null,
+    event_date:        fd.get('event_date') || null,
+    venue:             fd.get('venue') || null,
+    services_selected: services,    // JSONB column expects an array
+    message:           fd.get('message') || null,
+    source:            'index-v2',
+  };
+
+  // IMPORTANT: do NOT chain .select() here. anon has no SELECT policy on
+  // inquiries (admin-only), so asking for the row back triggers a 42501
+  // "RLS violation" error from PostgREST even though the INSERT itself
+  // succeeded. Insert-without-select uses `Prefer: return=minimal` and
+  // sidesteps the SELECT check entirely.
+  const { error } = await sb.from('inquiries').insert(payload);
+
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = 'Send inquiry';
+    setMsg(`Couldn't submit: ${error.message}. Try emailing berky@comewith.org instead.`, 'err');
+    return;
+  }
+
+  // Fire-and-forget notify (sprint 2 wires the function). Passes the
+  // inquiry payload directly since we don't have the row id; the function
+  // will look up the most recent matching inquiry by email + timestamp.
+  sb.functions.invoke('inquiry-notify', { body: { email: payload.email, full_name: payload.full_name } })
+    .catch(() => { /* swallowed — sprint 2 owns the function */ });
+
+  btn.textContent = 'Sent';
+  setMsg("Got it. Berky will reach out within a day or two. You can close this tab.", 'ok');
+  e.target.reset();
+});
+</script>
+
+</body>
+</html>
