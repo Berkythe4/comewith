@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sign your agreement · Come With</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #1A1410; --bg: #F2EDE6; --red: #C13B2A; --red-dk: #8C2A1C;
+  --mid: #8A7F72; --off: #E8E2D9; --border: rgba(26,20,16,0.14);
+  --border-strong: rgba(26,20,16,0.3); --green: #3B6D11; --green-bg: #DFF0D0;
+  --amber: #854F0B; --amber-bg: #FFF0D0;
+}
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'Libre Baskerville', serif; font-weight: 400;
+  min-height: 100vh; line-height: 1.6;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(26,20,16,0.05) 1px, transparent 1px);
+  background-size: 18px 18px; pointer-events: none; z-index: 0;
+}
+
+.page { position: relative; z-index: 1; max-width: 700px; margin: 0 auto; padding: 32px 24px 64px; }
+
+header { margin-bottom: 24px; text-align: center; }
+.brand {
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.2rem;
+  letter-spacing: 0.06em; color: var(--ink); line-height: 1;
+}
+.brand-sub {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--mid); margin-top: 8px;
+}
+
+.card {
+  background: white; border: 1px solid var(--border);
+  padding: 32px 32px;
+}
+
+.state {
+  text-align: center;
+  font-family: 'Inconsolata', monospace; font-size: 0.85rem;
+  color: var(--mid); padding: 40px 16px;
+}
+.state.err {
+  background: #fbe6e1; color: var(--red-dk);
+  border-left: 3px solid var(--red); text-align: left;
+}
+.state.ok {
+  background: var(--green-bg); color: var(--green);
+  border-left: 3px solid var(--green); text-align: left;
+}
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--red);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+  margin-right: 8px; vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.section-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
+  letter-spacing: 0.04em; margin-bottom: 6px;
+}
+.kicker {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.62rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 18px;
+}
+
+.row { margin-bottom: 14px; display: grid; grid-template-columns: 130px 1fr; gap: 16px; font-size: 0.95rem; }
+.row .k {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--mid); padding-top: 4px;
+}
+.row .v { color: var(--ink); }
+
+.divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+.sign-area {
+  background: var(--off); padding: 24px 26px; margin-top: 24px;
+  border-left: 3px solid var(--red);
+}
+.sign-area .section-title { margin-bottom: 4px; }
+.sign-area p { font-size: 0.92rem; margin-bottom: 16px; color: var(--ink); }
+
+.field-label {
+  display: block; font-family: 'Inconsolata', monospace;
+  font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 8px;
+}
+.field-input {
+  width: 100%; font-family: 'Libre Baskerville', serif; font-size: 1.05rem;
+  padding: 12px 14px; border: 1px solid var(--border-strong);
+  background: white; color: var(--ink); outline: none; border-radius: 0;
+}
+.field-input:focus { border-color: var(--red); }
+
+.sign-btn {
+  width: 100%; margin-top: 16px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; letter-spacing: 0.1em;
+  padding: 14px; background: var(--red); color: white; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.sign-btn:hover:not(:disabled) { background: var(--red-dk); }
+.sign-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.legal {
+  font-size: 0.78rem; color: var(--mid); margin-top: 14px; line-height: 1.5;
+}
+
+footer {
+  text-align: center; margin-top: 28px;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem; letter-spacing: 0.1em; color: var(--mid);
+}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <header>
+    <div class="brand">Come With</div>
+    <div class="brand-sub">Agreement</div>
+  </header>
+
+  <div class="card" id="card">
+    <div class="state" id="state"><span class="spinner"></span>Loading your agreement…</div>
+    <div id="content" style="display:none;"></div>
+  </div>
+
+  <footer>
+    Questions? Reply to the email or write to berky@comewith.org
+  </footer>
+
+</div>
+
+<script type="module">
+// Public values — safe to embed.
+const SUPABASE_URL = 'https://qjosjafbizxdtkisyrqm.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_aks4D0QB6tuO8pZYxCqB4A_TdBnUdYe';
+
+const FN_GET = `${SUPABASE_URL}/functions/v1/get-agreement-by-token`;
+const FN_MARK = `${SUPABASE_URL}/functions/v1/mark-signed`;
+
+const $ = (id) => document.getElementById(id);
+const escapeHtml = (s) => {
+  if (s == null) return '';
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'","&#39;");
+};
+const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? s : d.toISOString().slice(0,10); };
+const money = (n) => n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+function setState(kind, message) {
+  const el = $('state');
+  el.className = 'state ' + (kind === 'loading' ? '' : kind);
+  el.innerHTML = kind === 'loading' ? `<span class="spinner"></span>${escapeHtml(message)}` : escapeHtml(message);
+  el.style.display = '';
+  $('content').style.display = 'none';
+}
+function showContent(html) {
+  $('state').style.display = 'none';
+  $('content').innerHTML = html;
+  $('content').style.display = '';
+}
+
+const params = new URLSearchParams(window.location.search);
+const token = params.get('token');
+
+if (!token) {
+  setState('err', 'Missing token in URL. Did you copy the link correctly?');
+} else {
+  loadAgreement();
+}
+
+async function callFn(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'apikey': PUBLISHABLE_KEY,
+      'Authorization': `Bearer ${PUBLISHABLE_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+  return data;
+}
+
+async function loadAgreement() {
+  try {
+    const { agreement, link } = await callFn(FN_GET, { token });
+    renderAgreement(agreement, link);
+  } catch (e) {
+    setState('err', e.message || 'Could not load this agreement.');
+  }
+}
+
+function row(k, v) {
+  return `<div class="row"><div class="k">${escapeHtml(k)}</div><div class="v">${v}</div></div>`;
+}
+
+function renderAgreement(a, link) {
+  const isSigned = link.already_signed || a.client_signed_at;
+  const typeLabel = a.agreement_type === 'rental' ? 'Equipment Rental' : 'Events Services';
+
+  const dateParts = [fmtDate(a.event_date), a.event_start_time, a.event_end_time].filter(Boolean).join(' · ');
+  const venue = [a.venue_name, a.venue_address].filter(Boolean).join(' — ');
+
+  const lines = [];
+  lines.push(`<div class="kicker">${typeLabel} agreement</div>`);
+  lines.push(`<div class="section-title">For ${escapeHtml(a.client?.full_name || 'you')}</div>`);
+  if (dateParts) lines.push(row('Event', escapeHtml(dateParts)));
+  if (venue)     lines.push(row('Venue', escapeHtml(venue)));
+  if (a.rental_start) lines.push(row('Rental window', `${fmtDate(a.rental_start)} → ${fmtDate(a.rental_return) || '—'}`));
+
+  if (Array.isArray(a.services) && a.services.length) {
+    const svc = a.services.map(s => typeof s === 'string' ? s : (s.name || JSON.stringify(s))).join(', ');
+    lines.push(row('Services', escapeHtml(svc)));
+  }
+  if (Array.isArray(a.equipment) && a.equipment.length) {
+    const eq = a.equipment.map(s => typeof s === 'string' ? s : (s.name || JSON.stringify(s))).join(', ');
+    lines.push(row('Equipment', escapeHtml(eq)));
+  }
+
+  lines.push(`<div class="divider"></div>`);
+  if (a.subtotal)      lines.push(row('Subtotal', money(a.subtotal)));
+  if (a.deposit_amount) lines.push(row('Deposit', money(a.deposit_amount)));
+  if (a.total_amount)  lines.push(row('Total', `<strong>${money(a.total_amount)}</strong>`));
+  if (a.payment_method) lines.push(row('Payment', escapeHtml(a.payment_method)));
+  if (a.payment_notes)  lines.push(row('Notes', escapeHtml(a.payment_notes)));
+
+  if (a.recording_rights) lines.push(row('Recording', escapeHtml(a.recording_rights)));
+  if (a.promo_rights)     lines.push(row('Promo', escapeHtml(a.promo_rights)));
+
+  if (isSigned) {
+    lines.push(`<div class="state ok" style="margin-top:24px;">
+      Signed${a.client_signed_at ? ' on ' + fmtDate(a.client_signed_at) : ''} as
+      <strong>${escapeHtml(a.client_signature_url || a.client?.full_name || 'client')}</strong>.
+      A copy was emailed to Berky.
+    </div>`);
+  } else {
+    lines.push(`
+      <div class="sign-area">
+        <div class="section-title">Sign</div>
+        <p>By typing your full legal name and clicking Sign, you agree to the terms above. A confirmation will be emailed to Berky.</p>
+        <form id="signForm">
+          <label class="field-label" for="signerName">Your full legal name</label>
+          <input class="field-input" type="text" id="signerName" name="signerName"
+                 value="${escapeHtml(a.client?.full_name || '')}"
+                 required minlength="2" autocomplete="name" />
+          <button class="sign-btn" type="submit" id="signBtn">Sign agreement</button>
+          <div class="legal" id="signMsg"></div>
+        </form>
+      </div>`);
+  }
+
+  showContent(lines.join(''));
+
+  if (!isSigned) {
+    $('signForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const name = $('signerName').value.trim();
+      if (name.length < 2) return;
+      const btn = $('signBtn');
+      const msg = $('signMsg');
+      btn.disabled = true; btn.textContent = 'Signing…';
+      msg.textContent = '';
+      msg.style.color = '';
+      try {
+        await callFn(FN_MARK, { token, signature_name: name });
+        // Reload to render the signed state cleanly
+        loadAgreement();
+      } catch (err) {
+        btn.disabled = false; btn.textContent = 'Sign agreement';
+        msg.textContent = 'Could not record signature: ' + (err.message || 'unknown');
+        msg.style.color = 'var(--red-dk)';
+      }
+    });
+  }
+}
+</script>
+
+</body>
+</html>
