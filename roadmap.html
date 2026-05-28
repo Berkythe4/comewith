@@ -104,7 +104,7 @@
     .status-done { color: var(--done); font-weight: 600; }
     .status-next { color: var(--next); font-weight: 600; }
     .mermaid {
-      background: var(--panel);
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 24px;
@@ -113,6 +113,10 @@
       display: flex;
       justify-content: center;
     }
+    /* Belt-and-suspenders: force any text inside Mermaid SVG to ink */
+    .mermaid svg text, .mermaid svg .nodeLabel, .mermaid svg .edgeLabel,
+    .mermaid svg .cluster-label, .mermaid svg .label { fill: #1A1410 !important; color: #1A1410 !important; }
+    .mermaid svg .edgeLabel { background-color: #ffffff !important; }
     .meta {
       color: var(--muted);
       font-size: 0.85rem;
@@ -397,13 +401,23 @@ flowchart LR
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
   mermaid.initialize({
     startOnLoad: true,
-    theme: 'dark',
+    theme: 'base',
     themeVariables: {
-      darkMode: true,
-      background: '#1e293b',
-      primaryColor: '#1e293b',
-      primaryTextColor: '#e2e8f0',
-      lineColor: '#64748b',
+      // Light theme so all node + subgraph labels render in dark ink against
+      // the pastel subgraph backgrounds in the architecture diagram.
+      background: '#ffffff',
+      primaryColor: '#ffffff',
+      primaryTextColor: '#1A1410',
+      primaryBorderColor: '#1A1410',
+      secondaryColor: '#F2EDE6',
+      tertiaryColor: '#E8E2D9',
+      lineColor: '#1A1410',
+      textColor: '#1A1410',
+      mainBkg: '#ffffff',
+      nodeTextColor: '#1A1410',
+      clusterBkg: '#F2EDE6',
+      clusterBorder: '#1A1410',
+      titleColor: '#1A1410',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     },
     flowchart: { htmlLabels: true, curve: 'basis' }
