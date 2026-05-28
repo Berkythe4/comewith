@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Come With — Dashboard v2</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #1A1410; --bg: #F2EDE6; --red: #C13B2A; --red-dk: #8C2A1C;
+  --mid: #8A7F72; --off: #E8E2D9; --border: rgba(26,20,16,0.14);
+  --border-strong: rgba(26,20,16,0.3); --green: #3B6D11; --green-bg: #DFF0D0;
+  --amber: #854F0B; --amber-bg: #FFF0D0; --blue: #185FA5; --blue-bg: #DCEEFF;
+}
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'Inconsolata', monospace; font-weight: 400;
+  min-height: 100vh;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(26,20,16,0.05) 1px, transparent 1px);
+  background-size: 18px 18px; pointer-events: none; z-index: 0;
+}
+
+/* ===== LOGIN SCREEN ===== */
+.login-screen {
+  position: relative; z-index: 1;
+  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.login-card {
+  background: white; border: 1px solid var(--border);
+  padding: 40px 36px; width: 100%; max-width: 420px;
+}
+.login-brand {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.8rem;
+  letter-spacing: 0.06em; color: var(--ink); line-height: 1;
+}
+.login-sub {
+  font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mid); margin-top: 6px; margin-bottom: 28px;
+}
+.login-label {
+  display: block; font-size: 0.6rem; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--mid); margin-bottom: 8px;
+}
+.login-input {
+  width: 100%; font-family: 'Inconsolata', monospace; font-size: 0.95rem;
+  padding: 12px 14px; border: 1px solid var(--border-strong);
+  background: white; color: var(--ink); outline: none; border-radius: 0;
+}
+.login-input:focus { border-color: var(--red); }
+.login-btn {
+  width: 100%; margin-top: 16px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 0.1em;
+  padding: 14px; background: var(--red); color: white; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.login-btn:hover:not(:disabled) { background: var(--red-dk); }
+.login-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.login-msg {
+  margin-top: 18px; font-size: 0.78rem; line-height: 1.45;
+  padding: 12px 14px; border-left: 3px solid transparent;
+}
+.login-msg.info { background: var(--blue-bg); color: var(--blue); border-left-color: var(--blue); }
+.login-msg.err  { background: #fbe6e1; color: var(--red-dk); border-left-color: var(--red); }
+.login-msg.ok   { background: var(--green-bg); color: var(--green); border-left-color: var(--green); }
+.login-msg:empty { display: none; }
+.login-meta {
+  margin-top: 24px; font-size: 0.65rem; letter-spacing: 0.06em;
+  color: var(--mid); text-align: center;
+}
+.login-meta code { font-size: 0.7rem; color: var(--ink); }
+
+/* ===== DASHBOARD SHELL ===== */
+.dash { position: relative; z-index: 1; display: none; }
+.dash.show { display: block; }
+
+.dash-layout { display: grid; grid-template-columns: 240px 1fr; min-height: 100vh; }
+
+/* Sidebar */
+.sidebar { background: var(--ink); display: flex; flex-direction: column; }
+.sidebar-header { padding: 24px 22px 18px; }
+.sidebar-brand {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem;
+  letter-spacing: 0.06em; color: var(--bg); line-height: 1;
+}
+.sidebar-role {
+  font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: rgba(242,237,230,0.4); margin-top: 4px;
+}
+.sidebar-profile {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px 22px;
+  border-top: 1px solid rgba(242,237,230,0.08);
+  border-bottom: 1px solid rgba(242,237,230,0.08);
+}
+.profile-avatar {
+  width: 34px; height: 34px; background: var(--red);
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem; color: white;
+  flex-shrink: 0;
+}
+.profile-info { min-width: 0; }
+.profile-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem;
+  letter-spacing: 0.06em; color: var(--bg);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.profile-sub {
+  font-size: 0.58rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: rgba(242,237,230,0.5);
+}
+
+.sidebar-nav { padding: 16px 0; flex: 1; }
+.sidebar-nav button {
+  display: block; width: 100%; text-align: left;
+  font-family: 'Inconsolata', monospace; font-size: 0.82rem; letter-spacing: 0.06em;
+  background: none; border: none; cursor: pointer;
+  color: rgba(242,237,230,0.55); padding: 11px 22px;
+  border-left: 3px solid transparent; transition: all 0.15s;
+}
+.sidebar-nav button:hover { color: var(--bg); background: rgba(242,237,230,0.04); }
+.sidebar-nav button.active {
+  color: var(--bg); border-left-color: var(--red); background: rgba(242,237,230,0.06);
+}
+
+.sidebar-footer { padding: 14px 22px; border-top: 1px solid rgba(242,237,230,0.08); }
+.sidebar-footer button {
+  background: none; border: none; cursor: pointer;
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem; letter-spacing: 0.08em;
+  color: rgba(242,237,230,0.4); padding: 0;
+}
+.sidebar-footer button:hover { color: var(--red); }
+.sidebar-footer .build {
+  margin-top: 10px; font-size: 0.55rem; letter-spacing: 0.12em;
+  color: rgba(242,237,230,0.25); text-transform: uppercase;
+}
+
+/* Main */
+.main { padding: 32px 36px 60px; overflow-x: auto; }
+.main-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 28px;
+}
+.main-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.04em;
+}
+.refresh-btn {
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
+  color: var(--mid); background: none; border: 1px solid var(--border);
+  padding: 8px 16px; cursor: pointer; transition: all 0.15s;
+}
+.refresh-btn:hover { color: var(--red); border-color: var(--red); }
+
+.panel { display: none; }
+.panel.active { display: block; }
+.placeholder {
+  background: white; border: 1px dashed var(--border-strong);
+  padding: 36px 28px; text-align: center;
+  font-size: 0.85rem; color: var(--mid); line-height: 1.6;
+}
+.placeholder strong { color: var(--ink); }
+
+/* Responsive */
+@media (max-width: 800px) {
+  .dash-layout { grid-template-columns: 1fr; }
+  .sidebar { flex-direction: row; flex-wrap: wrap; align-items: stretch; }
+  .sidebar-header, .sidebar-profile { flex: 1 1 50%; }
+  .sidebar-nav {
+    display: flex; flex: 1 1 100%; padding: 0;
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    border-top: 1px solid rgba(242,237,230,0.08);
+  }
+  .sidebar-nav button {
+    border-left: none; border-bottom: 3px solid transparent;
+    white-space: nowrap; padding: 12px 16px;
+  }
+  .sidebar-nav button.active { border-left-color: transparent; border-bottom-color: var(--red); }
+  .sidebar-footer { flex: 1 1 100%; }
+  .main { padding: 20px 16px 40px; }
+}
+</style>
+</head>
+<body>
+
+<!-- ========== LOGIN SCREEN ========== -->
+<section class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <div class="login-brand">Come With</div>
+    <div class="login-sub">Admin Dashboard · v2 (staging)</div>
+
+    <form id="loginForm">
+      <label class="login-label" for="email">Email</label>
+      <input
+        class="login-input"
+        type="email"
+        id="email"
+        name="email"
+        placeholder="berky@comewith.org"
+        autocomplete="email"
+        required
+      />
+      <button class="login-btn" type="submit" id="loginBtn">Send magic link</button>
+    </form>
+
+    <div class="login-msg" id="loginMsg"></div>
+
+    <div class="login-meta">
+      staging · <code id="metaUrl"></code>
+    </div>
+  </div>
+</section>
+
+<!-- ========== DASHBOARD SHELL ========== -->
+<div class="dash" id="dash">
+  <div class="dash-layout">
+
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand">Come With</div>
+        <div class="sidebar-role">Dashboard v2 · Staging</div>
+      </div>
+
+      <div class="sidebar-profile">
+        <div class="profile-avatar" id="profileAvatar">·</div>
+        <div class="profile-info">
+          <div class="profile-name" id="profileName">—</div>
+          <div class="profile-sub" id="profileRole">—</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav" id="sidebarNav">
+        <button data-tab="inquiries" class="active">Inquiries</button>
+        <button data-tab="agreements">Agreements</button>
+        <button data-tab="clients">Clients</button>
+        <button data-tab="income">Income</button>
+        <button data-tab="expenses">Expenses</button>
+        <button data-tab="equipment">Equipment</button>
+        <button data-tab="events">Events</button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <button id="signOutBtn">Sign out</button>
+        <div class="build">phase 3 · sprint 1</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <div class="main-header">
+        <div class="main-title" id="mainTitle">Inquiries</div>
+        <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
+      </div>
+
+      <div class="panel active" id="panel-inquiries">
+        <div class="placeholder">
+          <strong>Sprint 2</strong> wires this tab to the <code>inquiries</code> table.<br />
+          For now the auth flow is the deliverable.
+        </div>
+      </div>
+      <div class="panel" id="panel-agreements"><div class="placeholder">Sprint 3 → <code>agreements</code></div></div>
+      <div class="panel" id="panel-clients"><div class="placeholder">Sprint 4 → <code>clients</code></div></div>
+      <div class="panel" id="panel-income"><div class="placeholder">Sprint 3 → <code>income</code></div></div>
+      <div class="panel" id="panel-expenses"><div class="placeholder">Sprint 4 → <code>expenses</code></div></div>
+      <div class="panel" id="panel-equipment"><div class="placeholder">Sprint 5 → <code>equipment_inventory</code></div></div>
+      <div class="panel" id="panel-events"><div class="placeholder">Sprint 5 → <code>events</code></div></div>
+    </main>
+
+  </div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+// PUBLIC values — safe to embed in frontend per the env contract.
+const SUPABASE_URL = 'https://qjosjafbizxdtkisyrqm.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_aks4D0QB6tuO8pZYxCqB4A_TdBnUdYe';
+
+const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+});
+
+const $ = (id) => document.getElementById(id);
+
+// ---- UI helpers ----
+function showLogin() { $('loginScreen').style.display = 'flex'; $('dash').classList.remove('show'); }
+function showDash()  { $('loginScreen').style.display = 'none'; $('dash').classList.add('show'); }
+function setMsg(text, kind = 'info') {
+  const el = $('loginMsg');
+  el.className = 'login-msg ' + kind;
+  el.textContent = text || '';
+}
+
+// Display URL in login footer for at-a-glance confirmation
+$('metaUrl').textContent = new URL(SUPABASE_URL).host;
+
+// ---- Auth state ----
+async function renderForSession(session) {
+  if (!session) { showLogin(); return; }
+
+  // Fetch profile to get role + display name. The "Users can read own profile"
+  // RLS policy lets the signed-in user select their own profile.
+  const { data: profile, error } = await sb
+    .from('profiles')
+    .select('full_name, role, email')
+    .eq('id', session.user.id)
+    .single();
+
+  if (error) {
+    setMsg('Signed in, but profile fetch failed: ' + error.message, 'err');
+    showLogin();
+    return;
+  }
+
+  const name = profile.full_name || profile.email;
+  $('profileName').textContent = name;
+  $('profileRole').textContent = profile.role.replace('_', ' ');
+  $('profileAvatar').textContent = (name[0] || '·').toUpperCase();
+  showDash();
+}
+
+sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
+
+// ---- Login handler ----
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  if (!email) return;
+
+  const btn = $('loginBtn');
+  btn.disabled = true;
+  setMsg('Sending magic link…', 'info');
+
+  const { error } = await sb.auth.signInWithOtp({
+    email,
+    options: {
+      // Redirect back to this exact page after the click.
+      emailRedirectTo: window.location.origin + window.location.pathname,
+    },
+  });
+
+  btn.disabled = false;
+  if (error) {
+    setMsg('Failed: ' + error.message, 'err');
+    return;
+  }
+  setMsg('Check ' + email + ' for a sign-in link. It expires in 1 hour.', 'ok');
+});
+
+// ---- Sign out ----
+$('signOutBtn').addEventListener('click', async () => {
+  await sb.auth.signOut();
+  // onAuthStateChange handles the UI flip
+});
+
+// ---- Tab switching (purely client-side for now) ----
+$('sidebarNav').addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  const tab = btn.dataset.tab;
+  for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
+  for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + tab);
+  $('mainTitle').textContent = btn.textContent;
+});
+
+// ---- Initial session check ----
+const { data: { session } } = await sb.auth.getSession();
+await renderForSession(session);
+</script>
+
+</body>
+</html>
