@@ -115,6 +115,57 @@ body::before {
   font-size: 0.85rem; color: var(--mid); line-height: 1.6;
 }
 .placeholder strong { color: var(--ink); }
+
+/* Agreement cards */
+.agreement-card {
+  background: white; border: 1px solid var(--border);
+  padding: 20px 22px; margin-bottom: 12px;
+}
+.agreement-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 16px; flex-wrap: wrap;
+}
+.agreement-meta { flex: 1; min-width: 200px; }
+.agreement-type {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem;
+  letter-spacing: 0.06em; color: var(--ink);
+}
+.agreement-detail {
+  font-size: 0.78rem; color: var(--mid); margin-top: 4px;
+}
+.agreement-total {
+  font-family: 'Inconsolata', monospace; font-size: 1.1rem; font-weight: 500;
+  font-variant-numeric: tabular-nums; color: var(--ink); margin-right: 16px;
+}
+.agreement-status {
+  display: inline-block; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 4px 10px; white-space: nowrap;
+}
+.status-draft     { background: var(--off);      color: var(--mid); }
+.status-sent      { background: var(--blue-bg);  color: var(--blue); }
+.status-signed    { background: var(--green-bg); color: var(--green); }
+.status-cancelled { background: #f5e2de;         color: var(--red-dk); }
+.status-completed { background: var(--green-bg); color: var(--green); }
+
+.sign-link {
+  display: inline-block; margin-top: 14px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.85rem; letter-spacing: 0.08em;
+  padding: 8px 18px; background: var(--red); color: white;
+  text-decoration: none; transition: background 0.15s;
+}
+.sign-link:hover { background: var(--red-dk); }
+
+.no-link {
+  display: inline-block; margin-top: 14px;
+  font-size: 0.78rem; color: var(--mid);
+}
+.no-link a { color: var(--ink); }
+
+.row-count {
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem;
+  letter-spacing: 0.1em; color: var(--mid); text-transform: uppercase;
+  margin-bottom: 12px;
+}
 </style>
 </head>
 <body>
@@ -145,9 +196,8 @@ body::before {
 
   <div class="section">
     <div class="section-title">Your agreements</div>
-    <div class="placeholder" id="agreementsPanel">
-      <strong>Sprint 4</strong> lists your agreements here.
-    </div>
+    <div class="row-count" id="agreementCount">—</div>
+    <div id="agreementsPanel"></div>
   </div>
 </div>
 
@@ -176,6 +226,73 @@ function setMsg(text, kind = 'info') {
   el.textContent = text || '';
 }
 
+function fmtDate(s) {
+  if (!s) return '';
+  const d = new Date(s); return isNaN(d) ? s : d.toISOString().slice(0, 10);
+}
+function money(n) {
+  return n == null ? '—' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;');
+}
+
+async function loadAgreements() {
+  // RLS: "Customers can read own agreements" filters to agreements whose
+  // client_id is owned by this auth.uid(). Embed agreement_links so we can
+  // surface an existing token if there is one (public-readable by policy).
+  const { data, error } = await sb
+    .from('agreements')
+    .select('id, agreement_type, status, event_date, venue_name, total_amount, client_signed_at, agreement_links(token, expires_at, used_at)')
+    .order('created_at', { ascending: false });
+
+  const panel = $('agreementsPanel');
+  const countEl = $('agreementCount');
+
+  if (error) {
+    countEl.textContent = '';
+    panel.innerHTML = `<div class="placeholder"><strong>Couldn't load:</strong> ${escapeHtml(error.message)}</div>`;
+    return;
+  }
+  if (!data || data.length === 0) {
+    countEl.textContent = '';
+    panel.innerHTML = `<div class="placeholder">No agreements yet. When Berky drafts and sends you one, it'll show up here.</div>`;
+    return;
+  }
+
+  countEl.textContent = data.length + ' agreement' + (data.length === 1 ? '' : 's');
+
+  const now = new Date();
+  panel.innerHTML = data.map(a => {
+    const status = (a.status || 'draft').toLowerCase();
+    const isUnsignedSent = status === 'sent' && !a.client_signed_at;
+    let signCta = '';
+    if (isUnsignedSent) {
+      // Find an unused, unexpired link
+      const links = a.agreement_links || [];
+      const usable = links.find(l => !l.used_at && new Date(l.expires_at) > now);
+      if (usable) {
+        signCta = `<a class="sign-link" href="sign.html?token=${encodeURIComponent(usable.token)}">Review &amp; sign</a>`;
+      } else {
+        signCta = `<div class="no-link">Signing link expired. <a href="mailto:berky@comewith.org">Email Berky</a> for a new one.</div>`;
+      }
+    }
+    const event = [fmtDate(a.event_date), a.venue_name].filter(Boolean).join(' · ');
+    return `<div class="agreement-card">
+      <div class="agreement-row">
+        <div class="agreement-meta">
+          <div class="agreement-type">${escapeHtml(a.agreement_type === 'rental' ? 'Equipment Rental' : 'Events Services')}</div>
+          ${event ? `<div class="agreement-detail">${escapeHtml(event)}</div>` : ''}
+        </div>
+        <div class="agreement-total">${money(a.total_amount)}</div>
+        <span class="agreement-status status-${escapeHtml(status)}">${escapeHtml(status)}</span>
+      </div>
+      ${signCta}
+    </div>`;
+  }).join('');
+}
+
 async function renderForSession(session) {
   if (!session) { showLogin(); return; }
   const { data: profile, error } = await sb
@@ -191,6 +308,7 @@ async function renderForSession(session) {
   $('customerName').textContent = profile.full_name || profile.email || 'Customer';
   $('customerEmail').textContent = profile.email || '';
   showPortal();
+  loadAgreements();
 }
 
 sb.auth.onAuthStateChange((_e, session) => renderForSession(session));
