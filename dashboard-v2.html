@@ -288,6 +288,75 @@ body::before {
 .status-select:hover, .status-select:focus { border-color: var(--red); }
 .status-select.saving { opacity: 0.5; cursor: progress; }
 
+/* Add-row button (Phase 4) */
+.add-btn {
+  display: inline-block;
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.82rem;
+  letter-spacing: 0.1em; padding: 8px 16px;
+  background: var(--red); color: white; border: none;
+  cursor: pointer; margin-bottom: 14px; transition: background 0.15s;
+}
+.add-btn:hover { background: var(--red-dk); }
+
+/* Modal (Phase 4) */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(26,20,16,0.55);
+  display: none; align-items: center; justify-content: center;
+  padding: 24px;
+}
+.modal-overlay.show { display: flex; }
+.modal {
+  background: var(--bg); border: 1px solid var(--border-strong);
+  width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+  padding: 28px 30px;
+  animation: modalIn 0.15s ease-out;
+}
+@keyframes modalIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.modal-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
+  letter-spacing: 0.04em; margin-bottom: 6px;
+}
+.modal-sub {
+  font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 22px;
+}
+.modal-form-row { margin-bottom: 14px; }
+.modal-form-row.half-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.modal-label {
+  display: block; font-size: 0.58rem; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--mid); margin-bottom: 6px;
+}
+.modal-input, .modal-select, .modal-textarea {
+  width: 100%; font-family: 'Inconsolata', monospace; font-size: 0.88rem;
+  padding: 10px 12px; border: 1px solid var(--border-strong);
+  background: white; color: var(--ink); outline: none; border-radius: 0;
+}
+.modal-input:focus, .modal-select:focus, .modal-textarea:focus { border-color: var(--red); }
+.modal-textarea { resize: vertical; min-height: 60px; font-family: 'Inconsolata', monospace; }
+.modal-actions {
+  display: flex; gap: 8px; justify-content: flex-end;
+  margin-top: 20px;
+}
+.modal-btn-cancel {
+  font-family: 'Inconsolata', monospace; font-size: 0.78rem;
+  letter-spacing: 0.06em; padding: 10px 18px;
+  background: none; border: 1px solid var(--border-strong);
+  color: var(--mid); cursor: pointer;
+}
+.modal-btn-cancel:hover { color: var(--ink); border-color: var(--ink); }
+.modal-btn-submit {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem;
+  letter-spacing: 0.1em; padding: 10px 24px;
+  background: var(--red); color: white; border: none;
+  cursor: pointer; transition: background 0.15s;
+}
+.modal-btn-submit:hover:not(:disabled) { background: var(--red-dk); }
+.modal-btn-submit:disabled { opacity: 0.5; cursor: not-allowed; }
+.modal-file-current {
+  font-size: 0.7rem; color: var(--mid); margin-top: 6px;
+}
+
 /* Toasts (Phase 4) */
 .toast-stack {
   position: fixed; bottom: 24px; right: 24px; z-index: 100;
@@ -359,6 +428,21 @@ body::before {
     </div>
   </div>
 </section>
+
+<!-- ========== MODAL (Phase 4) ========== -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">—</div>
+    <div class="modal-sub" id="modalSub"></div>
+    <form id="modalForm" enctype="multipart/form-data">
+      <div id="modalFields"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-btn-cancel" id="modalCancel">Cancel</button>
+        <button type="submit" class="modal-btn-submit" id="modalSubmit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
 
 <!-- ========== DASHBOARD SHELL ========== -->
 <div class="dash" id="dash">
@@ -451,6 +535,7 @@ body::before {
       </div>
 
       <div class="panel" id="panel-income">
+        <button class="add-btn" data-add="income">+ Add income</button>
         <div class="row-count" id="count-income">—</div>
         <div id="state-income"></div>
         <table class="data-table" id="table-income" style="display:none;">
@@ -882,6 +967,171 @@ async function loadTab(tab) {
 $('refreshBtn').addEventListener('click', () => {
   const active = document.querySelector('.sidebar-nav button.active');
   if (active) loadTab(active.dataset.tab);
+});
+
+// ---- Modal / write forms (Phase 4 sprints 2-3) ----
+
+// Cache layer for select-options that don't change often within a session.
+// Caches are invalidated when a tab that owns them changes.
+const dataCache = { clients: null, agreements: null };
+async function loadCachedClients() {
+  if (dataCache.clients) return dataCache.clients;
+  const { data, error } = await sb.from('clients').select('id, full_name').order('full_name');
+  if (error) { toast('Loading clients failed: ' + error.message, 'err'); return []; }
+  dataCache.clients = data || [];
+  return dataCache.clients;
+}
+async function loadCachedAgreements() {
+  if (dataCache.agreements) return dataCache.agreements;
+  const { data, error } = await sb
+    .from('agreements')
+    .select('id, agreement_type, event_date, client:clients(full_name)')
+    .order('created_at', { ascending: false });
+  if (error) { toast('Loading agreements failed: ' + error.message, 'err'); return []; }
+  dataCache.agreements = data || [];
+  return dataCache.agreements;
+}
+function invalidateCacheFor(table) {
+  if (table === 'clients') dataCache.clients = null;
+  if (table === 'agreements') dataCache.agreements = null;
+}
+
+const TODAY = () => new Date().toISOString().slice(0, 10);
+
+const FORM_DEFS = {
+  income: {
+    title: 'Add income',
+    sub: 'Logs a row in public.income',
+    table: 'income',
+    fields: [
+      { name: 'date',         type: 'date',     label: 'Date',          required: true, default: TODAY, half: 'left' },
+      { name: 'amount',       type: 'number',   label: 'Amount',        required: true, step: '0.01', min: 0, half: 'right' },
+      { name: 'category',     type: 'text',     label: 'Category',      placeholder: 'e.g. event, rental, donation' },
+      { name: 'description',  type: 'textarea', label: 'Description' },
+      { name: 'client_id',    type: 'select-clients',    label: 'Client (optional)' },
+      { name: 'agreement_id', type: 'select-agreements', label: 'Agreement (optional)' },
+    ],
+  },
+};
+
+async function buildField(f) {
+  const def = typeof f.default === 'function' ? f.default() : (f.default || '');
+  let input = '';
+  if (f.type === 'textarea') {
+    input = `<textarea class="modal-textarea" name="${f.name}" rows="3"${f.required ? ' required' : ''}>${escapeHtml(def)}</textarea>`;
+  } else if (f.type === 'select-clients') {
+    const opts = (await loadCachedClients()).map(c =>
+      `<option value="${escapeHtml(c.id)}">${escapeHtml(c.full_name)}</option>`).join('');
+    input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
+  } else if (f.type === 'select-agreements') {
+    const opts = (await loadCachedAgreements()).map(a => {
+      const lbl = `${a.agreement_type} · ${a.client?.full_name || 'no client'} · ${fmtDate(a.event_date) || '—'}`;
+      return `<option value="${escapeHtml(a.id)}">${escapeHtml(lbl)}</option>`;
+    }).join('');
+    input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
+  } else if (f.type === 'checkbox') {
+    const checked = def ? ' checked' : '';
+    input = `<input class="modal-input" type="checkbox" name="${f.name}" value="true"${checked} style="width:auto;" />`;
+  } else if (f.type === 'file') {
+    input = `<input class="modal-input" type="file" name="${f.name}"${f.accept ? ` accept="${f.accept}"` : ''} />`;
+  } else {
+    const attrs = [
+      `type="${f.type}"`,
+      `name="${f.name}"`,
+      f.required ? 'required' : '',
+      f.step ? `step="${f.step}"` : '',
+      f.min != null ? `min="${f.min}"` : '',
+      f.placeholder ? `placeholder="${escapeHtml(f.placeholder)}"` : '',
+      def ? `value="${escapeHtml(String(def))}"` : '',
+    ].filter(Boolean).join(' ');
+    input = `<input class="modal-input" ${attrs} />`;
+  }
+  return `<label class="modal-label">${escapeHtml(f.label)}${f.required ? ' *' : ''}</label>${input}`;
+}
+
+async function openModal(kind) {
+  const spec = FORM_DEFS[kind];
+  if (!spec) return;
+  $('modalTitle').textContent = spec.title;
+  $('modalSub').textContent = spec.sub;
+  $('modalSubmit').textContent = 'Save';
+  $('modalSubmit').disabled = false;
+  $('modalSubmit').dataset.kind = kind;
+
+  // Build fields, grouping consecutive .half items into a half-row container
+  const built = await Promise.all(spec.fields.map(buildField));
+  let html = '';
+  for (let i = 0; i < spec.fields.length; i++) {
+    const f = spec.fields[i];
+    const fNext = spec.fields[i + 1];
+    if (f.half === 'left' && fNext?.half === 'right') {
+      html += `<div class="modal-form-row half-row"><div>${built[i]}</div><div>${built[i+1]}</div></div>`;
+      i++;
+    } else {
+      html += `<div class="modal-form-row">${built[i]}</div>`;
+    }
+  }
+  $('modalFields').innerHTML = html;
+  $('modalOverlay').classList.add('show');
+}
+
+function closeModal() {
+  $('modalOverlay').classList.remove('show');
+  $('modalForm').reset();
+  $('modalFields').innerHTML = '';
+}
+
+$('modalCancel').addEventListener('click', closeModal);
+$('modalOverlay').addEventListener('click', (e) => {
+  if (e.target === $('modalOverlay')) closeModal();
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('modalOverlay').classList.contains('show')) closeModal();
+});
+
+// Add-button delegation
+document.querySelector('main.main').addEventListener('click', (e) => {
+  const btn = e.target.closest('[data-add]');
+  if (!btn) return;
+  openModal(btn.dataset.add);
+});
+
+// Submit
+$('modalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const kind = $('modalSubmit').dataset.kind;
+  const spec = FORM_DEFS[kind];
+  if (!spec) return;
+
+  // Collect form values
+  const fd = new FormData(e.target);
+  const row = {};
+  for (const f of spec.fields) {
+    if (f.type === 'file') continue; // handled separately in sprint 3
+    let v = fd.get(f.name);
+    if (v == null || v === '') continue;
+    if (f.type === 'checkbox') v = true;
+    if (f.type === 'number') v = Number(v);
+    row[f.name] = v;
+  }
+
+  // Attach the signed-in user as created_by where the table supports it
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user?.id) row.created_by = session.user.id;
+
+  $('modalSubmit').disabled = true;
+  $('modalSubmit').textContent = 'Saving…';
+  const { error } = await sb.from(spec.table).insert(row);
+  if (error) {
+    $('modalSubmit').disabled = false;
+    $('modalSubmit').textContent = 'Save';
+    toast('Save failed: ' + error.message, 'err');
+    return;
+  }
+  closeModal();
+  toast(kind + ' added', 'ok');
+  invalidateCacheFor(spec.table);
+  loadTab(spec.table);
 });
 
 // ---- Inline status writes (Phase 4 sprint 1) ----
