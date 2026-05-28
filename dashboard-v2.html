@@ -353,7 +353,21 @@ body::before {
         </table>
       </div>
 
-      <div class="panel" id="panel-clients"><div class="placeholder">Sprint 4 → <code>clients</code></div></div>
+      <div class="panel" id="panel-clients">
+        <div class="row-count" id="count-clients">—</div>
+        <div id="state-clients"></div>
+        <table class="data-table" id="table-clients" style="display:none;">
+          <thead><tr>
+            <th>Added</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Company</th>
+            <th>Notes</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
 
       <div class="panel" id="panel-income">
         <div class="row-count" id="count-income">—</div>
@@ -369,7 +383,20 @@ body::before {
           <tbody></tbody>
         </table>
       </div>
-      <div class="panel" id="panel-expenses"><div class="placeholder">Sprint 4 → <code>expenses</code></div></div>
+      <div class="panel" id="panel-expenses">
+        <div class="row-count" id="count-expenses">—</div>
+        <div id="state-expenses"></div>
+        <table class="data-table" id="table-expenses" style="display:none;">
+          <thead><tr>
+            <th>Date</th>
+            <th class="num">Amount</th>
+            <th>Category</th>
+            <th>Vendor</th>
+            <th>Description</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="panel" id="panel-equipment"><div class="placeholder">Sprint 5 → <code>equipment_inventory</code></div></div>
       <div class="panel" id="panel-events"><div class="placeholder">Sprint 5 → <code>events</code></div></div>
     </main>
@@ -556,6 +583,29 @@ const renderers = {
       </tr>`;
     }).join('');
   },
+
+  expenses(rows) {
+    const tbody = $('table-expenses').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td>${escapeHtml(fmtDate(r.date))}</td>
+      <td class="num">${money(r.amount)}</td>
+      <td>${escapeHtml(r.category || '') || muted}</td>
+      <td>${escapeHtml(r.vendor || '') || muted}</td>
+      <td class="truncate">${escapeHtml(truncate(r.description || '', 80)) || muted}</td>
+    </tr>`).join('');
+  },
+
+  clients(rows) {
+    const tbody = $('table-clients').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td>${escapeHtml(fmtDate(r.created_at))}</td>
+      <td>${escapeHtml(r.full_name || '')}</td>
+      <td class="truncate">${escapeHtml(r.email || '') || muted}</td>
+      <td>${escapeHtml(r.phone || '') || muted}</td>
+      <td>${escapeHtml(r.company || '') || muted}</td>
+      <td class="truncate">${escapeHtml(truncate(r.notes || '', 60)) || muted}</td>
+    </tr>`).join('');
+  },
 };
 
 const queries = {
@@ -572,6 +622,16 @@ const queries = {
   income: () => sb.from('income')
     .select('id, date, amount, category, description, client:clients(full_name)')
     .order('date', { ascending: false })
+    .limit(500),
+
+  expenses: () => sb.from('expenses')
+    .select('id, date, amount, category, vendor, description')
+    .order('date', { ascending: false })
+    .limit(500),
+
+  clients: () => sb.from('clients')
+    .select('id, full_name, email, phone, company, notes, created_at')
+    .order('created_at', { ascending: false })
     .limit(500),
 };
 
