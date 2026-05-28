@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dance Infusion #2 — Come With</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #1A1410; --bg: #F2EDE6; --red: #C13B2A; --red-dk: #8C2A1C;
+  --mid: #8A7F72; --off: #E8E2D9; --border: rgba(26,20,16,0.14);
+  --border-strong: rgba(26,20,16,0.3); --green: #3B6D11; --green-bg: #DFF0D0;
+  --navy: #142A4A;
+}
+body {
+  background: var(--bg); color: var(--ink);
+  font-family: 'Libre Baskerville', serif; font-weight: 400;
+  min-height: 100vh; line-height: 1.6;
+}
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: radial-gradient(circle, rgba(26,20,16,0.05) 1px, transparent 1px);
+  background-size: 18px 18px; pointer-events: none; z-index: 0;
+}
+
+.page { position: relative; z-index: 1; max-width: 880px; margin: 0 auto; padding: 40px 24px 80px; }
+.crumbs {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 18px;
+}
+.crumbs a { color: var(--mid); text-decoration: none; }
+.crumbs a:hover { color: var(--red); }
+
+.hero { text-align: center; padding: 24px 0 36px; border-bottom: 1px solid var(--border); margin-bottom: 36px; }
+.hero-kicker {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--red); margin-bottom: 10px;
+}
+.hero-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 3.6rem;
+  letter-spacing: 0.04em; line-height: 1; color: var(--ink);
+}
+.hero-meta {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.85rem; letter-spacing: 0.06em;
+  color: var(--mid); margin-top: 14px;
+}
+.hero-meta strong { color: var(--ink); }
+
+.status-chip {
+  display: inline-block; font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 4px 14px; margin-top: 16px;
+}
+.status-completed { background: var(--green-bg); color: var(--green); }
+.status-on_sale, .status-announced { background: #fff0d0; color: #854F0B; }
+.status-sold_out { background: var(--red); color: white; }
+.status-planning { background: var(--off); color: var(--mid); }
+
+.description {
+  font-size: 1.05rem; line-height: 1.7; max-width: 640px; margin: 24px auto 0;
+  text-align: center; color: var(--ink);
+}
+
+.section { margin-bottom: 48px; }
+.section-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.6rem;
+  letter-spacing: 0.06em; color: var(--ink);
+  padding-bottom: 8px; border-bottom: 2px solid var(--ink);
+  margin-bottom: 18px;
+}
+
+/* Lineup */
+.lineup {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 14px;
+}
+.artist-card {
+  background: white; border: 1px solid var(--border); padding: 18px 18px;
+  border-top: 4px solid var(--ink);
+}
+.artist-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem;
+  letter-spacing: 0.04em; line-height: 1.2;
+}
+.artist-role {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--mid); margin-top: 4px;
+}
+
+/* Sponsors */
+.sponsor-tier-group { margin-bottom: 20px; }
+.tier-label {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 10px;
+}
+.sponsor-row {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+.sponsor-card {
+  background: white; border: 1px solid var(--border); padding: 14px 16px;
+}
+.sponsor-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.sponsor-name a { color: inherit; text-decoration: none; border-bottom: 1px dotted var(--mid); }
+.sponsor-name a:hover { color: var(--red); border-bottom-color: var(--red); }
+
+/* Prizes */
+.prizes { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+@media (max-width: 600px) { .prizes { grid-template-columns: 1fr; } }
+.prize-card {
+  background: white; border: 1px solid var(--border); padding: 14px 16px;
+}
+.prize-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem;
+  letter-spacing: 0.04em;
+}
+.prize-meta {
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem;
+  letter-spacing: 0.06em; color: var(--mid); margin-top: 4px;
+}
+
+.state {
+  text-align: center; padding: 60px 16px;
+  font-family: 'Inconsolata', monospace; font-size: 0.85rem; color: var(--mid);
+}
+.state.err {
+  background: #fbe6e1; color: var(--red-dk);
+  border-left: 3px solid var(--red); text-align: left; padding: 24px;
+}
+.spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--red);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+  margin-right: 8px; vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+footer {
+  text-align: center; margin-top: 40px; padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem;
+  letter-spacing: 0.08em; color: var(--mid);
+}
+footer a { color: var(--ink); }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <div class="crumbs">
+    <a href="/">Come With</a> · Events · Dance Infusion #2
+  </div>
+
+  <div id="content"><div class="state"><span class="spinner"></span>Loading event…</div></div>
+
+  <footer>
+    Brought to you by Come With · in partnership with the MS Society
+  </footer>
+
+</div>
+
+<script type="module">
+const SUPABASE_URL = 'https://qjosjafbizxdtkisyrqm.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_aks4D0QB6tuO8pZYxCqB4A_TdBnUdYe';
+const FN = `${SUPABASE_URL}/functions/v1/get-event-hub`;
+const SLUG = 'dance-infusion-2';
+
+const escapeHtml = (s) => {
+  if (s == null) return '';
+  return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;');
+};
+const fmtDate = (s) => { if (!s) return ''; const d = new Date(s); return isNaN(d) ? s : d.toISOString().slice(0,10); };
+const money = (n) => n == null ? '' : '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+
+const $ = (id) => document.getElementById(id);
+
+async function load() {
+  try {
+    const res = await fetch(FN, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ slug: SLUG }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data?.error || `HTTP ${res.status}`);
+    render(data);
+  } catch (e) {
+    $('content').innerHTML = `<div class="state err">Couldn't load this event: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function render({ event, sponsorships, artists, prizes }) {
+  const status = (event.status || 'planning').toLowerCase();
+  const venue = event.venue?.name || '';
+  const venueLine = [venue, event.venue?.city, event.venue?.state].filter(Boolean).join(', ');
+  const timeLine = [fmtDate(event.event_date), event.doors_time, event.end_time && '— ' + event.end_time].filter(Boolean).join(' · ');
+
+  const hero = `
+    <div class="hero">
+      <div class="hero-kicker">${escapeHtml(event.series || 'Event')}</div>
+      <div class="hero-title">${escapeHtml(event.name)}</div>
+      <div class="hero-meta"><strong>${escapeHtml(timeLine)}</strong>${venueLine ? ' · ' + escapeHtml(venueLine) : ''}</div>
+      <span class="status-chip status-${escapeHtml(status)}">${escapeHtml(status.replace('_', ' '))}</span>
+      ${event.description ? `<p class="description">${escapeHtml(event.description)}</p>` : ''}
+    </div>`;
+
+  // Lineup
+  let lineup = '';
+  if (artists.length) {
+    lineup = `
+      <div class="section">
+        <div class="section-title">Lineup</div>
+        <div class="lineup">
+          ${artists.map(a => `
+            <div class="artist-card" ${a.artist?.signature_color ? `style="border-top-color:${escapeHtml(a.artist.signature_color)};"` : ''}>
+              <div class="artist-name">${escapeHtml(a.artist?.stage_name || 'TBA')}</div>
+              <div class="artist-role">${escapeHtml(a.role || 'Performance')}</div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  // Sponsors grouped by tier
+  let sponsors = '';
+  if (sponsorships.length) {
+    const tiers = {};
+    for (const s of sponsorships) {
+      const tier = s.tier || 'Partner';
+      if (!tiers[tier]) tiers[tier] = [];
+      tiers[tier].push(s);
+    }
+    const tierOrder = ['Benefactor', 'Leader', 'Champion', 'Individual', 'Partner', 'Vendor'];
+    const orderedTiers = tierOrder.filter(t => tiers[t]).concat(
+      Object.keys(tiers).filter(t => !tierOrder.includes(t))
+    );
+
+    sponsors = `
+      <div class="section">
+        <div class="section-title">Sponsors</div>
+        ${orderedTiers.map(tier => `
+          <div class="sponsor-tier-group">
+            <div class="tier-label">${escapeHtml(tier)}</div>
+            <div class="sponsor-row">
+              ${tiers[tier].map(s => `
+                <div class="sponsor-card">
+                  <div class="sponsor-name">${s.sponsor?.website ? `<a href="${escapeHtml(s.sponsor.website)}" target="_blank">${escapeHtml(s.sponsor?.name || '')}</a>` : escapeHtml(s.sponsor?.name || '')}</div>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+  }
+
+  // Raffle prizes
+  let prizesHtml = '';
+  if (prizes.length) {
+    prizesHtml = `
+      <div class="section">
+        <div class="section-title">Raffle prizes</div>
+        <div class="prizes">
+          ${prizes.map(p => `
+            <div class="prize-card">
+              <div class="prize-name">${escapeHtml(p.prize_name)}</div>
+              <div class="prize-meta">
+                ${p.donor_name ? 'Donated by ' + escapeHtml(p.donor_name) : ''}
+                ${p.estimated_value ? ' · ' + money(p.estimated_value) : ''}
+                ${p.winner_name ? ' · Winner: ' + escapeHtml(p.winner_name) : ''}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>`;
+  }
+
+  $('content').innerHTML = hero + lineup + sponsors + prizesHtml;
+}
+
+load();
+</script>
+
+</body>
+</html>
