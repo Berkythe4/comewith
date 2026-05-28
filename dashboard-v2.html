@@ -218,6 +218,20 @@ body::before {
 .badge-lost       { background: #f5e2de;          color: var(--red-dk); }
 .badge-archived   { background: #e6e3df;          color: var(--mid); }
 
+/* Agreement statuses */
+.badge-draft      { background: var(--off);       color: var(--mid); }
+.badge-sent       { background: var(--blue-bg);   color: var(--blue); }
+.badge-signed     { background: var(--green-bg);  color: var(--green); }
+.badge-cancelled  { background: #f5e2de;          color: var(--red-dk); }
+.badge-completed  { background: var(--green-bg);  color: var(--green); }
+
+/* Agreement types */
+.badge-type-events { background: var(--off);     color: var(--ink); border: 1px solid var(--border-strong); }
+.badge-type-rental { background: var(--blue-bg); color: var(--blue); }
+
+/* Numeric / money cell */
+.data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+
 /* Responsive */
 @media (max-width: 800px) {
   .dash-layout { grid-template-columns: 1fr; }
@@ -323,9 +337,38 @@ body::before {
           <tbody></tbody>
         </table>
       </div>
-      <div class="panel" id="panel-agreements"><div class="placeholder">Sprint 3 → <code>agreements</code></div></div>
+      <div class="panel" id="panel-agreements">
+        <div class="row-count" id="count-agreements">—</div>
+        <div id="state-agreements"></div>
+        <table class="data-table" id="table-agreements" style="display:none;">
+          <thead><tr>
+            <th>Created</th>
+            <th>Type</th>
+            <th>Client</th>
+            <th>Event date</th>
+            <th class="num">Total</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
       <div class="panel" id="panel-clients"><div class="placeholder">Sprint 4 → <code>clients</code></div></div>
-      <div class="panel" id="panel-income"><div class="placeholder">Sprint 3 → <code>income</code></div></div>
+
+      <div class="panel" id="panel-income">
+        <div class="row-count" id="count-income">—</div>
+        <div id="state-income"></div>
+        <table class="data-table" id="table-income" style="display:none;">
+          <thead><tr>
+            <th>Date</th>
+            <th class="num">Amount</th>
+            <th>Category</th>
+            <th>Description</th>
+            <th>Client</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="panel" id="panel-expenses"><div class="placeholder">Sprint 4 → <code>expenses</code></div></div>
       <div class="panel" id="panel-equipment"><div class="placeholder">Sprint 5 → <code>equipment_inventory</code></div></div>
       <div class="panel" id="panel-events"><div class="placeholder">Sprint 5 → <code>events</code></div></div>
@@ -461,6 +504,9 @@ function setCount(tab, n) {
   el.textContent = n == null ? '—' : (n + ' row' + (n === 1 ? '' : 's'));
 }
 
+const muted = '<span class="muted">—</span>';
+const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 const renderers = {
   inquiries(rows) {
     const tbody = $('table-inquiries').querySelector('tbody');
@@ -479,12 +525,53 @@ const renderers = {
       </tr>`;
     }).join('');
   },
+
+  agreements(rows) {
+    const tbody = $('table-agreements').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'draft').toLowerCase();
+      const type = (r.agreement_type || '').toLowerCase();
+      const clientCell = r.client?.full_name ? escapeHtml(r.client.full_name) : muted;
+      return `<tr>
+        <td>${escapeHtml(fmtDate(r.created_at))}</td>
+        <td><span class="badge badge-type-${escapeHtml(type)}">${escapeHtml(type)}</span></td>
+        <td>${clientCell}</td>
+        <td>${escapeHtml(fmtDate(r.event_date)) || muted}</td>
+        <td class="num">${money(r.total_amount)}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      </tr>`;
+    }).join('');
+  },
+
+  income(rows) {
+    const tbody = $('table-income').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const clientCell = r.client?.full_name ? escapeHtml(r.client.full_name) : muted;
+      return `<tr>
+        <td>${escapeHtml(fmtDate(r.date))}</td>
+        <td class="num">${money(r.amount)}</td>
+        <td>${escapeHtml(r.category || '') || muted}</td>
+        <td class="truncate">${escapeHtml(truncate(r.description || '', 80)) || muted}</td>
+        <td>${clientCell}</td>
+      </tr>`;
+    }).join('');
+  },
 };
 
 const queries = {
   inquiries: () => sb.from('inquiries')
     .select('id, full_name, email, event_date, services_selected, status, created_at')
     .order('created_at', { ascending: false })
+    .limit(500),
+
+  agreements: () => sb.from('agreements')
+    .select('id, agreement_type, status, event_date, total_amount, created_at, client:clients(full_name, email)')
+    .order('created_at', { ascending: false })
+    .limit(500),
+
+  income: () => sb.from('income')
+    .select('id, date, amount, category, description, client:clients(full_name)')
+    .order('date', { ascending: false })
     .limit(500),
 };
 
