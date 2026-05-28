@@ -173,9 +173,9 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2 done
-    class P3 next
-    class P4,P5,P6,P7,P8,P9,P10,P11 planned
+    class P0,P1,P2,P3 done
+    class P4 next
+    class P5,P6,P7,P8,P9,P10,P11 planned
   </pre>
 
   <h3>Per-phase descriptions</h3>
@@ -209,13 +209,13 @@ flowchart TD
         <td>0</td>
       </tr>
       <tr>
-        <td class="phase-num status-next">3 →</td>
+        <td class="phase-num status-done">3 ✓</td>
         <td>Admin dashboard — read</td>
-        <td><code>dashboard.html</code> rewritten to read from Supabase (inquiries, agreements, income, expenses, equipment). Berky logs in via magic-link, sees real data. No writes yet — read-only de-risks the schema before exposing edits</td>
+        <td><code>dashboard-v2.html</code> reads from Supabase (all 7 admin tables: inquiries, agreements, clients, income, expenses, equipment, events). Magic-link login. No writes — read-only de-risks the schema before exposing edits</td>
         <td>2</td>
       </tr>
       <tr>
-        <td class="phase-num">4</td>
+        <td class="phase-num status-next">4 →</td>
         <td>Admin dashboard — write</td>
         <td>CRUD on agreements, inquiry status updates, income/expense entry, equipment management. Berky stops using Sheets day-to-day</td>
         <td>3</td>
