@@ -226,6 +226,11 @@ body::before {
 }
 .data-table tr:last-child td { border-bottom: none; }
 .data-table tr:hover td { background: rgba(193,59,42,0.03); }
+.data-table tbody tr.flash td { animation: flashRow 1.8s ease-out; }
+@keyframes flashRow {
+  0%   { background-color: var(--green-bg); }
+  100% { background-color: transparent; }
+}
 .data-table .muted { color: var(--mid); font-style: italic; }
 .data-table .truncate {
   max-width: 280px; overflow: hidden; text-overflow: ellipsis;
@@ -932,7 +937,7 @@ function setLastRefreshed() {
   $('lastRefreshed').textContent = 'Refreshed ' + hh + ':' + mm;
 }
 
-async function loadTab(tab) {
+async function loadTab(tab, { highlightFirst = false } = {}) {
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
@@ -940,8 +945,6 @@ async function loadTab(tab) {
   try {
     const { data, error } = await queries[tab]();
     if (error) {
-      // Common cases: RLS denied (PostgREST returns 'permission denied'),
-      // session expired (returns 401), network down.
       const msg = error.code === 'PGRST301' || /JWT/i.test(error.message)
         ? 'Session expired. Please sign in again.'
         : error.message;
@@ -957,6 +960,10 @@ async function loadTab(tab) {
     renderers[tab](data);
     setPanelState(tab, 'hidden');
     setLastRefreshed();
+    if (highlightFirst) {
+      const firstRow = document.querySelector('#table-' + tab + ' tbody tr');
+      if (firstRow) firstRow.classList.add('flash');
+    }
   } catch (e) {
     setPanelState(tab, 'err', e.message || String(e));
   } finally {
@@ -1093,6 +1100,11 @@ async function openModal(kind) {
   }
   $('modalFields').innerHTML = html;
   $('modalOverlay').classList.add('show');
+  // Auto-focus the first writable field after a tick so the modal animation finishes
+  setTimeout(() => {
+    const first = $('modalFields').querySelector('input:not([type="checkbox"]):not([type="file"]), select, textarea');
+    if (first) first.focus();
+  }, 60);
 }
 
 function closeModal() {
@@ -1173,13 +1185,17 @@ $('modalForm').addEventListener('submit', async (e) => {
   if (error) {
     $('modalSubmit').disabled = false;
     $('modalSubmit').textContent = 'Save';
-    toast('Save failed: ' + error.message, 'err');
+    const friendly = /JWT/i.test(error.message)
+      ? 'Session expired. Please sign in again.'
+      : error.message;
+    toast('Save failed: ' + friendly, 'err');
+    if (/JWT/i.test(error.message)) await sb.auth.signOut();
     return;
   }
   closeModal();
   toast(kind + ' added', 'ok');
   invalidateCacheFor(spec.table);
-  loadTab(spec.table);
+  loadTab(spec.table, { highlightFirst: true });
 });
 
 // ---- Inline status writes (Phase 4 sprint 1) ----
