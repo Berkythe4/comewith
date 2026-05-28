@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Unsubscribe — Come With</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root { --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;--mid:#8A7F72;--border:rgba(26,20,16,0.14);--green:#3B6D11; }
+body { background: var(--bg); color: var(--ink); font-family: 'Inconsolata', monospace; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+body::before { content:''; position:fixed; inset:0; background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px); background-size:18px 18px; pointer-events:none; z-index:0; }
+.card { background: white; border: 1px solid var(--border); padding: 40px 36px; max-width: 460px; width: 100%; text-align: center; position: relative; z-index: 1; }
+.brand { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.06em; margin-bottom: 8px; }
+.kicker { font-size: 0.65rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mid); margin-bottom: 24px; }
+.state { font-size: 0.95rem; line-height: 1.6; }
+.state.ok { color: var(--green); }
+.state.err { color: var(--red); }
+.btn { font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 0.1em; padding: 14px 28px; background: var(--red); color: white; border: none; cursor: pointer; margin-top: 18px; transition: background 0.15s; }
+.btn:hover:not(:disabled) { background: var(--red-dk); }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.spinner { display: inline-block; width: 18px; height: 18px; border: 2px solid var(--border); border-top-color: var(--red); border-radius: 50%; animation: spin 0.6s linear infinite; margin-right: 8px; vertical-align: -3px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.detail { font-size: 0.78rem; color: var(--mid); margin-top: 14px; }
+.detail a { color: var(--ink); }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">Come With</div>
+  <div class="kicker">Unsubscribe</div>
+  <div id="state" class="state">Click below to remove this email from the Come With mailing list.</div>
+  <button class="btn" id="confirmBtn">Confirm unsubscribe</button>
+</div>
+<script type="module">
+const SUPABASE_URL = 'https://qjosjafbizxdtkisyrqm.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_aks4D0QB6tuO8pZYxCqB4A_TdBnUdYe';
+const escapeHtml = (s) => { if (s == null) return ''; return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'", '&#39;'); };
+const token = new URLSearchParams(window.location.search).get('token');
+const stateEl = document.getElementById('state');
+const btn = document.getElementById('confirmBtn');
+function show(html, kind, hideBtn = true) {
+  stateEl.className = 'state ' + kind;
+  stateEl.innerHTML = html;
+  if (hideBtn) btn.style.display = 'none';
+}
+if (!token) {
+  show('Missing token. Did you copy the link from an email correctly?', 'err');
+}
+btn.addEventListener('click', async () => {
+  btn.disabled = true;
+  stateEl.innerHTML = '<span class="spinner"></span>Unsubscribing…';
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/unsubscribe`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': PUBLISHABLE_KEY, 'Authorization': `Bearer ${PUBLISHABLE_KEY}` },
+      body: JSON.stringify({ token }),
+    });
+    const d = await res.json();
+    if (!res.ok) { show(escapeHtml(d.error || 'Unsubscribe failed'), 'err'); return; }
+    const already = d.already ? ' (already unsubscribed earlier)' : '';
+    show(`Unsubscribed${already}.<br><br><strong>${escapeHtml(d.email)}</strong> won't get any more Come With emails.<div class="detail">Changed your mind? Just sign up again at <a href="https://comewith.org">comewith.org</a>.</div>`, 'ok');
+  } catch (e) {
+    show(escapeHtml('Network error: ' + (e.message || e)), 'err', false);
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
