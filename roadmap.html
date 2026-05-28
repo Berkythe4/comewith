@@ -113,6 +113,80 @@
       display: flex;
       justify-content: center;
     }
+
+    /* ===== Hand-coded architecture diagram (replaces Mermaid for this one) ===== */
+    .arch {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 16px;
+      margin: 20px 0 8px;
+    }
+    @media (max-width: 880px) {
+      .arch { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 520px) {
+      .arch { grid-template-columns: 1fr; }
+    }
+    .arch-col {
+      background: #ffffff;
+      border: 1px solid #1A1410;
+      border-top: 4px solid var(--accent);
+      padding: 16px 14px 18px;
+      color: #1A1410;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .arch-col.users    { border-top-color: #1A1410; }
+    .arch-col.netlify  { border-top-color: #d9a92b; }
+    .arch-col.supabase { border-top-color: #2f8c4d; }
+    .arch-col.external { border-top-color: #C13B2A; }
+    .arch-col h4 {
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: #1A1410;
+      margin: 0 0 4px;
+    }
+    .arch-node {
+      background: #F2EDE6;
+      border: 1px solid #1A1410;
+      padding: 10px 12px;
+      color: #1A1410;
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
+    .arch-node.admin {
+      background: #fff;
+      border: 2px solid var(--accent);
+    }
+    .arch-node strong { display: block; font-size: 0.9rem; margin-bottom: 2px; color: #1A1410; }
+    .arch-node code {
+      background: transparent;
+      color: #1A1410;
+      padding: 0;
+      font-size: 0.78rem;
+    }
+    .arch-node .meta {
+      display: block;
+      font-size: 0.72rem;
+      color: #8A7F72;
+      margin-top: 2px;
+    }
+    .arch-legend {
+      display: flex; gap: 16px; flex-wrap: wrap;
+      margin: 0 0 12px;
+      font-size: 0.78rem; color: #8A7F72;
+    }
+    .arch-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .arch-legend .sw {
+      display: inline-block; width: 14px; height: 14px; border: 1px solid #1A1410;
+      border-radius: 2px;
+    }
+    .arch-legend .sw.users    { background: #fff; border-top: 3px solid #1A1410; }
+    .arch-legend .sw.netlify  { background: #fff; border-top: 3px solid #d9a92b; }
+    .arch-legend .sw.supabase { background: #fff; border-top: 3px solid #2f8c4d; }
+    .arch-legend .sw.external { background: #fff; border-top: 3px solid #C13B2A; }
     /* No mermaid-internal CSS overrides — let the per-node `style` directives
        in the diagram source dictate node colors. Adding `!important` here
        backfires when a selector accidentally matches a node's background
@@ -280,91 +354,50 @@ flowchart TD
 
   <p>Target state after Phase 11. Apps Script + Google Sheets are sunset and don't appear.</p>
 
-  <pre class="mermaid">
-flowchart LR
-    subgraph USERS["Users"]
-        direction TB
-        VIS[Visitor]
-        CUST[Signed-in customer]
-        ADMIN[Berky · master_admin]
-    end
+  <div class="arch-legend">
+    <span><i class="sw users"></i> Users</span>
+    <span><i class="sw netlify"></i> Netlify · comewith.org</span>
+    <span><i class="sw supabase"></i> Supabase platform</span>
+    <span><i class="sw external"></i> External services</span>
+  </div>
 
-    subgraph NETLIFY["Netlify · comewith.org"]
-        direction TB
-        IDX[index.html<br/>marketing + inquiry form]
-        EQP[equipment_list.html<br/>public rental catalog]
-        EVT["/events/dance-infusion-*<br/>event hub pages"]
-        AUTH_PG[auth.html<br/>magic-link entry]
-        PORT[customer_portal.html<br/>my agreements]
-        DASH[dashboard.html<br/>admin workspace]
-    end
+  <div class="arch">
 
-    subgraph SB["Supabase platform"]
-        direction TB
-        SBA[Auth<br/>magic-link · JWT]
-        REST[PostgREST API<br/>CRUD with RLS]
-        STG[Storage<br/>6 buckets]
-        EDGE[Edge Functions<br/>10 deployed]
-        CRON[pg_cron<br/>scheduled triggers]
-        DB[(Postgres<br/>35 tables + views<br/>RLS policies)]
-    end
+    <div class="arch-col users">
+      <h4>Users</h4>
+      <div class="arch-node"><strong>Visitor</strong>Unauthenticated. Lands on the marketing + inquiry page.</div>
+      <div class="arch-node"><strong>Signed-in customer</strong>Has an <code>auth.users</code> row + matching <code>clients</code> row.</div>
+      <div class="arch-node admin"><strong>Berky · master_admin</strong>Profile.role = master_admin. Routes to dashboard.</div>
+    </div>
 
-    subgraph EXT["External"]
-        direction TB
-        RES[Resend<br/>transactional + broadcast]
-        DNS[Namecheap DNS<br/>SPF · DKIM · MX]
-        ZEF[Zeffy / Resident Advisor<br/>ticketing CSVs]
-    end
+    <div class="arch-col netlify">
+      <h4>Netlify · comewith.org</h4>
+      <div class="arch-node"><strong>index.html</strong>Marketing + inquiry form + mailing list signup.</div>
+      <div class="arch-node"><strong>customer_portal.html</strong>Signed-in customer's agreements list.</div>
+      <div class="arch-node"><strong>dashboard.html</strong>Admin workspace (10 tabs).</div>
+      <div class="arch-node"><strong>sign.html</strong>Tokenized agreement signing page.</div>
+      <div class="arch-node"><strong>confirm.html / unsubscribe.html</strong>Mailing list double-opt-in + global unsub.</div>
+      <div class="arch-node"><span class="meta">/legacy/ — Apps Script-era pages preserved</span></div>
+    </div>
 
-    VIS --> IDX
-    VIS --> EQP
-    VIS --> EVT
-    VIS --> AUTH_PG
-    CUST --> PORT
-    CUST --> AUTH_PG
-    ADMIN --> DASH
-    ADMIN --> AUTH_PG
+    <div class="arch-col supabase">
+      <h4>Supabase platform</h4>
+      <div class="arch-node"><strong>Auth</strong>Magic-link email · issues JWTs.</div>
+      <div class="arch-node"><strong>PostgREST</strong>CRUD with RLS enforced server-side.</div>
+      <div class="arch-node"><strong>Storage</strong>6 buckets: agreements, receipts, event/artist/equipment/sponsor photos.</div>
+      <div class="arch-node"><strong>Edge Functions</strong>10 deployed: send-agreement, sign flow, inquiry-notify, subscribe + confirm/unsub, send-campaign, resend-webhook, get-event-hub.</div>
+      <div class="arch-node"><strong>pg_cron</strong>Nightly MV refresh + 365-day audit retention.</div>
+      <div class="arch-node"><strong>Postgres</strong>35 tables · views + materialized views · RLS policies · audit_log.</div>
+    </div>
 
-    IDX -->|insert inquiry| REST
-    EQP -->|read available| REST
-    EVT -->|read event| REST
-    AUTH_PG -->|sign in| SBA
-    PORT -->|read own agreements| REST
-    PORT -->|signed URLs| STG
-    DASH -->|CRUD all tables| REST
-    DASH -->|upload receipts| STG
-    DASH -->|trigger sends| EDGE
+    <div class="arch-col external">
+      <h4>External services</h4>
+      <div class="arch-node"><strong>Resend</strong>Transactional + broadcast email. Webhook reports back to <code>mailing_events</code>.</div>
+      <div class="arch-node"><strong>Namecheap DNS</strong>SPF · DKIM · MX records for comewith.org.</div>
+      <div class="arch-node"><strong>Zeffy / Resident Advisor</strong>Ticketing CSV imports → <code>ticketing</code> table.</div>
+    </div>
 
-    REST --> DB
-    EDGE -->|service-role| DB
-    EDGE -->|send| RES
-    EDGE -->|sign URLs| STG
-    SBA -.->|JWT| REST
-    CRON -.->|via pg_net| EDGE
-    CRON -->|refresh MVs| DB
-    RES -.->|delivery webhooks| EDGE
-    DNS -.->|verifies| RES
-    ZEF -.->|periodic import| EDGE
-
-    style VIS fill:#ffffff,stroke:#1A1410,color:#1A1410
-    style CUST fill:#ffffff,stroke:#1A1410,color:#1A1410
-    style ADMIN fill:#ffffff,stroke:#C13B2A,stroke-width:2px,color:#1A1410
-    style IDX fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style EQP fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style EVT fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style AUTH_PG fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style PORT fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style DASH fill:#FFF9E6,stroke:#1A1410,color:#1A1410
-    style SBA fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style REST fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style STG fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style EDGE fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style CRON fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style DB fill:#E0F2E0,stroke:#1A1410,color:#1A1410
-    style RES fill:#FCE4EC,stroke:#1A1410,color:#1A1410
-    style DNS fill:#FCE4EC,stroke:#1A1410,color:#1A1410
-    style ZEF fill:#FCE4EC,stroke:#1A1410,color:#1A1410
-  </pre>
+  </div>
 
   <h3>Request-flow examples</h3>
 
