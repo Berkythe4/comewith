@@ -1,0 +1,1571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Dashboard</title>
+<!--
+  GOOGLE APPS SCRIPT NOTE:
+  This dashboard fetches data via GET requests to the Apps Script URL.
+  Your Apps Script needs a doGet(e) handler that returns JSON based on e.parameter.action:
+
+  function doGet(e) {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var action = e.parameter.action;
+
+    if (action === 'getInquiries') {
+      var sheet = ss.getSheetByName('Bookings Intake');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getAgreements') {
+      var sheet = ss.getSheetByName('Events Services Agreements');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getRentals') {
+      var sheet = ss.getSheetByName('Equipment Rental Agreements');
+      return jsonResponse(sheetToArray(sheet));
+    }
+    if (action === 'getAll') {
+      return jsonResponse({
+        inquiries: sheetToArray(ss.getSheetByName('Bookings Intake')),
+        agreements: sheetToArray(ss.getSheetByName('Events Services Agreements')),
+        rentals: sheetToArray(ss.getSheetByName('Equipment Rental Agreements'))
+      });
+    }
+    if (action === 'getCustomerData') {
+      var email = (e.parameter.email || '').toLowerCase().trim();
+      var filterByEmail = function(rows) {
+        return rows.filter(function(r) {
+          for (var k in r) {
+            if (k.toLowerCase() === 'email' && String(r[k]).toLowerCase().trim() === email) return true;
+          }
+          return false;
+        });
+      };
+      return jsonResponse({
+        inquiries: filterByEmail(sheetToArray(ss.getSheetByName('Bookings Intake'))),
+        agreements: filterByEmail(sheetToArray(ss.getSheetByName('Events Services Agreements'))),
+        rentals: filterByEmail(sheetToArray(ss.getSheetByName('Equipment Rental Agreements')))
+      });
+    }
+    return jsonResponse({error: 'Unknown action'});
+  }
+
+  function sheetToArray(sheet) {
+    if (!sheet) return [];
+    var data = sheet.getDataRange().getValues();
+    if (data.length < 2) return [];
+    var headers = data[0];
+    var rows = [];
+    for (var i = 1; i < data.length; i++) {
+      var obj = {};
+      for (var j = 0; j < headers.length; j++) {
+        obj[headers[j]] = data[i][j];
+      }
+      rows.push(obj);
+    }
+    return rows;
+  }
+
+  function jsonResponse(data) {
+    return ContentService.createTextOutput(JSON.stringify(data))
+      .setMimeType(ContentService.MimeType.JSON);
+  }
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --ink:#1A1410;--bg:#F2EDE6;--red:#C13B2A;--red-dk:#8C2A1C;
+  --mid:#8A7F72;--off:#E8E2D9;--border:rgba(26,20,16,0.14);
+  --border-strong:rgba(26,20,16,0.3);--green:#3B6D11;--green-bg:#DFF0D0;
+  --amber:#854F0B;--amber-bg:#FFF0D0;--blue:#185FA5;--blue-bg:#DCEEFF;
+}
+body{background:var(--bg);color:var(--ink);font-family:'Inconsolata',monospace;font-weight:400;padding:0;margin:0;min-height:100vh;}
+body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(circle,rgba(26,20,16,0.05) 1px,transparent 1px);background-size:18px 18px;pointer-events:none;z-index:0;}
+
+.admin-content{position:relative;z-index:1;}
+
+/* LAYOUT */
+.dash-layout{display:grid;grid-template-columns:220px 1fr;min-height:100vh;}
+
+/* SIDEBAR */
+.sidebar{background:var(--ink);padding:0;display:flex;flex-direction:column;}
+.sidebar-header{padding:24px 20px 20px;}
+.sidebar-brand{font-family:'Bebas Neue',sans-serif;font-size:1.6rem;letter-spacing:0.06em;color:var(--bg);line-height:1;}
+.sidebar-role{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:rgba(242,237,230,0.4);margin-top:4px;}
+
+.sidebar-profile{display:flex;align-items:center;gap:12px;padding:16px 20px;border-top:1px solid rgba(242,237,230,0.08);border-bottom:1px solid rgba(242,237,230,0.08);}
+.profile-avatar{width:34px;height:34px;background:var(--red);display:flex;align-items:center;justify-content:center;font-family:'Bebas Neue',sans-serif;font-size:1rem;color:white;flex-shrink:0;}
+.profile-info{}
+.profile-name{font-family:'Bebas Neue',sans-serif;font-size:0.95rem;letter-spacing:0.06em;color:var(--bg);}
+.profile-sub{font-size:0.58rem;letter-spacing:0.1em;text-transform:uppercase;color:rgba(242,237,230,0.4);}
+
+.sidebar-nav{padding:16px 0;flex:1;}
+.sidebar-nav a{display:flex;align-items:center;gap:10px;padding:10px 20px;font-family:'Inconsolata',monospace;font-size:0.8rem;letter-spacing:0.06em;color:rgba(242,237,230,0.55);text-decoration:none;transition:all 0.15s;border-left:3px solid transparent;}
+.sidebar-nav a:hover{color:var(--bg);background:rgba(242,237,230,0.04);}
+.sidebar-nav a.active{color:var(--bg);border-left-color:var(--red);background:rgba(242,237,230,0.06);}
+.sidebar-nav .nav-divider{height:1px;background:rgba(242,237,230,0.06);margin:10px 20px;}
+
+.sidebar-actions{padding:16px 20px;border-top:1px solid rgba(242,237,230,0.08);}
+.sidebar-actions .section-label-s{font-size:0.55rem;letter-spacing:0.2em;text-transform:uppercase;color:rgba(242,237,230,0.3);margin-bottom:10px;}
+.action-btn{display:block;width:100%;font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.1em;padding:10px 14px;border:none;cursor:pointer;transition:all 0.15s;text-align:left;margin-bottom:4px;text-decoration:none;}
+.action-btn-primary{background:var(--red);color:white;}
+.action-btn-primary:hover{background:var(--red-dk);}
+.action-btn-secondary{background:rgba(242,237,230,0.06);color:rgba(242,237,230,0.6);border:1px solid rgba(242,237,230,0.1);}
+.action-btn-secondary:hover{color:var(--bg);border-color:rgba(242,237,230,0.2);}
+
+.sidebar-footer{padding:12px 20px;border-top:1px solid rgba(242,237,230,0.08);}
+.sidebar-footer a{font-size:0.65rem;color:rgba(242,237,230,0.35);text-decoration:none;letter-spacing:0.06em;}
+.sidebar-footer a:hover{color:var(--bg);}
+.sidebar-footer button{font-size:0.65rem;color:rgba(242,237,230,0.35);background:none;border:none;cursor:pointer;letter-spacing:0.06em;padding:0;font-family:'Inconsolata',monospace;}
+.sidebar-footer button:hover{color:var(--red);}
+
+/* MAIN */
+.main{padding:32px 36px 60px;overflow-x:auto;}
+.main-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px;}
+.main-title{font-family:'Bebas Neue',sans-serif;font-size:2rem;letter-spacing:0.04em;color:var(--ink);}
+.refresh-btn{font-family:'Inconsolata',monospace;font-size:0.72rem;letter-spacing:0.08em;color:var(--mid);background:none;border:1px solid var(--border);padding:8px 16px;cursor:pointer;transition:all 0.15s;}
+.refresh-btn:hover{color:var(--red);border-color:var(--red);}
+
+/* TABS */
+.tabs{display:flex;gap:0;border-bottom:2px solid var(--ink);margin-bottom:24px;}
+.tab{font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.1em;padding:12px 24px;cursor:pointer;color:var(--mid);background:none;border:none;border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;}
+.tab:hover{color:var(--ink);}
+.tab.active{color:var(--ink);border-bottom-color:var(--red);}
+
+/* TAB PANELS */
+.tab-panel{display:none;}
+.tab-panel.active{display:block;}
+
+/* FILTERS (archive) */
+.filter-bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:20px;}
+.filter-bar label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);}
+.filter-bar input,.filter-bar select{font-family:'Inconsolata',monospace;font-size:0.82rem;padding:8px 10px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;}
+.filter-bar input:focus,.filter-bar select:focus{border-color:var(--red);}
+
+/* TABLE */
+.data-table{width:100%;border-collapse:collapse;font-size:0.82rem;}
+.data-table th{font-size:0.58rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--mid);text-align:left;padding:10px 12px;border-bottom:2px solid var(--ink);background:var(--off);white-space:nowrap;}
+.data-table td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top;}
+.data-table tr:hover td{background:rgba(193,59,42,0.03);}
+.data-table .no-data{text-align:center;color:var(--mid);font-style:italic;padding:40px 12px;}
+
+/* STATUS BADGES */
+.badge{display:inline-block;font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;padding:3px 10px;font-weight:500;white-space:nowrap;}
+.badge-new{background:var(--blue-bg);color:var(--blue);}
+.badge-active{background:var(--amber-bg);color:var(--amber);}
+.badge-complete{background:var(--green-bg);color:var(--green);}
+
+/* Segmented toggle for filters */
+.seg-toggle{display:inline-flex;border:1px solid var(--border-strong);background:white;}
+.seg-btn{font-family:'Inconsolata',monospace;font-size:0.72rem;letter-spacing:0.06em;padding:6px 12px;background:transparent;color:var(--mid);border:none;cursor:pointer;transition:all 0.15s;}
+.seg-btn:hover{color:var(--ink);}
+.seg-btn.seg-active{background:var(--ink);color:var(--bg);}
+
+/* Inline per-row resend/delete/void feedback */
+.row-note{display:inline-block;margin-left:8px;font-size:0.62rem;color:var(--green);letter-spacing:0.08em;opacity:0;transition:opacity 0.2s;}
+.row-note.show{opacity:1;}
+.row-note.err{color:var(--red);}
+
+/* Link action buttons that look distinct from primary row-btn */
+.row-btn-danger{color:var(--red);border-color:rgba(193,59,42,0.35);}
+.row-btn-danger:hover{background:var(--red);color:white;border-color:var(--red);}
+.row-btn-warn{color:var(--amber);border-color:rgba(133,79,11,0.35);}
+.row-btn-warn:hover{background:var(--amber);color:white;border-color:var(--amber);}
+.row-btn-upload{color:var(--ink);border-color:var(--ink);}
+.row-btn-upload:hover{background:var(--ink);color:var(--bg);border-color:var(--ink);}
+.row-btn-done{background:var(--green-bg);color:var(--green);border-color:var(--green);text-decoration:none;}
+.row-btn-done:hover{background:var(--green);color:white;}
+
+/* Inline status dropdown */
+.status-select{font-family:'Inconsolata',monospace;font-size:0.72rem;padding:5px 8px;border:1px solid var(--border-strong);background:white;color:var(--ink);outline:none;border-radius:0;-webkit-appearance:none;cursor:pointer;letter-spacing:0.04em;min-width:160px;}
+.status-select:focus{border-color:var(--red);}
+.status-select.updating{opacity:0.5;}
+.status-saved{display:inline-block;margin-left:6px;font-size:0.62rem;color:var(--green);letter-spacing:0.08em;opacity:0;transition:opacity 0.2s;}
+.status-saved.show{opacity:1;}
+
+/* ROW ACTIONS */
+.row-actions{display:flex;gap:6px;flex-wrap:wrap;}
+.row-btn{font-family:'Inconsolata',monospace;font-size:0.68rem;letter-spacing:0.06em;padding:5px 10px;border:1px solid var(--border);background:white;color:var(--ink);cursor:pointer;transition:all 0.12s;white-space:nowrap;}
+.row-btn:hover{border-color:var(--red);color:var(--red);}
+.row-btn-done{background:var(--green-bg);border-color:var(--green);color:var(--green);}
+
+/* EXPANDABLE DETAIL */
+.detail-row{display:none;}
+.detail-row.open{display:table-row;}
+.detail-row td{background:var(--off);padding:16px 20px;}
+.detail-content{display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;font-size:0.78rem;}
+.detail-content .dk{font-size:0.6rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--mid);}
+.detail-content .dv{color:var(--ink);margin-bottom:8px;word-break:break-word;}
+
+/* LOADING */
+.loading{text-align:center;padding:48px;color:var(--mid);font-size:0.85rem;}
+.loading-spinner{display:inline-block;width:20px;height:20px;border:2px solid var(--border);border-top-color:var(--red);border-radius:50%;animation:spin 0.6s linear infinite;margin-right:8px;vertical-align:middle;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* COUNTS */
+.stat-row{display:flex;gap:2px;margin-bottom:24px;}
+.stat-card{flex:1;background:white;border:1px solid var(--border);padding:16px 18px;}
+.stat-num{font-family:'Bebas Neue',sans-serif;font-size:1.8rem;color:var(--ink);line-height:1;}
+.stat-label{font-size:0.6rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-top:4px;}
+
+/* RESPONSIVE */
+@media(max-width:800px){
+  .dash-layout{grid-template-columns:1fr;}
+  .sidebar{display:none;}
+  .main{padding:20px 16px 40px;}
+  .tabs{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .tab{padding:10px 16px;font-size:0.8rem;}
+  .data-table{font-size:0.75rem;}
+  .data-table th,.data-table td{padding:8px 8px;}
+  .stat-row{flex-wrap:wrap;}
+  .stat-card{min-width:120px;}
+  .detail-content{grid-template-columns:1fr;}
+  .filter-bar{flex-direction:column;align-items:flex-start;}
+}
+</style>
+</head>
+<body>
+
+<!-- ADMIN CONTENT (auth handled by users.js) -->
+<div class="admin-content" id="adminContent" style="display:none;">
+  <div class="dash-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="index.html" style="text-decoration:none;"><div class="sidebar-brand">Come With</div></a>
+        <div class="sidebar-role">Business Dashboard</div>
+      </div>
+
+      <div class="sidebar-profile">
+        <div class="profile-avatar">B</div>
+        <div class="profile-info">
+          <div class="profile-name">Berky</div>
+          <div class="profile-sub">Come With Admin</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#" class="active" data-tab="inquiries">Inquiries</a>
+        <a href="#" data-tab="agreements">Agreements</a>
+        <a href="#" data-tab="rentals">Equipment Rentals</a>
+        <a href="#" data-tab="income">Events &amp; Income</a>
+        <a href="#" data-tab="links">Links</a>
+        <a href="#" data-tab="archive">Archive</a>
+        <a href="#" data-tab="users" id="navUsers" style="display:none;">Users</a>
+        <div class="nav-divider"></div>
+        <a href="index.html">&larr; Back to site</a>
+      </nav>
+
+      <div class="sidebar-actions">
+        <div class="section-label-s">Quick actions</div>
+        <a href="send_agreement.html" class="action-btn action-btn-primary">New Agreement</a>
+        <a href="ComeWith_Equipment_Rental_Agreement.html" class="action-btn action-btn-secondary">Equipment Rental Form</a>
+        <a href="ComeWith_Events_Services_Agreement.html" class="action-btn action-btn-secondary">Events Agreement Form</a>
+        <a href="come_with_equipment_list.html" class="action-btn action-btn-secondary">Equipment List</a>
+      </div>
+
+      <div class="sidebar-footer">
+        <button onclick="logout()">Log out</button>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+
+      <div class="main-header">
+        <div class="main-title">Dashboard</div>
+        <button class="refresh-btn" onclick="loadAllData()">Refresh data</button>
+      </div>
+
+      <!-- STATS -->
+      <div class="stat-row" id="statRow">
+        <div class="stat-card"><div class="stat-num" id="statInquiries">—</div><div class="stat-label">Inquiries</div></div>
+        <div class="stat-card"><div class="stat-num" id="statAgreements">—</div><div class="stat-label">Agreements</div></div>
+        <div class="stat-card"><div class="stat-num" id="statRentals">—</div><div class="stat-label">Rentals</div></div>
+        <div class="stat-card" style="border-color:var(--red);"><div class="stat-num" id="statIncomeYTD" style="color:var(--red);">—</div><div class="stat-label">Income (YTD)</div></div>
+        <div class="stat-card"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total records</div></div>
+      </div>
+
+      <!-- TABS -->
+      <div class="tabs">
+        <button class="tab active" data-tab="inquiries">Inquiries</button>
+        <button class="tab" data-tab="agreements">Agreements</button>
+        <button class="tab" data-tab="rentals">Equipment Rentals</button>
+        <button class="tab" data-tab="income">Events &amp; Income</button>
+        <button class="tab" data-tab="links">Links</button>
+        <button class="tab" data-tab="archive">Archive</button>
+        <button class="tab" data-tab="users" id="tabUsers" style="display:none;">Users</button>
+      </div>
+
+      <!-- INQUIRIES TAB -->
+      <div class="tab-panel active" id="panel-inquiries">
+        <div class="loading" id="loading-inquiries"><span class="loading-spinner"></span>Loading inquiries...</div>
+        <table class="data-table" id="table-inquiries" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Email</th>
+              <th>Services Interested</th>
+              <th>Status</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-inquiries"></tbody>
+        </table>
+      </div>
+
+      <!-- AGREEMENTS TAB -->
+      <div class="tab-panel" id="panel-agreements">
+        <div class="loading" id="loading-agreements"><span class="loading-spinner"></span>Loading agreements...</div>
+        <table class="data-table" id="table-agreements" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Client</th>
+              <th>Event Date</th>
+              <th>Total Fee</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-agreements"></tbody>
+        </table>
+      </div>
+
+      <!-- RENTALS TAB -->
+      <div class="tab-panel" id="panel-rentals">
+        <div class="loading" id="loading-rentals"><span class="loading-spinner"></span>Loading rentals...</div>
+        <table class="data-table" id="table-rentals" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Renter</th>
+              <th>Pickup</th>
+              <th>Return</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-rentals"></tbody>
+        </table>
+      </div>
+
+      <!-- LINKS TAB (agreement links) -->
+      <div class="tab-panel" id="panel-links">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;flex:1;min-width:260px;">Agreement links generated from Send Agreement. <strong>Draft</strong> → admin needs to complete &amp; submit · <strong>Pending Client Signature</strong> → waiting on client · <strong>Signed</strong> → done · <strong>Voided</strong> → link disabled.</div>
+          <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+            <div id="linksRowCount" style="font-family:'Bebas Neue',sans-serif;font-size:0.85rem;letter-spacing:0.08em;color:var(--ink);"></div>
+            <div class="seg-toggle" role="tablist" aria-label="Agreement filter">
+              <button type="button" class="seg-btn seg-active" data-filter="active" onclick="setLinksFilter('active')">Active only</button>
+              <button type="button" class="seg-btn" data-filter="all" onclick="setLinksFilter('all')">Show all</button>
+            </div>
+          </div>
+        </div>
+        <div class="loading" id="loading-links"><span class="loading-spinner"></span>Loading links...</div>
+        <table class="data-table" id="table-links" style="display:none;">
+          <thead>
+            <tr>
+              <th>Agreement ID</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>Email</th>
+              <th>Created</th>
+              <th>Status</th>
+              <th>Link</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-links"></tbody>
+        </table>
+      </div>
+
+      <!-- EVENTS & INCOME TAB -->
+      <div class="tab-panel" id="panel-income">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:12px;">
+          <div style="font-size:0.82rem;color:var(--mid);line-height:1.5;">Income entries from the Income sheet. YTD total reflects the current calendar year.</div>
+          <div id="incomeSummary" style="font-family:'Bebas Neue',sans-serif;font-size:0.9rem;letter-spacing:0.08em;color:var(--ink);"></div>
+        </div>
+        <div class="loading" id="loading-income"><span class="loading-spinner"></span>Loading income...</div>
+        <table class="data-table" id="table-income" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Invoice #</th>
+              <th>Client</th>
+              <th>Service Type</th>
+              <th style="text-align:right;">Amount</th>
+              <th>Payment Method</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-income"></tbody>
+        </table>
+      </div>
+
+      <!-- ARCHIVE TAB -->
+      <div class="tab-panel" id="panel-archive">
+        <div class="filter-bar">
+          <div>
+            <label>From</label>
+            <input type="date" id="archiveFrom">
+          </div>
+          <div>
+            <label>To</label>
+            <input type="date" id="archiveTo">
+          </div>
+          <div>
+            <label>Type</label>
+            <select id="archiveType">
+              <option value="all">All types</option>
+              <option value="inquiry">Inquiries</option>
+              <option value="agreement">Agreements</option>
+              <option value="rental">Rentals</option>
+            </select>
+          </div>
+          <button class="refresh-btn" onclick="filterArchive()">Filter</button>
+        </div>
+        <div class="loading" id="loading-archive"><span class="loading-spinner"></span>Loading archive...</div>
+        <table class="data-table" id="table-archive" style="display:none;">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Client</th>
+              <th>Details</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="tbody-archive"></tbody>
+        </table>
+      </div>
+
+      <!-- USERS TAB (master admin only) -->
+      <div class="tab-panel" id="panel-users">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+          <div style="font-size:0.75rem;color:var(--mid);">Manage user accounts. Master admin only.</div>
+          <button class="refresh-btn" id="createAdminBtn" onclick="showCreateAdmin()" style="background:var(--red);color:white;border-color:var(--red);">+ Create Admin Account</button>
+        </div>
+
+        <!-- Create admin inline form -->
+        <div id="createAdminForm" style="display:none;background:white;border:2px solid var(--ink);padding:20px;margin-bottom:20px;">
+          <div style="font-family:'Bebas Neue',sans-serif;font-size:1rem;letter-spacing:0.08em;margin-bottom:12px;">Create Admin Account</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Name</label><input type="text" id="newAdminName" placeholder="Full name" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;"></div>
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Email</label><input type="email" id="newAdminEmail" placeholder="admin@email.com" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;"></div>
+            <div class="field" style="margin:0;"><label style="display:block;font-size:0.58rem;letter-spacing:0.14em;text-transform:uppercase;color:var(--mid);margin-bottom:4px;">Role</label><select id="newAdminRole" style="width:100%;font-family:'Inconsolata',monospace;font-size:0.85rem;padding:8px 10px;border:1px solid var(--border-strong);outline:none;background:white;"><option value="sub_admin">Sub Admin</option><option value="master_admin">Master Admin</option></select></div>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;">
+            <button class="refresh-btn" style="background:var(--ink);color:var(--bg);border-color:var(--ink);" onclick="doCreateAdmin()">Create Account</button>
+            <button class="refresh-btn" onclick="document.getElementById('createAdminForm').style.display='none'">Cancel</button>
+          </div>
+          <div id="createAdminResult" style="display:none;margin-top:10px;font-size:0.78rem;padding:10px;background:#DFF0D0;border:1px solid #3B6D11;color:#3B6D11;"></div>
+        </div>
+
+        <div class="loading" id="loading-users"><span class="loading-spinner"></span>Loading users...</div>
+        <table class="data-table" id="table-users" style="display:none;">
+          <thead>
+            <tr>
+              <th>Email</th>
+              <th>Name</th>
+              <th>Role</th>
+              <th>Created</th>
+              <th>Last Login</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="tbody-users"></tbody>
+        </table>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<script src="users.js"></script>
+<script>
+// ── SCRIPT URL (resolved per-fetch, never at module load time) ─────
+// Hardcoded fallback lives here so the dashboard still works even if
+// users.js failed to load or CW_AUTH isn't initialized yet.
+const FALLBACK_URL = "https://script.google.com/macros/s/AKfycbymD36gSx1RevZo4JukipWYFJEwUwyN_rQGX65Zzt_d8zPuSlkJQzaYpLp5DU7RWT0HkA/exec";
+
+function getScriptUrl() {
+  const url = (window.CW_AUTH && CW_AUTH.SCRIPT_URL) ? CW_AUTH.SCRIPT_URL : FALLBACK_URL;
+  return url;
+}
+
+console.log('[dashboard] users.js loaded?', typeof CW_AUTH !== 'undefined');
+console.log('[dashboard] CW_AUTH.SCRIPT_URL =', (window.CW_AUTH && CW_AUTH.SCRIPT_URL) || '(unset)');
+console.log('[dashboard] FALLBACK_URL =', FALLBACK_URL);
+
+// ── AUTH (role-based via users.js) ─────────────────────────
+// Wait for DOM + users.js before wiring anything up.
+function bootstrapDashboard() {
+  if (typeof CW_AUTH === 'undefined') {
+    console.error('[dashboard] users.js did not load — CW_AUTH is undefined. Check <script src="users.js"> path.');
+    document.getElementById('loading-inquiries').innerHTML =
+      '<div style="color:var(--red);font-size:0.82rem;">users.js failed to load. Check the browser Network tab for a 404 on users.js.</div>';
+    return;
+  }
+
+  CW_AUTH.init({
+    requireAuth: true,
+    allowedRoles: [CW_AUTH.ROLES.MASTER_ADMIN, CW_AUTH.ROLES.SUB_ADMIN],
+    onReady: function(user) {
+      document.getElementById('adminContent').style.display = 'block';
+      var pn = document.querySelector('.profile-name');
+      if (pn) pn.textContent = user.name || user.email;
+      if (CW_AUTH.isMasterAdmin(user)) {
+        document.getElementById('navUsers').style.display = '';
+        document.getElementById('tabUsers').style.display = '';
+      }
+      loadAllData();
+    }
+  });
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', bootstrapDashboard);
+} else {
+  // DOM already ready (users.js is synchronous so it has also finished here)
+  bootstrapDashboard();
+}
+
+function logout() {
+  CW_AUTH.logout();
+}
+
+// ── TABS ─────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(function(t){
+  t.addEventListener('click',function(){
+    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
+    document.querySelectorAll('.tab-panel').forEach(function(x){x.classList.remove('active');});
+    t.classList.add('active');
+    document.getElementById('panel-'+t.getAttribute('data-tab')).classList.add('active');
+    // sync sidebar
+    document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
+      a.classList.toggle('active',a.getAttribute('data-tab')===t.getAttribute('data-tab'));
+    });
+  });
+});
+document.querySelectorAll('.sidebar-nav a[data-tab]').forEach(function(a){
+  a.addEventListener('click',function(e){
+    e.preventDefault();
+    var tab=a.getAttribute('data-tab');
+    document.querySelector('.tab[data-tab="'+tab+'"]').click();
+  });
+});
+
+// ── DATA ─────────────────────────────────────────────────
+var store={inquiries:[],agreements:[],rentals:[],income:[],links:[],incomeYTD:0,incomeAll:0};
+
+function loadAllData(){
+  loadInquiries();
+  loadAgreements();
+  loadRentals();
+  loadIncome();
+  loadLinks();
+}
+
+function fetchData(action,cb){
+  var scriptUrl = getScriptUrl();
+  if (!scriptUrl) {
+    console.error('[dashboard] No script URL available for ' + action);
+    cb({ __error: 'No script URL configured.' });
+    return;
+  }
+  var url = scriptUrl + '?action=' + encodeURIComponent(action);
+  console.log('[dashboard] fetch →', url);
+
+  fetch(url, { redirect: 'follow' })
+    .then(function(r){
+      console.log('[dashboard] ' + action + ' response status:', r.status, 'final URL:', r.url);
+      return r.text().then(function(text){
+        return { status: r.status, ok: r.ok, text: text, finalUrl: r.url };
+      });
+    })
+    .then(function(res){
+      if (!res.ok) {
+        console.error('[dashboard] ' + action + ' HTTP error ' + res.status + '. Body (first 500):', res.text.substring(0, 500));
+        cb({ __error: 'HTTP ' + res.status });
+        return;
+      }
+      // Log the first 300 chars of the raw text so we can see HTML redirects
+      // from the Google auth flow or malformed JSON.
+      console.log('[dashboard] ' + action + ' raw (first 300):', res.text.substring(0, 300));
+      var data;
+      try {
+        data = JSON.parse(res.text);
+      } catch (parseErr) {
+        console.error('[dashboard] ' + action + ' JSON parse failed:', parseErr, 'Raw body (first 500):', res.text.substring(0, 500));
+        cb({ __error: 'Parse failed' });
+        return;
+      }
+      // Surface Apps Script error objects (e.g. {error: "Unknown action"})
+      if (data && !Array.isArray(data) && data.error) {
+        console.error('[dashboard] ' + action + ' Apps Script error:', data.error);
+      }
+      cb(data);
+    })
+    .catch(function(err){
+      console.error('[dashboard] ' + action + ' fetch failed:', err);
+      cb({ __error: String(err) });
+    });
+}
+
+// Helper: safely read a field from a row object using fuzzy key matching
+function getField(row,keys){
+  if(!row)return '';
+  for(var i=0;i<keys.length;i++){
+    // exact match
+    if(row[keys[i]]!==undefined && row[keys[i]]!==null) return String(row[keys[i]]);
+    // case-insensitive search
+    var lk=keys[i].toLowerCase();
+    for(var k in row){
+      if(k.toLowerCase()===lk) return String(row[k]);
+    }
+  }
+  return '';
+}
+
+function esc(s){
+  var d=document.createElement('div');d.textContent=s||'';return d.innerHTML;
+}
+
+function fmtDate(s){
+  if(!s)return '—';
+  var d=new Date(s);
+  if(isNaN(d.getTime()))return esc(s);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+}
+
+function getBaseUrl(){
+  var loc=window.location;
+  return loc.protocol+'//'+loc.host+loc.pathname.replace(/[^/]*$/,'');
+}
+
+// ── INQUIRIES ────────────────────────────────────────────
+function loadInquiries(){
+  document.getElementById('loading-inquiries').style.display='block';
+  document.getElementById('table-inquiries').style.display='none';
+  fetchData('getInquiries',function(data){
+    if (data && data.__error) {
+      document.getElementById('loading-inquiries').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;line-height:1.6;">' +
+        '<strong>Failed to load inquiries.</strong><br>' + esc(data.__error) +
+        '<br><span style="color:var(--mid);font-size:0.72rem;">Open the browser console (F12) for details.</span></div>';
+      return;
+    }
+    if (data && !Array.isArray(data) && data.error) {
+      document.getElementById('loading-inquiries').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;line-height:1.6;">' +
+        '<strong>Apps Script error:</strong> ' + esc(data.error) + '</div>';
+      return;
+    }
+    store.inquiries=Array.isArray(data)?data:[];
+    renderInquiries();
+    updateStats();
+  });
+}
+
+var PIPELINE_STATUSES = [
+  'New',
+  'Contacted',
+  'Discovery Call Scheduled',
+  'Agreement Sent',
+  'Booked',
+  'Completed'
+];
+
+function statusBadgeClass(status){
+  var s=(status||'').toLowerCase();
+  if(s==='completed'||s==='complete')return 'badge-complete';
+  if(s==='booked')return 'badge-complete';
+  if(s==='new')return 'badge-new';
+  return 'badge-active';
+}
+
+function renderInquiries(){
+  var tbody=document.getElementById('tbody-inquiries');
+  var rows=store.inquiries;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No inquiries found. Make sure your Apps Script doGet handler is deployed.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['firstName','first name','First Name','name','Name'])+' '+getField(r,['lastName','last name','Last Name']);
+      name=name.trim()||getField(r,['clientName','client name','Client Name']);
+      var email=getField(r,['email','Email']);
+      var phone=getField(r,['phone','Phone']);
+      var instagram=getField(r,['instagram','Instagram','ig','IG']);
+      var servicesSelected=getField(r,['servicesSelected','services selected','Services Selected']);
+      var service=getField(r,['service','Service']);
+      var servicesDisplay=servicesSelected||service||'—';
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var status=getField(r,['status','Status'])||'New';
+      // Normalize legacy statuses
+      if(status.toLowerCase()==='complete')status='Completed';
+      var base=getBaseUrl();
+      var clientQs=new URLSearchParams({name:name.trim(),email:email,phone:phone,instagram:instagram}).toString();
+      var agrLink=base+'send_agreement.html?'+clientQs;
+      var svcLink=base+'services_selection.html?'+new URLSearchParams({name:name.trim(),email:email}).toString();
+      var selId='status-'+i;
+      var savedId='saved-'+i;
+
+      var options='';
+      for(var s=0;s<PIPELINE_STATUSES.length;s++){
+        var sv=PIPELINE_STATUSES[s];
+        options+='<option value="'+esc(sv)+'"'+(sv===status?' selected':'')+'>'+esc(sv)+'</option>';
+      }
+
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+esc(email)+'</td>';
+      html+='<td>'+esc(servicesDisplay)+'</td>';
+      html+='<td><select id="'+selId+'" class="status-select" onchange="updateRowStatus(this,\''+esc(email).replace(/'/g,"\\'")+'\','+i+')">'+options+'</select>';
+      html+='<span class="status-saved" id="'+savedId+'">✓ saved</span></td>';
+      html+='<td><div class="row-actions">';
+      html+='<a href="'+esc(agrLink)+'" class="row-btn" target="_blank">Send Agreement</a>';
+      html+='<a href="'+esc(svcLink)+'" class="row-btn" target="_blank">Services Link</a>';
+      html+='</div></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-inquiries').style.display='none';
+  document.getElementById('table-inquiries').style.display='table';
+}
+
+function updateRowStatus(sel,email,idx){
+  var newStatus=sel.value;
+  sel.classList.add('updating');
+  var saved=document.getElementById('saved-'+idx);
+  fetch(getScriptUrl(),{
+    method:'POST',mode:'no-cors',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({type:'updateStatus',email:email,status:newStatus})
+  });
+  // Optimistic local update
+  if(store.inquiries[idx]){
+    for(var k in store.inquiries[idx]){
+      if(k.toLowerCase()==='status'){store.inquiries[idx][k]=newStatus;break;}
+    }
+  }
+  setTimeout(function(){
+    sel.classList.remove('updating');
+    if(saved){
+      saved.classList.add('show');
+      setTimeout(function(){saved.classList.remove('show');},1500);
+    }
+  },400);
+}
+
+// ── AGREEMENTS ───────────────────────────────────────────
+function loadAgreements(){
+  document.getElementById('loading-agreements').style.display='block';
+  document.getElementById('table-agreements').style.display='none';
+  fetchData('getAgreements',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-agreements').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load agreements: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.agreements=Array.isArray(data)?data:[];
+    renderAgreements();
+    updateStats();
+  });
+}
+
+function renderAgreements(){
+  var tbody=document.getElementById('tbody-agreements');
+  var rows=store.agreements;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="5">No agreements found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['clientName','client name','Client Name','name','Name']);
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var eventDate=getField(r,['eventDate','event date','Event Date']);
+      var total=getField(r,['totalFee','total fee','Total Fee','total','Total']);
+      var status=getField(r,['status','Status'])||'Submitted';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':'badge-active';
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+fmtDate(eventDate)+'</td>';
+      html+='<td>'+esc(total)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-agreements').style.display='none';
+  document.getElementById('table-agreements').style.display='table';
+}
+
+// ── RENTALS ──────────────────────────────────────────────
+function loadRentals(){
+  document.getElementById('loading-rentals').style.display='block';
+  document.getElementById('table-rentals').style.display='none';
+  fetchData('getRentals',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-rentals').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load rentals: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.rentals=Array.isArray(data)?data:[];
+    renderRentals();
+    updateStats();
+    renderArchive();
+  });
+}
+
+function renderRentals(){
+  var tbody=document.getElementById('tbody-rentals');
+  var rows=store.rentals;
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No rental agreements found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=rows.length-1;i>=0;i--){
+      var r=rows[i];
+      var name=getField(r,['renterName','renter name','Renter Name','name','Name']);
+      var ts=getField(r,['timestamp','Timestamp','date','Date']);
+      var pickup=getField(r,['pickupDate','pickup date','Pickup Date']);
+      var ret=getField(r,['returnDate','return date','Return Date']);
+      var total=getField(r,['totalFee','total fee','Total Fee','total','Total']);
+      var status=getField(r,['status','Status'])||'Submitted';
+      var badgeClass=status.toLowerCase()==='complete'?'badge-complete':'badge-active';
+      html+='<tr>';
+      html+='<td>'+fmtDate(ts)+'</td>';
+      html+='<td><strong>'+esc(name)+'</strong></td>';
+      html+='<td>'+fmtDate(pickup)+'</td>';
+      html+='<td>'+fmtDate(ret)+'</td>';
+      html+='<td>'+esc(total)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-rentals').style.display='none';
+  document.getElementById('table-rentals').style.display='table';
+}
+
+// ── INCOME ──────────────────────────────────────────────
+function parseAmount(val){
+  if(val===null||val===undefined)return 0;
+  if(typeof val==='number')return isFinite(val)?val:0;
+  var s=String(val).replace(/[$,\s]/g,'').replace(/^\((.+)\)$/, '-$1');
+  var n=parseFloat(s);
+  return isNaN(n)?0:n;
+}
+
+function fmtCurrency(n){
+  var sign=n<0?'-':'';
+  var abs=Math.abs(n);
+  return sign+'$'+abs.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+
+function loadIncome(){
+  document.getElementById('loading-income').style.display='block';
+  document.getElementById('table-income').style.display='none';
+  fetchData('getIncome',function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-income').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load income: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.income = Array.isArray(data) ? data : [];
+    renderIncome();
+    updateStats();
+  });
+}
+
+function renderIncome(){
+  var tbody=document.getElementById('tbody-income');
+  var rows=store.income||[];
+  var currentYear=new Date().getFullYear();
+  var ytdTotal=0;
+  var allTotal=0;
+
+  if(!rows.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="8">No income entries found. Make sure the Income sheet exists and your Apps Script doGet handler supports getIncome.</td></tr>';
+  } else {
+    var html='';
+    // sort by date desc
+    var sorted=rows.slice().sort(function(a,b){
+      var da=new Date(getField(a,['date','Date']))||0;
+      var db=new Date(getField(b,['date','Date']))||0;
+      return db-da;
+    });
+    for(var i=0;i<sorted.length;i++){
+      var r=sorted[i];
+      var date=getField(r,['date','Date']);
+      var invoice=getField(r,['invoice','Invoice','invoice #','Invoice #','invoiceNum','Invoice Number']);
+      var client=getField(r,['client','Client','clientName','Client Name','name','Name']);
+      var svcType=getField(r,['serviceType','Service Type','service','Service','type','Type']);
+      var amountRaw=getField(r,['amount','Amount','totalFee','Total Fee','total','Total']);
+      var amt=parseAmount(amountRaw);
+      allTotal+=amt;
+      var dObj=new Date(date);
+      if(!isNaN(dObj.getTime())&&dObj.getFullYear()===currentYear)ytdTotal+=amt;
+      var payment=getField(r,['paymentMethod','Payment Method','payment','Payment']);
+      var status=getField(r,['status','Status'])||'—';
+      var sl=status.toLowerCase();
+      var badgeClass=(sl==='paid'||sl==='complete'||sl==='completed')?'badge-complete':(sl==='pending'||sl==='sent'?'badge-active':'badge-new');
+      var notes=getField(r,['notes','Notes']);
+
+      html+='<tr>';
+      html+='<td>'+fmtDate(date)+'</td>';
+      html+='<td>'+esc(invoice)+'</td>';
+      html+='<td><strong>'+esc(client)+'</strong></td>';
+      html+='<td>'+esc(svcType)+'</td>';
+      html+='<td style="text-align:right;font-family:\'Bebas Neue\',sans-serif;letter-spacing:0.04em;">'+esc(fmtCurrency(amt))+'</td>';
+      html+='<td>'+esc(payment)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td style="max-width:260px;color:var(--mid);">'+esc(notes)+'</td>';
+      html+='</tr>';
+    }
+    tbody.innerHTML=html;
+  }
+
+  // Update summary line above the table
+  var summary=document.getElementById('incomeSummary');
+  if(summary){
+    summary.innerHTML = 'YTD ' + currentYear + ': <span style="color:var(--red);">' + esc(fmtCurrency(ytdTotal)) + '</span>'
+      + ' &nbsp;·&nbsp; All-time: <span style="color:var(--ink);">' + esc(fmtCurrency(allTotal)) + '</span>';
+  }
+  // Expose for stats card
+  store.incomeYTD = ytdTotal;
+  store.incomeAll = allTotal;
+
+  document.getElementById('loading-income').style.display='none';
+  document.getElementById('table-income').style.display='table';
+}
+
+// ── LINKS (Agreement Links) ─────────────────────────────
+function loadLinks(){
+  document.getElementById('loading-links').style.display='block';
+  document.getElementById('table-links').style.display='none';
+  fetchData('getAgreementLinks', function(data){
+    if (data && (data.__error || (data.error && !Array.isArray(data)))) {
+      document.getElementById('loading-links').innerHTML =
+        '<div style="color:var(--red);font-size:0.82rem;">Failed to load agreement links: ' + esc(data.__error || data.error) + '</div>';
+      return;
+    }
+    store.links = Array.isArray(data) ? data : [];
+    renderLinks();
+  });
+}
+
+// Current filter mode for Links tab: 'active' (default) or 'all'.
+var linksFilter = 'active';
+
+function setLinksFilter(mode){
+  linksFilter = (mode === 'all') ? 'all' : 'active';
+  document.querySelectorAll('#panel-links .seg-btn').forEach(function(b){
+    b.classList.toggle('seg-active', b.getAttribute('data-filter') === linksFilter);
+  });
+  renderLinks();
+}
+
+// A draft is "stale" if it was created more than 24 hours ago. The
+// active view hides stale drafts (admin likely abandoned them) and
+// voided rows. Fresh drafts and anything Pending/Signed stay visible.
+function isLinkActiveView(r){
+  var status = String(getField(r,['status','Status']) || 'Draft').toLowerCase();
+  if (status === 'voided') return false;
+  if (status === 'draft') {
+    var created = getField(r,['createdDate','Created Date','created','Created']);
+    var d = new Date(created);
+    if (!isNaN(d.getTime())) {
+      var ageHrs = (Date.now() - d.getTime()) / 3600000;
+      if (ageHrs > 24) return false;
+    }
+  }
+  return true;
+}
+
+function renderLinks(){
+  var tbody = document.getElementById('tbody-links');
+  var countEl = document.getElementById('linksRowCount');
+  var allRows = store.links || [];
+
+  var rows = (linksFilter === 'active')
+    ? allRows.filter(isLinkActiveView)
+    : allRows.slice();
+
+  // Sort newest first
+  rows.sort(function(a,b){
+    var da = new Date(getField(a,['createdDate','Created Date','created','Created']))||0;
+    var db = new Date(getField(b,['createdDate','Created Date','created','Created']))||0;
+    return db - da;
+  });
+
+  if (countEl) {
+    var label = (linksFilter === 'active')
+      ? rows.length + ' active agreement' + (rows.length === 1 ? '' : 's')
+      : rows.length + ' of ' + allRows.length + ' total';
+    countEl.textContent = label;
+  }
+
+  if (!rows.length) {
+    var emptyMsg = (linksFilter === 'active' && allRows.length)
+      ? 'No active agreements. Switch to "Show all" to see voided/stale entries.'
+      : 'No agreement links yet. Create one from the Send Agreement page.';
+    tbody.innerHTML = '<tr><td class="no-data" colspan="8">' + esc(emptyMsg) + '</td></tr>';
+  } else {
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var id = getField(r,['agreementId','Agreement ID','id','ID']);
+      var type = getField(r,['type','Type','agreementType','Agreement Type']);
+      var cname = getField(r,['clientName','Client Name','name','Name']);
+      var cemail = getField(r,['clientEmail','Client Email','email','Email']);
+      var created = getField(r,['createdDate','Created Date','created','Created']);
+      var status = getField(r,['status','Status']) || 'Draft';
+      var link = getField(r,['link','Link','url','URL']);
+      var signedPDF = getField(r,['signedPDF','Signed PDF','pdfUrl','PDF URL']);
+      var sl = status.toLowerCase();
+      var badgeClass = (sl === 'signed') ? 'badge-complete'
+                     : (sl === 'draft') ? 'badge-new'
+                     : (sl === 'voided') ? 'badge-complete'
+                     : 'badge-active';
+      if (sl === 'voided') badgeClass = 'badge-new'; // dim visual for voided
+      var idEsc = esc(id).replace(/'/g,"\\'");
+      var linkEsc = esc(link || '').replace(/'/g,"\\'");
+      var noteId = 'linknote-' + i;
+      var hasPdf = !!(signedPDF && /^https?:\/\//.test(signedPDF));
+
+      html += '<tr>';
+      html += '<td><span style="font-family:\'Inconsolata\',monospace;font-size:0.72rem;color:' + (sl === 'voided' ? 'var(--mid)' : 'var(--red)') + ';letter-spacing:0.04em;' + (sl === 'voided' ? 'text-decoration:line-through;' : '') + '">' + esc(id) + '</span></td>';
+      html += '<td>' + esc(type) + '</td>';
+      html += '<td><strong>' + esc(cname) + '</strong></td>';
+      html += '<td>' + esc(cemail) + '</td>';
+      html += '<td>' + fmtDate(created) + '</td>';
+      html += '<td><span class="badge ' + badgeClass + '">' + esc(status) + '</span>' + (hasPdf ? ' <span style="font-size:0.6rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--green);margin-left:4px;">· PDF</span>' : '') + '</td>';
+      html += '<td style="max-width:260px;">';
+      if (link) {
+        html += '<a href="' + esc(link) + '" target="_blank" style="font-size:0.7rem;color:var(--mid);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;max-width:240px;">' + esc(link) + '</a>';
+      }
+      html += '</td>';
+
+      // ── ACTIONS column — once a signed PDF is uploaded, actions
+      //    drop to a single "Open PDF" link. Otherwise status-based
+      //    actions + the Upload Signed PDF button.
+      html += '<td><div class="row-actions">';
+      if (hasPdf) {
+        html += '<a href="' + esc(signedPDF) + '" target="_blank" class="row-btn row-btn-done">Open PDF</a>';
+      } else {
+        if (sl === 'draft') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Edit</a>';
+          html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+          html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Draft\')">Delete</button>';
+        } else if (sl === 'pending client signature' || sl === 'pending') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+          html += '<button class="row-btn" onclick="copyAgrLink(this,\'' + linkEsc + '\')">Copy</button>';
+          html += '<button class="row-btn" onclick="resendLink(\'' + idEsc + '\', this)">Resend Email</button>';
+          html += '<button class="row-btn row-btn-warn" onclick="voidLink(\'' + idEsc + '\')">Void</button>';
+        } else if (sl === 'signed') {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        } else if (sl === 'voided') {
+          html += '<button class="row-btn row-btn-danger" onclick="deleteLink(\'' + idEsc + '\', \'Voided\')">Delete</button>';
+        } else {
+          if (link) html += '<a href="' + esc(link) + '" target="_blank" class="row-btn">Open</a>';
+        }
+        // Upload Signed PDF available on every row until one's attached
+        html += '<button class="row-btn row-btn-upload" onclick="uploadSignedPDF(\'' + idEsc + '\', this)">Upload Signed PDF</button>';
+      }
+      html += '<span class="row-note" id="' + noteId + '"></span>';
+      html += '</div></td>';
+
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+  document.getElementById('loading-links').style.display = 'none';
+  document.getElementById('table-links').style.display = 'table';
+}
+
+function copyAgrLink(btn, url){
+  if (!url) return;
+  navigator.clipboard.writeText(url).then(function(){
+    var orig = btn.textContent;
+    btn.textContent = 'Copied';
+    setTimeout(function(){ btn.textContent = orig; }, 1500);
+  });
+}
+
+function showLinkNote(btn, msg, isErr, durationMs){
+  // Find the row-note span next to this button (inside the same .row-actions)
+  var container = btn && btn.closest ? btn.closest('.row-actions') : null;
+  if (!container) return;
+  var note = container.querySelector('.row-note');
+  if (!note) return;
+  note.textContent = msg;
+  note.title = msg; // full text on hover when truncated
+  note.classList.toggle('err', !!isErr);
+  note.classList.add('show');
+  // Errors stick around longer so admin can actually read them
+  var ms = typeof durationMs === 'number' ? durationMs : (isErr ? 10000 : 2000);
+  clearTimeout(note._hideTimer);
+  note._hideTimer = setTimeout(function(){ note.classList.remove('show'); }, ms);
+}
+
+// ── Agreement link actions (void / delete / resend) ─────
+function voidLink(agreementId){
+  if (!agreementId) return;
+  if (!confirm('Void this agreement? The client link will no longer work.')) return;
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'voidAgreement', agreementId: agreementId })
+  });
+  // Optimistic local update
+  updateLocalLinkStatus(agreementId, 'Voided');
+  // Flip any matching inquiry row back to Contacted locally so the
+  // Inquiries tab reflects it without a manual reload.
+  var email = findLinkClientEmail(agreementId);
+  if (email) locallyUpdateInquiryStatus(email, 'Contacted');
+  renderLinks();
+}
+
+function deleteLink(agreementId, statusLabel){
+  if (!agreementId) return;
+  var msg = (statusLabel === 'Voided')
+    ? 'Permanently delete this voided agreement? This cannot be undone.'
+    : 'Permanently delete this draft agreement? This cannot be undone.';
+  if (!confirm(msg)) return;
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'deleteAgreementLink', agreementId: agreementId })
+  });
+  // Optimistic: remove from store
+  store.links = (store.links || []).filter(function(r){
+    return getField(r,['agreementId','Agreement ID','id','ID']) !== agreementId;
+  });
+  renderLinks();
+}
+
+function resendLink(agreementId, btn){
+  if (!agreementId) return;
+  btn.disabled = true;
+  var orig = btn.textContent;
+  btn.textContent = 'Sending...';
+  fetch(getScriptUrl(), {
+    method: 'POST',
+    mode: 'no-cors',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type: 'resendAgreementEmail', agreementId: agreementId })
+  });
+  // no-cors returns opaque; optimistic success after a short delay
+  setTimeout(function(){
+    btn.textContent = orig;
+    btn.disabled = false;
+    showLinkNote(btn, '✓ Email resent', false);
+  }, 600);
+}
+
+// ── Signed PDF upload ───────────────────────────────────
+// Opens a file picker, reads the PDF, base64-encodes it, POSTs to
+// Apps Script. Apps Script saves the file to the
+// "Come With — Signed Agreements" Drive folder, flips this row's
+// status to Signed, stores the Drive URL in signedPDF, and rolls
+// the linked inquiry to Booked.
+//
+// We POST with Content-Type: text/plain (NOT application/json and NOT
+// no-cors) so the request is a CORS "simple request" — no preflight,
+// but the response is still readable. Apps Script's e.postData.contents
+// gives us the raw body regardless of content-type, so JSON.parse on
+// the server side still works. Reading the response lets us log it,
+// show server errors in the row, and update state with the actual
+// Drive URL in a single step (no 2.5s poll that could revert the UI).
+function uploadSignedPDF(agreementId, btn){
+  if (!agreementId) return;
+  var input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'application/pdf,.pdf';
+  input.onchange = function(){
+    var file = input.files && input.files[0];
+    if (!file) return;
+    if (file.type && file.type !== 'application/pdf' && !/\.pdf$/i.test(file.name)) {
+      alert('Please select a PDF file.');
+      return;
+    }
+    // Soft size cap — Apps Script web app POST body has a 50 MB ceiling
+    // and base64 expands by ~33%, so keep uploads under ~35 MB.
+    if (file.size > 35 * 1024 * 1024) {
+      alert('PDF is too large — keep it under 35 MB, or compress before uploading.');
+      return;
+    }
+    var origLabel = btn ? btn.textContent : '';
+    var resetBtn = function(){ if (btn) { btn.textContent = origLabel; btn.disabled = false; } };
+    if (btn) { btn.disabled = true; btn.textContent = 'Uploading...'; }
+
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var b64 = String(ev.target.result || '').replace(/^data:[^,]+,/, '');
+      var payload = {
+        type: 'uploadSignedPDF',
+        agreementId: agreementId,
+        filename: file.name,
+        fileData: b64
+      };
+      console.log('[uploadSignedPDF] POST', {
+        agreementId: agreementId,
+        filename: file.name,
+        fileSizeBytes: file.size,
+        base64Length: b64.length,
+        scriptUrl: getScriptUrl()
+      });
+
+      fetch(getScriptUrl(), {
+        method: 'POST',
+        // text/plain avoids a CORS preflight while still being parsed
+        // server-side via e.postData.contents + JSON.parse
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        redirect: 'follow'
+      })
+      .then(function(r){
+        console.log('[uploadSignedPDF] HTTP ' + r.status + ' (ok=' + r.ok + ') final URL:', r.url);
+        return r.text().then(function(text){
+          return { status: r.status, ok: r.ok, text: text };
+        });
+      })
+      .then(function(res){
+        console.log('[uploadSignedPDF] raw response (first 500 chars):',
+          res.text.length > 500 ? res.text.substring(0, 500) + '…' : res.text);
+
+        if (!res.ok) {
+          resetBtn();
+          showLinkNote(btn, '✗ HTTP ' + res.status + ' — check console', true);
+          return;
+        }
+
+        var data;
+        try {
+          data = JSON.parse(res.text);
+        } catch (parseErr) {
+          console.error('[uploadSignedPDF] JSON parse failed:', parseErr);
+          resetBtn();
+          showLinkNote(btn, '✗ Bad server response — check console', true);
+          return;
+        }
+
+        console.log('[uploadSignedPDF] parsed response:', data);
+
+        if (data.error) {
+          resetBtn();
+          var msg = String(data.error);
+          showLinkNote(btn, '✗ ' + (msg.length > 80 ? msg.substring(0, 80) + '…' : msg), true);
+          return;
+        }
+
+        if (!data.success || !data.url) {
+          resetBtn();
+          showLinkNote(btn, '✗ Server returned no URL — check console', true);
+          return;
+        }
+
+        // ✓ Success — the server committed the row. Update local state
+        //   with the real Drive URL so the row collapses to "Open PDF"
+        //   immediately, no re-poll that could revert it.
+        updateLocalLinkStatus(agreementId, 'Signed');
+        updateLocalLinkPdf(agreementId, data.url);
+        var email = findLinkClientEmail(agreementId);
+        if (email) locallyUpdateInquiryStatus(email, 'Booked');
+
+        resetBtn();
+        showLinkNote(btn, '✓ PDF uploaded', false);
+        renderLinks();
+      })
+      .catch(function(err){
+        console.error('[uploadSignedPDF] fetch failed:', err);
+        resetBtn();
+        var m = String(err && err.message || err);
+        showLinkNote(btn, '✗ ' + (m.length > 80 ? m.substring(0, 80) + '…' : m), true);
+      });
+    };
+    reader.onerror = function(){
+      alert('Failed to read the PDF file.');
+      resetBtn();
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+
+// Write the signedPDF URL onto the local store entry so renderLinks
+// shows the "Open PDF" action without having to re-fetch the sheet.
+function updateLocalLinkPdf(agreementId, pdfUrl){
+  if (!pdfUrl) return;
+  (store.links || []).forEach(function(r){
+    if (getField(r,['agreementId','Agreement ID','id','ID']) === agreementId) {
+      var written = false;
+      for (var k in r) {
+        if (k.toLowerCase() === 'signedpdf') { r[k] = pdfUrl; written = true; }
+      }
+      if (!written) r.signedPDF = pdfUrl;
+    }
+  });
+}
+
+function updateLocalLinkStatus(agreementId, newStatus){
+  (store.links || []).forEach(function(r){
+    if (getField(r,['agreementId','Agreement ID','id','ID']) === agreementId) {
+      for (var k in r) {
+        if (k.toLowerCase() === 'status') { r[k] = newStatus; return; }
+      }
+      r.status = newStatus;
+    }
+  });
+}
+
+function findLinkClientEmail(agreementId){
+  var match = (store.links || []).find(function(r){
+    return getField(r,['agreementId','Agreement ID','id','ID']) === agreementId;
+  });
+  return match ? getField(match,['clientEmail','Client Email','email','Email']) : '';
+}
+
+function locallyUpdateInquiryStatus(email, newStatus){
+  if (!email) return;
+  var target = String(email).toLowerCase().trim();
+  (store.inquiries || []).forEach(function(r){
+    var e = String(getField(r,['email','Email']) || '').toLowerCase().trim();
+    if (e === target) {
+      for (var k in r) {
+        if (k.toLowerCase() === 'status') { r[k] = newStatus; return; }
+      }
+      r.status = newStatus;
+    }
+  });
+  // Re-render the inquiries table so the status dropdown reflects it
+  if (typeof renderInquiries === 'function') renderInquiries();
+}
+
+// ── ARCHIVE ──────────────────────────────────────────────
+var archiveData=[];
+
+function buildArchive(){
+  var all=[];
+  store.inquiries.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'inquiry',_typeName:'Inquiry',
+      _name:(getField(r,['firstName','First Name'])+' '+getField(r,['lastName','Last Name'])).trim()||getField(r,['clientName','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:getField(r,['service','Service'])+' — '+getField(r,['message','Message']).substring(0,80)
+    }));
+  });
+  store.agreements.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'agreement',_typeName:'Agreement',
+      _name:getField(r,['clientName','client name','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:'Event: '+getField(r,['eventType','Event Type'])+' — Total: '+getField(r,['totalFee','Total Fee'])
+    }));
+  });
+  store.rentals.forEach(function(r){
+    all.push(Object.assign({},r,{_type:'rental',_typeName:'Rental',
+      _name:getField(r,['renterName','renter name','name','Name']),
+      _date:getField(r,['timestamp','Timestamp','date','Date']),
+      _detail:'Equipment: '+getField(r,['equipment','Equipment']).substring(0,80)+' — Total: '+getField(r,['totalFee','Total Fee'])
+    }));
+  });
+  // sort by date desc
+  all.sort(function(a,b){
+    var da=new Date(a._date)||0,db=new Date(b._date)||0;
+    return db-da;
+  });
+  return all;
+}
+
+function renderArchive(filtered){
+  var data=filtered||buildArchive();
+  archiveData=data;
+  var tbody=document.getElementById('tbody-archive');
+  if(!data.length){
+    tbody.innerHTML='<tr><td class="no-data" colspan="6">No records found.</td></tr>';
+  } else {
+    var html='';
+    for(var i=0;i<data.length;i++){
+      var r=data[i];
+      var status=getField(r,['status','Status'])||'—';
+      var sl=status.toLowerCase();
+      var badgeClass=(sl==='complete'||sl==='completed'||sl==='booked')?'badge-complete':(sl==='new'?'badge-new':'badge-active');
+      var typeClass=r._type==='inquiry'?'badge-new':(r._type==='agreement'?'badge-active':'badge-complete');
+      html+='<tr>';
+      html+='<td>'+fmtDate(r._date)+'</td>';
+      html+='<td><span class="badge '+typeClass+'">'+esc(r._typeName)+'</span></td>';
+      html+='<td><strong>'+esc(r._name)+'</strong></td>';
+      html+='<td style="max-width:260px;">'+esc(r._detail)+'</td>';
+      html+='<td><span class="badge '+badgeClass+'">'+esc(status)+'</span></td>';
+      html+='<td><button class="row-btn" onclick="toggleDetail(this,'+i+')">Details</button></td>';
+      html+='</tr>';
+      // Detail row
+      html+='<tr class="detail-row" id="detail-'+i+'"><td colspan="6"><div class="detail-content">';
+      var keys=Object.keys(r);
+      for(var k=0;k<keys.length;k++){
+        if(keys[k].charAt(0)==='_')continue;
+        var val=r[keys[k]];
+        if(val===''||val===null||val===undefined)continue;
+        html+='<div><div class="dk">'+esc(keys[k])+'</div><div class="dv">'+esc(String(val))+'</div></div>';
+      }
+      html+='</div></td></tr>';
+    }
+    tbody.innerHTML=html;
+  }
+  document.getElementById('loading-archive').style.display='none';
+  document.getElementById('table-archive').style.display='table';
+}
+
+function toggleDetail(btn,idx){
+  var row=document.getElementById('detail-'+idx);
+  if(row){
+    row.classList.toggle('open');
+    btn.textContent=row.classList.contains('open')?'Hide':'Details';
+  }
+}
+
+function filterArchive(){
+  var from=document.getElementById('archiveFrom').value;
+  var to=document.getElementById('archiveTo').value;
+  var type=document.getElementById('archiveType').value;
+  var all=buildArchive();
+  var filtered=all.filter(function(r){
+    if(type!=='all'&&r._type!==type)return false;
+    if(from){
+      var d=new Date(r._date);
+      if(!isNaN(d.getTime())&&d<new Date(from))return false;
+    }
+    if(to){
+      var d2=new Date(r._date);
+      if(!isNaN(d2.getTime())&&d2>new Date(to+'T23:59:59'))return false;
+    }
+    return true;
+  });
+  renderArchive(filtered);
+}
+
+// ── STATS ────────────────────────────────────────────────
+function updateStats(){
+  document.getElementById('statInquiries').textContent=store.inquiries.length;
+  document.getElementById('statAgreements').textContent=store.agreements.length;
+  document.getElementById('statRentals').textContent=store.rentals.length;
+  var ytd=store.incomeYTD||0;
+  document.getElementById('statIncomeYTD').textContent=fmtCurrency(ytd);
+  document.getElementById('statTotal').textContent=store.inquiries.length+store.agreements.length+store.rentals.length+(store.income?store.income.length:0);
+}
+
+// ── USERS TAB ────────────────────────────────────────────
+function loadUsers() {
+  document.getElementById('loading-users').style.display = 'block';
+  document.getElementById('table-users').style.display = 'none';
+  CW_AUTH.getUsers().then(function(data) {
+    var rows = Array.isArray(data) ? data : [];
+    renderUsers(rows);
+  }).catch(function() { renderUsers([]); });
+}
+
+function renderUsers(rows) {
+  var tbody = document.getElementById('tbody-users');
+  var isMaster = CW_AUTH.isMasterAdmin();
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td class="no-data" colspan="6">No users found. Make sure Users sheet exists in Google Sheets.</td></tr>';
+  } else {
+    var html = '';
+    for (var i = 0; i < rows.length; i++) {
+      var r = rows[i];
+      var email = getField(r, ['email', 'Email']);
+      var name = getField(r, ['name', 'Name']);
+      var role = getField(r, ['role', 'Role']);
+      var created = getField(r, ['created', 'Created']);
+      var lastLogin = getField(r, ['lastLogin', 'Last Login', 'lastlogin']);
+      var roleBadge = role === 'master_admin' ? 'badge-complete' : (role === 'sub_admin' ? 'badge-active' : 'badge-new');
+      var roleLabel = role === 'master_admin' ? 'Master Admin' : (role === 'sub_admin' ? 'Sub Admin' : 'Customer');
+      html += '<tr>';
+      html += '<td>' + esc(email) + '</td>';
+      html += '<td>' + esc(name) + '</td>';
+      html += '<td><span class="badge ' + roleBadge + '">' + roleLabel + '</span></td>';
+      html += '<td>' + fmtDate(created) + '</td>';
+      html += '<td>' + (lastLogin ? fmtDate(lastLogin) : '—') + '</td>';
+      html += '<td><div class="row-actions">';
+      if (isMaster && role === 'customer') {
+        html += '<button class="row-btn" onclick="promoteUser(\'' + esc(email) + '\')">Promote to Admin</button>';
+      }
+      if (isMaster && role === 'sub_admin') {
+        html += '<button class="row-btn" onclick="demoteUser(\'' + esc(email) + '\')">Demote to Customer</button>';
+      }
+      if (isMaster && email !== CW_AUTH.MASTER_EMAIL) {
+        html += '<button class="row-btn" onclick="removeUser(\'' + esc(email) + '\',this)" style="color:var(--red);border-color:var(--red);">Delete</button>';
+      }
+      html += '</div></td>';
+      html += '</tr>';
+    }
+    tbody.innerHTML = html;
+  }
+  document.getElementById('loading-users').style.display = 'none';
+  document.getElementById('table-users').style.display = 'table';
+}
+
+function promoteUser(email) {
+  if (!confirm('Promote ' + email + ' to Sub Admin?')) return;
+  CW_AUTH.updateUserRole(email, 'sub_admin');
+  setTimeout(loadUsers, 1000);
+}
+
+function demoteUser(email) {
+  if (!confirm('Demote ' + email + ' to Customer?')) return;
+  CW_AUTH.updateUserRole(email, 'customer');
+  setTimeout(loadUsers, 1000);
+}
+
+function removeUser(email, btn) {
+  if (!confirm('Delete user ' + email + '? This cannot be undone.')) return;
+  CW_AUTH.deleteUser(email);
+  btn.closest('tr').style.opacity = '0.3';
+  setTimeout(loadUsers, 1000);
+}
+
+function showCreateAdmin() {
+  document.getElementById('createAdminForm').style.display = 'block';
+  document.getElementById('createAdminResult').style.display = 'none';
+}
+
+function doCreateAdmin() {
+  var name = document.getElementById('newAdminName').value.trim();
+  var email = document.getElementById('newAdminEmail').value.trim();
+  var role = document.getElementById('newAdminRole').value;
+  if (!name || !email) { alert('Name and email required.'); return; }
+
+  var tempPw = CW_AUTH.generatePassword(12);
+  CW_AUTH.createUser(email, name, tempPw, role, true).then(function() {
+    var result = document.getElementById('createAdminResult');
+    result.innerHTML = 'Account created for <strong>' + esc(email) + '</strong>.<br>Temporary password: <strong>' + esc(tempPw) + '</strong><br>They must change it on first login.';
+    result.style.display = 'block';
+    setTimeout(loadUsers, 1000);
+  });
+}
+
+// Load users when Users tab is clicked
+var origTabClick = null;
+document.querySelectorAll('.tab').forEach(function(t) {
+  if (t.getAttribute('data-tab') === 'users') {
+    t.addEventListener('click', function() { loadUsers(); });
+  }
+});
+</script>
+</body>
+</html>
