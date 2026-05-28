@@ -165,6 +165,59 @@ body::before {
 }
 .placeholder strong { color: var(--ink); }
 
+/* Data tables (Sprint 2+) */
+.panel-state {
+  background: white; border: 1px solid var(--border);
+  padding: 28px 24px; text-align: center;
+  font-size: 0.85rem; color: var(--mid); line-height: 1.6;
+}
+.panel-state.err { border-color: var(--red); color: var(--red-dk); background: #fbe6e1; }
+.panel-state .spinner {
+  display: inline-block; width: 14px; height: 14px;
+  border: 2px solid var(--border); border-top-color: var(--red);
+  border-radius: 50%; animation: spin 0.6s linear infinite;
+  margin-right: 8px; vertical-align: -2px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.row-count {
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem;
+  letter-spacing: 0.1em; color: var(--mid); text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.data-table {
+  width: 100%; border-collapse: collapse; font-size: 0.82rem;
+  background: white; border: 1px solid var(--border);
+}
+.data-table th {
+  font-size: 0.58rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--mid); text-align: left; padding: 10px 12px;
+  border-bottom: 2px solid var(--ink); background: var(--off); white-space: nowrap;
+}
+.data-table td {
+  padding: 10px 12px; border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: rgba(193,59,42,0.03); }
+.data-table .muted { color: var(--mid); font-style: italic; }
+.data-table .truncate {
+  max-width: 280px; overflow: hidden; text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-block; font-size: 0.6rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 3px 10px; white-space: nowrap;
+}
+.badge-new        { background: var(--blue-bg);  color: var(--blue); }
+.badge-contacted  { background: var(--amber-bg); color: var(--amber); }
+.badge-quoted     { background: var(--amber-bg); color: var(--amber); }
+.badge-converted  { background: var(--green-bg); color: var(--green); }
+.badge-lost       { background: #f5e2de;          color: var(--red-dk); }
+.badge-archived   { background: #e6e3df;          color: var(--mid); }
+
 /* Responsive */
 @media (max-width: 800px) {
   .dash-layout { grid-template-columns: 1fr; }
@@ -256,10 +309,19 @@ body::before {
       </div>
 
       <div class="panel active" id="panel-inquiries">
-        <div class="placeholder">
-          <strong>Sprint 2</strong> wires this tab to the <code>inquiries</code> table.<br />
-          For now the auth flow is the deliverable.
-        </div>
+        <div class="row-count" id="count-inquiries">—</div>
+        <div id="state-inquiries"></div>
+        <table class="data-table" id="table-inquiries" style="display:none;">
+          <thead><tr>
+            <th>Submitted</th>
+            <th>Name</th>
+            <th>Email</th>
+            <th>Event date</th>
+            <th>Services</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
       </div>
       <div class="panel" id="panel-agreements"><div class="placeholder">Sprint 3 → <code>agreements</code></div></div>
       <div class="panel" id="panel-clients"><div class="placeholder">Sprint 4 → <code>clients</code></div></div>
@@ -320,6 +382,10 @@ async function renderForSession(session) {
   $('profileRole').textContent = profile.role.replace('_', ' ');
   $('profileAvatar').textContent = (name[0] || '·').toUpperCase();
   showDash();
+  $('refreshBtn').disabled = false;
+  // Load the currently active tab now that we have a session
+  const active = document.querySelector('.sidebar-nav button.active');
+  if (active) loadTab(active.dataset.tab);
 }
 
 sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
@@ -356,7 +422,101 @@ $('signOutBtn').addEventListener('click', async () => {
   // onAuthStateChange handles the UI flip
 });
 
-// ---- Tab switching (purely client-side for now) ----
+// ---- Data layer ----
+// One loader per tab. Each returns {rows, error}.
+// renderRows is responsible for empty/error/loaded states.
+
+const fmtDate = (s) => {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toISOString().slice(0, 10);
+};
+
+const truncate = (s, n = 80) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
+
+const escapeHtml = (s) => {
+  if (s == null) return '';
+  return String(s)
+    .replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&#39;');
+};
+
+function setPanelState(tab, kind, message) {
+  const stateEl = $('state-' + tab);
+  const table = $('table-' + tab);
+  if (!stateEl) return;
+  if (kind === 'hidden') { stateEl.innerHTML = ''; if (table) table.style.display = ''; return; }
+  if (table) table.style.display = 'none';
+  const cls = kind === 'err' ? 'panel-state err' : 'panel-state';
+  const inner = kind === 'loading'
+    ? '<span class="spinner"></span>' + escapeHtml(message)
+    : escapeHtml(message);
+  stateEl.innerHTML = '<div class="' + cls + '">' + inner + '</div>';
+}
+
+function setCount(tab, n) {
+  const el = $('count-' + tab);
+  if (!el) return;
+  el.textContent = n == null ? '—' : (n + ' row' + (n === 1 ? '' : 's'));
+}
+
+const renderers = {
+  inquiries(rows) {
+    const tbody = $('table-inquiries').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const services = Array.isArray(r.services_selected)
+        ? r.services_selected.map(s => typeof s === 'string' ? s : (s.name || JSON.stringify(s))).join(', ')
+        : '';
+      const status = (r.status || 'new').toLowerCase();
+      return `<tr>
+        <td>${escapeHtml(fmtDate(r.created_at))}</td>
+        <td>${escapeHtml(r.full_name || '')}</td>
+        <td class="truncate">${escapeHtml(r.email || '')}</td>
+        <td>${escapeHtml(fmtDate(r.event_date))}</td>
+        <td class="truncate">${escapeHtml(truncate(services, 60))}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      </tr>`;
+    }).join('');
+  },
+};
+
+const queries = {
+  inquiries: () => sb.from('inquiries')
+    .select('id, full_name, email, event_date, services_selected, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500),
+};
+
+async function loadTab(tab) {
+  if (!queries[tab]) return; // placeholder panels are no-ops
+  setCount(tab, null);
+  setPanelState(tab, 'loading', 'Loading ' + tab + '…');
+  try {
+    const { data, error } = await queries[tab]();
+    if (error) {
+      setPanelState(tab, 'err', error.message);
+      return;
+    }
+    setCount(tab, data.length);
+    if (data.length === 0) {
+      setPanelState(tab, 'info', 'No ' + tab + ' yet.');
+      return;
+    }
+    renderers[tab](data);
+    setPanelState(tab, 'hidden');
+  } catch (e) {
+    setPanelState(tab, 'err', e.message || String(e));
+  }
+}
+
+// Refresh button reloads the active tab
+$('refreshBtn').addEventListener('click', () => {
+  const active = document.querySelector('.sidebar-nav button.active');
+  if (active) loadTab(active.dataset.tab);
+});
+
+// ---- Tab switching ----
 $('sidebarNav').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
   if (!btn) return;
@@ -364,6 +524,7 @@ $('sidebarNav').addEventListener('click', (e) => {
   for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
   for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + tab);
   $('mainTitle').textContent = btn.textContent;
+  loadTab(tab);
 });
 
 // ---- Initial session check ----
