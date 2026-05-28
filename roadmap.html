@@ -173,9 +173,9 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2,P3 done
-    class P4 next
-    class P5,P6,P7,P8,P9,P10,P11 planned
+    class P0,P1,P2,P3,P4 done
+    class P5 next
+    class P6,P7,P8,P9,P10,P11 planned
   </pre>
 
   <h3>Per-phase descriptions</h3>
@@ -215,13 +215,13 @@ flowchart TD
         <td>2</td>
       </tr>
       <tr>
-        <td class="phase-num status-next">4 →</td>
+        <td class="phase-num status-done">4 ✓</td>
         <td>Admin dashboard — write</td>
-        <td>CRUD on agreements, inquiry status updates, income/expense entry, equipment management. Berky stops using Sheets day-to-day</td>
+        <td>Inquiry status writes, agreement status writes, "Add income" + "Add expense" modals with receipt upload to Storage. Daily ledger work runnable from the dashboard. Clients/equipment/events CRUD deferred to 4.5 / Phase 7</td>
         <td>3</td>
       </tr>
       <tr>
-        <td class="phase-num">5</td>
+        <td class="phase-num status-next">5 →</td>
         <td>Edge Functions: transactional</td>
         <td><code>send-agreement</code> (PDF gen + storage upload + Resend email), <code>inquiry-notify</code> (Resend on new inquiry), <code>magic-link-redirect</code> (post-login routing). Bridges Phase 4 admin writes to outbound email</td>
         <td>4</td>
