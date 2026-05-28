@@ -25,12 +25,30 @@ body::before {
   background-size: 18px 18px; pointer-events: none; z-index: 0;
 }
 
+/* ===== BOOT SCREEN ===== */
+.boot {
+  position: fixed; inset: 0; z-index: 2;
+  background: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mid);
+  transition: opacity 0.2s;
+}
+.boot::after {
+  content: ''; display: inline-block; width: 12px; height: 12px;
+  border: 2px solid var(--border); border-top-color: var(--red);
+  border-radius: 50%; margin-left: 10px;
+  animation: spin 0.6s linear infinite;
+}
+.boot.hide { opacity: 0; pointer-events: none; }
+
 /* ===== LOGIN SCREEN ===== */
 .login-screen {
   position: relative; z-index: 1;
-  min-height: 100vh; display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; display: none; align-items: center; justify-content: center;
   padding: 24px;
 }
+.login-screen.show { display: flex; }
 .login-card {
   background: white; border: 1px solid var(--border);
   padding: 40px 36px; width: 100%; max-width: 420px;
@@ -149,12 +167,19 @@ body::before {
 .main-title {
   font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.04em;
 }
+.refresh-cluster { display: flex; align-items: center; gap: 12px; }
+.last-refreshed {
+  font-family: 'Inconsolata', monospace; font-size: 0.65rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--mid);
+}
+.last-refreshed:empty { display: none; }
 .refresh-btn {
   font-family: 'Inconsolata', monospace; font-size: 0.72rem; letter-spacing: 0.08em;
   color: var(--mid); background: none; border: 1px solid var(--border);
   padding: 8px 16px; cursor: pointer; transition: all 0.15s;
 }
-.refresh-btn:hover { color: var(--red); border-color: var(--red); }
+.refresh-btn:hover:not(:disabled) { color: var(--red); border-color: var(--red); }
+.refresh-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .panel { display: none; }
 .panel.active { display: block; }
@@ -267,6 +292,9 @@ body::before {
 </head>
 <body>
 
+<!-- ========== BOOT SCREEN ========== -->
+<div class="boot" id="boot">Checking session</div>
+
 <!-- ========== LOGIN SCREEN ========== -->
 <section class="login-screen" id="loginScreen">
   <div class="login-card">
@@ -332,7 +360,10 @@ body::before {
     <main class="main">
       <div class="main-header">
         <div class="main-title" id="mainTitle">Inquiries</div>
-        <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
+        <div class="refresh-cluster">
+          <span class="last-refreshed" id="lastRefreshed"></span>
+          <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
+        </div>
       </div>
 
       <div class="panel active" id="panel-inquiries">
@@ -460,8 +491,22 @@ const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 const $ = (id) => document.getElementById(id);
 
 // ---- UI helpers ----
-function showLogin() { $('loginScreen').style.display = 'flex'; $('dash').classList.remove('show'); }
-function showDash()  { $('loginScreen').style.display = 'none'; $('dash').classList.add('show'); }
+function hideBoot() {
+  const b = $('boot');
+  if (!b) return;
+  b.classList.add('hide');
+  setTimeout(() => { b.style.display = 'none'; }, 220);
+}
+function showLogin() {
+  hideBoot();
+  $('loginScreen').classList.add('show');
+  $('dash').classList.remove('show');
+}
+function showDash() {
+  hideBoot();
+  $('loginScreen').classList.remove('show');
+  $('dash').classList.add('show');
+}
 function setMsg(text, kind = 'info') {
   const el = $('loginMsg');
   el.className = 'login-msg ' + kind;
@@ -718,25 +763,52 @@ const queries = {
     .limit(500),
 };
 
+const emptyMessages = {
+  inquiries: 'No inquiries yet. The public form on index.html will land them here.',
+  agreements: 'No agreements yet. Phase 4 adds creation flows.',
+  clients: 'No clients yet.',
+  income: 'No income recorded yet.',
+  expenses: 'No expenses recorded yet.',
+  equipment: 'No equipment in inventory yet.',
+  events: 'No events yet. Dance Infusion event hub gets seeded in Phase 7.',
+};
+
+function setLastRefreshed() {
+  const now = new Date();
+  const hh = String(now.getHours()).padStart(2, '0');
+  const mm = String(now.getMinutes()).padStart(2, '0');
+  $('lastRefreshed').textContent = 'Refreshed ' + hh + ':' + mm;
+}
+
 async function loadTab(tab) {
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
+  $('refreshBtn').disabled = true;
   try {
     const { data, error } = await queries[tab]();
     if (error) {
-      setPanelState(tab, 'err', error.message);
+      // Common cases: RLS denied (PostgREST returns 'permission denied'),
+      // session expired (returns 401), network down.
+      const msg = error.code === 'PGRST301' || /JWT/i.test(error.message)
+        ? 'Session expired. Please sign in again.'
+        : error.message;
+      setPanelState(tab, 'err', msg);
+      if (/JWT/i.test(error.message)) await sb.auth.signOut();
       return;
     }
     setCount(tab, data.length);
     if (data.length === 0) {
-      setPanelState(tab, 'info', 'No ' + tab + ' yet.');
+      setPanelState(tab, 'info', emptyMessages[tab] || ('No ' + tab + ' yet.'));
       return;
     }
     renderers[tab](data);
     setPanelState(tab, 'hidden');
+    setLastRefreshed();
   } catch (e) {
     setPanelState(tab, 'err', e.message || String(e));
+  } finally {
+    $('refreshBtn').disabled = false;
   }
 }
 
