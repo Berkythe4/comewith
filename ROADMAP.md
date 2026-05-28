@@ -11,8 +11,8 @@ the work spans admin tools, public pages, and an Edge Function backend.
 This version uses 12 phases (0-11) with each phase being independently
 shippable on staging.
 
-**Status as of 2026-05-28 close of Phase 6**: Phases 0-6 done. Phase 7
-(Dance Infusion event hub) is next.
+**Status as of 2026-05-28 close of Phase 7**: Phases 0-7 done. Phase 8
+(mailing list) is next.
 
 ---
 
@@ -47,9 +47,9 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2,P3,P4,P5,P6 done
-    class P7 next
-    class P8,P9,P10,P11 planned
+    class P0,P1,P2,P3,P4,P5,P6,P7 done
+    class P8 next
+    class P9,P10,P11 planned
 ```
 
 ### Phase descriptions and dependencies
@@ -63,7 +63,7 @@ flowchart TD
 | 4 ✅ | Admin dashboard — write | Inquiry status writes, agreement status writes, "Add income" modal, "Add expense" modal with receipt upload to Storage. Daily ledger work runnable from the dashboard. Full CRUD on clients/equipment/events deferred to 4.5 or Phase 7 | 3 |
 | 5 ✅ | Edge Functions: transactional | `send-agreement` (creates token, emails sign link via Resend, marks agreement sent), `get-agreement-by-token` (public, returns agreement for signing page), `mark-signed` (records typed-name signature, notifies all master_admins). `sign.html` customer signing page. Web-based signing — no PDFs. `inquiry-notify` deferred to Phase 6 alongside the public form | 4 |
 | 6 ✅ | Customer-facing flows | `index-v2.html` public inquiry form (anon insert via `return=minimal` workaround), `customer_portal-v2.html` shows signed-in customer's agreements with "Review & sign" deep link, `inquiry-notify` Edge Function emails master_admins on new submission. **Anon-RLS resolved** — was a `Prefer: return=representation` quirk, not a policy bug | 5 |
-| 7 🟡 | Dance Infusion event hub | Public `/events/dance-infusion-*` page reads from `events`, `sponsors`, `artists`; ticketing import from Zeffy + Resident Advisor; sponsor admin UI. Separate domain from inquiries/agreements | 5 |
+| 7 ✅ | Dance Infusion event hub | DI2 seeded (1 venue, 1 event, 9 sponsors+sponsorships, 5 artists+bookings, 5 raffle prizes, 4 expenses, 16 RA tickets). `events/dance-infusion-2/index-v2.html` public hub via `get-event-hub` Edge Function. Dashboard-v2 admin tabs for sponsors/sponsorships/artists. `import_ticketing.py` CSV importer (RA + extensible for Zeffy) | 5 |
 | 8 | Mailing list | Public subscribe form, double-opt-in confirmation, unsubscribe via tokenized URL, segments. Self-hosted per decision #8 | 6 |
 | 9 | Resend broadcasts + webhooks | Audiences sync, campaign drafting UI, send queue, webhook handler for `delivered`/`bounced`/`complained` → `mailing_events` table | 8 |
 | 10 | pg_cron automation | Nightly materialized view refresh, scheduled mailing sends, audit log retention, weekly digest emails. Lives in `automation_jobs` table; pg_cron calls Edge Functions via pg_net | 4 |
