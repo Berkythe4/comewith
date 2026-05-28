@@ -11,8 +11,9 @@ the work spans admin tools, public pages, and an Edge Function backend.
 This version uses 12 phases (0-11) with each phase being independently
 shippable on staging.
 
-**Status as of 2026-05-28 close of Phase 10**: Phases 0-10 done. Phase 11
-(production cutover) is next.
+**Status as of 2026-05-28 close of Phase 11**: ALL PHASES DONE. Migration
+complete. comewith.org is live on Supabase prod. Known issues + redesign
+items collected in project-phase-11-status memory.
 
 ---
 
@@ -47,8 +48,7 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10 done
-    class P11 next
+    class P0,P1,P2,P3,P4,P5,P6,P7,P8,P9,P10,P11 done
 ```
 
 ### Phase descriptions and dependencies
