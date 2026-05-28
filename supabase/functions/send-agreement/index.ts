@@ -23,8 +23,10 @@ const CORS_HEADERS = {
 
 const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 
-// TODO(phase-11): switch to https://comewith.org/sign.html when prod cutover lands.
-const SIGN_BASE_URL = "http://localhost:8765/sign.html";
+// SITE_URL is set as a secret per project: staging defaults to localhost,
+// prod sets it to https://comewith.org via `supabase secrets set SITE_URL=...`
+const SITE_URL = Deno.env.get("SITE_URL") || "http://localhost:8765";
+const SIGN_BASE_URL = `${SITE_URL}/sign.html`;
 
 const FROM = "Berky <berky@comewith.org>";
 const REPLY_TO = "berky@comewith.org";

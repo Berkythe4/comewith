@@ -32,8 +32,9 @@ const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 const FROM = "Come With <berky@comewith.org>";
 const REPLY_TO = "berky@comewith.org";
 
-// TODO(phase-11): swap to https://comewith.org/* at production cutover.
-const CONFIRM_BASE = "http://localhost:8765/confirm.html";
+// SITE_URL is set as a secret per project.
+const SITE_URL = Deno.env.get("SITE_URL") || "http://localhost:8765";
+const CONFIRM_BASE = `${SITE_URL}/confirm.html`;
 
 function jsonError(status: number, message: string) {
   return new Response(JSON.stringify({ error: message }), { status, headers: JSON_HEADERS });
