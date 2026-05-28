@@ -265,6 +265,15 @@ body::before {
 .badge-maintenance { background: var(--blue-bg);  color: var(--blue); }
 .badge-retired     { background: #e6e3df;         color: var(--mid); }
 
+/* Sponsorship statuses */
+.badge-pending     { background: var(--off);      color: var(--mid); }
+.badge-confirmed   { background: var(--blue-bg);  color: var(--blue); }
+.badge-paid        { background: var(--green-bg); color: var(--green); }
+
+/* Artist statuses */
+.badge-active      { background: var(--green-bg); color: var(--green); }
+.badge-inactive    { background: var(--off);      color: var(--mid); }
+
 /* Event statuses (planning/announced/on_sale/sold_out/completed/cancelled
    reuses already-defined badges where the slug matches; the new ones: ) */
 .badge-planning   { background: var(--off);      color: var(--mid); }
@@ -485,6 +494,9 @@ body::before {
         <button data-tab="expenses">Expenses</button>
         <button data-tab="equipment">Equipment</button>
         <button data-tab="events">Events</button>
+        <button data-tab="sponsors">Sponsors</button>
+        <button data-tab="sponsorships">Sponsorships</button>
+        <button data-tab="artists">Artists</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -608,6 +620,51 @@ body::before {
             <th>Status</th>
             <th class="num">Bar min</th>
             <th class="num">Attendance</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-sponsors">
+        <div class="row-count" id="count-sponsors">—</div>
+        <div id="state-sponsors"></div>
+        <table class="data-table" id="table-sponsors" style="display:none;">
+          <thead><tr>
+            <th>Name</th>
+            <th>Contact</th>
+            <th>Website</th>
+            <th>Notes</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-sponsorships">
+        <div class="row-count" id="count-sponsorships">—</div>
+        <div id="state-sponsorships"></div>
+        <table class="data-table" id="table-sponsorships" style="display:none;">
+          <thead><tr>
+            <th>Sponsor</th>
+            <th>Event</th>
+            <th>Tier</th>
+            <th class="num">Cash</th>
+            <th class="num">Entry tix</th>
+            <th class="num">Drink tix</th>
+            <th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-artists">
+        <div class="row-count" id="count-artists">—</div>
+        <div id="state-artists"></div>
+        <table class="data-table" id="table-artists" style="display:none;">
+          <thead><tr>
+            <th>Stage name</th>
+            <th>Genres</th>
+            <th>Contact</th>
+            <th>Status</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -902,6 +959,46 @@ const renderers = {
       </tr>`;
     }).join('');
   },
+
+  sponsors(rows) {
+    const tbody = $('table-sponsors').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => `<tr>
+      <td>${escapeHtml(r.name || '')}</td>
+      <td class="truncate">${escapeHtml(r.contact_email || r.contact_name || '') || muted}</td>
+      <td class="truncate">${r.website ? `<a href="${escapeHtml(r.website)}" target="_blank">${escapeHtml(r.website)}</a>` : muted}</td>
+      <td class="truncate">${escapeHtml(truncate(r.notes || '', 60)) || muted}</td>
+    </tr>`).join('');
+  },
+
+  sponsorships(rows) {
+    const tbody = $('table-sponsorships').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'pending').toLowerCase();
+      return `<tr>
+        <td>${escapeHtml(r.sponsor?.name || '—')}</td>
+        <td>${escapeHtml(r.event?.name || '—')}</td>
+        <td>${escapeHtml(r.tier || '') || muted}</td>
+        <td class="num">${money(r.cash_amount)}</td>
+        <td class="num">${r.entry_tickets || 0}</td>
+        <td class="num">${r.drink_tickets || 0}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      </tr>`;
+    }).join('');
+  },
+
+  artists(rows) {
+    const tbody = $('table-artists').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'active').toLowerCase();
+      const genres = Array.isArray(r.genres) && r.genres.length ? r.genres.join(', ') : '';
+      return `<tr>
+        <td>${escapeHtml(r.stage_name || '')}</td>
+        <td>${escapeHtml(genres) || muted}</td>
+        <td class="truncate">${escapeHtml(r.contact_email || '') || muted}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      </tr>`;
+    }).join('');
+  },
 };
 
 const queries = {
@@ -939,6 +1036,21 @@ const queries = {
     .select('id, name, series, event_date, status, bar_minimum, total_attendance')
     .order('event_date', { ascending: false })
     .limit(500),
+
+  sponsors: () => sb.from('sponsors')
+    .select('id, name, contact_name, contact_email, contact_phone, website, notes')
+    .order('name')
+    .limit(500),
+
+  sponsorships: () => sb.from('sponsorships')
+    .select('id, tier, cash_amount, drink_tickets, entry_tickets, status, sponsor:sponsors(name), event:events(name, event_date)')
+    .order('cash_amount', { ascending: false })
+    .limit(500),
+
+  artists: () => sb.from('artists')
+    .select('id, stage_name, genres, contact_email, status, signature_color')
+    .order('stage_name')
+    .limit(500),
 };
 
 const emptyMessages = {
@@ -949,6 +1061,9 @@ const emptyMessages = {
   expenses: 'No expenses recorded yet.',
   equipment: 'No equipment in inventory yet.',
   events: 'No events yet. Dance Infusion event hub gets seeded in Phase 7.',
+  sponsors: 'No sponsors yet.',
+  sponsorships: 'No sponsorships yet.',
+  artists: 'No artists yet.',
 };
 
 function setLastRefreshed() {
