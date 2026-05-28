@@ -275,6 +275,16 @@ body::before {
 /* Numeric / money cell */
 .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Inline row action buttons (Phase 5: Send) */
+.row-btn {
+  font-family: 'Inconsolata', monospace; font-size: 0.68rem;
+  letter-spacing: 0.06em; padding: 5px 12px;
+  border: 1px solid var(--border-strong); background: white; color: var(--ink);
+  cursor: pointer; transition: all 0.12s; white-space: nowrap;
+}
+.row-btn:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+.row-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
 /* Inline status edit selects (Phase 4 sprint 1) */
 .status-select {
   font-family: 'Inconsolata', monospace; font-size: 0.62rem;
@@ -519,6 +529,7 @@ body::before {
             <th>Event date</th>
             <th class="num">Total</th>
             <th>Status</th>
+            <th>Actions</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -804,6 +815,14 @@ const renderers = {
       const status = (r.status || 'draft').toLowerCase();
       const type = (r.agreement_type || '').toLowerCase();
       const clientCell = r.client?.full_name ? escapeHtml(r.client.full_name) : muted;
+      const hasEmail = !!r.client?.email;
+      const sendLabel = status === 'sent' ? 'Resend' : 'Send';
+      // Only offer Send for draft/sent (already-signed/completed/cancelled don't get re-sent)
+      const sendBtn = (status === 'draft' || status === 'sent') && hasEmail
+        ? `<button class="row-btn" data-send-agreement="${escapeHtml(r.id)}">${sendLabel}</button>`
+        : (status === 'draft' && !hasEmail
+            ? `<span class="muted" title="Client has no email on file">no email</span>`
+            : '');
       return `<tr>
         <td>${escapeHtml(fmtDate(r.created_at))}</td>
         <td><span class="badge badge-type-${escapeHtml(type)}">${escapeHtml(type)}</span></td>
@@ -811,6 +830,7 @@ const renderers = {
         <td>${escapeHtml(fmtDate(r.event_date)) || muted}</td>
         <td class="num">${money(r.total_amount)}</td>
         <td>${statusSelect('agreements', r.id, status)}</td>
+        <td>${sendBtn}</td>
       </tr>`;
     }).join('');
   },
@@ -1147,6 +1167,34 @@ document.querySelector('main.main').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-add]');
   if (!btn) return;
   openModal(btn.dataset.add);
+});
+
+// Send-agreement delegation (Phase 5 sprint 2)
+document.querySelector('main.main').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-send-agreement]');
+  if (!btn || btn.disabled) return;
+  const id = btn.dataset.sendAgreement;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  const { data, error } = await sb.functions.invoke('send-agreement', { body: { agreement_id: id } });
+  // supabase-js returns the function's JSON response on success in `data`,
+  // and HTTP errors in `error`. The function itself may also return
+  // { error: "..."} with HTTP 4xx/5xx — supabase-js packages those into `error`.
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = original;
+    let detail = error.message;
+    // Try to parse the function's error payload for a more useful message
+    try {
+      const ctx = error.context;
+      if (ctx?.body) detail = (await ctx.body).error || detail;
+    } catch (_) { /* fall through */ }
+    toast('Send failed: ' + detail, 'err');
+    return;
+  }
+  toast(`Agreement sent to ${data.sent_to}`, 'ok');
+  loadTab('agreements');
 });
 
 // Submit
