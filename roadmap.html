@@ -113,10 +113,24 @@
       display: flex;
       justify-content: center;
     }
-    /* Belt-and-suspenders: force any text inside Mermaid SVG to ink */
-    .mermaid svg text, .mermaid svg .nodeLabel, .mermaid svg .edgeLabel,
-    .mermaid svg .cluster-label, .mermaid svg .label { fill: #1A1410 !important; color: #1A1410 !important; }
+    /* Belt-and-suspenders: force any text inside Mermaid SVG to ink so labels
+       remain legible regardless of theme drift or future Mermaid upgrades. */
+    .mermaid svg text,
+    .mermaid svg .nodeLabel,
+    .mermaid svg .nodeLabel *,
+    .mermaid svg .edgeLabel,
+    .mermaid svg .edgeLabel *,
+    .mermaid svg .cluster-label,
+    .mermaid svg .cluster-label *,
+    .mermaid svg .label,
+    .mermaid svg .label *,
+    .mermaid svg foreignObject div,
+    .mermaid svg foreignObject span,
+    .mermaid svg foreignObject p { color: #1A1410 !important; fill: #1A1410 !important; }
     .mermaid svg .edgeLabel { background-color: #ffffff !important; }
+    .mermaid svg .edgeLabel rect { fill: #ffffff !important; }
+    /* Force readable subgraph (cluster) backgrounds */
+    .mermaid svg .cluster rect { fill: #F2EDE6 !important; stroke: #1A1410 !important; }
     .meta {
       color: var(--muted);
       font-size: 0.85rem;
@@ -282,42 +296,37 @@ flowchart TD
 
   <pre class="mermaid">
 flowchart LR
-    classDef user fill:#dbeafe,stroke:#1d4ed8,color:#000
-    classDef page fill:#fef3c7,stroke:#a16207,color:#000
-    classDef sb fill:#86efac,stroke:#166534,color:#000
-    classDef ext fill:#fbcfe8,stroke:#9d174d,color:#000
-
-    subgraph USERS["👥 Users"]
+    subgraph USERS["Users"]
         direction TB
         VIS[Visitor]
         CUST[Signed-in customer]
-        ADMIN[Berky — master_admin]
+        ADMIN[Berky · master_admin]
     end
 
-    subgraph NETLIFY["🌐 Netlify (comewith.org)"]
+    subgraph NETLIFY["Netlify · comewith.org"]
         direction TB
         IDX[index.html<br/>marketing + inquiry form]
         EQP[equipment_list.html<br/>public rental catalog]
         EVT["/events/dance-infusion-*<br/>event hub pages"]
         AUTH_PG[auth.html<br/>magic-link entry]
-        PORT[customer_portal.html<br/>my agreements + PDFs]
+        PORT[customer_portal.html<br/>my agreements]
         DASH[dashboard.html<br/>admin workspace]
     end
 
-    subgraph SB["🟩 Supabase platform"]
+    subgraph SB["Supabase platform"]
         direction TB
-        SBA[Auth<br/>magic-link, JWT]
+        SBA[Auth<br/>magic-link · JWT]
         REST[PostgREST API<br/>CRUD with RLS]
-        STG[Storage<br/>6 buckets: agreements,<br/>photos, receipts, logos]
-        EDGE[Edge Functions<br/>send-agreement, inquiry-notify,<br/>mailing-confirm, resend-webhook,<br/>mailing-send, mv-refresh]
+        STG[Storage<br/>6 buckets]
+        EDGE[Edge Functions<br/>10 deployed]
         CRON[pg_cron<br/>scheduled triggers]
-        DB[(Postgres<br/>30 tables + views<br/>RLS policies<br/>audit_log)]
+        DB[(Postgres<br/>35 tables + views<br/>RLS policies)]
     end
 
-    subgraph EXT["📨 External"]
+    subgraph EXT["External"]
         direction TB
         RES[Resend<br/>transactional + broadcast]
-        DNS[Namecheap DNS<br/>SPF, DKIM, MX]
+        DNS[Namecheap DNS<br/>SPF · DKIM · MX]
         ZEF[Zeffy / Resident Advisor<br/>ticketing CSVs]
     end
 
@@ -332,29 +341,43 @@ flowchart LR
 
     IDX -->|insert inquiry| REST
     EQP -->|read available| REST
-    EVT -->|read event, sponsors,<br/>artists| REST
+    EVT -->|read event| REST
     AUTH_PG -->|sign in| SBA
     PORT -->|read own agreements| REST
     PORT -->|signed URLs| STG
     DASH -->|CRUD all tables| REST
-    DASH -->|upload receipts,<br/>signed PDFs| STG
+    DASH -->|upload receipts| STG
     DASH -->|trigger sends| EDGE
 
     REST --> DB
     EDGE -->|service-role| DB
     EDGE -->|send| RES
     EDGE -->|sign URLs| STG
-    SBA -.->|JWT to anon/<br/>authenticated| REST
+    SBA -.->|JWT| REST
     CRON -.->|via pg_net| EDGE
-    CRON -->|refresh mv| DB
+    CRON -->|refresh MVs| DB
     RES -.->|delivery webhooks| EDGE
     DNS -.->|verifies| RES
     ZEF -.->|periodic import| EDGE
 
-    class VIS,CUST,ADMIN user
-    class IDX,EQP,EVT,AUTH_PG,PORT,DASH page
-    class SBA,REST,STG,EDGE,CRON,DB sb
-    class RES,DNS,ZEF ext
+    style VIS fill:#ffffff,stroke:#1A1410,color:#1A1410
+    style CUST fill:#ffffff,stroke:#1A1410,color:#1A1410
+    style ADMIN fill:#ffffff,stroke:#C13B2A,stroke-width:2px,color:#1A1410
+    style IDX fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style EQP fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style EVT fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style AUTH_PG fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style PORT fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style DASH fill:#FFF9E6,stroke:#1A1410,color:#1A1410
+    style SBA fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style REST fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style STG fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style EDGE fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style CRON fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style DB fill:#E0F2E0,stroke:#1A1410,color:#1A1410
+    style RES fill:#FCE4EC,stroke:#1A1410,color:#1A1410
+    style DNS fill:#FCE4EC,stroke:#1A1410,color:#1A1410
+    style ZEF fill:#FCE4EC,stroke:#1A1410,color:#1A1410
   </pre>
 
   <h3>Request-flow examples</h3>
@@ -401,25 +424,7 @@ flowchart LR
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
   mermaid.initialize({
     startOnLoad: true,
-    theme: 'base',
-    themeVariables: {
-      // Light theme so all node + subgraph labels render in dark ink against
-      // the pastel subgraph backgrounds in the architecture diagram.
-      background: '#ffffff',
-      primaryColor: '#ffffff',
-      primaryTextColor: '#1A1410',
-      primaryBorderColor: '#1A1410',
-      secondaryColor: '#F2EDE6',
-      tertiaryColor: '#E8E2D9',
-      lineColor: '#1A1410',
-      textColor: '#1A1410',
-      mainBkg: '#ffffff',
-      nodeTextColor: '#1A1410',
-      clusterBkg: '#F2EDE6',
-      clusterBorder: '#1A1410',
-      titleColor: '#1A1410',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
-    },
+    theme: 'default',
     flowchart: { htmlLabels: true, curve: 'basis' }
   });
 </script>
