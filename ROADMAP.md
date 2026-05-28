@@ -11,8 +11,8 @@ the work spans admin tools, public pages, and an Edge Function backend.
 This version uses 12 phases (0-11) with each phase being independently
 shippable on staging.
 
-**Status as of 2026-05-28 close of Phase 7**: Phases 0-7 done. Phase 8
-(mailing list) is next.
+**Status as of 2026-05-28 close of Phase 8**: Phases 0-8 done. Phase 9
+(Resend broadcasts + webhooks) is next.
 
 ---
 
@@ -47,9 +47,9 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2,P3,P4,P5,P6,P7 done
-    class P8 next
-    class P9,P10,P11 planned
+    class P0,P1,P2,P3,P4,P5,P6,P7,P8 done
+    class P9 next
+    class P10,P11 planned
 ```
 
 ### Phase descriptions and dependencies

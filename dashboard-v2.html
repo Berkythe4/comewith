@@ -274,6 +274,12 @@ body::before {
 .badge-active      { background: var(--green-bg); color: var(--green); }
 .badge-inactive    { background: var(--off);      color: var(--mid); }
 
+/* Subscriber statuses */
+.badge-subscribed   { background: var(--green-bg); color: var(--green); }
+.badge-unsubscribed { background: #e6e3df;         color: var(--mid); }
+.badge-bounced      { background: #fbe6e1;         color: var(--red-dk); }
+.badge-complained   { background: #fbe6e1;         color: var(--red-dk); }
+
 /* Event statuses (planning/announced/on_sale/sold_out/completed/cancelled
    reuses already-defined badges where the slug matches; the new ones: ) */
 .badge-planning   { background: var(--off);      color: var(--mid); }
@@ -497,6 +503,7 @@ body::before {
         <button data-tab="sponsors">Sponsors</button>
         <button data-tab="sponsorships">Sponsorships</button>
         <button data-tab="artists">Artists</button>
+        <button data-tab="subscribers">Subscribers</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -665,6 +672,22 @@ body::before {
             <th>Genres</th>
             <th>Contact</th>
             <th>Status</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-subscribers">
+        <div class="row-count" id="count-subscribers">—</div>
+        <div id="state-subscribers"></div>
+        <table class="data-table" id="table-subscribers" style="display:none;">
+          <thead><tr>
+            <th>Email</th>
+            <th>Name</th>
+            <th>Status</th>
+            <th>Segments</th>
+            <th>Source</th>
+            <th>Confirmed</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -999,6 +1022,24 @@ const renderers = {
       </tr>`;
     }).join('');
   },
+
+  subscribers(rows) {
+    const tbody = $('table-subscribers').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'pending').toLowerCase();
+      const segments = Array.isArray(r.subscriber_segments) && r.subscriber_segments.length
+        ? r.subscriber_segments.map(s => s.segment).join(', ')
+        : '';
+      return `<tr>
+        <td class="truncate">${escapeHtml(r.email || '')}</td>
+        <td>${escapeHtml(r.full_name || '') || muted}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td>${escapeHtml(segments) || muted}</td>
+        <td>${escapeHtml(r.source || '') || muted}</td>
+        <td>${escapeHtml(fmtDate(r.confirmed_at)) || muted}</td>
+      </tr>`;
+    }).join('');
+  },
 };
 
 const queries = {
@@ -1051,6 +1092,11 @@ const queries = {
     .select('id, stage_name, genres, contact_email, status, signature_color')
     .order('stage_name')
     .limit(500),
+
+  subscribers: () => sb.from('subscribers')
+    .select('id, email, full_name, status, source, confirmed_at, created_at, subscriber_segments(segment)')
+    .order('created_at', { ascending: false })
+    .limit(500),
 };
 
 const emptyMessages = {
@@ -1064,6 +1110,7 @@ const emptyMessages = {
   sponsors: 'No sponsors yet.',
   sponsorships: 'No sponsorships yet.',
   artists: 'No artists yet.',
+  subscribers: 'No subscribers yet. The subscribe widgets land them here.',
 };
 
 function setLastRefreshed() {
