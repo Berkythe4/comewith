@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Come With — Inquiry</title>
+<title>Come With — DJ · Rental · Production · Brooklyn</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
@@ -24,16 +24,64 @@ body::before {
   background-size: 18px 18px; pointer-events: none; z-index: 0;
 }
 
-.page { position: relative; z-index: 1; max-width: 620px; margin: 0 auto; padding: 40px 24px 80px; }
+.page { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
 
-header { text-align: center; margin-bottom: 32px; }
+header { text-align: center; margin-bottom: 48px; }
 .brand {
-  font-family: 'Bebas Neue', sans-serif; font-size: 2.6rem;
-  letter-spacing: 0.06em; color: var(--ink); line-height: 1;
+  font-family: 'Bebas Neue', sans-serif; font-size: 3.4rem;
+  letter-spacing: 0.06em; color: var(--ink); line-height: 0.95;
 }
 .brand-sub {
-  font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
-  color: var(--mid); margin-top: 8px;
+  font-size: 0.65rem; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--mid); margin-top: 12px;
+}
+.tagline {
+  font-family: 'Libre Baskerville', serif;
+  font-size: 1.15rem; line-height: 1.55; color: var(--ink);
+  margin-top: 22px;
+}
+.lede {
+  font-size: 0.7rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--mid); margin-top: 14px;
+}
+
+.about {
+  background: white; border: 1px solid var(--border);
+  padding: 28px 30px; margin-bottom: 28px;
+}
+.about-kicker {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem;
+  letter-spacing: 0.06em; margin-bottom: 12px;
+}
+.about p {
+  font-family: 'Libre Baskerville', serif; font-size: 0.98rem;
+  line-height: 1.7; color: var(--ink);
+}
+.about p + p { margin-top: 12px; }
+
+.services-section { margin-bottom: 28px; }
+.services-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
+  letter-spacing: 0.06em; margin-bottom: 14px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--ink);
+}
+.services-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+.service-card {
+  background: white; border: 1px solid var(--border);
+  padding: 16px 18px;
+  border-top: 3px solid var(--red);
+  transition: border-top-color 0.15s;
+}
+.service-card:hover { border-top-color: var(--ink); }
+.service-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+.service-desc {
+  font-size: 0.78rem; color: var(--mid); margin-top: 4px; line-height: 1.45;
 }
 
 .card { background: white; border: 1px solid var(--border); padding: 32px 32px; }
@@ -103,8 +151,46 @@ footer a { color: var(--ink); }
 
   <header>
     <div class="brand">Come With</div>
-    <div class="brand-sub">Event services · equipment rental</div>
+    <div class="brand-sub">DJ · Rental · Production · Brooklyn</div>
+    <p class="tagline">Music that moves people. Gear that performs. Events that people actually remember.</p>
+    <div class="lede">Brooklyn-based · Available worldwide</div>
   </header>
+
+  <div class="about">
+    <div class="about-kicker">Who we are</div>
+    <p>Come With is an independent DJ, equipment rental, and event production operation based in Brooklyn, NY. Founded by Berky (Keith Berkman) — DJ, producer, and event organizer with roots in the New York house music community.</p>
+    <p>We also produce <strong>Dance Infusion</strong>, a Brooklyn house music event series in partnership with the National MS Society's Emerging Leaders Alliance. Every event raises funds and awareness for MS research.</p>
+  </div>
+
+  <div class="services-section">
+    <div class="services-title">What we do</div>
+    <div class="services-grid">
+      <div class="service-card">
+        <div class="service-name">DJ Services</div>
+        <div class="service-desc">House, disco, and brunch-to-late sets for weddings, club nights, corporate, and private events.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Equipment Rental</div>
+        <div class="service-desc">Pro-grade audio + lighting rigs for self-run events. Pickup or delivery available.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Sound</div>
+        <div class="service-desc">Speakers, subs, and mixers sized to your venue. Setup + breakdown included.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Lighting</div>
+        <div class="service-desc">From mood washes to full stage rigs. Configurable for any room.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Photography</div>
+        <div class="service-desc">Event coverage with same-day highlights and full gallery turnaround.</div>
+      </div>
+      <div class="service-card">
+        <div class="service-name">Videography</div>
+        <div class="service-desc">Highlight reels, full-event capture, and short-form content for social.</div>
+      </div>
+    </div>
+  </div>
 
   <div class="card" style="margin-bottom:24px;">
     <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.04em;margin-bottom:6px;">Mailing list</h2>
