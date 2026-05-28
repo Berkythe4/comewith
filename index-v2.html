@@ -106,6 +106,16 @@ footer a { color: var(--ink); }
     <div class="brand-sub">Event services · equipment rental</div>
   </header>
 
+  <div class="card" style="margin-bottom:24px;">
+    <h2 style="font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:0.04em;margin-bottom:6px;">Mailing list</h2>
+    <p style="font-size:0.9rem;color:var(--mid);margin-bottom:16px;">Updates on new events, equipment availability, and Dance Infusion. One email at a time, no spam.</p>
+    <form id="subscribeForm" style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input class="form-input" type="email" id="subscribeEmail" name="email" placeholder="you@example.com" required style="flex:1;min-width:200px;" />
+      <button class="submit-btn" type="submit" id="subscribeBtn" style="margin-top:0;width:auto;padding:12px 24px;">Subscribe</button>
+    </form>
+    <div class="msg" id="subscribeMsg"></div>
+  </div>
+
   <div class="card">
     <p class="intro">Tell us about your event. Berky will respond within a day or two.</p>
 
@@ -231,6 +241,56 @@ $('inquiryForm').addEventListener('submit', async (e) => {
   btn.textContent = 'Sent';
   setMsg("Got it. Berky will reach out within a day or two. You can close this tab.", 'ok');
   e.target.reset();
+});
+
+// ---- Subscribe widget (Phase 8 sprint 2) ----
+const subscribeMsg = (text, kind) => {
+  const el = $('subscribeMsg');
+  el.className = 'msg ' + (kind || '');
+  el.textContent = text || '';
+};
+
+$('subscribeForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('subscribeEmail').value.trim();
+  if (!email) return;
+  const btn = $('subscribeBtn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  subscribeMsg('', '');
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/subscribe`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_PUBLISHABLE_KEY,
+        'Authorization': `Bearer ${SUPABASE_PUBLISHABLE_KEY}`,
+      },
+      body: JSON.stringify({ email, segment: 'come_with', source: 'index-v2' }),
+    });
+    const data = await res.json();
+    btn.disabled = false;
+    btn.textContent = 'Subscribe';
+
+    if (!res.ok) {
+      subscribeMsg(data?.error || `HTTP ${res.status}`, 'err');
+      return;
+    }
+
+    if (data.confirm_sent) {
+      subscribeMsg(`Check ${email} for a confirmation link to finish subscribing.`, 'ok');
+    } else if (data.status === 'subscribed') {
+      subscribeMsg("You're already on the list — added to this segment if you weren't already.", 'ok');
+    } else {
+      subscribeMsg('Subscription updated.', 'ok');
+    }
+    e.target.reset();
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = 'Subscribe';
+    subscribeMsg('Network error: ' + (err.message || err), 'err');
+  }
 });
 </script>
 
