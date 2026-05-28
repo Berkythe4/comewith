@@ -59,7 +59,43 @@ header { text-align: center; margin-bottom: 48px; }
 }
 .about p + p { margin-top: 12px; }
 
-.services-section { margin-bottom: 28px; }
+/* Specialty highlight blocks */
+.specialty { margin-bottom: 32px; }
+.specialty-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
+  letter-spacing: 0.06em; margin-bottom: 14px; padding-bottom: 8px;
+  border-bottom: 2px solid var(--ink);
+}
+.spec-row {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 14px;
+}
+@media (max-width: 600px) { .spec-row { grid-template-columns: 1fr; } }
+.spec-card {
+  background: white; border: 1px solid var(--border);
+  border-left: 4px solid var(--red);
+  padding: 22px 24px;
+}
+.spec-num {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.65rem; letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--red); margin-bottom: 8px;
+}
+.spec-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
+  letter-spacing: 0.04em; line-height: 1.1; margin-bottom: 10px;
+}
+.spec-desc {
+  font-family: 'Libre Baskerville', serif; font-size: 0.95rem;
+  line-height: 1.65; color: var(--ink);
+}
+.spec-tag {
+  display: inline-block; margin-top: 12px;
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.62rem; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--red); padding: 4px 10px; border: 1px solid var(--red);
+}
+
+.services-section { margin-bottom: 32px; }
 .services-title {
   font-family: 'Bebas Neue', sans-serif; font-size: 1.4rem;
   letter-spacing: 0.06em; margin-bottom: 14px; padding-bottom: 8px;
@@ -82,6 +118,58 @@ header { text-align: center; margin-bottom: 48px; }
 }
 .service-desc {
   font-size: 0.78rem; color: var(--mid); margin-top: 4px; line-height: 1.45;
+}
+.service-card.premium {
+  border-top-color: var(--ink); background: #fdfaf4;
+}
+.service-card.premium .service-name { color: var(--ink); }
+
+/* Series section */
+.series { margin-bottom: 32px; }
+.series-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+}
+@media (max-width: 600px) { .series-grid { grid-template-columns: 1fr; } }
+.series-card {
+  background: var(--ink); color: var(--bg);
+  padding: 22px 22px; position: relative;
+}
+.series-card.di { background: white; color: var(--ink); border: 1px solid var(--border); }
+.series-kicker {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.6rem; letter-spacing: 0.16em; text-transform: uppercase;
+  opacity: 0.6; margin-bottom: 6px;
+}
+.series-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.7rem;
+  letter-spacing: 0.06em; line-height: 1; margin-bottom: 10px;
+}
+.series-desc { font-size: 0.85rem; line-height: 1.6; opacity: 0.9; }
+
+/* Watch section */
+.watch { margin-bottom: 32px; }
+.watch-card {
+  background: white; border: 1px solid var(--border);
+  padding: 22px 24px;
+  display: flex; align-items: center; gap: 20px; flex-wrap: wrap;
+  text-decoration: none; color: var(--ink);
+  transition: border-color 0.15s, transform 0.15s;
+}
+.watch-card:hover { border-color: var(--red); transform: translateY(-1px); }
+.watch-icon {
+  width: 56px; height: 56px; flex-shrink: 0;
+  background: var(--red); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.8rem; font-family: 'Bebas Neue', sans-serif;
+}
+.watch-info { flex: 1; min-width: 220px; }
+.watch-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem;
+  letter-spacing: 0.04em;
+}
+.watch-handle {
+  font-family: 'Inconsolata', monospace;
+  font-size: 0.78rem; color: var(--mid); margin-top: 2px;
 }
 
 .card { background: white; border: 1px solid var(--border); padding: 32px 32px; }
@@ -151,45 +239,86 @@ footer a { color: var(--ink); }
 
   <header>
     <div class="brand">Come With</div>
-    <div class="brand-sub">DJ · Rental · Production · Brooklyn</div>
-    <p class="tagline">Music that moves people. Gear that performs. Events that people actually remember.</p>
+    <div class="brand-sub">DJ · Production · Brooklyn</div>
+    <p class="tagline">A boutique DJ + event production outfit for weddings, private parties, and the kinds of nights people remember.</p>
     <div class="lede">Brooklyn-based · Available worldwide</div>
   </header>
 
   <div class="about">
     <div class="about-kicker">Who we are</div>
-    <p>Come With is an independent DJ, equipment rental, and event production operation based in Brooklyn, NY. Founded by Berky (Keith Berkman) — DJ, producer, and event organizer with roots in the New York house music community.</p>
-    <p>We also produce <strong>Dance Infusion</strong>, a Brooklyn house music event series in partnership with the National MS Society's Emerging Leaders Alliance. Every event raises funds and awareness for MS research.</p>
+    <p>Come With is an independent DJ and event production operation based in Brooklyn, NY. Founded by Berky (Keith Berkman) — DJ, producer, and event organizer with roots in the New York house music community.</p>
+    <p>We DJ and produce private events — weddings, dinner parties, brunch sets, and the kinds of intimate nights that don't feel mass-produced. We also throw <strong>Come With</strong>, our namesake house-music party series, and produce <strong>Dance Infusion</strong>, our brunch dance event series benefiting the National MS Society's Emerging Leaders Alliance.</p>
+  </div>
+
+  <div class="specialty">
+    <div class="specialty-title">What we're known for</div>
+    <div class="spec-row">
+      <div class="spec-card">
+        <div class="spec-num">01 · Featured</div>
+        <div class="spec-name">DJ Services</div>
+        <div class="spec-desc">House, disco, and brunch-to-late sets — read the room, hold the energy. Berky's been DJing the Brooklyn house scene long enough to know when to push and when to ease back.</div>
+        <div class="spec-tag">Weddings · Private parties · Brunches</div>
+      </div>
+      <div class="spec-card">
+        <div class="spec-num">02 · Featured</div>
+        <div class="spec-name">Event Production</div>
+        <div class="spec-desc">Full setup from sound to lighting to staging. Including a battery-powered rig that lets us run remote — rooftops, backyards, beaches, anywhere the room isn't already built.</div>
+        <div class="spec-tag">Off-grid capable</div>
+      </div>
+    </div>
   </div>
 
   <div class="services-section">
-    <div class="services-title">What we do</div>
+    <div class="services-title">Also available</div>
     <div class="services-grid">
       <div class="service-card">
-        <div class="service-name">DJ Services</div>
-        <div class="service-desc">House, disco, and brunch-to-late sets for weddings, club nights, corporate, and private events.</div>
-      </div>
-      <div class="service-card">
-        <div class="service-name">Equipment Rental</div>
-        <div class="service-desc">Pro-grade audio + lighting rigs for self-run events. Pickup or delivery available.</div>
-      </div>
-      <div class="service-card">
         <div class="service-name">Sound</div>
-        <div class="service-desc">Speakers, subs, and mixers sized to your venue. Setup + breakdown included.</div>
+        <div class="service-desc">Speakers, subs, mixers sized to your venue.</div>
       </div>
       <div class="service-card">
         <div class="service-name">Lighting</div>
-        <div class="service-desc">From mood washes to full stage rigs. Configurable for any room.</div>
+        <div class="service-desc">Mood washes to full stage rigs.</div>
       </div>
       <div class="service-card">
         <div class="service-name">Photography</div>
-        <div class="service-desc">Event coverage with same-day highlights and full gallery turnaround.</div>
+        <div class="service-desc">Event coverage with same-day highlights.</div>
       </div>
       <div class="service-card">
         <div class="service-name">Videography</div>
-        <div class="service-desc">Highlight reels, full-event capture, and short-form content for social.</div>
+        <div class="service-desc">Highlight reels and short-form for social.</div>
+      </div>
+      <div class="service-card premium">
+        <div class="service-name">Equipment Rental</div>
+        <div class="service-desc">Berky's own pro rig. Available to repeat clients and trusted partners — ask if you're not sure.</div>
       </div>
     </div>
+  </div>
+
+  <div class="series">
+    <div class="specialty-title">Series we run</div>
+    <div class="series-grid">
+      <a class="series-card" href="#" style="text-decoration:none;">
+        <div class="series-kicker">Our namesake party series</div>
+        <div class="series-name">Come With</div>
+        <div class="series-desc">Brooklyn house music with the people we'd actually invite over. More info as dates lock.</div>
+      </a>
+      <a class="series-card di" href="#" style="text-decoration:none;">
+        <div class="series-kicker">Charity series · MS Society</div>
+        <div class="series-name">Dance Infusion</div>
+        <div class="series-desc">Brunch dance parties in partnership with the National MS Society's Emerging Leaders Alliance. Every event raises funds and awareness for MS research.</div>
+      </a>
+    </div>
+  </div>
+
+  <div class="watch">
+    <div class="specialty-title">Watch</div>
+    <a class="watch-card" href="https://www.youtube.com/@ComewithNYC" target="_blank" rel="noopener">
+      <div class="watch-icon">▶</div>
+      <div class="watch-info">
+        <div class="watch-title">Come With on YouTube</div>
+        <div class="watch-handle">@ComewithNYC · sets, highlights, and showcase recordings</div>
+      </div>
+    </a>
   </div>
 
   <div class="card" style="margin-bottom:24px;">
