@@ -550,6 +550,7 @@ body::before {
         </table>
       </div>
       <div class="panel" id="panel-expenses">
+        <button class="add-btn" data-add="expense">+ Add expense</button>
         <div class="row-count" id="count-expenses">—</div>
         <div id="state-expenses"></div>
         <table class="data-table" id="table-expenses" style="display:none;">
@@ -1012,6 +1013,25 @@ const FORM_DEFS = {
       { name: 'agreement_id', type: 'select-agreements', label: 'Agreement (optional)' },
     ],
   },
+  expense: {
+    title: 'Add expense',
+    sub: 'Logs a row in public.expenses · uploads to receipts bucket',
+    table: 'expenses',
+    fields: [
+      { name: 'date',         type: 'date',     label: 'Date',          required: true, default: TODAY, half: 'left' },
+      { name: 'amount',       type: 'number',   label: 'Amount',        required: true, step: '0.01', min: 0, half: 'right' },
+      { name: 'category',     type: 'text',     label: 'Category',      placeholder: 'e.g. equipment, travel, marketing' },
+      { name: 'vendor',       type: 'text',     label: 'Vendor' },
+      { name: 'description',  type: 'textarea', label: 'Description' },
+      { name: 'deductible',   type: 'checkbox', label: 'Tax-deductible', default: true },
+      { name: 'receipt',      type: 'file',     label: 'Receipt photo / PDF (optional)', accept: 'image/jpeg,image/png,image/webp,application/pdf' },
+    ],
+  },
+};
+
+// Map a form's file field to the row column it populates after upload.
+const RECEIPT_FIELD_TO_COLUMN = {
+  expense: 'receipt_path',
 };
 
 async function buildField(f) {
@@ -1103,23 +1123,51 @@ $('modalForm').addEventListener('submit', async (e) => {
   const spec = FORM_DEFS[kind];
   if (!spec) return;
 
+  $('modalSubmit').disabled = true;
+  $('modalSubmit').textContent = 'Saving…';
+
   // Collect form values
   const fd = new FormData(e.target);
   const row = {};
+  let fileField = null;
   for (const f of spec.fields) {
-    if (f.type === 'file') continue; // handled separately in sprint 3
+    if (f.type === 'file') { fileField = f; continue; }
+    if (f.type === 'checkbox') {
+      row[f.name] = !!fd.get(f.name);
+      continue;
+    }
     let v = fd.get(f.name);
     if (v == null || v === '') continue;
-    if (f.type === 'checkbox') v = true;
     if (f.type === 'number') v = Number(v);
     row[f.name] = v;
+  }
+
+  // File upload first — receipt → Storage 'receipts' bucket
+  if (fileField) {
+    const file = fd.get(fileField.name);
+    if (file instanceof File && file.size > 0) {
+      $('modalSubmit').textContent = 'Uploading…';
+      const dateStr = (row.date || TODAY()).replace(/-/g, '');
+      const safe = (file.name || 'receipt').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 64);
+      const path = `${dateStr}_${Date.now()}_${safe}`;
+      const { data: upload, error: uploadErr } = await sb.storage
+        .from('receipts')
+        .upload(path, file, { contentType: file.type, upsert: false });
+      if (uploadErr) {
+        $('modalSubmit').disabled = false;
+        $('modalSubmit').textContent = 'Save';
+        toast('Receipt upload failed: ' + uploadErr.message, 'err');
+        return;
+      }
+      const col = RECEIPT_FIELD_TO_COLUMN[kind];
+      if (col) row[col] = upload.path;
+    }
   }
 
   // Attach the signed-in user as created_by where the table supports it
   const { data: { session } } = await sb.auth.getSession();
   if (session?.user?.id) row.created_by = session.user.id;
 
-  $('modalSubmit').disabled = true;
   $('modalSubmit').textContent = 'Saving…';
   const { error } = await sb.from(spec.table).insert(row);
   if (error) {
