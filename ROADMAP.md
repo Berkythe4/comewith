@@ -11,8 +11,8 @@ the work spans admin tools, public pages, and an Edge Function backend.
 This version uses 12 phases (0-11) with each phase being independently
 shippable on staging.
 
-**Status as of 2026-05-28 close of Phase 4**: Phases 0-4 done. Phase 5
-(Edge Functions for transactional email) is next.
+**Status as of 2026-05-28 close of Phase 5**: Phases 0-5 done. Phase 6
+(customer-facing flows: public inquiry form, customer portal) is next.
 
 ---
 
@@ -47,9 +47,9 @@ flowchart TD
     P10 --> P11
     P7 --> P11
 
-    class P0,P1,P2,P3,P4 done
-    class P5 next
-    class P6,P7,P8,P9,P10,P11 planned
+    class P0,P1,P2,P3,P4,P5 done
+    class P6 next
+    class P7,P8,P9,P10,P11 planned
 ```
 
 ### Phase descriptions and dependencies
@@ -61,8 +61,8 @@ flowchart TD
 | 2 ✅ | Auth bootstrap | magic-link configured, Berky=master_admin, RLS isolation proven | 0 |
 | 3 ✅ | Admin dashboard — read | `dashboard-v2.html` reads from Supabase (all 7 admin tables: inquiries, agreements, clients, income, expenses, equipment, events). Magic-link login. No writes yet — read-only de-risks the schema before exposing edits | 2 |
 | 4 ✅ | Admin dashboard — write | Inquiry status writes, agreement status writes, "Add income" modal, "Add expense" modal with receipt upload to Storage. Daily ledger work runnable from the dashboard. Full CRUD on clients/equipment/events deferred to 4.5 or Phase 7 | 3 |
-| 5 🟡 | Edge Functions: transactional | `send-agreement` (PDF gen + storage upload + Resend email), `inquiry-notify` (Resend on new inquiry), `magic-link-redirect` (post-login routing). Bridges Phase 4 admin writes to outbound email | 4 |
-| 6 | Customer-facing flows | `index.html` inquiry form posts to Supabase; `customer_portal.html` shows the signed-in customer's agreements; `services_selection.html`, `send_agreement.html`, equipment list — all rewired. **First time anon-RLS gets a real test** (see Phase 2's `project_anon_rls_sql_editor` memory) | 5 |
+| 5 ✅ | Edge Functions: transactional | `send-agreement` (creates token, emails sign link via Resend, marks agreement sent), `get-agreement-by-token` (public, returns agreement for signing page), `mark-signed` (records typed-name signature, notifies all master_admins). `sign.html` customer signing page. Web-based signing — no PDFs. `inquiry-notify` deferred to Phase 6 alongside the public form | 4 |
+| 6 🟡 | Customer-facing flows | `index.html` inquiry form posts to Supabase; `customer_portal.html` shows the signed-in customer's agreements; `services_selection.html`, equipment list — all rewired. `inquiry-notify` Edge Function fires when a public inquiry lands. **First time anon-RLS gets a real test** (see Phase 2's `project_anon_rls_sql_editor` memory) | 5 |
 | 7 | Dance Infusion event hub | Public `/events/dance-infusion-2` page reads from `events`, `sponsors`, `artists`; ticketing import from Zeffy + Resident Advisor; sponsor admin UI. Can run in parallel with Phase 6 since it's a separate domain | 5 |
 | 8 | Mailing list | Public subscribe form, double-opt-in confirmation, unsubscribe via tokenized URL, segments. Self-hosted per decision #8 | 6 |
 | 9 | Resend broadcasts + webhooks | Audiences sync, campaign drafting UI, send queue, webhook handler for `delivered`/`bounced`/`complained` → `mailing_events` table | 8 |
