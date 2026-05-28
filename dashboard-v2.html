@@ -508,6 +508,7 @@ body::before {
         </table>
       </div>
       <div class="panel" id="panel-agreements">
+        <button class="add-btn" data-add="agreement">+ Add agreement</button>
         <div class="row-count" id="count-agreements">—</div>
         <div id="state-agreements"></div>
         <table class="data-table" id="table-agreements" style="display:none;">
@@ -1020,6 +1021,23 @@ const FORM_DEFS = {
       { name: 'agreement_id', type: 'select-agreements', label: 'Agreement (optional)' },
     ],
   },
+  agreement: {
+    title: 'Add agreement',
+    sub: 'Drafts a row in public.agreements (status=draft)',
+    table: 'agreements',
+    fields: [
+      { name: 'agreement_type', type: 'select-static', label: 'Type', required: true, options: ['events', 'rental'], half: 'left' },
+      { name: 'event_date',     type: 'date',         label: 'Event date',                                          half: 'right' },
+      { name: 'client_id',      type: 'select-clients', label: 'Client', required: true },
+      { name: 'venue_name',     type: 'text',         label: 'Venue name' },
+      { name: 'venue_address',  type: 'text',         label: 'Venue address' },
+      { name: 'subtotal',       type: 'number',       label: 'Subtotal',  step: '0.01', min: 0, half: 'left' },
+      { name: 'deposit_amount', type: 'number',       label: 'Deposit',   step: '0.01', min: 0, half: 'right' },
+      { name: 'total_amount',   type: 'number',       label: 'Total',     step: '0.01', min: 0 },
+      { name: 'payment_method', type: 'text',         label: 'Payment method', placeholder: 'e.g. Zelle, Venmo, check' },
+      { name: 'notes',          type: 'textarea',     label: 'Internal notes (not shown to client)' },
+    ],
+  },
   expense: {
     title: 'Add expense',
     sub: 'Logs a row in public.expenses · uploads to receipts bucket',
@@ -1056,6 +1074,9 @@ async function buildField(f) {
       return `<option value="${escapeHtml(a.id)}">${escapeHtml(lbl)}</option>`;
     }).join('');
     input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
+  } else if (f.type === 'select-static') {
+    const opts = f.options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
+    input = `<select class="modal-select" name="${f.name}"${f.required ? ' required' : ''}>${opts}</select>`;
   } else if (f.type === 'checkbox') {
     const checked = def ? ' checked' : '';
     input = `<input class="modal-input" type="checkbox" name="${f.name}" value="true"${checked} style="width:auto;" />`;
