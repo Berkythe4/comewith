@@ -229,6 +229,19 @@ body::before {
 .badge-type-events { background: var(--off);     color: var(--ink); border: 1px solid var(--border-strong); }
 .badge-type-rental { background: var(--blue-bg); color: var(--blue); }
 
+/* Equipment statuses */
+.badge-available   { background: var(--green-bg); color: var(--green); }
+.badge-rented      { background: var(--amber-bg); color: var(--amber); }
+.badge-maintenance { background: var(--blue-bg);  color: var(--blue); }
+.badge-retired     { background: #e6e3df;         color: var(--mid); }
+
+/* Event statuses (planning/announced/on_sale/sold_out/completed/cancelled
+   reuses already-defined badges where the slug matches; the new ones: ) */
+.badge-planning   { background: var(--off);      color: var(--mid); }
+.badge-announced  { background: var(--blue-bg);  color: var(--blue); }
+.badge-on_sale    { background: var(--green-bg); color: var(--green); }
+.badge-sold_out   { background: var(--amber-bg); color: var(--amber); }
+
 /* Numeric / money cell */
 .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
@@ -397,8 +410,37 @@ body::before {
           <tbody></tbody>
         </table>
       </div>
-      <div class="panel" id="panel-equipment"><div class="placeholder">Sprint 5 → <code>equipment_inventory</code></div></div>
-      <div class="panel" id="panel-events"><div class="placeholder">Sprint 5 → <code>events</code></div></div>
+      <div class="panel" id="panel-equipment">
+        <div class="row-count" id="count-equipment">—</div>
+        <div id="state-equipment"></div>
+        <table class="data-table" id="table-equipment" style="display:none;">
+          <thead><tr>
+            <th>Name</th>
+            <th>Category</th>
+            <th>Brand / Model</th>
+            <th>Status</th>
+            <th class="num">Daily rate</th>
+            <th class="num">Purchase</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-events">
+        <div class="row-count" id="count-events">—</div>
+        <div id="state-events"></div>
+        <table class="data-table" id="table-events" style="display:none;">
+          <thead><tr>
+            <th>Date</th>
+            <th>Name</th>
+            <th>Series</th>
+            <th>Status</th>
+            <th class="num">Bar min</th>
+            <th class="num">Attendance</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
     </main>
 
   </div>
@@ -606,6 +648,37 @@ const renderers = {
       <td class="truncate">${escapeHtml(truncate(r.notes || '', 60)) || muted}</td>
     </tr>`).join('');
   },
+
+  equipment(rows) {
+    const tbody = $('table-equipment').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'available').toLowerCase();
+      const bm = [r.brand, r.model].filter(Boolean).join(' ');
+      return `<tr>
+        <td>${escapeHtml(r.name || '')}</td>
+        <td>${escapeHtml(r.category || '') || muted}</td>
+        <td>${escapeHtml(bm) || muted}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td class="num">${r.daily_rate != null ? money(r.daily_rate) : muted}</td>
+        <td class="num">${r.purchase_price != null ? money(r.purchase_price) : muted}</td>
+      </tr>`;
+    }).join('');
+  },
+
+  events(rows) {
+    const tbody = $('table-events').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'planning').toLowerCase();
+      return `<tr>
+        <td>${escapeHtml(fmtDate(r.event_date))}</td>
+        <td>${escapeHtml(r.name || '')}</td>
+        <td>${escapeHtml(r.series || '') || muted}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status.replace('_', ' '))}</span></td>
+        <td class="num">${r.bar_minimum != null ? money(r.bar_minimum) : muted}</td>
+        <td class="num">${r.total_attendance != null ? r.total_attendance : muted}</td>
+      </tr>`;
+    }).join('');
+  },
 };
 
 const queries = {
@@ -632,6 +705,16 @@ const queries = {
   clients: () => sb.from('clients')
     .select('id, full_name, email, phone, company, notes, created_at')
     .order('created_at', { ascending: false })
+    .limit(500),
+
+  equipment: () => sb.from('equipment_inventory')
+    .select('id, name, category, brand, model, status, daily_rate, purchase_price')
+    .order('name', { ascending: true })
+    .limit(500),
+
+  events: () => sb.from('events')
+    .select('id, name, series, event_date, status, bar_minimum, total_attendance')
+    .order('event_date', { ascending: false })
     .limit(500),
 };
 
