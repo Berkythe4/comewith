@@ -280,6 +280,12 @@ body::before {
 .badge-bounced      { background: #fbe6e1;         color: var(--red-dk); }
 .badge-complained   { background: #fbe6e1;         color: var(--red-dk); }
 
+/* Campaign statuses */
+.badge-scheduled    { background: var(--amber-bg); color: var(--amber); }
+.badge-sending      { background: var(--blue-bg);  color: var(--blue); }
+.badge-sent         { background: var(--green-bg); color: var(--green); }
+.badge-failed       { background: #fbe6e1;         color: var(--red-dk); }
+
 /* Event statuses (planning/announced/on_sale/sold_out/completed/cancelled
    reuses already-defined badges where the slug matches; the new ones: ) */
 .badge-planning   { background: var(--off);      color: var(--mid); }
@@ -504,6 +510,7 @@ body::before {
         <button data-tab="sponsorships">Sponsorships</button>
         <button data-tab="artists">Artists</button>
         <button data-tab="subscribers">Subscribers</button>
+        <button data-tab="campaigns">Campaigns</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -688,6 +695,24 @@ body::before {
             <th>Segments</th>
             <th>Source</th>
             <th>Confirmed</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-campaigns">
+        <button class="add-btn" data-add="campaign">+ Draft campaign</button>
+        <div class="row-count" id="count-campaigns">—</div>
+        <div id="state-campaigns"></div>
+        <table class="data-table" id="table-campaigns" style="display:none;">
+          <thead><tr>
+            <th>Name</th>
+            <th>Subject</th>
+            <th>Segment</th>
+            <th>Status</th>
+            <th class="num">Sent to</th>
+            <th>Sent at</th>
+            <th>Actions</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -1040,6 +1065,25 @@ const renderers = {
       </tr>`;
     }).join('');
   },
+
+  campaigns(rows) {
+    const tbody = $('table-campaigns').querySelector('tbody');
+    tbody.innerHTML = rows.map(r => {
+      const status = (r.status || 'draft').toLowerCase();
+      const sendBtn = status === 'draft'
+        ? `<button class="row-btn" data-send-campaign="${escapeHtml(r.id)}">Send</button>`
+        : (status === 'sending' ? `<span class="muted">sending…</span>` : '');
+      return `<tr>
+        <td>${escapeHtml(r.name || '')}</td>
+        <td class="truncate">${escapeHtml(r.subject || '')}</td>
+        <td>${escapeHtml(r.segment_filter || '') || muted}</td>
+        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td class="num">${r.recipient_count != null ? r.recipient_count : muted}</td>
+        <td>${escapeHtml(fmtDate(r.sent_at)) || muted}</td>
+        <td>${sendBtn}</td>
+      </tr>`;
+    }).join('');
+  },
 };
 
 const queries = {
@@ -1097,6 +1141,11 @@ const queries = {
     .select('id, email, full_name, status, source, confirmed_at, created_at, subscriber_segments(segment)')
     .order('created_at', { ascending: false })
     .limit(500),
+
+  campaigns: () => sb.from('mailing_campaigns')
+    .select('id, name, subject, segment_filter, status, recipient_count, sent_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(500),
 };
 
 const emptyMessages = {
@@ -1111,6 +1160,7 @@ const emptyMessages = {
   sponsorships: 'No sponsorships yet.',
   artists: 'No artists yet.',
   subscribers: 'No subscribers yet. The subscribe widgets land them here.',
+  campaigns: 'No campaigns yet. Draft one above.',
 };
 
 function setLastRefreshed() {
@@ -1201,6 +1251,18 @@ const FORM_DEFS = {
       { name: 'description',  type: 'textarea', label: 'Description' },
       { name: 'client_id',    type: 'select-clients',    label: 'Client (optional)' },
       { name: 'agreement_id', type: 'select-agreements', label: 'Agreement (optional)' },
+    ],
+  },
+  campaign: {
+    title: 'Draft campaign',
+    sub: 'Saves to public.mailing_campaigns as status=draft',
+    table: 'mailing_campaigns',
+    fields: [
+      { name: 'name',           type: 'text',     label: 'Internal name',     required: true, placeholder: 'May newsletter' },
+      { name: 'subject',        type: 'text',     label: 'Subject line',      required: true },
+      { name: 'preview_text',   type: 'text',     label: 'Preview text', placeholder: 'Shows next to subject in inbox' },
+      { name: 'segment_filter', type: 'text',     label: 'Segment filter',    placeholder: 'leave blank for all subscribers' },
+      { name: 'body_html',      type: 'textarea', label: 'Body (HTML)',       required: true },
     ],
   },
   agreement: {
@@ -1329,6 +1391,28 @@ document.querySelector('main.main').addEventListener('click', (e) => {
   const btn = e.target.closest('[data-add]');
   if (!btn) return;
   openModal(btn.dataset.add);
+});
+
+// Send-campaign delegation (Phase 9 sprint 3)
+document.querySelector('main.main').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-send-campaign]');
+  if (!btn || btn.disabled) return;
+  if (!confirm('Send this campaign to all matching subscribers? This cannot be undone.')) return;
+  const id = btn.dataset.sendCampaign;
+  const original = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+  const { data, error } = await sb.functions.invoke('send-campaign', { body: { campaign_id: id } });
+  if (error) {
+    btn.disabled = false;
+    btn.textContent = original;
+    let detail = error.message;
+    try { const ctx = error.context; if (ctx?.body) detail = (await ctx.body).error || detail; } catch (_) {}
+    toast('Send failed: ' + detail, 'err');
+    return;
+  }
+  toast(`Sent to ${data.sent} of ${data.total} subscribers`, 'ok');
+  loadTab('campaigns');
 });
 
 // Send-agreement delegation (Phase 5 sprint 2)
