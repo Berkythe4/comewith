@@ -113,24 +113,10 @@
       display: flex;
       justify-content: center;
     }
-    /* Belt-and-suspenders: force any text inside Mermaid SVG to ink so labels
-       remain legible regardless of theme drift or future Mermaid upgrades. */
-    .mermaid svg text,
-    .mermaid svg .nodeLabel,
-    .mermaid svg .nodeLabel *,
-    .mermaid svg .edgeLabel,
-    .mermaid svg .edgeLabel *,
-    .mermaid svg .cluster-label,
-    .mermaid svg .cluster-label *,
-    .mermaid svg .label,
-    .mermaid svg .label *,
-    .mermaid svg foreignObject div,
-    .mermaid svg foreignObject span,
-    .mermaid svg foreignObject p { color: #1A1410 !important; fill: #1A1410 !important; }
-    .mermaid svg .edgeLabel { background-color: #ffffff !important; }
-    .mermaid svg .edgeLabel rect { fill: #ffffff !important; }
-    /* Force readable subgraph (cluster) backgrounds */
-    .mermaid svg .cluster rect { fill: #F2EDE6 !important; stroke: #1A1410 !important; }
+    /* No mermaid-internal CSS overrides — let the per-node `style` directives
+       in the diagram source dictate node colors. Adding `!important` here
+       backfires when a selector accidentally matches a node's background
+       shape instead of just its text. */
     .meta {
       color: var(--muted);
       font-size: 0.85rem;
