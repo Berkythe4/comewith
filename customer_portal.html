@@ -297,12 +297,17 @@ async function renderForSession(session) {
   if (!session) { showLogin(); return; }
   const { data: profile, error } = await sb
     .from('profiles')
-    .select('full_name, email')
+    .select('full_name, email, role')
     .eq('id', session.user.id)
     .single();
   if (error) {
     setMsg('Signed in but could not load your profile: ' + error.message, 'err');
     showLogin();
+    return;
+  }
+  // Admins land on the admin dashboard, not the customer portal.
+  if (profile.role === 'master_admin' || profile.role === 'sub_admin') {
+    window.location.href = 'dashboard.html';
     return;
   }
   $('customerName').textContent = profile.full_name || profile.email || 'Customer';

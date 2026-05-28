@@ -26,6 +26,18 @@ body::before {
 
 .page { position: relative; z-index: 1; max-width: 720px; margin: 0 auto; padding: 48px 24px 80px; }
 
+/* Top-right sign-in link */
+.signin {
+  position: absolute; top: 24px; right: 24px; z-index: 2;
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--mid); text-decoration: none;
+  padding: 8px 16px; border: 1px solid var(--border);
+  background: white;
+  transition: all 0.15s;
+}
+.signin:hover { color: var(--red); border-color: var(--red); }
+
 header { text-align: center; margin-bottom: 48px; }
 .brand {
   font-family: 'Bebas Neue', sans-serif; font-size: 3.4rem;
@@ -235,19 +247,21 @@ footer a { color: var(--ink); }
 </style>
 </head>
 <body>
+<a class="signin" href="customer_portal.html">Sign in</a>
+
 <div class="page">
 
   <header>
     <div class="brand">Come With</div>
     <div class="brand-sub">DJ · Production · Brooklyn</div>
-    <p class="tagline">A boutique DJ + event production outfit for weddings, private parties, and the kinds of nights people remember.</p>
+    <p class="tagline">Music that moves people. Gear that performs. Events that people actually remember.</p>
     <div class="lede">Brooklyn-based · Available worldwide</div>
   </header>
 
   <div class="about">
     <div class="about-kicker">Who we are</div>
     <p>Come With is an independent DJ and event production operation based in Brooklyn, NY. Founded by Berky (Keith Berkman) — DJ, producer, and event organizer with roots in the New York house music community.</p>
-    <p>We DJ and produce private events — weddings, dinner parties, brunch sets, and the kinds of intimate nights that don't feel mass-produced. We also throw <strong>Come With</strong>, our namesake house-music party series, and produce <strong>Dance Infusion</strong>, our brunch dance event series benefiting the National MS Society's Emerging Leaders Alliance.</p>
+    <p>We DJ and produce private events — dinner parties, brunches, club nights, and corporate events. We also throw <strong>Come With</strong>, our namesake house-music party series, and produce <strong>Dance Infusion</strong>, our brunch dance event series benefiting the National MS Society's Emerging Leaders Alliance.</p>
   </div>
 
   <div class="specialty">
@@ -257,7 +271,7 @@ footer a { color: var(--ink); }
         <div class="spec-num">01 · Featured</div>
         <div class="spec-name">DJ Services</div>
         <div class="spec-desc">House, disco, and brunch-to-late sets — read the room, hold the energy. Berky's been DJing the Brooklyn house scene long enough to know when to push and when to ease back.</div>
-        <div class="spec-tag">Weddings · Private parties · Brunches</div>
+        <div class="spec-tag">Private parties · Brunches · Club nights</div>
       </div>
       <div class="spec-card">
         <div class="spec-num">02 · Featured</div>
