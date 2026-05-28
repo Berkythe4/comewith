@@ -270,6 +270,43 @@ body::before {
 /* Numeric / money cell */
 .data-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 
+/* Inline status edit selects (Phase 4 sprint 1) */
+.status-select {
+  font-family: 'Inconsolata', monospace; font-size: 0.62rem;
+  letter-spacing: 0.1em; text-transform: uppercase; font-weight: 500;
+  padding: 4px 24px 4px 10px; cursor: pointer;
+  border: 1px solid var(--border-strong); background: white; color: var(--ink);
+  border-radius: 0; -webkit-appearance: none; -moz-appearance: none; appearance: none;
+  outline: none; min-width: 130px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--mid) 50%),
+                    linear-gradient(135deg, var(--mid) 50%, transparent 50%);
+  background-position: calc(100% - 12px) 50%, calc(100% - 8px) 50%;
+  background-size: 4px 4px, 4px 4px;
+  background-repeat: no-repeat;
+  transition: border-color 0.15s, opacity 0.15s;
+}
+.status-select:hover, .status-select:focus { border-color: var(--red); }
+.status-select.saving { opacity: 0.5; cursor: progress; }
+
+/* Toasts (Phase 4) */
+.toast-stack {
+  position: fixed; bottom: 24px; right: 24px; z-index: 100;
+  display: flex; flex-direction: column-reverse; gap: 8px;
+  max-width: 360px; pointer-events: none;
+}
+.toast {
+  pointer-events: auto;
+  background: var(--ink); color: var(--bg);
+  padding: 12px 16px; font-size: 0.78rem;
+  border-left: 3px solid var(--red);
+  animation: toastIn 0.2s ease-out;
+  font-family: 'Inconsolata', monospace;
+}
+.toast.ok  { border-left-color: var(--green); }
+.toast.err { border-left-color: var(--red); }
+.toast.fade { opacity: 0; transition: opacity 0.3s; }
+@keyframes toastIn { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
 /* Responsive */
 @media (max-width: 800px) {
   .dash-layout { grid-template-columns: 1fr; }
@@ -621,6 +658,35 @@ function setCount(tab, n) {
 const muted = '<span class="muted">—</span>';
 const money = (n) => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+const STATUS_VALUES = {
+  inquiries:  ['new', 'contacted', 'quoted', 'converted', 'lost', 'archived'],
+  agreements: ['draft', 'sent', 'signed', 'cancelled', 'completed'],
+};
+
+function statusSelect(table, rowId, current) {
+  const opts = STATUS_VALUES[table].map(s =>
+    `<option value="${s}"${s === current ? ' selected' : ''}>${s}</option>`
+  ).join('');
+  return `<select class="status-select" data-table="${table}" data-row="${escapeHtml(rowId)}" data-original="${escapeHtml(current)}">${opts}</select>`;
+}
+
+// ---- Toasts ----
+function toast(message, kind = 'ok') {
+  let stack = document.getElementById('toastStack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toastStack';
+    stack.className = 'toast-stack';
+    document.body.appendChild(stack);
+  }
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind;
+  t.textContent = message;
+  stack.appendChild(t);
+  setTimeout(() => t.classList.add('fade'), 2700);
+  setTimeout(() => t.remove(), 3100);
+}
+
 const renderers = {
   inquiries(rows) {
     const tbody = $('table-inquiries').querySelector('tbody');
@@ -635,7 +701,7 @@ const renderers = {
         <td class="truncate">${escapeHtml(r.email || '')}</td>
         <td>${escapeHtml(fmtDate(r.event_date))}</td>
         <td class="truncate">${escapeHtml(truncate(services, 60))}</td>
-        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td>${statusSelect('inquiries', r.id, status)}</td>
       </tr>`;
     }).join('');
   },
@@ -652,7 +718,7 @@ const renderers = {
         <td>${clientCell}</td>
         <td>${escapeHtml(fmtDate(r.event_date)) || muted}</td>
         <td class="num">${money(r.total_amount)}</td>
-        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+        <td>${statusSelect('agreements', r.id, status)}</td>
       </tr>`;
     }).join('');
   },
@@ -816,6 +882,36 @@ async function loadTab(tab) {
 $('refreshBtn').addEventListener('click', () => {
   const active = document.querySelector('.sidebar-nav button.active');
   if (active) loadTab(active.dataset.tab);
+});
+
+// ---- Inline status writes (Phase 4 sprint 1) ----
+// Event delegation on the main area so newly rendered selects are handled.
+document.querySelector('main.main').addEventListener('change', async (e) => {
+  const sel = e.target.closest('.status-select');
+  if (!sel) return;
+  const table = sel.dataset.table;
+  const rowId = sel.dataset.row;
+  const original = sel.dataset.original;
+  const next = sel.value;
+  if (next === original) return;
+
+  sel.classList.add('saving');
+  sel.disabled = true;
+  const { error } = await sb.from(table).update({ status: next }).eq('id', rowId);
+  sel.classList.remove('saving');
+  sel.disabled = false;
+
+  if (error) {
+    sel.value = original; // revert
+    const friendly = /JWT/i.test(error.message)
+      ? 'Session expired. Please sign in again.'
+      : error.message;
+    toast('Update failed: ' + friendly, 'err');
+    if (/JWT/i.test(error.message)) await sb.auth.signOut();
+    return;
+  }
+  sel.dataset.original = next;
+  toast(table.slice(0, -1) + ' marked "' + next + '"', 'ok');
 });
 
 // ---- Tab switching ----
