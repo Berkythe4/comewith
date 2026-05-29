@@ -259,6 +259,24 @@ body::before {
   color: white; padding: 8px;
 }
 .fly-arrow { color: var(--mid); font-size: 1.5rem; }
+/* Reusable formula hover-tip (Phase 13 — every computed metric carries one) */
+.info-tip {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 13px; height: 13px; margin-left: 5px; vertical-align: middle;
+  border: 1px solid var(--mid); border-radius: 50%;
+  font-family: 'Libre Baskerville', serif; font-style: italic; font-size: 9px;
+  color: var(--mid); cursor: help; position: relative; user-select: none;
+}
+.info-tip:hover { color: var(--ink); border-color: var(--ink); }
+.info-tip:hover::after {
+  content: attr(data-tip);
+  position: absolute; bottom: calc(100% + 8px); left: 50%; transform: translateX(-50%);
+  background: var(--ink); color: var(--bg); padding: 8px 11px;
+  font-family: 'Inconsolata', monospace; font-style: normal; font-size: 0.66rem;
+  letter-spacing: 0.01em; line-height: 1.5; text-align: left;
+  width: max-content; max-width: 250px; white-space: normal;
+  z-index: 60; pointer-events: none; box-shadow: 0 3px 12px rgba(26,20,16,0.25);
+}
 .placeholder {
   background: white; border: 1px dashed var(--border-strong);
   padding: 36px 28px; text-align: center;
@@ -1882,11 +1900,25 @@ function setStratState(kind, msg) {
   el.innerHTML = `<div class="panel-state${kind === 'err' ? ' err' : ''}">${kind === 'loading' ? '<span class="spinner"></span>' : ''}${escapeHtml(msg)}</div>`;
 }
 
+// Plain-language formulas for every computed metric — one source, reused by infoTip().
+const FORMULAS = {
+  sell_through: 'Sell-through = tickets sold ÷ capacity × 100',
+  net_pl: 'Net P&L = tickets + other income (bar/vendor/merch) + donations + sponsor cash − expenses',
+  total_raised: 'Total raised = tickets + other income + donations + sponsor cash + sponsor in-kind',
+  cost_to_raise: 'Cost to raise $1 = expenses ÷ total raised',
+  tickets_cap: 'Tickets sold (sum of tier quantities) vs venue capacity',
+  attendance: 'Total attendance recorded for the event',
+};
+function infoTip(text) { return ` <span class="info-tip" data-tip="${escapeHtml(text)}">i</span>`; }
+
 function kpiCardHtml(c) {
   const t = trendFor(c);
   const color = WORKSTREAM[c.workstream]?.color || 'var(--mid)';
+  const tip = c.comparison === 'lte'
+    ? 'Progress = target ÷ current (lower is better). Trend = change vs last reading; ▼ down is good.'
+    : 'Progress = current ÷ target. Trend = change vs last reading; ▲ up is good.';
   return `<div class="kpi-card${c.current_value == null ? ' no-data' : ''}" style="--ws-color:${color}">
-    <div class="kpi-label">${escapeHtml(c.label)}</div>
+    <div class="kpi-label">${escapeHtml(c.label)}${infoTip(tip)}</div>
     <div class="kpi-value">${fmtMetric(c.current_value, c.unit)}</div>
     <div class="kpi-bar"><span style="width:${progressFor(c)}%"></span></div>
     <div class="kpi-meta">
@@ -1908,22 +1940,23 @@ function renderStrategy() {
   }
   $('strat-cards').innerHTML = groups || `<div class="panel-state">All cards hidden. Use “Manage cards” to show some.</div>`;
 
-  const evt = (label, val) => `<div class="evt-metric"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${val}</div></div>`;
+  const evt = (label, val, tip) => `<div class="evt-metric"><div class="kpi-label">${escapeHtml(label)}${tip ? infoTip(tip) : ''}</div><div class="kpi-value">${val}</div></div>`;
   const p = strat.parties, d = strat.di;
   $('strat-parties').innerHTML = p
     ? `<div class="section-sub">Latest party — ${escapeHtml(p.name || '')} · ${escapeHtml(fmtDate(p.event_date))}</div>
        <div class="strat-event-row">
-         ${evt('Sell-through', fmtMetric(p.sell_through_pct, '%'))}
-         ${evt('Tickets / capacity', `${fmtNum(p.tickets_sold)} / ${fmtNum(p.capacity)}`)}
-         ${evt('Net P&L', fmtMetric(p.net_pl, '$'))}
+         ${evt('Sell-through', fmtMetric(p.sell_through_pct, '%'), FORMULAS.sell_through)}
+         ${evt('Tickets / capacity', `${fmtNum(p.tickets_sold)} / ${fmtNum(p.capacity)}`, FORMULAS.tickets_cap)}
+         ${evt('Net P&L', fmtMetric(p.net_pl, '$'), FORMULAS.net_pl)}
        </div>`
     : `<div class="panel-state">No party events yet — log one to populate sell-through and P&amp;L.</div>`;
   $('strat-di').innerHTML = d
     ? `<div class="section-sub">Latest Dance Infusion — ${escapeHtml(d.name || '')} · ${escapeHtml(fmtDate(d.event_date))}</div>
        <div class="strat-event-row">
-         ${evt('Total raised', fmtMetric(d.total_raised, '$'))}
-         ${evt('Cost to raise $1', fmtMetric(d.cost_to_raise_per_dollar, '$'))}
-         ${evt('Attendance', fmtNum(d.total_attendance))}
+         ${evt('Net P&L', fmtMetric(d.net_pl, '$'), FORMULAS.net_pl)}
+         ${evt('Total raised', fmtMetric(d.total_raised, '$'), FORMULAS.total_raised)}
+         ${evt('Cost to raise $1', fmtMetric(d.cost_to_raise_per_dollar, '$'), FORMULAS.cost_to_raise)}
+         ${evt('Attendance', fmtNum(d.total_attendance), FORMULAS.attendance)}
        </div>`
     : `<div class="panel-state">No Dance Infusion events yet.</div>`;
 
@@ -1941,7 +1974,7 @@ async function loadStrategy() {
     const [dash, parties, di, prefs] = await Promise.all([
       sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
       sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
-      sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
+      sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, net_pl, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
       sb.from('dashboard_prefs').select('hidden_metric_keys').eq('singleton', true).maybeSingle(),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
