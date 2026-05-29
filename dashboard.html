@@ -2079,6 +2079,7 @@ async function openEditTarget() {
       <select class="modal-select" name="mode" id="et-mode">
         <option value="existing">Update an existing target</option>
         <option value="new">Create a new metric</option>
+        <option value="retire">Retire a metric</option>
       </select></div>
     <div id="et-existing">
       <div class="modal-form-row"><label class="modal-label">Metric *</label>
@@ -2095,25 +2096,44 @@ async function openEditTarget() {
         <div><label class="modal-label">Unit</label><input class="modal-input" name="unit" placeholder="% $ hrs or blank"></div>
       </div>
     </div>
-    <div class="modal-form-row half-row">
-      <div><label class="modal-label">Target value *</label><input class="modal-input" type="number" step="any" name="target_value" required></div>
+    <div id="et-retire" style="display:none;">
+      <div class="modal-form-row"><label class="modal-label">Metric to retire *</label>
+        <select class="modal-select" name="metric_key_retire">${existOpts || '<option value="">— none —</option>'}</select></div>
+      <div class="kpi-hint">Retiring sets the metric inactive — it drops from the cards and the Log Numbers list. History is kept; bring it back later via “Create a new metric” with the same key.</div>
+    </div>
+    <div class="modal-form-row half-row" id="et-target-row">
+      <div><label class="modal-label">Target value *</label><input class="modal-input" type="number" step="any" name="target_value"></div>
       <div><label class="modal-label">Effective date</label><input class="modal-input" type="date" name="effective_date" value="${TODAY()}"></div>
     </div>
-    <div class="kpi-hint">Saving inserts a new active row; the card uses the latest active target. History is kept.</div>`,
+    <div class="kpi-hint" id="et-hint">Saving inserts a new active row; the card uses the latest active target. History is kept.</div>`,
     submitEditTarget, 'Save target');
   $('et-mode').addEventListener('change', (e) => {
-    const isNew = e.target.value === 'new';
-    $('et-new').style.display = isNew ? '' : 'none';
-    $('et-existing').style.display = isNew ? 'none' : '';
+    const m = e.target.value;
+    $('et-existing').style.display = m === 'existing' ? '' : 'none';
+    $('et-new').style.display = m === 'new' ? '' : 'none';
+    $('et-retire').style.display = m === 'retire' ? '' : 'none';
+    $('et-target-row').style.display = m === 'retire' ? 'none' : '';
+    $('et-hint').style.display = m === 'retire' ? 'none' : '';
+    $('kpiModalSubmit').textContent = m === 'retire' ? 'Retire metric' : 'Save target';
   });
 }
 async function submitEditTarget() {
   const mode = kpiVal('mode');
+  const { data: { session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || null;
+
+  if (mode === 'retire') {
+    const metric_key = kpiVal('metric_key_retire');
+    if (!metric_key) throw new Error('Pick a metric to retire');
+    const { error } = await sb.from('kpi_targets').update({ active: false }).eq('metric_key', metric_key).eq('active', true);
+    if (error) throw error;
+    closeKpi(); toast('Metric retired', 'ok'); refreshStratIfActive();
+    return;
+  }
+
   const target_value = kpiVal('target_value');
   const effective_date = kpiVal('effective_date') || TODAY();
   if (target_value === '') throw new Error('Target value is required');
-  const { data: { session } } = await sb.auth.getSession();
-  const uid = session?.user?.id || null;
   let row;
   if (mode === 'new') {
     const metric_key = kpiVal('metric_key_new');
