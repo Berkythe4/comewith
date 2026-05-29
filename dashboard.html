@@ -2196,7 +2196,9 @@ function tierRowHtml() {
 }
 function openLogEvent() {
   tierIdx = 0;
-  const seriesOpts = SERIES_OPTIONS.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  // No silent default — force an explicit Parties/DI pick (required + empty placeholder).
+  const seriesOpts = '<option value="" disabled selected>— Select series —</option>' +
+    SERIES_OPTIONS.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
   const statusOpts = ['completed', 'planning', 'announced', 'on_sale', 'sold_out', 'cancelled'].map(s => `<option value="${s}">${s.replace('_', ' ')}</option>`).join('');
   openKpi('Log event', 'Creates the event plus ticket / income / expense / donation / sponsorship rows', `
     <div class="kpi-section-h">Event</div>
@@ -2219,8 +2221,8 @@ function openLogEvent() {
     <button type="button" class="tier-add" id="tier-add">+ Add tier</button>
     <div class="kpi-section-h">Financials (optional — blank rows are skipped)</div>
     <div class="modal-form-row half-row">
-      <div><label class="modal-label">Other income $</label><input class="modal-input" type="number" min="0" step="0.01" name="income_amount"></div>
-      <div><label class="modal-label">Income category</label><input class="modal-input" name="income_category" placeholder="e.g. bar, merch"></div>
+      <div><label class="modal-label">Other income $ — bar, vendor, merch (NOT ticket sales)</label><input class="modal-input" type="number" min="0" step="0.01" name="income_amount"></div>
+      <div><label class="modal-label">Income category</label><input class="modal-input" name="income_category" placeholder="e.g. bar, vendor, merch"></div>
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Total expenses $</label><input class="modal-input" type="number" min="0" step="0.01" name="expense_amount"></div>
@@ -2385,13 +2387,14 @@ async function openEditEvent(id) {
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
   // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
   const seriesVals = SERIES_OPTIONS.includes(ev.series) ? SERIES_OPTIONS : [ev.series, ...SERIES_OPTIONS];
-  const seriesOpts = seriesVals.map(s => `<option value="${escapeHtml(s)}"${s === ev.series ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  const seriesOpts = '<option value="" disabled>— Select series —</option>' +
+    seriesVals.map(s => `<option value="${escapeHtml(s)}"${s === ev.series ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
   const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled']
     .map(s => `<option value="${s}"${s === ev.status ? ' selected' : ''}>${s.replace('_', ' ')}</option>`).join('');
   openKpi('Edit event', 'Updates the event row — financial rows unchanged', `
     <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(ev.name || '')}" required></div>
     <div class="modal-form-row half-row">
-      <div><label class="modal-label">Series *</label><select class="modal-select" name="series">${seriesOpts}</select></div>
+      <div><label class="modal-label">Series *</label><select class="modal-select" name="series" required>${seriesOpts}</select></div>
       <div><label class="modal-label">Date *</label><input class="modal-input" type="date" name="event_date" value="${escapeHtml(ev.event_date || '')}" required></div>
     </div>
     <div class="modal-form-row half-row">
