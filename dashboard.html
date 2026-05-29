@@ -277,6 +277,22 @@ body::before {
   width: max-content; max-width: 250px; white-space: normal;
   z-index: 60; pointer-events: none; box-shadow: 0 3px 12px rgba(26,20,16,0.25);
 }
+/* Per-event money panel (Phase 13 — step 5) */
+.money-section { margin-bottom: 16px; }
+.money-section h4 {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.9rem; letter-spacing: 0.06em;
+  margin-bottom: 6px; padding-top: 10px; border-top: 1px solid var(--border);
+}
+.money-row { display: flex; align-items: center; gap: 8px; font-size: 0.8rem; padding: 4px 0; }
+.money-row .mr-main { flex: 1; }
+.money-row .mr-amt { font-variant-numeric: tabular-nums; }
+.money-del { background: none; border: 1px solid var(--border-strong); color: var(--mid); cursor: pointer; font-size: 0.8rem; line-height: 1; padding: 3px 8px; }
+.money-del:hover { color: var(--red); border-color: var(--red); }
+.money-add { display: flex; gap: 6px; margin-top: 6px; }
+.money-add input, .money-add select { font-family: 'Inconsolata', monospace; font-size: 0.78rem; padding: 6px 8px; border: 1px solid var(--border-strong); background: white; min-width: 0; }
+.money-add input { flex: 1; }
+.money-add .money-add-btn { background: var(--ink); color: var(--bg); border: none; cursor: pointer; padding: 6px 12px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
+.money-empty { font-size: 0.74rem; color: var(--mid); padding: 3px 0; }
 .placeholder {
   background: white; border: 1px dashed var(--border-strong);
   padding: 36px 28px; text-align: center;
@@ -1303,6 +1319,7 @@ const renderers = {
         <td class="num">${r.capacity != null ? r.capacity : muted}</td>
         <td class="num">${r.total_attendance != null ? r.total_attendance : muted}</td>
         <td>
+          <button class="row-btn" data-event-money="${escapeHtml(r.id)}">Money</button>
           <button class="row-btn" data-event-edit="${escapeHtml(r.id)}">Edit</button>
           <button class="row-btn" data-event-delete="${escapeHtml(r.id)}">Delete</button>
         </td>
@@ -2423,6 +2440,8 @@ async function submitEditEvent(id) {
 
 // Events row actions — edit / soft-delete (delegated)
 document.querySelector('main.main').addEventListener('click', async (e) => {
+  const moneyBtn = e.target.closest('[data-event-money]');
+  if (moneyBtn) { openMoneyPanel(moneyBtn.dataset.eventMoney); return; }
   const editBtn = e.target.closest('[data-event-edit]');
   if (editBtn) { openEditEvent(editBtn.dataset.eventEdit); return; }
   const delBtn = e.target.closest('[data-event-delete]');
@@ -2434,6 +2453,108 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
   toast('Event deleted', 'ok');
   refreshStratIfActive();
   loadTab('events');
+});
+
+// ---- Per-event Money panel (Phase 13 — step 5: list + delete + add, no in-place edit) ----
+const moneyState = { eventId: null };
+
+async function openMoneyPanel(eventId) {
+  moneyState.eventId = eventId;
+  openKpi('Event money', 'Add or remove line items to fix entry mistakes', '<div class="panel-state"><span class="spinner"></span> Loading…</div>', () => { closeKpi(); }, 'Done');
+  await renderMoneyPanel();
+}
+
+async function renderMoneyPanel() {
+  const id = moneyState.eventId;
+  const [ev, tk, inc, exp, don, spo, sponsors] = await Promise.all([
+    sb.from('events').select('name').eq('id', id).single(),
+    sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
+    sb.from('income').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
+    sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
+    sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
+    sb.from('sponsorships').select('id, cash_amount, in_kind_value, sponsor:sponsors(name)').eq('event_id', id),
+    sb.from('sponsors').select('id, name').order('name'),
+  ]);
+  $('kpiModalTitle').textContent = 'Money — ' + (ev.data?.name || 'event');
+  const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
+  const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
+  const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
+  const sponsorOpts = (sponsors.data || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+
+  $('kpiModalBody').innerHTML = `
+    <div class="money-section">
+      <h4>Tickets</h4>
+      ${list(tk.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.ticket_type)} × ${fmtNum(r.quantity)}</span><span class="mr-amt">${money(r.amount_paid)}</span>${del('ticketing', r.id)}</div>`)}
+      <div class="money-add"><input data-f="type" placeholder="Tier"><input data-f="qty" type="number" min="1" step="1" placeholder="Qty"><input data-f="price" type="number" min="0" step="0.01" placeholder="Unit $">${addBtn('ticket')}</div>
+    </div>
+    <div class="money-section">
+      <h4>Other income (bar / vendor / merch — not tickets)</h4>
+      ${list(inc.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.category || '—')}</span><span class="mr-amt">${money(r.amount)}</span>${del('income', r.id)}</div>`)}
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${addBtn('income')}</div>
+    </div>
+    <div class="money-section">
+      <h4>Expenses</h4>
+      ${list(exp.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.category || '—')}</span><span class="mr-amt">${money(r.amount)}</span>${del('expenses', r.id)}</div>`)}
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${addBtn('expense')}</div>
+    </div>
+    <div class="money-section">
+      <h4>Donations</h4>
+      ${list(don.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.donor_name || 'donation')}</span><span class="mr-amt">${money(r.amount)}</span>${del('third_party_donations', r.id)}</div>`)}
+      <div class="money-add"><input data-f="donor" placeholder="Donor (optional)"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $">${addBtn('donation')}</div>
+    </div>
+    <div class="money-section">
+      <h4>Sponsorships</h4>
+      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.sponsor?.name || '—')}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
+      ${sponsorOpts
+        ? `<div class="money-add"><select data-f="sponsor_id"><option value="">— sponsor —</option>${sponsorOpts}</select><input data-f="cash" type="number" min="0" step="0.01" placeholder="Cash $"><input data-f="inkind" type="number" min="0" step="0.01" placeholder="In-kind $">${addBtn('sponsorship')}</div>`
+        : `<div class="money-empty">No sponsors on file — add one in the Sponsors tab first.</div>`}
+    </div>`;
+}
+
+// Delegated add/delete inside the money panel.
+// income/expenses soft-delete (deleted_at exists, views honor it); ticketing/donations/
+// sponsorships hard-delete (no deleted_at column).
+$('kpiModalBody').addEventListener('click', async (e) => {
+  if (!moneyState.eventId) return;
+  const delEl = e.target.closest('[data-money-del]');
+  const addEl = e.target.closest('[data-money-add]');
+  if (!delEl && !addEl) return;
+  e.preventDefault();
+  try {
+    if (delEl) {
+      const [tbl, rid] = delEl.dataset.moneyDel.split(':');
+      const op = (tbl === 'income' || tbl === 'expenses')
+        ? sb.from(tbl).update({ deleted_at: new Date().toISOString() }).eq('id', rid)
+        : sb.from(tbl).delete().eq('id', rid);
+      const { error } = await op; if (error) throw error;
+    } else {
+      const sec = addEl.closest('.money-section');
+      const v = (f) => { const el = sec.querySelector(`[data-f="${f}"]`); return el ? el.value.trim() : ''; };
+      const id = moneyState.eventId, kind = addEl.dataset.moneyAdd;
+      const { data: { session } } = await sb.auth.getSession();
+      const uid = session?.user?.id || null;
+      let op;
+      if (kind === 'ticket') {
+        const qty = Number(v('qty')); if (!qty || qty < 1) throw new Error('Tier needs a quantity ≥ 1');
+        op = sb.from('ticketing').insert({ event_id: id, ticket_type: v('type') || 'General', quantity: Math.round(qty), amount_paid: +(qty * (Number(v('price')) || 0)).toFixed(2) });
+      } else if (kind === 'income' || kind === 'expense') {
+        const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
+        op = sb.from(kind === 'income' ? 'income' : 'expenses').insert({ event_id: id, date: TODAY(), amount: amt, category: v('category') || null, created_by: uid });
+      } else if (kind === 'donation') {
+        const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
+        op = sb.from('third_party_donations').insert({ event_id: id, date: TODAY(), amount: amt, donor_name: v('donor') || null });
+      } else if (kind === 'sponsorship') {
+        const sid = v('sponsor_id'); if (!sid) throw new Error('Pick a sponsor');
+        op = sb.from('sponsorships').insert({ event_id: id, sponsor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
+      }
+      const { error } = await op; if (error) throw error;
+    }
+    await renderMoneyPanel();
+    refreshStratIfActive();
+    if (document.querySelector('#panel-events.active')) loadTab('events');
+  } catch (err) {
+    toast(err.message || String(err), 'err');
+  }
 });
 
 // ---- Initial session check ----
