@@ -199,6 +199,11 @@ Ideas captured after the Phase 0–11 migration. Not yet scheduled.
 - **Expenses CSV import** — dashboard button: drop a file → preview parsed rows
   → confirm → bulk insert into `expenses`. Reuses the migration CSV logic. Use
   case: bulk monthly bank / Simplifi export, instead of one-at-a-time entry.
+- **`created_by`-aware modal submit** — the shared Phase-4 `FORM_DEFS` submit handler
+  injects `created_by` into every insert, so tables without that column (e.g. `sponsors`)
+  can't use the standard path (Add Sponsor is a custom KPI-modal form as a workaround).
+  Make the handler only set `created_by` when the table has it, then fold custom forms
+  back onto the standard path. Low priority.
 - **Delete event** — soft-delete via `deleted_at` (reversible, preserves financial
   history); the schema and all views already filter `deleted_at is null`, so a
   "Delete event" action just stamps `deleted_at = now()`. No hard delete. Also
