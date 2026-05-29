@@ -873,6 +873,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <div class="panel" id="panel-sponsors">
+        <button class="add-btn" id="addSponsorBtn">+ Add sponsor</button>
         <div class="row-count" id="count-sponsors">—</div>
         <div id="state-sponsors"></div>
         <table class="data-table" id="table-sponsors" style="display:none;">
@@ -2556,6 +2557,36 @@ $('kpiModalBody').addEventListener('click', async (e) => {
     toast(err.message || String(err), 'err');
   }
 });
+
+// ---- Add Sponsor (Phase 13 — step 6) ----
+// Sponsors had no creation UI (SQL-only), blocking sponsorship entry. Custom form
+// (not FORM_DEFS — sponsors has no created_by column). Once a sponsor exists,
+// attach one-or-many sponsorships per event via the Money panel / Log Event.
+function openAddSponsor() {
+  openKpi('Add sponsor', 'Saves to public.sponsors', `
+    <div class="modal-form-row"><label class="modal-label">Company / sponsor name *</label><input class="modal-input" name="name" required></div>
+    <div class="modal-form-row"><label class="modal-label">Contact name</label><input class="modal-input" name="contact_name"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Contact email</label><input class="modal-input" name="contact_email"></div>
+      <div><label class="modal-label">Contact phone</label><input class="modal-input" name="contact_phone"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Website</label><input class="modal-input" name="website" placeholder="https://"></div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2"></textarea></div>`,
+    submitAddSponsor, 'Save sponsor');
+}
+async function submitAddSponsor() {
+  const name = kpiVal('name');
+  if (!name) throw new Error('Sponsor name is required');
+  const row = { name };
+  for (const f of ['contact_name', 'contact_email', 'contact_phone', 'website', 'notes']) {
+    const val = kpiVal(f); if (val) row[f] = val;
+  }
+  const { error } = await sb.from('sponsors').insert(row);
+  if (error) throw error;
+  closeKpi(); toast('Sponsor added', 'ok');
+  if (document.querySelector('#panel-sponsors.active')) loadTab('sponsors');
+}
+$('addSponsorBtn').addEventListener('click', openAddSponsor);
 
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
