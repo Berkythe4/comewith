@@ -819,6 +819,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th>Category</th>
             <th>Description</th>
             <th>Client</th>
+            <th>Actions</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -1264,6 +1265,7 @@ const renderers = {
         <td>${escapeHtml(r.category || '') || muted}</td>
         <td class="truncate">${escapeHtml(truncate(r.description || '', 80)) || muted}</td>
         <td>${clientCell}</td>
+        <td><button class="row-btn" data-income-delete="${escapeHtml(r.id)}">Delete</button></td>
       </tr>`;
     }).join('');
   },
@@ -1419,6 +1421,7 @@ const queries = {
 
   income: () => sb.from('income')
     .select('id, date, amount, category, description, client:clients(full_name)')
+    .is('deleted_at', null)
     .order('date', { ascending: false })
     .limit(500),
 
@@ -2587,6 +2590,19 @@ async function submitAddSponsor() {
   if (document.querySelector('#panel-sponsors.active')) loadTab('sponsors');
 }
 $('addSponsorBtn').addEventListener('click', openAddSponsor);
+
+// ---- Income row soft-delete (Phase 13) ----
+document.querySelector('main.main').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-income-delete]');
+  if (!btn) return;
+  if (!confirm('Delete this income row? It disappears from income + event totals but is reversible (soft delete).')) return;
+  btn.disabled = true;
+  const { error } = await sb.from('income').update({ deleted_at: new Date().toISOString() }).eq('id', btn.dataset.incomeDelete);
+  if (error) { btn.disabled = false; toast('Delete failed: ' + error.message, 'err'); return; }
+  toast('Income deleted', 'ok');
+  refreshStratIfActive();
+  loadTab('income');
+});
 
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
