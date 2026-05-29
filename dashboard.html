@@ -92,6 +92,13 @@ body::before {
   color: var(--mid); text-align: center;
 }
 .login-meta code { font-size: 0.7rem; color: var(--ink); }
+.login-link {
+  display: block; width: 100%; margin-top: 12px; padding: 0;
+  background: none; border: none; cursor: pointer;
+  font-family: 'Inconsolata', monospace; font-size: 0.75rem; letter-spacing: 0.04em;
+  color: var(--mid); text-decoration: underline; text-underline-offset: 3px;
+}
+.login-link:hover { color: var(--ink); }
 
 /* ===== DASHBOARD SHELL ===== */
 .dash { position: relative; z-index: 1; display: none; }
@@ -157,6 +164,24 @@ body::before {
   margin-top: 10px; font-size: 0.55rem; letter-spacing: 0.12em;
   color: rgba(242,237,230,0.25); text-transform: uppercase;
 }
+.footer-actions { display: flex; align-items: center; gap: 8px; }
+.footer-sep { color: rgba(242,237,230,0.2); font-size: 0.7rem; }
+.setpw-form { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.setpw-input {
+  width: 100%; font-family: 'Inconsolata', monospace; font-size: 0.8rem;
+  padding: 8px 10px; background: rgba(242,237,230,0.06);
+  border: 1px solid rgba(242,237,230,0.15); color: var(--bg); outline: none;
+}
+.setpw-input:focus { border-color: var(--red); }
+.setpw-save {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.8rem; letter-spacing: 0.08em;
+  padding: 8px; background: var(--red); color: white; border: none; cursor: pointer;
+}
+.setpw-save:hover { background: var(--red-dk); }
+.setpw-msg { margin-top: 8px; font-size: 0.68rem; line-height: 1.4; }
+.setpw-msg.err { color: #ff9b87; }
+.setpw-msg.ok  { color: #8fd39a; }
+.setpw-msg:empty { display: none; }
 
 /* Main */
 .main { padding: 32px 36px 60px; overflow-x: auto; }
@@ -441,7 +466,7 @@ body::before {
 <section class="login-screen" id="loginScreen">
   <div class="login-card">
     <div class="login-brand">Come With</div>
-    <div class="login-sub">Admin Dashboard · v2 (staging)</div>
+    <div class="login-sub">Admin Dashboard</div>
 
     <form id="loginForm">
       <label class="login-label" for="email">Email</label>
@@ -454,13 +479,24 @@ body::before {
         autocomplete="email"
         required
       />
-      <button class="login-btn" type="submit" id="loginBtn">Send magic link</button>
+      <label class="login-label" for="password" style="margin-top:18px;">Password</label>
+      <input
+        class="login-input"
+        type="password"
+        id="password"
+        name="password"
+        placeholder="Leave blank to use a magic link"
+        autocomplete="current-password"
+      />
+      <button class="login-btn" type="submit" id="loginBtn">Sign in</button>
     </form>
+
+    <button class="login-link" type="button" id="magicLinkBtn">Email me a magic link instead</button>
 
     <div class="login-msg" id="loginMsg"></div>
 
     <div class="login-meta">
-      staging · <code id="metaUrl"></code>
+      <code id="metaUrl"></code>
     </div>
   </div>
 </section>
@@ -487,7 +523,7 @@ body::before {
     <aside class="sidebar">
       <div class="sidebar-header">
         <div class="sidebar-brand">Come With</div>
-        <div class="sidebar-role">Dashboard v2 · Staging</div>
+        <div class="sidebar-role">Dashboard v2</div>
       </div>
 
       <div class="sidebar-profile">
@@ -514,8 +550,25 @@ body::before {
       </nav>
 
       <div class="sidebar-footer">
-        <button id="signOutBtn">Sign out</button>
-        <div class="build">phase 3 · sprint 1</div>
+        <div class="footer-actions">
+          <button id="setPasswordBtn" type="button">Set password</button>
+          <span class="footer-sep">·</span>
+          <button id="signOutBtn">Sign out</button>
+        </div>
+        <form id="setPasswordForm" class="setpw-form" hidden>
+          <input
+            class="setpw-input"
+            type="password"
+            id="newPassword"
+            placeholder="New password (min 6)"
+            autocomplete="new-password"
+            minlength="6"
+            required
+          />
+          <button class="setpw-save" type="submit">Save password</button>
+          <div class="setpw-msg" id="setPasswordMsg"></div>
+        </form>
+        <div class="build">phase 12 · password auth</div>
       </div>
     </aside>
 
@@ -792,16 +845,12 @@ async function renderForSession(session) {
 
 sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
 
-// ---- Login handler ----
-$('loginForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const email = $('email').value.trim();
-  if (!email) return;
-
-  const btn = $('loginBtn');
-  btn.disabled = true;
+// ---- Login handlers ----
+// Admins may sign in with email+password OR magic link, interchangeably.
+// Magic link stays the fallback: any account without a password set yet
+// (e.g. invited users) just leaves the field blank and gets a link.
+async function sendMagicLink(email) {
   setMsg('Sending magic link…', 'info');
-
   const { error } = await sb.auth.signInWithOtp({
     email,
     options: {
@@ -809,19 +858,83 @@ $('loginForm').addEventListener('submit', async (e) => {
       emailRedirectTo: window.location.origin + window.location.pathname,
     },
   });
-
-  btn.disabled = false;
   if (error) {
     setMsg('Failed: ' + error.message, 'err');
     return;
   }
   setMsg('Check ' + email + ' for a sign-in link. It expires in 1 hour.', 'ok');
+}
+
+$('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const email = $('email').value.trim();
+  const password = $('password').value;
+  if (!email) return;
+
+  const btn = $('loginBtn');
+  btn.disabled = true;
+
+  if (password) {
+    // Password path. Supabase returns a generic "Invalid login credentials"
+    // for both a wrong password AND an account that never set one, so the
+    // error copy points users at the magic-link fallback either way.
+    setMsg('Signing in…', 'info');
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    btn.disabled = false;
+    if (error) {
+      setMsg("That password didn't work — or you haven't set one yet. Leave the password blank to get a magic link, then set a password from the dashboard.", 'err');
+      return;
+    }
+    // onAuthStateChange flips the UI on success.
+    return;
+  }
+
+  await sendMagicLink(email);
+  btn.disabled = false;
+});
+
+$('magicLinkBtn').addEventListener('click', async () => {
+  const email = $('email').value.trim();
+  if (!email) { setMsg('Enter your email first.', 'err'); return; }
+  await sendMagicLink(email);
 });
 
 // ---- Sign out ----
 $('signOutBtn').addEventListener('click', async () => {
   await sb.auth.signOut();
   // onAuthStateChange handles the UI flip
+});
+
+// ---- Set password ----
+// Always available to any signed-in admin. Doubles as first-time set
+// (magic-link/invited users have no password) and later change — both are
+// updateUser({ password }), so there's no unreliable "has password" detection.
+const setPwForm = $('setPasswordForm');
+$('setPasswordBtn').addEventListener('click', () => {
+  setPwForm.hidden = !setPwForm.hidden;
+  if (!setPwForm.hidden) $('newPassword').focus();
+});
+setPwForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pw = $('newPassword').value;
+  const msg = $('setPasswordMsg');
+  if (pw.length < 6) {
+    msg.className = 'setpw-msg err';
+    msg.textContent = 'Password must be at least 6 characters.';
+    return;
+  }
+  msg.className = 'setpw-msg';
+  msg.textContent = 'Saving…';
+  const { error } = await sb.auth.updateUser({ password: pw });
+  if (error) {
+    msg.className = 'setpw-msg err';
+    msg.textContent = error.message;
+    return;
+  }
+  msg.className = 'setpw-msg ok';
+  msg.textContent = 'Password set. You can now sign in with it.';
+  $('newPassword').value = '';
+  setTimeout(() => { setPwForm.hidden = true; msg.textContent = ''; }, 2500);
 });
 
 // ---- Data layer ----
