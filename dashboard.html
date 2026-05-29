@@ -623,8 +623,8 @@ body::before {
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav">
-        <button data-tab="strategy">Strategy</button>
-        <button data-tab="inquiries" class="active">Inquiries</button>
+        <button data-tab="strategy" class="active">Strategy</button>
+        <button data-tab="inquiries">Inquiries</button>
         <button data-tab="agreements">Agreements</button>
         <button data-tab="clients">Clients</button>
         <button data-tab="income">Income</button>
@@ -663,14 +663,14 @@ body::before {
 
     <main class="main">
       <div class="main-header">
-        <div class="main-title" id="mainTitle">Inquiries</div>
+        <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
           <span class="last-refreshed" id="lastRefreshed"></span>
           <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
         </div>
       </div>
 
-      <div class="panel" id="panel-strategy">
+      <div class="panel active" id="panel-strategy">
         <div class="strat-toolbar">
           <button class="strat-btn primary" data-kpi-open="event">Log event</button>
           <button class="strat-btn primary" data-kpi-open="numbers">Log numbers</button>
@@ -710,7 +710,7 @@ body::before {
         </div>
       </div>
 
-      <div class="panel active" id="panel-inquiries">
+      <div class="panel" id="panel-inquiries">
         <div class="row-count" id="count-inquiries">—</div>
         <div id="state-inquiries"></div>
         <table class="data-table" id="table-inquiries" style="display:none;">
@@ -1872,7 +1872,7 @@ function renderStrategy() {
        <div class="strat-event-row">
          ${evt('Sell-through', fmtMetric(p.sell_through_pct, '%'))}
          ${evt('Tickets / capacity', `${fmtNum(p.tickets_sold)} / ${fmtNum(p.capacity)}`)}
-         ${evt('Net P&amp;L', fmtMetric(p.net_pl, '$'))}
+         ${evt('Net P&L', fmtMetric(p.net_pl, '$'))}
        </div>`
     : `<div class="panel-state">No party events yet — log one to populate sell-through and P&amp;L.</div>`;
   $('strat-di').innerHTML = d
@@ -2161,6 +2161,21 @@ async function submitLogEvent() {
   const event_date = kpiVal('event_date') || TODAY();
   if (!name) throw new Error('Event name is required');
   if (!SERIES_OPTIONS.includes(series)) throw new Error('Pick a valid series'); // enforce the contract
+
+  // Collect + validate ticket tiers BEFORE creating the event, so a tier mistake
+  // doesn't leave an orphan event. A row counts if it has any input; qty is
+  // required (>=1), tier name defaults to "General" so qty+price never silently drops.
+  const tiers = [];
+  for (const r of $('kpiModalBody').querySelectorAll('[data-tier]')) {
+    const type = r.querySelector('[data-t="type"]').value.trim();
+    const qtyRaw = r.querySelector('[data-t="qty"]').value.trim();
+    const priceRaw = r.querySelector('[data-t="price"]').value.trim();
+    if (!type && !qtyRaw && !priceRaw) continue; // wholly empty row → ignore
+    const qty = Number(qtyRaw);
+    if (!qtyRaw || !Number.isFinite(qty) || qty < 1) throw new Error(`Ticket tier "${type || 'unnamed'}" needs a quantity of at least 1.`);
+    tiers.push({ ticket_type: type || 'General', quantity: Math.round(qty), amount_paid: +(qty * (Number(priceRaw) || 0)).toFixed(2) });
+  }
+
   let slug = kpiVal('slug');
   if (!slug) slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || ('event-' + Date.now());
   const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed' };
@@ -2173,17 +2188,8 @@ async function submitLogEvent() {
   const { data: { session } } = await sb.auth.getSession();
   const uid = session?.user?.id || null;
 
-  const tickets = [];
-  for (const r of $('kpiModalBody').querySelectorAll('[data-tier]')) {
-    const type = r.querySelector('[data-t="type"]').value.trim();
-    const qty = Number(r.querySelector('[data-t="qty"]').value);
-    const price = Number(r.querySelector('[data-t="price"]').value);
-    if (!type || !qty || qty < 1) continue;
-    tickets.push({ event_id, ticket_type: type, quantity: qty, amount_paid: +(qty * (price || 0)).toFixed(2) });
-  }
-
   const ops = [];
-  if (tickets.length) ops.push(sb.from('ticketing').insert(tickets));
+  if (tiers.length) ops.push(sb.from('ticketing').insert(tiers.map(t => ({ event_id, ...t }))));
   const incAmt = Number(kpiVal('income_amount'));    if (incAmt > 0) ops.push(sb.from('income').insert({ event_id, date: event_date, amount: incAmt, category: kpiVal('income_category') || null, created_by: uid }));
   const expAmt = Number(kpiVal('expense_amount'));    if (expAmt > 0) ops.push(sb.from('expenses').insert({ event_id, date: event_date, amount: expAmt, category: kpiVal('expense_category') || null, created_by: uid }));
   const donAmt = Number(kpiVal('donation_amount'));   if (donAmt > 0) ops.push(sb.from('third_party_donations').insert({ event_id, date: event_date, amount: donAmt }));
