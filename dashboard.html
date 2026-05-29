@@ -830,7 +830,9 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th>Series</th>
             <th>Status</th>
             <th class="num">Bar min</th>
+            <th class="num">Capacity</th>
             <th class="num">Attendance</th>
+            <th>Actions</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -1280,7 +1282,12 @@ const renderers = {
         <td>${escapeHtml(r.series || '') || muted}</td>
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status.replace('_', ' '))}</span></td>
         <td class="num">${r.bar_minimum != null ? money(r.bar_minimum) : muted}</td>
+        <td class="num">${r.capacity != null ? r.capacity : muted}</td>
         <td class="num">${r.total_attendance != null ? r.total_attendance : muted}</td>
+        <td>
+          <button class="row-btn" data-event-edit="${escapeHtml(r.id)}">Edit</button>
+          <button class="row-btn" data-event-delete="${escapeHtml(r.id)}">Delete</button>
+        </td>
       </tr>`;
     }).join('');
   },
@@ -1395,7 +1402,8 @@ const queries = {
     .limit(500),
 
   events: () => sb.from('events')
-    .select('id, name, series, event_date, status, bar_minimum, total_attendance')
+    .select('id, name, series, event_date, status, bar_minimum, capacity, total_attendance')
+    .is('deleted_at', null)
     .order('event_date', { ascending: false })
     .limit(500),
 
@@ -2313,6 +2321,64 @@ async function submitLogNote() {
   closeKpi(); toast('Note saved', 'ok');
   if (document.querySelector('#panel-notes.active')) loadTab('notes');
 }
+
+// ---- Edit + soft-delete events (Phase 13 — Part D) ----
+// Scope: edits the event CORE (name, series, date, capacity, attendance, status)
+// and soft-deletes via deleted_at. Ticket tiers / financial child rows are NOT
+// editable here yet — that's a later pass (manage per-event line items).
+async function openEditEvent(id) {
+  const { data: ev, error } = await sb.from('events')
+    .select('id, name, series, event_date, status, capacity, total_attendance').eq('id', id).single();
+  if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
+  const seriesVals = SERIES_OPTIONS.includes(ev.series) ? SERIES_OPTIONS : [ev.series, ...SERIES_OPTIONS];
+  const seriesOpts = seriesVals.map(s => `<option value="${escapeHtml(s)}"${s === ev.series ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled']
+    .map(s => `<option value="${s}"${s === ev.status ? ' selected' : ''}>${s.replace('_', ' ')}</option>`).join('');
+  openKpi('Edit event', 'Updates the event row — financial rows unchanged', `
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(ev.name || '')}" required></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Series *</label><select class="modal-select" name="series">${seriesOpts}</select></div>
+      <div><label class="modal-label">Date *</label><input class="modal-input" type="date" name="event_date" value="${escapeHtml(ev.event_date || '')}" required></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity" value="${ev.capacity ?? ''}"></div>
+      <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>`,
+    () => submitEditEvent(id), 'Save changes');
+}
+async function submitEditEvent(id) {
+  const name = kpiVal('name');
+  const series = kpiVal('series');
+  const event_date = kpiVal('event_date');
+  if (!name) throw new Error('Event name is required');
+  if (!series) throw new Error('Series is required');
+  if (!event_date) throw new Error('Date is required');
+  const patch = { name, series, event_date, status: kpiVal('status') || 'planning' };
+  const cap = kpiVal('capacity'); patch.capacity = cap === '' ? null : Number(cap);
+  const att = kpiVal('total_attendance'); patch.total_attendance = att === '' ? null : Number(att);
+  const { error } = await sb.from('events').update(patch).eq('id', id);
+  if (error) throw error;
+  closeKpi(); toast('Event updated', 'ok');
+  refreshStratIfActive();
+  if (document.querySelector('#panel-events.active')) loadTab('events');
+}
+
+// Events row actions — edit / soft-delete (delegated)
+document.querySelector('main.main').addEventListener('click', async (e) => {
+  const editBtn = e.target.closest('[data-event-edit]');
+  if (editBtn) { openEditEvent(editBtn.dataset.eventEdit); return; }
+  const delBtn = e.target.closest('[data-event-delete]');
+  if (!delBtn) return;
+  if (!confirm('Delete this event? It disappears everywhere but is reversible — financial history is kept (soft delete).')) return;
+  delBtn.disabled = true;
+  const { error } = await sb.from('events').update({ deleted_at: new Date().toISOString() }).eq('id', delBtn.dataset.eventDelete);
+  if (error) { delBtn.disabled = false; toast('Delete failed: ' + error.message, 'err'); return; }
+  toast('Event deleted', 'ok');
+  refreshStratIfActive();
+  loadTab('events');
+});
 
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
