@@ -189,3 +189,13 @@ flowchart LR
 Update the `class P# done|next|planned` lines in the Mermaid block as phases
 progress. The mermaid diagrams render natively on GitHub and in VSCode/Cursor
 preview — no build step required.
+
+---
+
+## Backlog (post-migration)
+
+Ideas captured after the Phase 0–11 migration. Not yet scheduled.
+
+- **Expenses CSV import** — dashboard button: drop a file → preview parsed rows
+  → confirm → bulk insert into `expenses`. Reuses the migration CSV logic. Use
+  case: bulk monthly bank / Simplifi export, instead of one-at-a-time entry.
