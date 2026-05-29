@@ -199,3 +199,8 @@ Ideas captured after the Phase 0–11 migration. Not yet scheduled.
 - **Expenses CSV import** — dashboard button: drop a file → preview parsed rows
   → confirm → bulk insert into `expenses`. Reuses the migration CSV logic. Use
   case: bulk monthly bank / Simplifi export, instead of one-at-a-time entry.
+- **Delete event** — soft-delete via `deleted_at` (reversible, preserves financial
+  history); the schema and all views already filter `deleted_at is null`, so a
+  "Delete event" action just stamps `deleted_at = now()`. No hard delete. Also
+  consider soft-delete for metrics / targets. (Today events can only be set to
+  status `cancelled`; removing one needs manual SQL.)
