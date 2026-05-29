@@ -468,6 +468,28 @@ body::before {
 .modal-file-current {
   font-size: 0.7rem; color: var(--mid); margin-top: 6px;
 }
+/* KPI entry forms (Phase 13 — Part B) */
+.strat-toolbar { gap: 8px; flex-wrap: wrap; }
+.strat-btn.primary { background: var(--red); color: white; border-color: var(--red); }
+.strat-btn.primary:hover { background: var(--red-dk); color: white; border-color: var(--red-dk); }
+.kpi-section-h {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: 0.06em;
+  color: var(--ink); margin: 18px 0 10px; padding-top: 14px; border-top: 1px solid var(--border);
+}
+.kpi-section-h:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+.kpi-hint { font-size: 0.66rem; color: var(--mid); margin: -2px 0 12px; line-height: 1.5; }
+.tier-row { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; margin-bottom: 8px; align-items: center; }
+.tier-del {
+  background: none; border: 1px solid var(--border-strong); color: var(--mid);
+  cursor: pointer; font-size: 0.85rem; line-height: 1; padding: 8px 10px;
+}
+.tier-del:hover { color: var(--red); border-color: var(--red); }
+.tier-add {
+  background: none; border: 1px dashed var(--border-strong); color: var(--ink);
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem; letter-spacing: 0.06em;
+  padding: 7px 12px; cursor: pointer; margin-top: 2px;
+}
+.tier-add:hover { border-color: var(--red); color: var(--red); }
 
 /* Toasts (Phase 4) */
 .toast-stack {
@@ -567,6 +589,21 @@ body::before {
   </div>
 </div>
 
+<!-- ========== KPI ENTRY MODAL (Phase 13 — Part B) ========== -->
+<div class="modal-overlay" id="kpiModalOverlay">
+  <div class="modal">
+    <div class="modal-title" id="kpiModalTitle">—</div>
+    <div class="modal-sub" id="kpiModalSub"></div>
+    <form id="kpiModalForm">
+      <div id="kpiModalBody"></div>
+      <div class="modal-actions">
+        <button type="button" class="modal-btn-cancel" id="kpiModalCancel">Cancel</button>
+        <button type="submit" class="modal-btn-submit" id="kpiModalSubmit">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
 <!-- ========== DASHBOARD SHELL ========== -->
 <div class="dash" id="dash">
   <div class="dash-layout">
@@ -635,6 +672,9 @@ body::before {
 
       <div class="panel" id="panel-strategy">
         <div class="strat-toolbar">
+          <button class="strat-btn primary" data-kpi-open="event">Log event</button>
+          <button class="strat-btn primary" data-kpi-open="numbers">Log numbers</button>
+          <button class="strat-btn primary" data-kpi-open="target">Edit target</button>
           <button class="strat-btn" data-strat-toggle>Manage cards</button>
         </div>
         <div id="strat-state"></div>
@@ -1902,6 +1942,264 @@ $('strat-manage-list').addEventListener('change', async (e) => {
   }
   renderStrategy();
 });
+
+// ---- KPI entry forms (Phase 13 — Part B) ----
+const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion']; // locked series contract — no CWF
+const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
+let kpiSubmit = null;
+let tierIdx = 0;
+
+function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
+  $('kpiModalTitle').textContent = title;
+  $('kpiModalSub').textContent = sub || '';
+  $('kpiModalBody').innerHTML = bodyHtml;
+  $('kpiModalSubmit').textContent = submitLabel;
+  $('kpiModalSubmit').disabled = false;
+  kpiSubmit = submitFn;
+  $('kpiModalOverlay').classList.add('show');
+  setTimeout(() => { const f = $('kpiModalBody').querySelector('input,select,textarea'); if (f) f.focus(); }, 60);
+}
+function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; }
+const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
+const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
+
+$('kpiModalCancel').addEventListener('click', closeKpi);
+$('kpiModalOverlay').addEventListener('click', (e) => { if (e.target === $('kpiModalOverlay')) closeKpi(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
+$('kpiModalForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!kpiSubmit) return;
+  const btn = $('kpiModalSubmit');
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Saving…';
+  try {
+    await kpiSubmit();
+  } catch (err) {
+    const jwt = /JWT/i.test(err.message || '');
+    toast('Save failed: ' + (jwt ? 'Session expired. Please sign in again.' : (err.message || String(err))), 'err');
+    if (jwt) await sb.auth.signOut();
+    btn.disabled = false; btn.textContent = orig;
+  }
+});
+
+// Toolbar dispatch (entry-form buttons live in the Strategy toolbar)
+$('panel-strategy').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-kpi-open]'); if (!b) return;
+  ({ event: openLogEvent, numbers: openLogNumbers, target: openEditTarget }[b.dataset.kpiOpen] || (() => {}))();
+});
+
+// ===== Log Numbers — upsert metric_snapshots =====
+async function openLogNumbers() {
+  const [{ data: cards }, { data: series }] = await Promise.all([
+    sb.from('v_kpi_dashboard').select('metric_key, label, unit').order('workstream'),
+    sb.from('content_series').select('id, name').eq('active', true).order('name'),
+  ]);
+  const metricOpts = (cards || []).map(c => `<option value="${escapeHtml(c.metric_key)}">${escapeHtml(c.label)} — ${escapeHtml(c.metric_key)}</option>`).join('');
+  const seriesOpts = (series || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+  openKpi('Log numbers', 'Upserts a reading into metric_snapshots', `
+    <div class="modal-form-row"><label class="modal-label">Metric *</label>
+      <select class="modal-select" name="metric_key" required>${metricOpts || '<option value="">— no metrics —</option>'}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Value *</label><input class="modal-input" type="number" step="any" name="value" required></div>
+      <div><label class="modal-label">Date</label><input class="modal-input" type="date" name="captured_on" value="${TODAY()}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Series (optional — per-series content metrics)</label>
+      <select class="modal-select" name="series_id"><option value="">— none —</option>${seriesOpts}</select></div>
+    <div class="kpi-hint">Re-entering the same metric + date overwrites that day's reading.</div>`,
+    submitLogNumbers, 'Save reading');
+}
+async function submitLogNumbers() {
+  const metric_key = kpiVal('metric_key');
+  const value = kpiVal('value');
+  const captured_on = kpiVal('captured_on') || TODAY();
+  const series_id = kpiVal('series_id') || null;
+  if (!metric_key || value === '') throw new Error('Metric and value are required');
+  const { data: { session } } = await sb.auth.getSession();
+  const payload = { metric_key, value: Number(value), captured_on, series_id, created_by: session?.user?.id || null };
+  let { error } = await sb.from('metric_snapshots').insert(payload);
+  if (error && error.code === '23505') { // one reading per metric/series/day — update instead
+    let upd = sb.from('metric_snapshots').update({ value: Number(value) }).eq('metric_key', metric_key).eq('captured_on', captured_on);
+    upd = series_id ? upd.eq('series_id', series_id) : upd.is('series_id', null);
+    ({ error } = await upd);
+  }
+  if (error) throw error;
+  closeKpi(); toast('Reading saved', 'ok'); refreshStratIfActive();
+}
+
+// ===== Edit Target — insert a versioned kpi_targets row (+ new-metric mode) =====
+async function openEditTarget() {
+  const { data: cards } = await sb.from('v_kpi_dashboard').select('metric_key, label, workstream, comparison, unit').order('workstream');
+  openEditTarget._existing = cards || [];
+  const existOpts = openEditTarget._existing.map(c => `<option value="${escapeHtml(c.metric_key)}">${escapeHtml(c.label)} — ${escapeHtml(c.metric_key)}</option>`).join('');
+  const wsOpts = WS_OPTIONS.map(w => `<option value="${w}">${escapeHtml(WORKSTREAM[w].label)}</option>`).join('');
+  openKpi('Edit target', 'Inserts a versioned kpi_targets row — never edits history', `
+    <div class="modal-form-row"><label class="modal-label">Mode</label>
+      <select class="modal-select" name="mode" id="et-mode">
+        <option value="existing">Update an existing target</option>
+        <option value="new">Create a new metric</option>
+      </select></div>
+    <div id="et-existing">
+      <div class="modal-form-row"><label class="modal-label">Metric *</label>
+        <select class="modal-select" name="metric_key_existing">${existOpts || '<option value="">— none yet —</option>'}</select></div>
+    </div>
+    <div id="et-new" style="display:none;">
+      <div class="modal-form-row half-row">
+        <div><label class="modal-label">Metric key *</label><input class="modal-input" name="metric_key_new" placeholder="e.g. tiktok.followers"></div>
+        <div><label class="modal-label">Workstream *</label><select class="modal-select" name="workstream">${wsOpts}</select></div>
+      </div>
+      <div class="modal-form-row"><label class="modal-label">Card label *</label><input class="modal-input" name="label" placeholder="Shown on the card"></div>
+      <div class="modal-form-row half-row">
+        <div><label class="modal-label">Comparison *</label><select class="modal-select" name="comparison"><option value="gte">Higher is better (gte)</option><option value="lte">Lower is better (lte)</option></select></div>
+        <div><label class="modal-label">Unit</label><input class="modal-input" name="unit" placeholder="% $ hrs or blank"></div>
+      </div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Target value *</label><input class="modal-input" type="number" step="any" name="target_value" required></div>
+      <div><label class="modal-label">Effective date</label><input class="modal-input" type="date" name="effective_date" value="${TODAY()}"></div>
+    </div>
+    <div class="kpi-hint">Saving inserts a new active row; the card uses the latest active target. History is kept.</div>`,
+    submitEditTarget, 'Save target');
+  $('et-mode').addEventListener('change', (e) => {
+    const isNew = e.target.value === 'new';
+    $('et-new').style.display = isNew ? '' : 'none';
+    $('et-existing').style.display = isNew ? 'none' : '';
+  });
+}
+async function submitEditTarget() {
+  const mode = kpiVal('mode');
+  const target_value = kpiVal('target_value');
+  const effective_date = kpiVal('effective_date') || TODAY();
+  if (target_value === '') throw new Error('Target value is required');
+  const { data: { session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || null;
+  let row;
+  if (mode === 'new') {
+    const metric_key = kpiVal('metric_key_new');
+    const label = kpiVal('label');
+    if (!metric_key || !label) throw new Error('A new metric needs a key and a label');
+    row = { metric_key, workstream: kpiVal('workstream'), label, comparison: kpiVal('comparison'), unit: kpiVal('unit') || '', target_value: Number(target_value), effective_date, active: true, updated_by: uid };
+  } else {
+    const metric_key = kpiVal('metric_key_existing');
+    if (!metric_key) throw new Error('Pick a metric to update');
+    const cur = (openEditTarget._existing || []).find(c => c.metric_key === metric_key) || {};
+    row = { metric_key, workstream: cur.workstream, label: cur.label, comparison: cur.comparison, unit: cur.unit || '', target_value: Number(target_value), effective_date, active: true, updated_by: uid };
+  }
+  const { error } = await sb.from('kpi_targets').insert(row);
+  if (error) throw error;
+  closeKpi(); toast('Target saved', 'ok'); refreshStratIfActive();
+}
+
+// ===== Log Event — event core + itemized per-tier tickets + financial rows =====
+function tierRowHtml() {
+  tierIdx++;
+  return `<div class="tier-row" data-tier>
+    <input class="modal-input" placeholder="Tier (e.g. GA)" data-t="type">
+    <input class="modal-input" type="number" min="1" step="1" placeholder="Qty" data-t="qty">
+    <input class="modal-input" type="number" min="0" step="0.01" placeholder="Unit $" data-t="price">
+    <button type="button" class="tier-del" title="Remove tier">✕</button>
+  </div>`;
+}
+function openLogEvent() {
+  tierIdx = 0;
+  const seriesOpts = SERIES_OPTIONS.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('');
+  const statusOpts = ['completed', 'planning', 'announced', 'on_sale', 'sold_out', 'cancelled'].map(s => `<option value="${s}">${s.replace('_', ' ')}</option>`).join('');
+  openKpi('Log event', 'Creates the event plus ticket / income / expense / donation / sponsorship rows', `
+    <div class="kpi-section-h">Event</div>
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" required placeholder="Come With — May"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Series *</label><select class="modal-select" name="series" required>${seriesOpts}</select></div>
+      <div><label class="modal-label">Date *</label><input class="modal-input" type="date" name="event_date" value="${TODAY()}" required></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity"></div>
+      <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+      <div><label class="modal-label">Slug</label><input class="modal-input" name="slug" placeholder="auto from name"></div>
+    </div>
+    <div class="kpi-section-h">Tickets — one row per price tier</div>
+    <div class="kpi-hint">tickets_sold counts quantity, not rows. Revenue stored = qty × unit price.</div>
+    <div id="tier-list">${tierRowHtml()}</div>
+    <button type="button" class="tier-add" id="tier-add">+ Add tier</button>
+    <div class="kpi-section-h">Financials (optional — blank rows are skipped)</div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Other income $</label><input class="modal-input" type="number" min="0" step="0.01" name="income_amount"></div>
+      <div><label class="modal-label">Income category</label><input class="modal-input" name="income_category" placeholder="e.g. bar, merch"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Total expenses $</label><input class="modal-input" type="number" min="0" step="0.01" name="expense_amount"></div>
+      <div><label class="modal-label">Expense category</label><input class="modal-input" name="expense_category" placeholder="e.g. venue, talent"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Third-party donations $</label><input class="modal-input" type="number" min="0" step="0.01" name="donation_amount"></div>
+    <div id="sponsor-block"></div>`,
+    submitLogEvent, 'Create event');
+  $('tier-add').addEventListener('click', () => $('tier-list').insertAdjacentHTML('beforeend', tierRowHtml()));
+  $('tier-list').addEventListener('click', (e) => {
+    if (!e.target.closest('.tier-del')) return;
+    const rows = $('tier-list').querySelectorAll('[data-tier]');
+    if (rows.length > 1) e.target.closest('[data-tier]').remove();
+  });
+  // Sponsorship needs an existing sponsor (FK). Only offer it if sponsors exist.
+  sb.from('sponsors').select('id, name').order('name').then(({ data }) => {
+    if (!$('kpiModalOverlay').classList.contains('show')) return; // modal may have closed
+    if (!data || !data.length) {
+      $('sponsor-block').innerHTML = `<div class="kpi-hint">No sponsors on file — add one in the Sponsors tab to attach sponsorship revenue.</div>`;
+      return;
+    }
+    const opts = data.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+    $('sponsor-block').innerHTML = `
+      <div class="modal-form-row half-row">
+        <div><label class="modal-label">Sponsor (optional)</label><select class="modal-select" name="sponsor_id"><option value="">— none —</option>${opts}</select></div>
+        <div><label class="modal-label">Sponsor cash $</label><input class="modal-input" type="number" min="0" step="0.01" name="sponsor_cash"></div>
+      </div>
+      <div class="modal-form-row"><label class="modal-label">Sponsor in-kind value $</label><input class="modal-input" type="number" min="0" step="0.01" name="sponsor_inkind"></div>`;
+  });
+}
+async function submitLogEvent() {
+  const name = kpiVal('name');
+  const series = kpiVal('series');
+  const event_date = kpiVal('event_date') || TODAY();
+  if (!name) throw new Error('Event name is required');
+  if (!SERIES_OPTIONS.includes(series)) throw new Error('Pick a valid series'); // enforce the contract
+  let slug = kpiVal('slug');
+  if (!slug) slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || ('event-' + Date.now());
+  const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed' };
+  const cap = kpiVal('capacity'); if (cap !== '') evRow.capacity = Number(cap);
+  const att = kpiVal('total_attendance'); if (att !== '') evRow.total_attendance = Number(att);
+
+  const { data: ev, error: evErr } = await sb.from('events').insert(evRow).select('id').single();
+  if (evErr) throw new Error(evErr.code === '23505' ? `Slug "${slug}" already exists — set a unique slug.` : evErr.message);
+  const event_id = ev.id;
+  const { data: { session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || null;
+
+  const tickets = [];
+  for (const r of $('kpiModalBody').querySelectorAll('[data-tier]')) {
+    const type = r.querySelector('[data-t="type"]').value.trim();
+    const qty = Number(r.querySelector('[data-t="qty"]').value);
+    const price = Number(r.querySelector('[data-t="price"]').value);
+    if (!type || !qty || qty < 1) continue;
+    tickets.push({ event_id, ticket_type: type, quantity: qty, amount_paid: +(qty * (price || 0)).toFixed(2) });
+  }
+
+  const ops = [];
+  if (tickets.length) ops.push(sb.from('ticketing').insert(tickets));
+  const incAmt = Number(kpiVal('income_amount'));    if (incAmt > 0) ops.push(sb.from('income').insert({ event_id, date: event_date, amount: incAmt, category: kpiVal('income_category') || null, created_by: uid }));
+  const expAmt = Number(kpiVal('expense_amount'));    if (expAmt > 0) ops.push(sb.from('expenses').insert({ event_id, date: event_date, amount: expAmt, category: kpiVal('expense_category') || null, created_by: uid }));
+  const donAmt = Number(kpiVal('donation_amount'));   if (donAmt > 0) ops.push(sb.from('third_party_donations').insert({ event_id, date: event_date, amount: donAmt }));
+  const sponsorId = kpiVal('sponsor_id');
+  if (sponsorId) ops.push(sb.from('sponsorships').insert({
+    event_id, sponsor_id: sponsorId,
+    cash_amount: Number(kpiVal('sponsor_cash')) || 0, in_kind_value: Number(kpiVal('sponsor_inkind')) || 0,
+    drink_tickets: 0, entry_tickets: 0, status: 'confirmed',
+  }));
+
+  const childErr = (await Promise.all(ops)).find(r => r && r.error);
+  closeKpi();
+  toast(childErr ? `Event created, but a row failed: ${childErr.error.message}` : 'Event logged', childErr ? 'err' : 'ok');
+  refreshStratIfActive();
+  if (document.querySelector('#panel-events.active')) loadTab('events');
+}
 
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
