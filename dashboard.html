@@ -208,6 +208,57 @@ body::before {
 
 .panel { display: none; }
 .panel.active { display: block; }
+
+/* ===== STRATEGY / KPI (Phase 13 — read-only) ===== */
+.strategy-wrap { display: flex; flex-direction: column; gap: 30px; }
+.strat-toolbar { display: flex; justify-content: flex-end; margin-bottom: 14px; }
+.strat-btn {
+  background: none; border: 1px solid var(--border-strong); color: var(--ink);
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem; letter-spacing: 0.1em;
+  text-transform: uppercase; padding: 7px 13px; cursor: pointer; transition: all 0.15s;
+}
+.strat-btn:hover { color: var(--red); border-color: var(--red); }
+.section-label { font-family: 'Bebas Neue', sans-serif; font-size: 1.25rem; letter-spacing: 0.08em; color: var(--ink); }
+.section-sub { font-size: 0.72rem; color: var(--mid); margin: 2px 0 14px; line-height: 1.5; }
+.strat-group { margin-bottom: 20px; }
+.strat-group-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1rem; letter-spacing: 0.08em;
+  color: var(--ink); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+}
+.strat-group-title::before {
+  content: ''; width: 11px; height: 11px; border-radius: 2px; background: var(--ws-color, var(--mid));
+}
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+.kpi-card {
+  background: white; border: 1px solid var(--border); border-left: 3px solid var(--ws-color, var(--mid));
+  padding: 15px 17px; display: flex; flex-direction: column; gap: 9px;
+}
+.kpi-label { font-size: 0.6rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--mid); }
+.kpi-value { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; line-height: 0.95; color: var(--ink); }
+.kpi-value .unit { font-size: 0.85rem; color: var(--mid); margin-left: 3px; }
+.kpi-card.no-data .kpi-value { color: var(--mid); }
+.kpi-bar { height: 5px; background: var(--off); position: relative; overflow: hidden; }
+.kpi-bar > span { position: absolute; inset: 0 auto 0 0; background: var(--ws-color, var(--mid)); }
+.kpi-meta { display: flex; align-items: center; justify-content: space-between; font-size: 0.66rem; }
+.kpi-trend.up { color: var(--green); }
+.kpi-trend.down { color: var(--red); }
+.kpi-trend.flat { color: var(--mid); }
+.kpi-target { color: var(--mid); }
+.strat-event-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
+.evt-metric { background: white; border: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 7px; }
+.strat-manage { background: white; border: 1px solid var(--border); padding: 16px 18px; display: none; }
+.strat-manage.show { display: block; }
+.strat-manage h4 { font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: 0.06em; margin-bottom: 10px; }
+#strat-manage-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 2px 16px; }
+.strat-manage label { display: flex; align-items: center; gap: 8px; font-size: 0.74rem; padding: 4px 0; cursor: pointer; }
+.flywheel { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; }
+.fly-node {
+  width: 112px; height: 112px; border-radius: 50%; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center; text-align: center;
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.92rem; letter-spacing: 0.05em;
+  color: white; padding: 8px;
+}
+.fly-arrow { color: var(--mid); font-size: 1.5rem; }
 .placeholder {
   background: white; border: 1px dashed var(--border-strong);
   padding: 36px 28px; text-align: center;
@@ -535,6 +586,7 @@ body::before {
       </div>
 
       <nav class="sidebar-nav" id="sidebarNav">
+        <button data-tab="strategy">Strategy</button>
         <button data-tab="inquiries" class="active">Inquiries</button>
         <button data-tab="agreements">Agreements</button>
         <button data-tab="clients">Clients</button>
@@ -578,6 +630,43 @@ body::before {
         <div class="refresh-cluster">
           <span class="last-refreshed" id="lastRefreshed"></span>
           <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
+        </div>
+      </div>
+
+      <div class="panel" id="panel-strategy">
+        <div class="strat-toolbar">
+          <button class="strat-btn" data-strat-toggle>Manage cards</button>
+        </div>
+        <div id="strat-state"></div>
+        <div id="strat-content" class="strategy-wrap">
+          <div id="strat-manage" class="strat-manage">
+            <h4>Show / hide cards</h4>
+            <div id="strat-manage-list"></div>
+          </div>
+          <div>
+            <div class="section-label">KPIs</div>
+            <div class="section-sub">Targets are set from the dashboard; values come from logged numbers and events. Empty until data is entered.</div>
+            <div id="strat-cards"></div>
+          </div>
+          <div>
+            <div class="section-label">Latest event</div>
+            <div id="strat-parties"></div>
+            <div id="strat-di" style="margin-top:14px;"></div>
+          </div>
+          <div>
+            <div class="section-label">The flywheel</div>
+            <div class="section-sub">How the workstreams feed each other.</div>
+            <div class="flywheel">
+              <div class="fly-node" style="background:#B5791F">Content</div>
+              <div class="fly-arrow">→</div>
+              <div class="fly-node" style="background:#2E8E72">Audience</div>
+              <div class="fly-arrow">→</div>
+              <div class="fly-node" style="background:#C75A3C">Parties</div>
+              <div class="fly-arrow">→</div>
+              <div class="fly-node" style="background:#8362A8">Dance&nbsp;Infusion</div>
+              <div class="fly-arrow">↺</div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1284,6 +1373,7 @@ function setLastRefreshed() {
 }
 
 async function loadTab(tab, { highlightFirst = false } = {}) {
+  if (tab === 'strategy') { await loadStrategy(); return; } // custom (non-table) renderer
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
@@ -1665,6 +1755,152 @@ $('sidebarNav').addEventListener('click', (e) => {
   for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + tab);
   $('mainTitle').textContent = btn.textContent;
   loadTab(tab);
+});
+
+// ---- Strategy / KPI section (Phase 13 — Part A, read-only) ----
+const WORKSTREAM = {
+  content:        { label: 'Content',        color: '#B5791F' },
+  audience:       { label: 'Audience',       color: '#2E8E72' },
+  parties:        { label: 'Parties',        color: '#C75A3C' },
+  dance_infusion: { label: 'Dance Infusion', color: '#8362A8' },
+};
+const WS_ORDER = ['content', 'audience', 'parties', 'dance_infusion'];
+const strat = { cards: [], hidden: new Set(), parties: null, di: null };
+
+const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
+function fmtMetric(v, unit) {
+  if (v == null) return '—';
+  const s = fmtNum(v);
+  if (unit === '$') return '$' + s;
+  if (unit === '%') return s + '%';
+  return unit ? `${s} <span class="unit">${escapeHtml(unit)}</span>` : s;
+}
+// Trend: arrow follows raw direction; color follows good/bad (flipped for lte).
+function trendFor(c) {
+  if (c.current_value == null || c.prior_value == null) return { cls: 'flat', arrow: '–', text: 'no prior reading' };
+  const delta = Number(c.current_value) - Number(c.prior_value);
+  if (delta === 0) return { cls: 'flat', arrow: '–', text: 'no change' };
+  const better = c.comparison === 'lte' ? delta < 0 : delta > 0;
+  return { cls: better ? 'up' : 'down', arrow: delta > 0 ? '▲' : '▼', text: fmtNum(Math.abs(delta)) };
+}
+// Progress toward target; inverted for lte (lower is better).
+function progressFor(c) {
+  if (c.current_value == null || c.target_value == null) return 0;
+  const cur = Number(c.current_value), tgt = Number(c.target_value);
+  if (!tgt || !cur) return 0;
+  const pct = c.comparison === 'lte' ? tgt / cur : cur / tgt;
+  return !isFinite(pct) || pct < 0 ? 0 : Math.min(100, Math.round(pct * 100));
+}
+
+function setStratState(kind, msg) {
+  const el = $('strat-state');
+  if (kind === 'hidden') { el.innerHTML = ''; $('strat-content').style.display = ''; return; }
+  $('strat-content').style.display = 'none';
+  el.innerHTML = `<div class="panel-state${kind === 'err' ? ' err' : ''}">${kind === 'loading' ? '<span class="spinner"></span>' : ''}${escapeHtml(msg)}</div>`;
+}
+
+function kpiCardHtml(c) {
+  const t = trendFor(c);
+  const color = WORKSTREAM[c.workstream]?.color || 'var(--mid)';
+  return `<div class="kpi-card${c.current_value == null ? ' no-data' : ''}" style="--ws-color:${color}">
+    <div class="kpi-label">${escapeHtml(c.label)}</div>
+    <div class="kpi-value">${fmtMetric(c.current_value, c.unit)}</div>
+    <div class="kpi-bar"><span style="width:${progressFor(c)}%"></span></div>
+    <div class="kpi-meta">
+      <span class="kpi-trend ${t.cls}">${t.arrow} ${escapeHtml(t.text)}</span>
+      <span class="kpi-target">target ${fmtMetric(c.target_value, c.unit)}</span>
+    </div>
+  </div>`;
+}
+
+function renderStrategy() {
+  let groups = '';
+  for (const ws of WS_ORDER) {
+    const cards = strat.cards.filter(c => c.workstream === ws && !strat.hidden.has(c.metric_key));
+    if (!cards.length) continue;
+    groups += `<div class="strat-group">
+      <div class="strat-group-title" style="--ws-color:${WORKSTREAM[ws].color}">${escapeHtml(WORKSTREAM[ws].label)}</div>
+      <div class="kpi-grid">${cards.map(kpiCardHtml).join('')}</div>
+    </div>`;
+  }
+  $('strat-cards').innerHTML = groups || `<div class="panel-state">All cards hidden. Use “Manage cards” to show some.</div>`;
+
+  const evt = (label, val) => `<div class="evt-metric"><div class="kpi-label">${escapeHtml(label)}</div><div class="kpi-value">${val}</div></div>`;
+  const p = strat.parties, d = strat.di;
+  $('strat-parties').innerHTML = p
+    ? `<div class="section-sub">Latest party — ${escapeHtml(p.name || '')} · ${escapeHtml(fmtDate(p.event_date))}</div>
+       <div class="strat-event-row">
+         ${evt('Sell-through', fmtMetric(p.sell_through_pct, '%'))}
+         ${evt('Tickets / capacity', `${fmtNum(p.tickets_sold)} / ${fmtNum(p.capacity)}`)}
+         ${evt('Net P&amp;L', fmtMetric(p.net_pl, '$'))}
+       </div>`
+    : `<div class="panel-state">No party events yet — log one to populate sell-through and P&amp;L.</div>`;
+  $('strat-di').innerHTML = d
+    ? `<div class="section-sub">Latest Dance Infusion — ${escapeHtml(d.name || '')} · ${escapeHtml(fmtDate(d.event_date))}</div>
+       <div class="strat-event-row">
+         ${evt('Total raised', fmtMetric(d.total_raised, '$'))}
+         ${evt('Cost to raise $1', fmtMetric(d.cost_to_raise_per_dollar, '$'))}
+         ${evt('Attendance', fmtNum(d.total_attendance))}
+       </div>`
+    : `<div class="panel-state">No Dance Infusion events yet.</div>`;
+
+  $('strat-manage-list').innerHTML = WS_ORDER.flatMap(ws =>
+    strat.cards.filter(c => c.workstream === ws).map(c =>
+      `<label><input type="checkbox" data-metric="${escapeHtml(c.metric_key)}"${strat.hidden.has(c.metric_key) ? '' : ' checked'}> ${escapeHtml(WORKSTREAM[ws].label)} · ${escapeHtml(c.label)}</label>`
+    )
+  ).join('');
+}
+
+async function loadStrategy() {
+  setStratState('loading', 'Loading strategy…');
+  $('refreshBtn').disabled = true;
+  try {
+    const [dash, parties, di, prefs] = await Promise.all([
+      sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
+      sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
+      sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
+      sb.from('dashboard_prefs').select('hidden_metric_keys').eq('singleton', true).maybeSingle(),
+    ]);
+    const err = dash.error || parties.error || di.error || prefs.error;
+    if (err) {
+      if (/JWT/i.test(err.message)) await sb.auth.signOut();
+      setStratState('err', /JWT/i.test(err.message) ? 'Session expired. Please sign in again.' : err.message);
+      return;
+    }
+    strat.cards = dash.data || [];
+    strat.parties = parties.data?.[0] || null;
+    strat.di = di.data?.[0] || null;
+    strat.hidden = new Set(prefs.data?.hidden_metric_keys || []);
+    renderStrategy();
+    setStratState('hidden');
+    setLastRefreshed();
+  } catch (e) {
+    setStratState('err', e.message || String(e));
+  } finally {
+    $('refreshBtn').disabled = false;
+  }
+}
+
+// Manage-cards toggle
+$('panel-strategy').addEventListener('click', (e) => {
+  if (e.target.closest('[data-strat-toggle]')) $('strat-manage').classList.toggle('show');
+});
+// Persist hide/show to the shared dashboard_prefs row
+$('strat-manage-list').addEventListener('change', async (e) => {
+  const cb = e.target.closest('input[type="checkbox"][data-metric]');
+  if (!cb) return;
+  const key = cb.dataset.metric;
+  if (cb.checked) strat.hidden.delete(key); else strat.hidden.add(key);
+  const { error } = await sb.from('dashboard_prefs')
+    .update({ hidden_metric_keys: [...strat.hidden], updated_at: new Date().toISOString() })
+    .eq('singleton', true);
+  if (error) {
+    if (cb.checked) strat.hidden.add(key); else strat.hidden.delete(key); // revert state
+    cb.checked = !cb.checked;
+    toast('Saving layout failed: ' + error.message, 'err');
+    return;
+  }
+  renderStrategy();
 });
 
 // ---- Initial session check ----
