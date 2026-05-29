@@ -490,6 +490,19 @@ body::before {
   padding: 7px 12px; cursor: pointer; margin-top: 2px;
 }
 .tier-add:hover { border-color: var(--red); color: var(--red); }
+/* Feedback log (Phase 13 — Part C) */
+.notes-filter { display: flex; gap: 6px; margin-bottom: 14px; }
+.notes-filter button {
+  background: none; border: 1px solid var(--border-strong); color: var(--mid);
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem; letter-spacing: 0.08em;
+  text-transform: uppercase; padding: 6px 12px; cursor: pointer;
+}
+.notes-filter button.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.note-text { white-space: normal; max-width: 460px; line-height: 1.4; }
+tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
+.badge-type-bug { background: #fbe6e1; color: var(--red-dk); }
+.badge-type-enhancement { background: var(--blue-bg); color: var(--blue); }
+.badge-type-idea { background: var(--amber-bg); color: var(--amber); }
 
 /* Toasts (Phase 4) */
 .toast-stack {
@@ -636,6 +649,7 @@ body::before {
         <button data-tab="artists">Artists</button>
         <button data-tab="subscribers">Subscribers</button>
         <button data-tab="campaigns">Campaigns</button>
+        <button data-tab="notes">Notes</button>
       </nav>
 
       <div class="sidebar-footer">
@@ -665,6 +679,7 @@ body::before {
       <div class="main-header">
         <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
+          <button class="refresh-btn" id="logNoteBtn">＋ Log note</button>
           <span class="last-refreshed" id="lastRefreshed"></span>
           <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
         </div>
@@ -895,6 +910,26 @@ body::before {
             <th class="num">Sent to</th>
             <th>Sent at</th>
             <th>Actions</th>
+          </tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+      <div class="panel" id="panel-notes">
+        <div class="notes-filter">
+          <button data-notes-filter="open" class="active">Open</button>
+          <button data-notes-filter="done">Done</button>
+          <button data-notes-filter="all">All</button>
+        </div>
+        <div class="row-count" id="count-notes">—</div>
+        <div id="state-notes"></div>
+        <table class="data-table" id="table-notes" style="display:none;">
+          <thead><tr>
+            <th style="width:42px;">Done</th>
+            <th>Type</th>
+            <th>Note</th>
+            <th>Page</th>
+            <th>Created</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -2205,6 +2240,78 @@ async function submitLogEvent() {
   toast(childErr ? `Event created, but a row failed: ${childErr.error.message}` : 'Event logged', childErr ? 'err' : 'ok');
   refreshStratIfActive();
   if (document.querySelector('#panel-events.active')) loadTab('events');
+}
+
+// ---- Feedback log (Phase 13 — Part C) ----
+let notesFilter = 'open';
+queries.notes = () => {
+  let qy = sb.from('feedback_log').select('id, created_at, type, note, status, page').order('created_at', { ascending: false }).limit(500);
+  if (notesFilter !== 'all') qy = qy.eq('status', notesFilter);
+  return qy;
+};
+emptyMessages.notes = 'No notes here. Use “＋ Log note” to jot a bug, enhancement, or idea.';
+renderers.notes = (rows) => {
+  $('table-notes').querySelector('tbody').innerHTML = rows.map(r => {
+    const done = r.status === 'done';
+    return `<tr class="${done ? 'note-done' : ''}">
+      <td><input type="checkbox" class="note-done-cb" data-id="${escapeHtml(r.id)}"${done ? ' checked' : ''}></td>
+      <td><span class="badge badge-type-${escapeHtml(r.type)}">${escapeHtml(r.type)}</span></td>
+      <td class="note-text">${escapeHtml(r.note)}</td>
+      <td>${escapeHtml(r.page || '') || muted}</td>
+      <td>${escapeHtml(fmtDate(r.created_at))}</td>
+    </tr>`;
+  }).join('');
+};
+
+// Filter buttons (open / done / all)
+$('panel-notes').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-notes-filter]');
+  if (!b) return;
+  notesFilter = b.dataset.notesFilter;
+  for (const x of $('panel-notes').querySelectorAll('[data-notes-filter]')) x.classList.toggle('active', x === b);
+  loadTab('notes');
+});
+
+// Check-to-mark-done (delegated; separate from the status-select handler)
+document.querySelector('main.main').addEventListener('change', async (e) => {
+  const cb = e.target.closest('.note-done-cb');
+  if (!cb) return;
+  const id = cb.dataset.id;
+  const status = cb.checked ? 'done' : 'open';
+  cb.disabled = true;
+  const { error } = await sb.from('feedback_log').update({ status }).eq('id', id);
+  cb.disabled = false;
+  if (error) { cb.checked = !cb.checked; toast('Update failed: ' + error.message, 'err'); return; }
+  cb.closest('tr')?.classList.toggle('note-done', cb.checked);
+  if (notesFilter !== 'all') loadTab('notes'); // row may no longer match the filter
+});
+
+// "+ Log note" — quick capture, available on every tab
+$('logNoteBtn').addEventListener('click', () => {
+  const activeBtn = document.querySelector('.sidebar-nav button.active');
+  const page = activeBtn ? activeBtn.textContent.trim() : '';
+  openKpi('Log a note', 'Quick capture — bug, enhancement, or idea', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Type</label>
+        <select class="modal-select" name="type">
+          <option value="idea">idea</option>
+          <option value="enhancement">enhancement</option>
+          <option value="bug">bug</option>
+        </select></div>
+      <div><label class="modal-label">Page</label><input class="modal-input" name="page" value="${escapeHtml(page)}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="4" required></textarea></div>`,
+    submitLogNote, 'Save note');
+});
+async function submitLogNote() {
+  const type = kpiVal('type') || 'idea';
+  const note = kpiVal('note');
+  const page = kpiVal('page') || null;
+  if (!note) throw new Error('Note text is required');
+  const { error } = await sb.from('feedback_log').insert({ type, note, page }); // created_by defaults to auth.uid()
+  if (error) throw error;
+  closeKpi(); toast('Note saved', 'ok');
+  if (document.querySelector('#panel-notes.active')) loadTab('notes');
 }
 
 // ---- Initial session check ----
