@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Come With — Strategy Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#3D2B1F; --raised:#4a3528; --card:#45301f; --inset:#2e1f14;
+  --text:#EDE4D3; --mid:#A89880; --concrete:#7A6F5F;
+  --amber:#E0A24E; --coral:#D9744A; --teal:#5DCAA5; --purple:#B9A4D9;
+  --border:rgba(237,228,211,0.1);
+  --up:#8FB339; --down:#D9744A;
+}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;font-weight:300;line-height:1.5;padding:40px 24px 80px;}
+.wrap{max-width:1080px;margin:0 auto;}
+
+.head{display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px;border-bottom:1px solid rgba(143,179,57,0.25);padding-bottom:20px;margin-bottom:8px;}
+.head-title{font-size:1.9rem;font-weight:500;letter-spacing:-0.02em;}
+.head-title strong{color:var(--up);}
+.head-meta{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--concrete);text-align:right;}
+.sample-tag{display:inline-block;font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.14em;text-transform:uppercase;color:var(--amber);border:1px solid rgba(224,162,78,0.4);padding:3px 10px;margin:16px 0 32px;}
+
+.flywheel-wrap{background:var(--raised);border:1px solid var(--border);border-radius:12px;padding:8px 0 0;margin-bottom:36px;}
+
+.legend{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;padding:4px 20px 18px;}
+.legend-item{display:flex;align-items:center;gap:7px;font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.06em;color:var(--mid);}
+.dot{width:9px;height:9px;border-radius:50%;}
+
+.ws-section{margin-bottom:14px;}
+.ws-head{display:flex;align-items:center;gap:10px;margin-bottom:12px;}
+.ws-bar{width:3px;height:20px;border-radius:2px;}
+.ws-name{font-size:1.05rem;font-weight:500;}
+.ws-role{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.12em;text-transform:uppercase;color:var(--concrete);margin-left:auto;}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:28px;}
+.card{background:var(--card);border:1px solid var(--border);border-left:3px solid var(--accent);border-radius:0 8px 8px 0;padding:18px 20px;}
+.card-metric{font-family:'DM Mono',monospace;font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--mid);margin-bottom:10px;}
+.card-value{font-size:2rem;font-weight:500;letter-spacing:-0.02em;line-height:1;display:flex;align-items:baseline;gap:10px;}
+.card-unit{font-size:0.9rem;color:var(--mid);font-weight:300;}
+.trend{font-family:'DM Mono',monospace;font-size:12px;font-weight:500;}
+.trend.up{color:var(--up);}
+.trend.down{color:var(--down);}
+.trend.flat{color:var(--concrete);}
+.bar{height:5px;background:var(--inset);border-radius:3px;margin-top:14px;overflow:hidden;}
+.fill{height:100%;background:var(--accent);border-radius:3px;}
+.card-target{font-family:'DM Mono',monospace;font-size:10px;letter-spacing:0.06em;color:var(--concrete);margin-top:7px;}
+
+.series-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px 4px;}
+.series-row{display:grid;grid-template-columns:1fr auto 120px;align-items:center;gap:16px;padding:12px 18px;border-bottom:1px solid rgba(237,228,211,0.05);}
+.series-row:last-child{border-bottom:none;}
+.series-name{font-size:14px;}
+.series-tag{font-family:'DM Mono',monospace;font-size:10px;color:var(--concrete);}
+.series-views{font-family:'DM Mono',monospace;font-size:13px;color:var(--text);text-align:right;}
+.series-bar{height:6px;background:var(--inset);border-radius:3px;overflow:hidden;}
+.series-fill{height:100%;background:var(--amber);border-radius:3px;}
+
+.note{font-family:'DM Mono',monospace;font-size:11px;color:var(--concrete);letter-spacing:0.04em;margin-top:32px;padding-top:20px;border-top:1px solid var(--border);line-height:1.8;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="head">
+    <div class="head-title">Come <strong>With</strong> — Strategy Dashboard</div>
+    <div class="head-meta">Recognition flywheel<br>Updated live · shared view</div>
+  </div>
+  <div class="sample-tag">● Sample data — wire to live sources</div>
+
+  <!-- FLYWHEEL -->
+  <div class="flywheel-wrap">
+    <svg width="100%" viewBox="0 0 680 410" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Recognition flywheel">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="#7A6F5F" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>
+      </defs>
+      <path d="M170 290 Q270 200 295 138" fill="none" stroke="#7A6F5F" stroke-width="1.2" marker-end="url(#ar)"/>
+      <path d="M390 134 Q520 200 525 288" fill="none" stroke="#7A6F5F" stroke-width="1.2" marker-end="url(#ar)"/>
+      <line x1="420" y1="332" x2="260" y2="332" stroke="#7A6F5F" stroke-width="1.2" marker-end="url(#ar)"/>
+      <path d="M205 172 L243 130" fill="none" stroke="#7A6F5F" stroke-width="1.2" marker-end="url(#ar)"/>
+
+      <text x="340" y="208" text-anchor="middle" fill="#EDE4D3" font-family="DM Sans" font-size="14" font-weight="500">The flywheel</text>
+      <text x="340" y="324" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">fills the room</text>
+
+      <g>
+        <rect x="240" y="50" width="200" height="84" rx="8" fill="rgba(224,162,78,0.12)" stroke="#E0A24E" stroke-width="1"/>
+        <text x="340" y="78" text-anchor="middle" fill="#E0A24E" font-family="DM Sans" font-size="15" font-weight="500">Content &amp; YouTube</text>
+        <text x="340" y="98" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Series-led channel</text>
+        <text x="340" y="116" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Subs + watch time</text>
+      </g>
+      <g>
+        <rect x="55" y="290" width="200" height="84" rx="8" fill="rgba(217,116,74,0.12)" stroke="#D9744A" stroke-width="1"/>
+        <text x="155" y="318" text-anchor="middle" fill="#D9744A" font-family="DM Sans" font-size="15" font-weight="500">Come With Parties</text>
+        <text x="155" y="338" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Pre-sale velocity</text>
+        <text x="155" y="356" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Sell-out + profit</text>
+      </g>
+      <g>
+        <rect x="425" y="290" width="200" height="84" rx="8" fill="rgba(93,202,165,0.12)" stroke="#5DCAA5" stroke-width="1"/>
+        <text x="525" y="318" text-anchor="middle" fill="#5DCAA5" font-family="DM Sans" font-size="15" font-weight="500">Audience &amp; Following</text>
+        <text x="525" y="338" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Saves + shares</text>
+        <text x="525" y="356" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Follower &#8594; ticket</text>
+      </g>
+      <g>
+        <rect x="40" y="160" width="170" height="84" rx="8" fill="rgba(185,164,217,0.12)" stroke="#B9A4D9" stroke-width="1"/>
+        <text x="125" y="188" text-anchor="middle" fill="#B9A4D9" font-family="DM Sans" font-size="15" font-weight="500">Dance Infusion</text>
+        <text x="125" y="208" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Cost to raise $1 &#8595;</text>
+        <text x="125" y="226" text-anchor="middle" fill="#A89880" font-family="DM Mono" font-size="11">Growth per event</text>
+      </g>
+    </svg>
+    <div class="legend">
+      <div class="legend-item"><span class="dot" style="background:#E0A24E"></span>Content &amp; YouTube</div>
+      <div class="legend-item"><span class="dot" style="background:#D9744A"></span>Come With Parties</div>
+      <div class="legend-item"><span class="dot" style="background:#5DCAA5"></span>Audience &amp; Following</div>
+      <div class="legend-item"><span class="dot" style="background:#B9A4D9"></span>Dance Infusion</div>
+    </div>
+  </div>
+
+  <!-- CONTENT & YOUTUBE -->
+  <div class="ws-section">
+    <div class="ws-head"><div class="ws-bar" style="background:#E0A24E"></div><div class="ws-name">Content &amp; YouTube</div><div class="ws-role">Discovery engine</div></div>
+    <div class="cards">
+      <div class="card" style="--accent:#E0A24E">
+        <div class="card-metric">Subscribers</div>
+        <div class="card-value">1,240 <span class="trend up">&#8593; 12%</span></div>
+        <div class="bar"><div class="fill" style="width:62%"></div></div>
+        <div class="card-target">62% to target · 2,000</div>
+      </div>
+      <div class="card" style="--accent:#E0A24E">
+        <div class="card-metric">Watch time / mo</div>
+        <div class="card-value">340 <span class="card-unit">hrs</span> <span class="trend up">&#8593; 8%</span></div>
+        <div class="bar"><div class="fill" style="width:45%"></div></div>
+        <div class="card-target">45% to target · 750 hrs</div>
+      </div>
+      <div class="card" style="--accent:#E0A24E">
+        <div class="card-metric">Avg views / upload</div>
+        <div class="card-value">2,150 <span class="trend up">&#8593; 5%</span></div>
+        <div class="bar"><div class="fill" style="width:54%"></div></div>
+        <div class="card-target">54% to target · 4,000</div>
+      </div>
+    </div>
+    <div class="series-wrap">
+      <div class="series-row">
+        <div><div class="series-name">Backyard Sessions</div><div class="series-tag">Artist showcase series</div></div>
+        <div class="series-views">8,400 views</div>
+        <div class="series-bar"><div class="series-fill" style="width:90%"></div></div>
+      </div>
+      <div class="series-row">
+        <div><div class="series-name">Live at Dance Infusion</div><div class="series-tag">Event recordings</div></div>
+        <div class="series-views">5,100 views</div>
+        <div class="series-bar"><div class="series-fill" style="width:55%"></div></div>
+      </div>
+      <div class="series-row">
+        <div><div class="series-name">Come With Sets</div><div class="series-tag">Full DJ sets</div></div>
+        <div class="series-views">3,200 views</div>
+        <div class="series-bar"><div class="series-fill" style="width:34%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COME WITH PARTIES -->
+  <div class="ws-section">
+    <div class="ws-head"><div class="ws-bar" style="background:#D9744A"></div><div class="ws-name">Come With Parties</div><div class="ws-role">Commercial engine</div></div>
+    <div class="cards">
+      <div class="card" style="--accent:#D9744A">
+        <div class="card-metric">Pre-sale velocity</div>
+        <div class="card-value">58% <span class="trend up">&#8593;</span></div>
+        <div class="bar"><div class="fill" style="width:58%"></div></div>
+        <div class="card-target">Sold by T-7 · target 70%</div>
+      </div>
+      <div class="card" style="--accent:#D9744A">
+        <div class="card-metric">Sell-through</div>
+        <div class="card-value">— <span class="card-unit">next: Jul 11</span></div>
+        <div class="bar"><div class="fill" style="width:0%"></div></div>
+        <div class="card-target">Target 100% · sell out</div>
+      </div>
+      <div class="card" style="--accent:#D9744A">
+        <div class="card-metric">Net P&amp;L / event</div>
+        <div class="card-value">&#8722;$420 <span class="trend down">invest</span></div>
+        <div class="bar"><div class="fill" style="width:30%"></div></div>
+        <div class="card-target">Break-even by event #__</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUDIENCE -->
+  <div class="ws-section">
+    <div class="ws-head"><div class="ws-bar" style="background:#5DCAA5"></div><div class="ws-name">Audience &amp; Following</div><div class="ws-role">Conversion engine</div></div>
+    <div class="cards">
+      <div class="card" style="--accent:#5DCAA5">
+        <div class="card-metric">Instagram followers</div>
+        <div class="card-value">3,480 <span class="trend up">&#8593; 6%</span></div>
+        <div class="bar"><div class="fill" style="width:70%"></div></div>
+        <div class="card-target">70% to target · 5,000</div>
+      </div>
+      <div class="card" style="--accent:#5DCAA5">
+        <div class="card-metric">Saves + shares / post</div>
+        <div class="card-value">94 <span class="trend up">&#8593; 18%</span></div>
+        <div class="bar"><div class="fill" style="width:63%"></div></div>
+        <div class="card-target">63% to target · 150</div>
+      </div>
+      <div class="card" style="--accent:#5DCAA5">
+        <div class="card-metric">Follower &#8594; ticket</div>
+        <div class="card-value">4.2% <span class="trend flat">&#8594;</span></div>
+        <div class="bar"><div class="fill" style="width:42%"></div></div>
+        <div class="card-target">Target 10% conversion</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DANCE INFUSION -->
+  <div class="ws-section">
+    <div class="ws-head"><div class="ws-bar" style="background:#B9A4D9"></div><div class="ws-name">Dance Infusion</div><div class="ws-role">Mission &amp; credibility</div></div>
+    <div class="cards">
+      <div class="card" style="--accent:#B9A4D9">
+        <div class="card-metric">Cost to raise $1</div>
+        <div class="card-value">$0.38 <span class="trend up">&#8595; better</span></div>
+        <div class="bar"><div class="fill" style="width:62%"></div></div>
+        <div class="card-target">Target &#8804; $0.25 by DI #3</div>
+      </div>
+      <div class="card" style="--accent:#B9A4D9">
+        <div class="card-metric">Raised / event</div>
+        <div class="card-value">$4,200 <span class="trend up">&#8593; 22%</span></div>
+        <div class="bar"><div class="fill" style="width:70%"></div></div>
+        <div class="card-target">70% to target · $6,000</div>
+      </div>
+      <div class="card" style="--accent:#B9A4D9">
+        <div class="card-metric">Attendance</div>
+        <div class="card-value">180 <span class="trend up">&#8593; 30</span></div>
+        <div class="bar"><div class="fill" style="width:72%"></div></div>
+        <div class="card-target">72% to target · 250</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    All figures are placeholders. Live wiring order: (1) ticket + P&amp;L data from Supabase &nbsp;·&nbsp; (2) YouTube Data API for subs, watch time, per-series views &nbsp;·&nbsp; (3) Instagram Graph API for followers and engagement. Cards read current value, trend vs. last period, and progress to target — no numbers to update by hand once connected.
+  </div>
+
+</div>
+</body>
+</html>
