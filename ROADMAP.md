@@ -192,20 +192,39 @@ preview — no build step required.
 
 ---
 
-## Backlog (post-migration)
+## Done since Phase 11 — KPI / metrics + money model (May 2026)
 
-Ideas captured after the Phase 0–11 migration. Not yet scheduled.
+Migrations **015–022**. Strategy tab (KPI cards, formula tooltips, placeholder flywheel),
+entry forms (Log Event / Log Numbers / Edit Target incl. create-new + retire-metric),
+`feedback_log` + Notes tab, event edit + soft-delete, per-event Money panel, Add Sponsor,
+Income soft-delete. **Canonical revenue/P&L model** — net P&L now includes ticket revenue.
+Details + rationale in `DECISIONS.md`; live state in `CARRYOVER.md`.
+
+## Parked — design-first (each its own session)
+
+- **Event model redesign** — events are multi-axis, not a flat `series`: **TYPE**
+  (Party / Dance Infusion / Production), **CONTENT** (`content_series`; content events
+  graded on views/follows, not P&L), **SIGNATURE** tag (booth-to-wall), plus relational
+  **LINKS** (`equipment_usage`, artists vs contractors, sponsors — TYPE may decide which
+  apply). **Design BEFORE migrating.** The 5 income-cleanup events use placeholder series
+  to reassign afterward.
+- **DI #1 / #2 statistic backfill** — after the event-model design. Also fix the
+  "Dance Infusion MS" `event_date` (2026-09-08 → 2025-09-06).
+- **Flywheel redesign** — cyclical, metric-carrying boxes, moved to the bottom.
+  Source: `ComeWith_Strategy_Dashboard.html` (in repo).
+- **Roadmap / timeline tool** — buy not build; Notion vs Trello TBD.
+
+## Backlog (smaller, post-migration)
 
 - **Expenses CSV import** — dashboard button: drop a file → preview parsed rows
   → confirm → bulk insert into `expenses`. Reuses the migration CSV logic. Use
   case: bulk monthly bank / Simplifi export, instead of one-at-a-time entry.
+- **Per-event line-item editor** — in-place edit of ticket tiers / financial rows in the
+  Money panel (today it's delete-and-re-add only).
+- **Reactivate-metric UI** — un-retire a metric (currently done via "create a new metric"
+  with the same key).
 - **`created_by`-aware modal submit** — the shared Phase-4 `FORM_DEFS` submit handler
   injects `created_by` into every insert, so tables without that column (e.g. `sponsors`)
   can't use the standard path (Add Sponsor is a custom KPI-modal form as a workaround).
   Make the handler only set `created_by` when the table has it, then fold custom forms
   back onto the standard path. Low priority.
-- **Delete event** — soft-delete via `deleted_at` (reversible, preserves financial
-  history); the schema and all views already filter `deleted_at is null`, so a
-  "Delete event" action just stamps `deleted_at = now()`. No hard delete. Also
-  consider soft-delete for metrics / targets. (Today events can only be set to
-  status `cancelled`; removing one needs manual SQL.)
