@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dance Infusion #2 — Public Audit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a;--green:#3a8c4a;--cost:#b9c2d4}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:0 20px}
+  h1,h2,.display{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.02em;line-height:1}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  a{color:var(--navy)}
+  .hero{background:var(--navy);color:var(--cream);padding:54px 0 46px;text-align:center}
+  .hero .eyebrow{color:#c9b67e}
+  .hero h1{font-size:clamp(30px,8vw,52px);color:var(--cream);margin:10px 0 6px}
+  .hero .big{font-family:"Bebas Neue";font-size:clamp(56px,15vw,104px);color:#e9dcb6;line-height:.9;margin:6px 0}
+  .hero p{color:#c4cbda;max-width:520px;margin:10px auto 0;font-size:15px}
+  section{padding:40px 0;border-bottom:1px solid var(--line)}
+  section h2{font-size:30px;color:var(--navy);margin:0 0 14px}
+  p{margin:0 0 14px}
+  /* money flow */
+  .flow{display:grid;gap:10px}
+  .flow .row{display:flex;justify-content:space-between;align-items:baseline;background:#fff;border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+  .flow .row .k{font-weight:500}
+  .flow .row .v{font-family:"Bebas Neue";font-size:26px;color:var(--navy)}
+  .flow .row.gross .v{color:var(--ink)}
+  .flow .row.mission{background:var(--navy);border-color:var(--navy)}
+  .flow .row.mission .k{color:var(--cream);font-weight:700}
+  .flow .row.mission .v{color:#e9dcb6;font-size:30px}
+  .flow .sub{font-size:13px;color:var(--muted);padding:2px 4px}
+  .groups{display:grid;gap:8px;margin:6px 0 0}
+  .group{display:flex;justify-content:space-between;background:#fbf8ef;border:1px solid var(--line);border-radius:10px;padding:11px 14px;font-size:15px}
+  .group .gv{font-weight:700;font-variant-numeric:tabular-nums}
+  .group small{color:var(--muted);display:block;font-weight:400;font-size:12px}
+  /* ratio bar */
+  .ratio{background:#fff;border:1px solid var(--line);border-radius:16px;padding:20px 18px;margin-top:6px}
+  .bar{position:relative;height:42px;border-radius:10px;overflow:hidden;background:var(--cost);margin:18px 0 8px}
+  .bar .mission{position:absolute;left:0;top:0;bottom:0;background:var(--green);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:13px}
+  .bar .costlabel{position:absolute;right:10px;top:0;bottom:0;display:flex;align-items:center;color:#3a4256;font-weight:700;font-size:13px}
+  .target{position:absolute;top:-6px;bottom:-6px;width:0;border-left:3px dashed var(--accent)}
+  .target .tlab{position:absolute;top:-20px;left:50%;transform:translateX(-50%);white-space:nowrap;font-size:11px;font-weight:700;color:#9a7b1f;letter-spacing:.04em}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-top:14px}
+  .legend i{display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+  .ratio .sentence{font-size:18px;color:var(--ink);margin-top:16px;font-weight:500}
+  .note{font-size:13px;color:var(--muted);margin-top:10px}
+  .backlink{display:inline-block;margin-top:8px;font-weight:700;text-decoration:none}
+  footer{padding:30px 0 60px;text-align:center;color:var(--muted);font-size:13px}
+  .btn{font-family:"DM Sans";font-weight:700;font-size:13px;letter-spacing:.04em;background:var(--accent);color:#1a1405;border:0;border-radius:999px;padding:9px 18px;cursor:pointer}
+  .pdfbar{position:sticky;top:0;z-index:50;background:rgba(250,246,236,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+  .pdfbar .wrap{display:flex;justify-content:space-between;align-items:center;padding:10px 20px}
+  .pdfbar .brand{font-family:"Bebas Neue";font-size:20px;color:var(--navy);letter-spacing:.04em}
+  .err{max-width:720px;margin:40px auto;padding:20px;border:1px solid #e7c3c3;background:#fbeaea;border-radius:12px;color:#8a2a2a;font-size:14px}
+  @media print{.pdfbar{display:none}body{background:#fff}.hero{background:#fff!important;color:var(--navy)!important;border-bottom:2px solid var(--navy)}.hero h1,.hero .big{color:var(--navy)!important}.hero p,.hero .eyebrow{color:#444!important}.flow .row.mission{background:#fff!important;border:1.5px solid var(--navy)}.flow .row.mission .k{color:var(--navy)!important}.flow .row.mission .v{color:var(--navy)!important}section{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="pdfbar"><div class="wrap"><span class="brand">DANCE INFUSION · AUDIT</span><button class="btn" onclick="window.print()">Export as PDF</button></div></div>
+<div id="app"><div class="err" style="display:none" id="err"></div></div>
+<script>
+const money = (n,d=0) => '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+async function getJSON(p){const r=await fetch(p+'?t='+Date.now());if(!r.ok)throw new Error('Could not load '+p);return r.json();}
+
+function render(d2){
+  const c = d2.config;
+  // To the mission (live from json)
+  const mission = (c.ms_society_owed||0)+(c.ms_society_already_paid||0)+(c.ms_society_personal_paid||0)+(c.ms_society_bluevine_paid||0)+(c.third_party_ms_donations||0);
+  // Event operating costs = expenses e1-e4 (NOT e5/e6, which are donations to MS). Grouped.
+  const ex = id => { const e=(d2.expenses||[]).find(x=>x.id===id); return e?e.amount:0; };
+  const venue = ex('e1') + ex('e4');        // Signal NYC bar pre-purchase + additional invoice
+  const production = ex('e2');               // Crossroads catering (pastries/focaccia/service)
+  const marketing = ex('e3');                // Fliers / printing
+  const talent = 0;                          // DJs performed for the cause; drink allocations comped (folded)
+  const costs = venue + production + marketing + talent;
+  // Gross across all channels — from final reconciled audit (not a single JSON field)
+  const GROSS = 9264.89;
+
+  // Prescribed framing: ~70% cost / 30% to mission; target 40% cost / 60% to mission.
+  const MISSION_PCT = 30, TARGET_MISSION_PCT = 60;
+
+  document.getElementById('app').innerHTML = `
+  <header class="hero"><div class="wrap">
+    <div class="eyebrow">Dance Infusion #2 · Public Audit</div>
+    <h1>Where every dollar went</h1>
+    <div class="big">${money(mission)}</div>
+    <div class="eyebrow" style="color:#c9b67e">to the National MS Society</div>
+    <p>We believe in showing our work. Here's the full money flow from Dance Infusion #2 — what came in, what it cost to put on, and what reached the mission.</p>
+  </div></header>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Money flow</div>
+    <h2>Gross → costs → mission</h2>
+    <div class="flow">
+      <div class="row gross"><span class="k">Total raised, all channels</span><span class="v">${money(GROSS,2)}</span></div>
+      <div class="sub">Less what it cost to produce the event:</div>
+      <div class="groups">
+        <div class="group"><span>Venue <small>Signal NYC — bar &amp; space</small></span><span class="gv">${money(venue,2)}</span></div>
+        <div class="group"><span>Production <small>Crossroads Café — catering &amp; service</small></span><span class="gv">${money(production,2)}</span></div>
+        <div class="group"><span>Talent <small>DJs performed for the cause — no cash fee</small></span><span class="gv">${money(talent,2)}</span></div>
+        <div class="group"><span>Marketing <small>Printing &amp; flyers</small></span><span class="gv">${money(marketing,2)}</span></div>
+      </div>
+      <div class="row"><span class="k">Total event costs</span><span class="v">${money(costs,2)}</span></div>
+      <div class="row mission"><span class="k">To the mission — National MS Society</span><span class="v">${money(mission)}</span></div>
+    </div>
+    <p class="note">Mission total includes ${money(c.ms_society_diy_direct||445)} given directly on the MS Society DIY page and ${money(c.third_party_ms_donations||130)} donated by partner Crossroads Café — both routed straight to the National MS Society rather than through event accounts, so the three figures above don't net to a single line.</p>
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Cost efficiency</div>
+    <h2>How much reached the mission</h2>
+    <div class="ratio">
+      <div class="bar">
+        <div class="mission" style="width:${MISSION_PCT}%">${MISSION_PCT}%</div>
+        <div class="costlabel">costs ${100-MISSION_PCT}%</div>
+        <div class="target" style="left:${TARGET_MISSION_PCT}%"><span class="tlab">Target ${TARGET_MISSION_PCT}% →</span></div>
+      </div>
+      <div class="legend">
+        <span><i style="background:var(--green)"></i>To mission (${MISSION_PCT}%)</span>
+        <span><i style="background:var(--cost)"></i>Event costs (${100-MISSION_PCT}%)</span>
+        <span><i style="background:transparent;border-left:3px dashed var(--accent);border-radius:0;width:3px"></i>Goal: ${TARGET_MISSION_PCT}% to mission</span>
+      </div>
+      <p class="sentence">For every $1 at Dance Infusion #2, $0.30 reached the mission. Our target is $0.60.</p>
+      <p class="note">Dance Infusion #2 ran at roughly a 70% cost ratio ($0.70 of every $1 covered event costs) against our 40% target ($0.40 cost / $0.60 to mission). This is our first fully reconciled year — figures and target shown on their own; no prior-event cost comparison is made because Dance Infusion #1 cost data is not available.</p>
+    </div>
+  </div></section>
+
+  <section style="border-bottom:0"><div class="wrap">
+    <a class="backlink" href="impact-report.html">← Back to the impact report</a>
+  </div></section>
+
+  <footer><div class="wrap">
+    Dance Infusion #2 · A Come With production benefiting the National MS Society<br>
+    Figures from the final reconciled event audit (June 1, 2026).
+  </div></footer>`;
+}
+
+(async function(){
+  try{ render(await getJSON('../data/dance_infusion.json')); }
+  catch(e){ const el=document.getElementById('err'); el.style.display='block';
+    el.innerHTML='Could not build audit: '+esc(e.message)+'<br><br>Serve via a local server (file:// blocks fetch).'; }
+})();
+</script>
+</body>
+</html>
