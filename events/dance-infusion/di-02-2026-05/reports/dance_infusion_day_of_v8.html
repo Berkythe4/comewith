@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dance Infusion #2 — Day-of Plan</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #fff; color: #1a1a1a; padding: 32px 28px 48px; max-width: 960px; margin: 0 auto; }
+  .di-wrap { padding: 1.25rem 0; font-size: 13px; }
+  .di-title { font-size: 15px; font-weight: 500; color: #1a1a1a; margin-bottom: 4px; }
+  .di-sub { font-size: 12px; color: #666; margin-bottom: 1.25rem; }
+  .di-cols { display: grid; grid-template-columns: minmax(0,1.8fr) minmax(0,1fr) minmax(0,1fr); gap: 14px; align-items: start; }
+  .col-label { font-size: 10px; font-weight: 500; letter-spacing: .08em; text-transform: uppercase; color: #888; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 0.5px solid rgba(0,0,0,0.15); }
+  .sched { display: flex; gap: 6px; }
+  .time-col { display: flex; flex-direction: column; min-width: 34px; }
+  .time-lbl { font-size: 10px; color: #888; white-space: nowrap; display: flex; align-items: flex-start; padding-top: 3px; }
+  .blocks-col { flex: 1; display: flex; flex-direction: column; gap: 4px; }
+  .bl { border-radius: 8px; padding: 7px 10px; border: 0.5px solid transparent; display: flex; flex-direction: column; justify-content: center; }
+  .bl .bl-name { font-size: 12px; font-weight: 500; line-height: 1.3; }
+  .bl .bl-sub { font-size: 10px; margin-top: 2px; opacity: .8; font-style: italic; }
+  .bl .bl-time { font-size: 10px; margin-top: 2px; opacity: .8; }
+  .bl-gray   { background: #F1EFE8; border-color: #B4B2A9; color: #2C2C2A; }
+  .bl-purple { background: #EEEDFE; border-color: #AFA9EC; color: #3C3489; }
+  .bl-teal   { background: #E1F5EE; border-color: #5DCAA5; color: #085041; }
+  .bl-coral  { background: #FAECE7; border-color: #F0997B; color: #4A1B0C; }
+  .overlap-col { position: relative; }
+  .fb { border-radius: 8px; padding: 9px 12px; border: 0.5px solid transparent; display: flex; flex-direction: column; justify-content: flex-start; position: absolute; left: 0; right: 0; overflow: hidden; }
+  .fb .fb-title { font-size: 12px; font-weight: 500; line-height: 1.3; }
+  .fb .fb-time { font-size: 10px; margin-bottom: 3px; opacity: .85; }
+  .fb .fb-desc { font-size: 11px; line-height: 1.4; opacity: .85; margin-top: 2px; }
+  .fb-amber { background: #FAEEDA; border-color: #EF9F27; color: #412402; z-index: 3; }
+  .fb-teal  { background: #E1F5EE; border-color: #5DCAA5; color: #085041; z-index: 2; }
+  .fb-coral { background: #FAECE7; border-color: #F0997B; color: #4A1B0C; z-index: 1; }
+  .fb-pink  { background: #FBEAF0; border-color: #ED93B1; color: #4B1528; z-index: 2; }
+  .fb-blue  { background: #E6F1FB; border-color: #85B7EB; color: #042C53; z-index: 1; }
+  .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 1.25rem; padding-top: 1rem; border-top: 0.5px solid rgba(0,0,0,0.12); }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: 11px; color: #666; }
+  .leg-dot { width: 10px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<div class="di-wrap">
+  <div class="di-title">Dance Infusion #2 — Day-of Plan</div>
+  <div class="di-sub">May 9, 2026 &nbsp;·&nbsp; Signal NYC &nbsp;·&nbsp; 3–10 PM</div>
+
+  <div class="di-cols">
+    <div>
+      <div class="col-label">DJ schedule</div>
+      <div class="sched">
+        <div class="time-col">
+          <div class="time-lbl" style="height:128px">3 PM</div>
+          <div class="time-lbl" style="height:56px">5 PM</div>
+          <div class="time-lbl" style="height:94px">6 PM</div>
+          <div class="time-lbl" style="height:94px">7:30 PM</div>
+          <div class="time-lbl" style="height:56px">9 PM</div>
+        </div>
+        <div class="blocks-col" id="djcol">
+          <div class="bl bl-gray" style="min-height:128px">
+            <div class="bl-name">Sauci Soni &amp; Kristen London</div>
+            <div class="bl-sub">B2B set</div>
+            <div class="bl-time">3:00 – 5:00 PM</div>
+          </div>
+          <div class="bl bl-purple" style="min-height:56px">
+            <div class="bl-name">Berky</div>
+            <div class="bl-time">5:00 – 6:00 PM</div>
+          </div>
+          <div class="bl bl-teal" style="min-height:94px">
+            <div class="bl-name">Kloud9</div>
+            <div class="bl-time">6:00 – 7:30 PM</div>
+          </div>
+          <div class="bl bl-coral" style="min-height:94px">
+            <div class="bl-name">KRNeY</div>
+            <div class="bl-time">7:30 – 9:00 PM</div>
+          </div>
+          <div class="bl bl-purple" style="min-height:56px">
+            <div class="bl-name">Berky</div>
+            <div class="bl-time">9:00 – 10:00 PM</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="col-label">Food &amp; drinks</div>
+      <div class="overlap-col" id="foodcol">
+        <div class="fb fb-coral" id="fb-food">
+          <div class="fb-time">5:00 – 9:00 PM</div>
+          <div class="fb-title">Food service</div>
+          <div class="fb-desc">Crossroads Café</div>
+        </div>
+        <div class="fb fb-teal" id="fb-coffee">
+          <div class="fb-time">3:00 – 6:00 PM</div>
+          <div class="fb-title">Coffee &amp; pastries</div>
+          <div class="fb-desc">Crossroads Café</div>
+        </div>
+        <div class="fb fb-amber" id="fb-brunch">
+          <div class="fb-time">3:00 – 4:00 PM</div>
+          <div class="fb-title">Brunch hour</div>
+          <div class="fb-desc">Bloody marys, mimosas &amp; specialty coffee</div>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <div class="col-label">AOM Infusion</div>
+      <div class="overlap-col" id="aomcol">
+        <div class="fb fb-blue" id="aom-tickets">
+          <div class="fb-time">5:00 – 10:00 PM</div>
+          <div class="fb-title">Drink tickets</div>
+          <div class="fb-desc">Distributed to guests by AOM</div>
+        </div>
+        <div class="fb fb-pink" id="aom-coffee">
+          <div class="fb-time">3:00 – 6:00 PM</div>
+          <div class="fb-title">Coffee bar sponsorship</div>
+          <div class="fb-desc">AOM-sponsored activation</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div class="leg-item"><div class="leg-dot" style="background:#7F77DD"></div>Berky</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#1D9E75"></div>Kloud9</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#D85A30"></div>KRNeY</div>
+    <div class="leg-item"><div class="leg-dot" style="background:#888780"></div>Sauci Soni &amp; Kristen London</div>
+  </div>
+</div>
+
+<script>
+  function layout() {
+    var djCol = document.getElementById('djcol');
+    var totalH = djCol.offsetHeight;
+    if (totalH < 50) { setTimeout(layout, 100); return; }
+    var totalMins = 7 * 60;
+    var pxPerMin = totalH / totalMins;
+
+    function topPx(h, m) { return ((h - 15) * 60 + m) * pxPerMin; }
+    function heightPx(sh, sm, eh, em) { return ((eh - sh) * 60 + (em - sm)) * pxPerMin - 4; }
+
+    var foodCol = document.getElementById('foodcol');
+    foodCol.style.height = totalH + 'px';
+
+    var coffeeTop = topPx(15, 0);
+    var coffeeH = heightPx(15, 0, 18, 0);
+    var coffeeBottom = coffeeTop + coffeeH;
+    var brunchH = heightPx(15, 0, 16, 0);
+
+    var coffee = document.getElementById('fb-coffee');
+    coffee.style.top = coffeeTop + 'px';
+    coffee.style.height = coffeeH + 'px';
+    coffee.style.paddingTop = (brunchH + 12) + 'px';
+
+    var brunch = document.getElementById('fb-brunch');
+    brunch.style.top = topPx(15, 0) + 'px';
+    brunch.style.height = brunchH + 'px';
+
+    var foodTop = topPx(17, 0);
+    var foodH = heightPx(17, 0, 21, 0);
+    var food = document.getElementById('fb-food');
+    food.style.top = foodTop + 'px';
+    food.style.height = foodH + 'px';
+    food.style.paddingTop = Math.max(9, coffeeBottom - foodTop + 12) + 'px';
+
+    var aomCol = document.getElementById('aomcol');
+    aomCol.style.height = totalH + 'px';
+
+    var aomCoffeeTop = topPx(15, 0);
+    var aomCoffeeH = heightPx(15, 0, 18, 0);
+    var aomCoffeeBottom = aomCoffeeTop + aomCoffeeH;
+
+    var aomCoffee = document.getElementById('aom-coffee');
+    aomCoffee.style.top = aomCoffeeTop + 'px';
+    aomCoffee.style.height = aomCoffeeH + 'px';
+
+    var aomTicketsTop = topPx(17, 0);
+    var aomTicketsH = heightPx(17, 0, 22, 0);
+    var aomTickets = document.getElementById('aom-tickets');
+    aomTickets.style.top = aomTicketsTop + 'px';
+    aomTickets.style.height = aomTicketsH + 'px';
+    aomTickets.style.paddingTop = Math.max(9, aomCoffeeBottom - aomTicketsTop + 12) + 'px';
+  }
+
+  if (document.readyState === 'complete') { layout(); }
+  else { window.addEventListener('load', layout); }
+  setTimeout(layout, 150);
+  setTimeout(layout, 500);
+</script>
+</body>
+</html>

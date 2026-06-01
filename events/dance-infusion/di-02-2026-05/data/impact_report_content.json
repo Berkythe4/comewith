@@ -1,0 +1,76 @@
+{
+  "event": {
+    "name": "Dance Infusion #2",
+    "tagline": "Dancing for a Cure, One Beat at a Time",
+    "date": "May 9, 2026",
+    "venue": "Signal NYC, Brooklyn",
+    "hero_subtitle": "A community came together — and danced for something bigger than themselves."
+  },
+  "narratives": {
+    "why_we_dance": "Dance Infusion exists because MS doesn't stop — and neither do we. The National MS Society is the country's largest private funder of MS research, advocacy, and support for the 1 million Americans living with multiple sclerosis. Every dollar we raise goes to programs that put treatments in reach, fund the science that will end MS, and stand alongside families navigating diagnosis. We dance because movement is freedom — and because we refuse to let MS take that from anyone.",
+    "the_event": "On May 9th, Signal NYC came alive. From the 3PM brunch hour pour to the final beat at 10PM, over 100 people moved through the room — sponsors and strangers, dancers and donors, all of them showing up for the same reason. Five DJs traded sets across seven hours. Crossroads Café ran the coffee bar with AOM Infusion. Bella Laser, Freemind, Brooklyn Cyclones, and the MS Society stocked the raffle table. By the time the lights came up, we had cleared our minimums, exceeded our donation target, and confirmed what we suspected: Dance Infusion is a thing now.",
+    "whats_next": "Dance Infusion #3 is coming. Bigger room, longer set, same mission. Follow @DanceInfusionNYC for sponsorship slots, early-bird tickets, and the date drop. If you danced with us in May — thank you. If you didn't — next time.",
+    "social_reach": "[Editable — Instagram impressions, story views, follower growth, hashtag mentions]"
+  },
+  "photos": {
+    "hero":             { "path": null, "description": "Wide event crowd shot — energy peak, dancers on floor with lights" },
+    "stats_inline":     { "path": null, "description": "Mid-tempo dance floor shot, smiling faces visible" },
+    "story_dj":         { "path": null, "description": "Keith DJing, lights overhead" },
+    "story_activation": { "path": null, "description": "Sponsor table activation / Crossroads Cafe / AOM coffee bar" },
+    "team_group":       { "path": null, "description": "Team group photo at end of night" }
+  },
+  "raffle_winners": {
+    "bella_laser_1": "[name TBD]",
+    "bella_laser_2": "[name TBD]",
+    "freemind":      "[name TBD]",
+    "yankees_hat_1": "[name TBD]",
+    "yankees_hat_2": "[name TBD]",
+    "yankees_hat_3": "[name TBD]",
+    "cyclones":      "[name TBD]"
+  },
+  "partner_orgs": [
+    { "name": "BeWell",            "role": "Wellness partner — 10% revenue share via DANCE code" },
+    { "name": "Bella Laser",       "role": "Raffle donor — laser treatment + skincare session" },
+    { "name": "Freemind",          "role": "Raffle donor — dance class certificate" },
+    { "name": "Brooklyn Cyclones", "role": "Raffle donor — game tickets" },
+    { "name": "Pulse Devices",     "role": "Champion sponsor + community partner" }
+  ],
+  "sponsor_display": [
+    { "tier": "Benefactor",    "members": [{ "name": "AOM Infusion" }] },
+    { "tier": "Leader",        "members": [{ "name": "Adam Cohen" }] },
+    { "tier": "Champions",     "members": [
+      { "name": "Pulse Devices" },
+      { "name": "Theresa Berkman" },
+      { "name": "Patrick Savery" },
+      { "name": "Francis Berkman" },
+      { "name": "Keith Berkman" }
+    ]},
+    { "tier": "Raffle Donors", "members": [
+      { "name": "Bella Laser" },
+      { "name": "Freemind Dance Studio" },
+      { "name": "Brooklyn Cyclones" },
+      { "name": "Yankees hats donor", "note": "name TBD" }
+    ]},
+    { "tier": "Partners",      "members": [{ "name": "BeWell" }] },
+    { "tier": "Vendor",        "members": [
+      { "name": "Crossroads Café", "note": "15% Revenue Share · $130 total donation to MS Society" }
+    ]}
+  ],
+  "team": [
+    { "role": "Producer",          "name": "Keith Berkman (Berky)" },
+    { "role": "Event Director",    "name": "Angela Tabone" },
+    { "role": "Marketing",         "name": "Kendall Leary" },
+    { "role": "Co-Producer",       "name": "Liz McQuillan" },
+    { "role": "Sponsorship Lead",  "name": "Jennifer Taveras" },
+    { "role": "Raffle Admin",      "name": "Aysha Khawaja" }
+  ],
+  "artists": ["Sauci Soni", "Kristen London", "Kloud9", "KRNeY", "Berky"],
+  "ms_society_partners": [
+    { "name": "Rich Klein", "role": "Executive Director, Greater NYC / Long Island" },
+    { "name": "April",      "role": "Board Member" }
+  ],
+  "contact": {
+    "email": "danceinfusionnyc@gmail.com",
+    "instagram": "@DanceInfusionNYC"
+  }
+}

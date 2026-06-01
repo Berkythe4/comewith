@@ -1,0 +1,51 @@
+[
+  {
+    "filename": "DanceInfusion_ImpactReport.html",
+    "title": "Impact Report",
+    "description": "Interactive impact report — Dance Infusion #2",
+    "date": "2026-05-14",
+    "type": "HTML"
+  },
+  {
+    "filename": "DanceInfusion_DoorList.xlsx",
+    "title": "Door List",
+    "description": "Complete guest and door list for Signal NYC staff",
+    "date": "2026-04-29",
+    "type": "XLSX"
+  },
+  {
+    "filename": "dance_infusion_day_of_v8.html",
+    "title": "Day-Of Rundown",
+    "description": "Full event day-of schedule and responsibilities",
+    "date": "2026-04-06",
+    "type": "HTML"
+  },
+  {
+    "filename": "DanceInfusion_PostCalendar.html",
+    "title": "Post Calendar",
+    "description": "Social media post schedule and content plan",
+    "date": "2026-04-06",
+    "type": "HTML"
+  },
+  {
+    "filename": "dance_infusion_gantt_v3.html",
+    "title": "Project Gantt",
+    "description": "Full project timeline and task tracker",
+    "date": "2026-04-06",
+    "type": "HTML"
+  },
+  {
+    "filename": "DanceInfusion_SponsorActivations.docx",
+    "title": "Sponsor Activations",
+    "description": "Sponsor activation details and deliverables",
+    "date": "2026-04-01",
+    "type": "DOCX"
+  },
+  {
+    "filename": "DanceInfusion_Project_Briefing.docx",
+    "title": "Project Briefing",
+    "description": "Full project brief and event overview",
+    "date": "2026-04-01",
+    "type": "DOCX"
+  }
+]

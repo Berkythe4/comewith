@@ -1,0 +1,114 @@
+id,name,email,marketing_opt_in,source_platform,amount_paid,payment_date,revenue_category,ticket_count,drink_ticket_count,comp,role,sponsor_tier,company,instagram,bluevine,ms_society,status,ra_marketing_opt_in,notes
+z1,Reshad Alam,reshadalam1123@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z2,Jessica Glagov,jessglagov@yahoo.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z3,Mark Larus,mattes.causers-2t@icloud.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z4,Nehali Nanti,znaree@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z5,Peter Coan,spanishoud@hotmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z6,Yael Ginosar,yael@elevatedlandscapes.nyc,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z7,Elizabeth Mcquillan,lizmcquillan331@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,staff,,,,True,True,settled,,1x Guest List — Liz (staff)
+z8,Kyle Taber,taberkyled@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z9,Renee Cogorno,reneecogorno@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z10,Katherine J Li,kthrnjnyl@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z11,Astha Sharma Pokharel,astha.sharmapokharel@gmail.com,,zeffy,50.0,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,,2x Guest List
+z12,Oluwatomilola Obaro,tometome90@gmail.com,,zeffy,75.0,2026-05-09,ticket,3,0,False,guest,,,,True,True,settled,,3x Guest List (combined $50 + $25)
+z13,Leah Kelly,drleahkelly@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z14,Stephanie Hollander,steph.hollander@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z15,Rameez Arif,rameez.arif1@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z16,Erik Berg,erik_berg@alumni.brown.edu,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z17,Mary Aniolek,maniolek108@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z18,Joseph Cambria,joepcambria3@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z19,Henry J. Zaradich,hjzaradich@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z20,Sophia Bisantz,srbisantz@yahoo.com,,zeffy,50.0,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,,2x Guest List
+z21,Brian Levin,blevin94@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List (Zeffy — separate from RA ticket)
+z22,Johanna Quintanilla,johquintanilla@aol.com,,zeffy,25.0,2026-05-09,ticket,1,3,False,guest,,,,True,True,settled,,1x Guest List + 3 DTs
+z23,Arnaldo Martinez,swimflap@yahoo.com,,zeffy,50.0,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,,2x Guest List
+z24,Denise LaManna,denise0623@aol.com,,zeffy,50.0,2026-05-09,zeffe_pkg,1,3,False,guest,,,,True,True,settled,,1x Guest List w/ DRINK PACKAGE
+z25,Alexander Moody,alex.imoody@gmail.com,,zeffy,100.0,2026-05-09,zeffe_pkg,2,6,False,guest,,,,True,True,settled,,2x Guest List w/ DRINK PACKAGE
+z26,Kendall Leary,kgleary101@gmail.com,,zeffy,100.0,2026-05-09,zeffe_pkg,2,6,False,staff,,,,True,True,settled,,2x Guest List w/ DRINK PACKAGE
+z27,Gaurav Pandey,gaurav.columbia@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z28,Elizabeth Verter,e.d.verter@gmail.com,,zeffy,150.0,2026-05-09,zeffe_pkg,3,9,False,guest,,,,True,True,settled,,3x Guest List w/ DRINK PACKAGE
+z29,Erica Romoff,ericahandburger@gmail.com,,zeffy,75.0,2026-05-09,zeffe_pkg,2,3,False,guest,,,,True,True,settled,,1x Guest List w/ DRINK PACKAGE + 1x Guest List
+z30,Zachary Mackey,zchryzmac@aol.com,,zeffy,50.0,2026-05-09,zeffe_pkg,1,3,False,guest,,,,True,True,settled,,1x Guest List w/ DRINK PACKAGE
+z31,Tehreem Mumtazz,tmumtaz12@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List
+z32,Arthemise Brouillet,abrouillet.inf@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,3,False,guest,,,,True,True,settled,,1x Guest List + 3 DTs
+z33,Emma Stroble,emma.stroble@gmail.com,,zeffy,75.0,2026-05-09,ticket,3,9,False,guest,,,,True,True,settled,,3x Guest List + 9 DTs
+z34,Angela Tabone,angela.tabone11@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,staff,,,,True,True,settled,,1x Guest List (staff)
+z35,Humza Mumtaz,humzamumtaz12@gmail.com,,zeffy,100.0,2026-05-09,zeffe_pkg,2,6,False,guest,,,,True,True,settled,,2x Guest List w/ DRINK PACKAGE
+z36,Janet Tabone,jtabone23@verizon.net,,zeffy,50.0,2026-05-09,zeffe_pkg,1,3,False,guest,,,,True,True,settled,,1x Guest List w/ DRINK PACKAGE
+z37,Emily Price,emilyrprice3@gmail.com,,zeffy,50.0,2026-05-09,zeffe_pkg,1,3,False,guest,,,,True,True,settled,,1x Guest List w/ DRINK PACKAGE
+z38,Andrew Krolikowski,drewkrol@gmail.com,,zeffy,75.0,2026-05-09,zeffe_pkg,2,4,False,guest,,,,True,True,settled,,"1x Guest List w/ DRINK PACKAGE, 1x Guest List + 1 extra DT from Berky"
+z39,Teri Berkman,taberkman@gmail.com,,zeffy,25.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,"Donation (Zeffy +$25 extra donation, no ticket)"
+z40,Martin P. Salas,,,zeffy,2.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation (Zeffy 2x Donations)
+z_dana,Dana Miele,dana.miele21@gmail.com,,zeffy,25.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,1x Guest List (Zeffy — separate from her RA ticket)
+zd1,Tarik Hajjam,h.tarik1992@gmail.com,,zeffy,30.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd2,Amelia Allen,bookings.ameliacecilia@gmail.com,,zeffy,2.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd3,Tanya Raine-Roosevelt,rainetanya@gmail.com,,zeffy,10.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd4,Ani Kanburiyan,ani.kanburiyan@gmail.com,,zeffy,1.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd5,Zachary Storey,zachstorey@yahoo.com,,zeffy,50.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation (Zeffy)
+zd6,Mariia Vysotska,masha.ftsl@gmail.com,,zeffy,10.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd7,Andriy Kashyrskyy,kashyrskyy.andriy@gmail.com,,zeffy,10.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd8,Theresa McGuinness,tess8897@aol.com,,zeffy,200.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd9,Victoriarose Vargas,victoriarose.business@outlook.com,,zeffy,15.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zd10,Jennifer Alderman,jenalderman26@gmail.com,,zeffy,100.0,2026-05-09,donation,0,0,False,donor,,,,True,True,settled,,Donation
+zs1,Adam Cohen,adam.ri.cohen@gmail.com,,zeffy,1500.0,2026-05-09,sponsorship,4,20,False,sponsor,,Adam Cohen Leadership,,True,False,settled,,Leader sponsorship
+zs2,Patrick Savery,patrick.savery@gmail.com,,zeffy,500.0,2026-05-09,sponsorship,3,20,False,sponsor,,,,True,False,settled,,Champion sponsorship
+zs3,Ethan Pollak,pulse@pulsedevice.com,,zeffy,500.0,2026-05-09,sponsorship,4,20,False,sponsor,,Pulse Devices,,True,False,settled,,Champion sponsorship
+zs4,Theresa Berkman,taberkman@gmail.com,,zeffy,500.0,2026-05-09,sponsorship,2,20,False,sponsor,,,,True,False,settled,,Champion sponsorship
+zs5,Keith Berkman,keith.berkman@gmail.com,,zeffy,400.0,2026-05-09,sponsorship,0,0,False,sponsor,,,,True,False,settled,,Individual sponsor — $375 DJ bottle
+zs6,Francis Berkman,francisberkman@gmail.com,,zeffy,325.0,2026-05-09,sponsorship,1,20,False,sponsor,,,,True,False,settled,,Individual sponsor
+ra1,Brian Levin,blevin94@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,"1x General Admission (RA) — personal ticket, separate from Zeffy slot"
+ra2,Chad Hernandez,chaddercheesy@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra3,Claudia,claudiabizzy@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra4,Cory Thompson,Corysthompson@gmail.com,,ra,43.8,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,False,2x General Admission (RA)
+ra5,Dana Miele,dana.miele21@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra6,Emily Brennan,emilyasl3@hotmail.com,,ra,43.8,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,False,2x General Admission (RA)
+ra7,Grace Aniolek,ganiolek810@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra8,Irene Bratsis,irenebratsis@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,True,1x General Admission (RA)
+ra9,Jason Yang,yangjason578@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,True,1x General Admission (RA)
+ra10,Kierney Brennan,krosie6290@gmail.com,,ra,43.8,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,True,2x General Admission (RA) — logo designer
+ra11,Kyle Hilland,yjnhrp555k@privaterelay.appleid.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra12,Maxwell Hochstein,max@art2themax.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,True,1x General Admission (RA)
+ra13,Michael Stevens,mcallstevens@yahoo.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra14,Michele Daboul,michele.daboul@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,True,1x General Admission (RA)
+ra15,Sammy Smith,sammysneakers23@gmail.com,,ra,21.9,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,False,1x General Admission (RA)
+ra16,Zachary Gorfinkel,zackgorf@gmail.com,,ra,43.8,2026-05-09,ticket,2,0,False,guest,,,,True,True,settled,False,2x General Admission (RA)
+m1,Aysha Khawaja,ayesha.khawaja95@gmail.com,,ms_society_diy,25.0,2026-05-09,ticket,1,0,False,staff,,,,False,True,settled,,MS Society DIY page — ticket
+m2,Victoria Treadwell,vtreadwell58@gmail.com,,ms_society_diy,25.0,2026-05-09,ticket,1,0,False,guest,,,,False,True,settled,,MS Society DIY page — ticket
+m3,Adnan Khan,,,ms_society_diy,25.0,2026-05-09,ticket,1,0,False,guest,,,,False,True,settled,,MS Society DIY page — ticket (paid as Victoria Treadwell's +1)
+m4,Lisa Meyer-Savery,lisameyerdesign@gmail.com,,manual,25.0,2026-05-09,donation,0,0,False,donor,,,,False,True,settled,,"MS Society DIY page — purchased Early Bird + Kandi ticket but did not attend, treated as donation"
+m5,Leandros & Kimberly Katsigeras,kimmrios@gmail.com,,ms_society_diy,50.0,2026-05-09,ticket,2,0,False,guest,,,,False,True,settled,,MS Society DIY page — 2 tickets
+m6,Laura Kennis,lkennis@gmail.com,,ms_society_diy,50.0,2026-05-09,donation,0,0,False,donor,,,,False,True,settled,,MS Society DIY page — donation
+m7,Oheyitsamanda,amandanhahn@gmail.com,,ms_society_diy,50.0,2026-05-09,donation,0,0,False,donor,,,,False,True,settled,,MS Society DIY page — donation
+m8,Anonymous Donor (Crossroads),,,ms_society_diy,60.0,2026-05-09,donation,0,0,False,donor,,,,False,True,settled,,Anonymous donation via Crossroads
+m9,Anonymous Donor (Crossroads),,,ms_society_diy,10.0,2026-05-09,donation,0,0,False,donor,,,,False,True,settled,,Anonymous donation via Crossroads
+m10,Zachary Storey,,,ms_society_diy,50.0,2026-05-09,ticket,1,0,False,guest,,,,False,True,settled,,"MS Society DIY page — GA Guest List + Kandi Bracelet ($50, 1 ticket)"
+c1,Berky (Keith Berkman),keith.berkman@gmail.com,,manual,0.0,2026-05-09,comp,1,19,True,dj,,,,False,False,settled,,"Performer/host — 25 alloc minus 6 transferred (Karylanne 3, Joseph 2, Andrew 1)"
+c2,KRNeY,,,manual,0.0,2026-05-09,comp,1,30,True,dj,,,,False,False,settled,,Performer
+c3,Kloud9,,,manual,0.0,2026-05-09,comp,1,10,True,dj,,,,False,False,settled,,Performer
+c4,Sauci Soni,,,manual,0.0,2026-05-09,comp,1,10,True,dj,,,,False,False,settled,,Performer
+c5,Kristen London,,,manual,0.0,2026-05-09,comp,1,10,True,dj,,,,False,False,settled,,Performer
+c6,Jennifer Taveras,j.taveras4@gmail.com,,manual,60.0,2026-05-09,zeffe_pkg,1,3,False,staff,,,,False,True,settled,,"MS Society DIY page — $60 donation, GA + Drink Package incentive (staff attending)"
+c7,Amanda Brunidge,,,manual,0.0,2026-05-09,comp,2,5,True,staff,,,,False,False,settled,,Volunteer — Kandi bracelets
+c8,Amanda Maldonado,,,manual,0.0,2026-05-09,comp,1,2,True,guest,,,lunaera.93,False,False,settled,,Comp — Instagram follow
+c9,Cindy Ayala,cindyayala04@gmail.com,,manual,0.0,2026-05-09,comp,2,0,True,guest,,,,False,False,settled,,Bella Laser donation comp
+c10,Tulay Sencar,,,manual,0.0,2026-05-09,sponsorship,5,25,False,sponsor,,AOM Infusion,,False,False,settled,,"AOM Infusion — 5 entry tickets, 25 drink tickets at door"
+c11,Karylanne Sartan,,,manual,0.0,2026-05-09,comp,1,3,True,guest,,,,False,False,settled,,"Comp — 1 entry, 3 drink tickets (from Berky pool)"
+c12,Joseph Tabone,,,manual,0.0,2026-05-09,comp,3,2,True,guest,,,,False,False,settled,,"Comp — 3 entry tickets, 2 drink tickets (from Berky pool)"
+c13,JayJay,,,manual,0.0,2026-05-09,comp,2,0,True,guest,,,,False,False,settled,,Comp — 2 entry tickets
+c14,Brian Levin +1 (TBD),,,zeffy,0.0,2026-05-09,ticket,1,0,False,guest,,,,True,True,settled,,"Placeholder — Brian Levin's +1, name TBD"
+sp_aom,AOM Infusion,,,bluevine_wire,2500,,sponsorship,4,25,False,sponsor,Benefactor,AOM Infusion,,True,False,settled,,SPONSOR DEAL: Coffee bar 3-6PM; pastries AOM-funded; branded cups/napkins | bottle: $0 | other: $300
+sp_pulse,Pulse Devices,,,zeffy,500,,sponsorship,4,20,False,sponsor,Champion,Pulse Devices,,True,False,settled,,SPONSOR DEAL: Ethan Pollak | bottle: $0 | other: $0
+sp_theresa,Theresa Berkman,,,zeffy,500,,sponsorship,2,20,False,sponsor,Champion,Theresa Berkman,,True,False,settled,,SPONSOR DEAL: Personal sponsor — 2 entry tickets | bottle: $0 | other: $0
+sp_patrick,Patrick Savery,,,zeffy,500,,sponsorship,3,20,False,sponsor,Champion,Patrick Savery,,True,False,settled,,SPONSOR DEAL: 3 entry tickets; $50 dad donation | bottle: $0 | other: $50
+sp_fran,Francis Berkman,,,zeffy,325,,sponsorship,1,20,False,sponsor,Individual,Francis Berkman,,True,False,settled,,SPONSOR DEAL: 1 entry ticket; 20 DTs; $60 leftover | bottle: $0 | other: $0
+sp_keith,Keith Berkman,,,zeffy,400,,sponsorship,0,0,False,sponsor,Individual,Keith Berkman,,True,False,settled,,SPONSOR DEAL: DJ bottle $375 | bottle: $375 | other: $0
+sp_adam,Adam Cohen,,,zeffy,1500,,sponsorship,4,20,False,sponsor,Leader,Adam Cohen,,True,False,settled,,SPONSOR DEAL: Leader sponsorship | bottle: $0 | other: $0
+sp_bewell,BeWell,,,manual,0,,sponsorship,0,0,False,sponsor,Partner,BeWell,,False,False,pending,,SPONSOR DEAL: 10% DANCE code revenue share | bottle: $0 | other: $0
+sp_crossroads,Crossroads Cafe,,,manual,0,,sponsorship,0,0,False,vendor,Vendor,Crossroads Cafe,,False,False,pending,,SPONSOR DEAL: 10% revenue share; $300 pastries owed | bottle: $0 | other: $0
+exp_signal,Signal NYC (175 Morgan Ave LLC),,,bluevine_wire,4385.0,2026-05-08,expense,0,0,False,vendor,,,,True,False,settled,,"Bar tab pre-purchase: $3,000 deposit (4/16) + $1,385 additional (5/8) — confirmed via Bluevine statement"
+exp_fliers,Postnet NY143 (Fliers),,,bluevine_wire,65.33,2026-05-05,expense,0,0,False,vendor,,,,True,False,settled,,100 color flyers
+exp_crossroads,Crossroads Cafe (Pastries),,,bluevine_wire,300.0,,expense,0,0,False,vendor,,,,False,False,owed,,AOM-funded pastries — not yet paid
+payout_ra,Resident Advisor (RA) Payout,,,ra,438.0,,payout,0,0,False,vendor,,,,True,False,pending,,20 RA tickets × $21.90 — payout pending
+payout_zeffy_pending,Zeffy Pending Payout (5/9 transactions),,,zeffy,853.0,,payout,0,0,False,vendor,,,,True,False,pending,,"Sum of 5/9/2026 Zeffy transactions with ""Upcoming"" payout date"
+diy_angela_donation,Angela Tabone,,,ms_society_diy,50.0,2026-01-17,donation,0,0,False,donor,,,,False,True,settled,,MS Society DIY page — GA Guest List + Kandi Bracelet incentive (separate from her Zeffy $25 ticket)
+diy_patrick_sr,Patrick Savery Sr.,,,ms_society_diy,50.0,2026-02-01,donation,0,0,False,donor,,,,False,True,settled,,"MS Society DIY page — 2x $25 Early Bird + Kandi incentive (Patrick Savery Sr., father of sponsor; tracked memo in patrick.other_expenses=50)"

@@ -1,0 +1,11 @@
+Metric,Computed,Expected,Status
+Total Zeffy revenue,5880.0,5880.0,PASS
+Total RA revenue,438.0,438.0,PASS
+Total MS Society DIY direct,445.0,445.0,PASS
+Total sponsor cash,6225,6225.0,PASS
+Total ticket face value,2025,2025.0,PASS
+MS Society total obligation,2930,2930.0,PASS
+MS Society already paid (DIY),445,445.0,PASS
+MS Society still owed,2485,2485.0,PASS
+Bluevine projected final,4369.56,4369.56,PASS
+Final available pool,1584.5600000000004,1584.56,PASS

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Dance Infusion #2 — Financial Audit Report</title>
+<style>
+  @page { margin: 0.7in 0.6in; }
+  :root {
+    --ink: #0d1b2a;
+    --muted: #6b7a8f;
+    --line: #d9dee5;
+    --accent: #c9a84c;
+    --green: #2f8a5e;
+    --red: #c44545;
+    --amber: #c97a2b;
+    --bg-soft: #f7f5ee;
+    --bg-page: #ffffff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    background: var(--bg-page);
+    color: var(--ink);
+    line-height: 1.5;
+    max-width: 8.5in;
+    margin: 0 auto;
+    padding: 32px 40px;
+  }
+  h1 {
+    font-size: 26px; letter-spacing: 1px;
+    margin: 0 0 4px;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 10px;
+  }
+  h2 {
+    font-size: 16px;
+    margin: 28px 0 10px;
+    color: var(--ink);
+    border-bottom: 1px solid var(--line);
+    padding-bottom: 4px;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .subtitle { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+  .meta { display: flex; gap: 24px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-bottom: 24px; }
+  .meta strong { color: var(--ink); }
+  .summary-box {
+    background: var(--bg-soft);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    margin: 16px 0 6px;
+    font-size: 13px;
+  }
+  .summary-box dl { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; margin: 0; }
+  .summary-box dt { color: var(--muted); }
+  .summary-box dd { margin: 0; font-weight: 600; }
+  .summary-box dd.big { font-size: 18px; color: var(--accent); }
+  table {
+    width: 100%; border-collapse: collapse;
+    margin: 10px 0; font-size: 12px;
+  }
+  th, td {
+    padding: 7px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  th {
+    background: var(--bg-soft);
+    font-weight: 600; font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--muted);
+  }
+  td.right, th.right { text-align: right; }
+  td.center, th.center { text-align: center; }
+  td.num { font-variant-numeric: tabular-nums; font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11.5px; }
+  td.muted, .muted { color: var(--muted); }
+  .total-row td { background: var(--bg-soft); font-weight: 600; }
+  .ok { color: var(--green); font-weight: 700; }
+  .fail { color: var(--red); font-weight: 700; }
+  .neg { color: var(--red); }
+  .small { font-size: 11px; }
+  .callout {
+    background: #e8f4ec; border-left: 3px solid var(--green);
+    padding: 10px 14px; font-size: 13px; margin: 12px 0;
+  }
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 3px;
+    font-size: 10px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .badge.settled { background: #d4ebde; color: var(--green); }
+  .badge.paid { background: #d4ebde; color: var(--green); }
+  .badge.owed { background: #f5d9d9; color: var(--red); }
+  .badge.pending { background: #fcecd6; color: var(--amber); }
+  .badge.tier-benefactor { background: #f3e6c4; color: #8a6a1f; }
+  .badge.tier-champion { background: #d6e6f3; color: #2a6496; }
+  .badge.tier-leader { background: #f3e6c4; color: #8a6a1f; }
+  .badge.tier-individual { background: #ede5d4; color: #6b5a2f; }
+  .badge.tier-partner { background: #d6e8df; color: #2f6b4f; }
+  .badge.tier-vendor { background: #e5e8ed; color: #4a5566; }
+  .walk-table td:first-child { width: 70%; }
+  .walk-total td { font-weight: 700; border-top: 2px solid var(--ink); background: var(--bg-soft); }
+  code { font-family: "SF Mono", Menlo, Consolas, monospace; font-size: 11px; background: var(--bg-soft); padding: 1px 5px; border-radius: 2px; }
+  footer {
+    margin-top: 36px; padding-top: 12px;
+    border-top: 1px solid var(--line);
+    font-size: 11px; color: var(--muted);
+    text-align: center;
+  }
+  @media print {
+    body { padding: 0; }
+    h2 { page-break-after: avoid; }
+    table, .summary-box { page-break-inside: avoid; }
+  }
+  .no-print { }
+  @media print { .no-print { display: none; } }
+  .print-btn {
+    position: fixed; top: 16px; right: 16px;
+    background: var(--accent); color: white; border: none;
+    padding: 8px 16px; border-radius: 4px; cursor: pointer;
+    font-family: inherit; font-size: 13px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+  }
+</style>
+</head>
+<body>
+<button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button>
+
+<h1>Dance Infusion #2 — Financial Audit Report</h1>
+<div class="subtitle">Final post-event reconciliation of all funds raised and disbursed for the May 9, 2026 charity event at Signal NYC, benefiting the National MS Society.</div>
+
+<div class="meta">
+  <div><strong>Event:</strong> May 9, 2026 · Signal NYC, 175 Morgan Ave, Brooklyn</div>
+  <div><strong>Prepared by:</strong> Keith Berkman</div>
+  <div><strong>Reconciliation date:</strong> May 19, 2026 (final)</div>
+  <div><strong>File version:</strong> v2026-05-19-final · <span id="renderedAt"></span></div>
+</div>
+<script>document.getElementById('renderedAt').textContent = 'rendered ' + new Date().toLocaleString();</script>
+
+<div class="summary-box">
+  <dl>
+    <dt>Total raised across all channels</dt><dd class="big">$9,264.89</dd>
+    <dt>Charitable donation to MS Society</dt><dd>$3,000.00 ($445 DIY + $601 personal + $1,824 Bluevine (ACH cleared 6/1/26) + $130 Crossroads partner)</dd>
+    <dt>Event operating costs</dt><dd>$6,557.33 (Signal $5,492 + Crossroads $1,000 + Fliers $65.33)</dd>
+    <dt>Final available pool</dt><dd>$0.00 (Bluevine final balance $0.56 — MS Society ACH cleared 6/1/26)</dd>
+    <dt>Reconciliation status</dt><dd><span class="ok">✓ Complete — all payments cleared (6/1/26)</span></dd>
+  </dl>
+</div>
+
+<section><h2>Reconciliation Status</h2><table class="audit-table"><thead><tr><th>Metric</th><th class="right">Computed</th><th class="right">Expected</th><th class="center">Status</th></tr></thead><tbody><tr><td>Total Zeffy revenue</td><td class="right num">$5,880.00</td><td class="right num">$5,880.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Total RA revenue</td><td class="right num">$438.00</td><td class="right num">$438.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Total MS Society DIY direct</td><td class="right num">$445.00</td><td class="right num">$445.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>MS Society personal paid (Keith, 5/19)</td><td class="right num">$601.00</td><td class="right num">$601.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Total sponsor cash</td><td class="right num">$6,225.00</td><td class="right num">$6,225.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Total ticket face value</td><td class="right num">$2,025.00</td><td class="right num">$2,025.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>MS Society total obligation (pre-reconciliation)</td><td class="right num">$2,930.00</td><td class="right num">$2,930.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>MS Society still owed</td><td class="right num">$0.00</td><td class="right num">$0.00</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Bluevine current balance</td><td class="right num">$0.56</td><td class="right num">$0.56</td><td class="center"><span class=ok>✓</span></td></tr><tr><td>Final available pool</td><td class="right num">$0.00</td><td class="right num">$0.00</td><td class="center"><span class=ok>✓</span></td></tr></tbody></table><p class="callout"><strong>Result: All 10 reconciliations pass.</strong> Final reconciliation complete 5/19/26. Total MS Society impact $3,000 ($445 DIY + $601 personal + $1,824 from Bluevine + $130 Crossroads partner). Final MS Society $1,824 ACH cleared from Bluevine 6/1/26 — all obligations fulfilled, $3,000 total impact.</p></section>
+
+<section><h2>Revenue Summary</h2><table><thead><tr><th>Source</th><th class="right">Amount</th><th>Channel</th></tr></thead><tbody><tr><td>Zeffy — Ticket sales & packages</td><td class="right num">$1,700.00</td><td class="muted">Bluevine</td></tr><tr><td>Zeffy — Donations</td><td class="right num">$455.00</td><td class="muted">Bluevine</td></tr><tr><td>Zeffy — Sponsorships</td><td class="right num">$3,725.00</td><td class="muted">Bluevine</td></tr><tr><td>Resident Advisor (RA) tickets</td><td class="right num">$438.00</td><td class="muted">Paid direct to Keith; re-donated to MS Society (see e5)</td></tr><tr><td>AOM Infusion (direct wire)</td><td class="right num">$2,500.00</td><td class="muted">Bluevine</td></tr><tr><td>MS Society DIY page</td><td class="right num">$445.00</td><td class="muted">Direct to MS (never Bluevine)</td></tr><tr><td>Bank interest (March)</td><td class="right num">$1.89</td><td class="muted">Bluevine</td></tr><tr class="total-row"><td><strong>TOTAL RAISED</strong></td><td class="right num"><strong>$9,264.89</strong></td><td></td></tr></tbody></table></section>
+
+<section><h2>Expense Detail</h2><table><thead><tr><th>Expense</th><th class="right">Amount</th><th>Notes</th><th class="center">Status</th></tr></thead><tbody><tr><td>Signal NYC — Bar pre-purchase</td><td class="right num">$4,385.00</td><td class="muted">$3,000 deposit (4/16) + $1,385 final (5/8)</td><td class="center"><span class="badge settled">Settled</span></td></tr><tr><td>Signal NYC — Additional invoice (bar shortfall + gratuity)</td><td class="right num">$1,107.00</td><td class="muted">Post-event invoice 5/12/26 — shortfall vs $6K sales min &amp; $1,200 tip min</td><td class="center"><span class="badge paid">Paid 5/14/26</span></td></tr><tr><td>Postnet — Fliers</td><td class="right num">$65.33</td><td class="muted">100 color flyers (5/5)</td><td class="center"><span class="badge settled">Settled</span></td></tr><tr><td>Crossroads Cafe — Pastries + Focaccia loaves + Service fee</td><td class="right num">$1,000.00</td><td class="muted">$350 pastries + $500 focaccia loaves + $150 service fee</td><td class="center"><span class="badge paid">Paid 5/19/26</span></td></tr><tr><td>MS Society — Personal donation (RA payout + personal check)</td><td class="right num">$601.00</td><td class="muted">RA payout $438 + personal check $163 — receipt <code>receipts/MS_Society_Receipt_601_2026-05-19.pdf</code></td><td class="center"><span class="badge paid">Paid 5/19/26</span></td></tr><tr><td>MS Society — From Bluevine (remaining obligation)</td><td class="right num">$1,824.00</td><td class="muted">ACH cleared from Bluevine 6/1/26 — final MS Society payment complete</td><td class="center"><span class="badge paid">Paid 6/1/26</span></td></tr><tr class="total-row"><td><strong>TOTAL EXPENSES</strong></td><td class="right num"><strong>$8,982.33</strong></td><td></td><td></td></tr></tbody></table></section>
+
+<section><h2>Outstanding Obligations</h2><table><thead><tr><th>Item</th><th class="right">Amount</th><th>Notes</th><th class="center">Type</th></tr></thead><tbody><tr><td>None — all obligations settled</td><td class="right num">$0.00</td><td class="muted">Final MS Society $1,824 Bluevine ACH cleared 6/1/26</td><td class="center"><span class="badge settled">Settled</span></td></tr></tbody></table><p class="callout"><strong>All obligations settled (including final MS Society Bluevine ACH, cleared 6/1/26):</strong> Signal (deposit + final + additional), Crossroads (final invoice), Postnet (fliers). RA payout received and re-routed to MS Society as part of $601 personal donation.</p></section>
+
+<section><h2>MS Society Donation Detail</h2>
+<h3 style="font-size:13px;margin-top:14px;margin-bottom:6px;text-transform:none;letter-spacing:0;border:0;padding:0;color:var(--muted);font-weight:600">Total impact breakdown (final reconciled state)</h3>
+<table><thead><tr><th>Source</th><th class="right">Amount</th><th>Channel</th></tr></thead><tbody><tr><td>MS Society DIY page (pre-event direct donations, 12 transactions)</td><td class="right num">$445.00</td><td class="muted">Direct to MS Society</td></tr><tr><td>Personal donation — Keith Berkman (RA $438 + check $163, paid 5/19/26)</td><td class="right num">$601.00</td><td class="muted">Direct to MS Society</td></tr><tr><td>From Bluevine (ACH cleared 6/1/26)</td><td class="right num">$1,824.00</td><td class="muted">DI event funds → MS Society</td></tr><tr><td>Crossroads Café partner donation (15% of café revenue)</td><td class="right num">$130.00</td><td class="muted">Direct to MS Society</td></tr><tr class="total-row"><td><strong>Total MS Society impact</strong></td><td class="right num"><strong>$3,000.00</strong></td><td></td></tr></tbody></table>
+<h3 style="font-size:13px;margin-top:14px;margin-bottom:6px;text-transform:none;letter-spacing:0;border:0;padding:0;color:var(--muted);font-weight:600">Reconciliation against pre-event model</h3>
+<table><thead><tr><th>Component</th><th class="right">Pre-event model</th><th class="right">Reconciled actual</th><th class="right">Delta</th></tr></thead><tbody><tr><td>Ticket sales face value (81 non-comp × $25)</td><td class="right num">$2,025.00</td><td class="right num">$2,025.00</td><td class="right num">—</td></tr><tr><td>Zeffy donations</td><td class="right num">$455.00</td><td class="right num">$455.00</td><td class="right num">—</td></tr><tr><td>Sponsor entry tickets value (18 × $25)</td><td class="right num">$450.00</td><td class="right num">$450.00</td><td class="right num">—</td></tr><tr class="total-row"><td><strong>Dance Infusion obligation (theoretical)</strong></td><td class="right num"><strong>$2,930.00</strong></td><td class="right num"><strong>$2,870.00</strong></td><td class="right num neg"><strong>($60.00)</strong></td></tr><tr><td>Less: MS Society DIY (paid direct, pre-event)</td><td class="right num neg">($445.00)</td><td class="right num neg">($445.00)</td><td class="right num">—</td></tr><tr><td>Net to be paid by event</td><td class="right num">$2,485.00</td><td class="right num">$2,425.00</td><td class="right num neg">($60.00)</td></tr><tr><td>Less: Keith personal donation (5/19/26 — RA + check)</td><td class="right num">—</td><td class="right num neg">($601.00)</td><td class="right num neg">($601.00)</td></tr><tr class="total-row"><td><strong>Remaining MS obligation (paid via Bluevine ACH 6/1/26)</strong></td><td class="right num"><strong>$2,485.00</strong></td><td class="right num"><strong>$1,824.00</strong></td><td class="right num neg"><strong>($661.00)</strong></td></tr></tbody></table>
+<p class="small muted"><strong>Notes:</strong> The $60 reconciliation adjustment was applied post-event (5/14/26) when final ticket/sponsor numbers were locked. The $601 personal donation absorbed the RA payout ($438) plus a $163 personal check from Keith to close the residual gap from post-event expenses (Signal additional invoice $1,107 + Crossroads final invoice $1,000 ran above the pre-event model). Crossroads $130 third-party donation is in addition to event-driven MS obligation, bringing total impact to $3,000.</p>
+</section>
+
+<section><h2>Sponsor Detail</h2><table><thead><tr><th>Sponsor</th><th>Tier</th><th class="right">Cash</th><th class="right">Entry Tix</th><th class="right">Drink Tix</th><th class="right">Spent</th><th class="right">Leftover</th></tr></thead><tbody><tr><td>AOM Infusion</td><td><span class="badge tier-benefactor">Benefactor</span></td><td class="right num">$2,500</td><td class="right">4</td><td class="right">25</td><td class="right num">$700</td><td class="right num"><strong>$1,800</strong></td></tr><tr><td>Pulse Devices</td><td><span class="badge tier-champion">Champion</span></td><td class="right num">$500</td><td class="right">4</td><td class="right">20</td><td class="right num">$340</td><td class="right num"><strong>$160</strong></td></tr><tr><td>Theresa Berkman</td><td><span class="badge tier-champion">Champion</span></td><td class="right num">$500</td><td class="right">2</td><td class="right">20</td><td class="right num">$290</td><td class="right num"><strong>$210</strong></td></tr><tr><td>Patrick Savery</td><td><span class="badge tier-champion">Champion</span></td><td class="right num">$500</td><td class="right">3</td><td class="right">20</td><td class="right num">$365</td><td class="right num"><strong>$135</strong></td></tr><tr><td>Francis Berkman</td><td><span class="badge tier-individual">Individual</span></td><td class="right num">$325</td><td class="right">1</td><td class="right">20</td><td class="right num">$265</td><td class="right num"><strong>$60</strong></td></tr><tr><td>Keith Berkman</td><td><span class="badge tier-individual">Individual</span></td><td class="right num">$400</td><td class="right">0</td><td class="right">0</td><td class="right num">$375</td><td class="right num"><strong>$25</strong></td></tr><tr><td>Adam Cohen</td><td><span class="badge tier-leader">Leader</span></td><td class="right num">$1,500</td><td class="right">4</td><td class="right">20</td><td class="right num">$340</td><td class="right num"><strong>$1,160</strong></td></tr><tr><td>BeWell</td><td><span class="badge tier-partner">Partner</span></td><td class="right num">$0</td><td class="right">0</td><td class="right">0</td><td class="right num">$0</td><td class="right num"><strong>$0</strong></td></tr><tr><td>Crossroads Cafe</td><td><span class="badge tier-vendor">Vendor</span></td><td class="right num">$0</td><td class="right">0</td><td class="right">0</td><td class="right num">$0</td><td class="right num"><strong>$0</strong></td></tr><tr class="total-row"><td><strong>TOTAL</strong></td><td></td><td class="right num"><strong>$6,225</strong></td><td></td><td></td><td></td><td class="right num"><strong>$3,550</strong></td></tr></tbody></table></section>
+
+<section><h2>Cash Position Walk-Forward (final reconciled)</h2><table class="walk-table"><tbody><tr class="walk-step"><td>Bluevine balance (5/10, post Zeffy 5/10 payout)</td><td class="right num">$3,078.56</td></tr><tr class="walk-step"><td>+ Zeffy payout — 5/9 transactions (received post-May-10)</td><td class="right num">$853.00</td></tr><tr class="walk-step"><td>− Signal NYC ACH (additional invoice, 5/14)</td><td class="right num neg">($1,107.00)</td></tr><tr class="walk-step"><td>− Crossroads Cafe ACH (final invoice, 5/19)</td><td class="right num neg">($1,000.00)</td></tr><tr class="walk-step walk-total"><td><strong>= Current Bluevine balance (5/19/26)</strong></td><td class="right num"><strong>$1,824.56</strong></td></tr><tr class="walk-step"><td>− MS Society donation (ACH cleared 6/1/26)</td><td class="right num neg">($1,824.00)</td></tr><tr class="walk-step walk-total"><td><strong>= Bluevine final state (6/1/26)</strong></td><td class="right num"><strong>$0.56</strong></td></tr></tbody></table></section>
+
+<section><h2>Bluevine Bank Statement (Audit Trail)</h2><table><thead><tr><th>Date</th><th>Description</th><th class="right">Amount</th><th class="right">Balance</th></tr></thead><tbody><tr><td>2026-02-09</td><td>Zeffy payout</td><td class="right num">$400.00</td><td class="right num muted">$400.00</td></tr><tr><td>2026-03-09</td><td>Zeffy payout</td><td class="right num">$850.00</td><td class="right num muted">$1,250.00</td></tr><tr><td>2026-03-23</td><td>AOM Infusion wire</td><td class="right num">$2,500.00</td><td class="right num muted">$3,750.00</td></tr><tr><td>2026-03-23</td><td>Zeffy payout</td><td class="right num">$175.00</td><td class="right num muted">$3,925.00</td></tr><tr><td>2026-03-30</td><td>Zeffy payout</td><td class="right num">$75.00</td><td class="right num muted">$4,000.00</td></tr><tr><td>2026-04-01</td><td>Bank interest (March)</td><td class="right num">$1.89</td><td class="right num muted">$4,001.89</td></tr><tr><td>2026-04-06</td><td>Zeffy payout</td><td class="right num">$275.00</td><td class="right num muted">$4,276.89</td></tr><tr><td>2026-04-13</td><td>Zeffy payout</td><td class="right num">$1,300.00</td><td class="right num muted">$5,576.89</td></tr><tr><td>2026-04-16</td><td>Signal NYC ACH (deposit)</td><td class="right num neg">($3,000.00)</td><td class="right num muted">$2,576.89</td></tr><tr><td>2026-04-20</td><td>Zeffy payout</td><td class="right num">$200.00</td><td class="right num muted">$2,776.89</td></tr><tr><td>2026-04-27</td><td>Zeffy payout</td><td class="right num">$50.00</td><td class="right num muted">$2,826.89</td></tr><tr><td>2026-05-04</td><td>Zeffy payout</td><td class="right num">$125.00</td><td class="right num muted">$2,951.89</td></tr><tr><td>2026-05-05</td><td>Postnet (Fliers)</td><td class="right num neg">($65.33)</td><td class="right num muted">$2,886.56</td></tr><tr><td>2026-05-08</td><td>Signal NYC ACH (final)</td><td class="right num neg">($1,385.00)</td><td class="right num muted">$1,501.56</td></tr><tr><td>2026-05-10</td><td>Zeffy payout (after CSV)</td><td class="right num">$1,577.00</td><td class="right num muted">$3,078.56</td></tr><tr><td>2026-05-13 <span class="muted small">(approx.)</span></td><td>Zeffy payout (5/9 transactions)</td><td class="right num">$853.00</td><td class="right num muted">$3,931.56</td></tr><tr><td>2026-05-14</td><td>Signal NYC ACH (additional invoice)</td><td class="right num neg">($1,107.00)</td><td class="right num muted">$2,824.56</td></tr><tr><td>2026-05-19</td><td>Crossroads Cafe ACH (final invoice)</td><td class="right num neg">($1,000.00)</td><td class="right num muted">$1,824.56</td></tr><tr><td>2026-06-01</td><td>MS Society donation (ACH cleared)</td><td class="right num neg">($1,824.00)</td><td class="right num muted">$0.56</td></tr></tbody></table><p class="muted small">Verify post-5/10 transactions against Bluevine statement when next exported. RA $438 payout did not pass through Bluevine — paid out direct to Keith personally and re-donated to MS Society as part of $601 personal donation (see e5).</p></section>
+
+<section><h2>Source Files</h2><table><thead><tr><th>File</th><th>Purpose</th></tr></thead><tbody><tr><td><code>dance_infusion.json</code></td><td class="muted">Master guest/sponsor records and configuration (reconciliation_complete: true)</td></tr><tr><td><code>dance_infusion_ledger.json</code></td><td class="muted">Canonical transaction-level data lake (114 records)</td></tr><tr><td><code>Dance Infusion #2_5-11-2026.xlsx</code></td><td class="muted">Zeffy platform export (58 succeeded transactions, $5,880)</td></tr><tr><td><code>20260509-DanceInfusion#2-list (4).csv</code></td><td class="muted">Resident Advisor ticket export (16 buyers, 20 tickets)</td></tr><tr><td><code>DIY Page transactions.csv</code></td><td class="muted">MS Society DIY page export (12 transactions, $445)</td></tr><tr><td><code>transactions-11052026.csv</code></td><td class="muted">Bluevine bank statement (through 5/8/2026)</td></tr><tr><td><code>receipts/MS_Society_Receipt_601_2026-05-19.pdf</code></td><td class="muted">Tax receipt — $601 personal donation, 5/19/26</td></tr></tbody></table></section>
+
+<footer>
+  Report manually updated June 1, 2026 to reflect final post-event reconciliation from <code>dance_infusion.json</code>. Includes Signal additional invoice (paid 5/14), Crossroads final invoice (paid 5/19), $601 personal MS Society donation (paid 5/19), and final $1,824 MS Society Bluevine ACH (cleared 6/1/26). Dance Infusion #2 financially closed — all obligations settled.<br>
+  All figures traced to source: Zeffy export · RA export · MS Society DIY transactions · Bluevine bank statement · MS Society donation receipt.
+</footer>
+
+</body></html>

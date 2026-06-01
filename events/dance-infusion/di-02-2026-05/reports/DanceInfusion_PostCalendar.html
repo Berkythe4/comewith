@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dance Infusion — Post Calendar</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: #fff;
+    color: #1a1a1a;
+    padding: 32px 28px 64px;
+    max-width: 980px;
+    margin: 0 auto;
+  }
+  h1 { font-size: 18px; font-weight: 500; margin-bottom: 4px; }
+  .subtitle { font-size: 12px; color: #666; margin-bottom: 20px; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-bottom: 20px; font-size: 12px; color: #555; }
+  .leg { display: flex; align-items: center; gap: 6px; }
+  .leg-sq { width: 12px; height: 10px; border-radius: 3px; flex-shrink: 0; }
+
+  .grid-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; min-width: 640px; }
+
+  .row-label {
+    font-size: 12px; font-weight: 500; color: #444; white-space: nowrap;
+    padding: 0 10px 0 0; vertical-align: middle; width: 160px;
+  }
+  .row-owner {
+    font-size: 10px; color: #888; font-weight: 400; display: block; margin-top: 1px;
+  }
+  .col-head {
+    font-size: 11px; color: #888; text-align: center;
+    padding: 0 2px 10px; font-weight: 400; white-space: nowrap;
+  }
+  .col-head.today { color: #c0392b; font-weight: 600; }
+  .cell { height: 32px; padding: 3px 2px; position: relative; }
+  .bar {
+    height: 26px; border-radius: 4px; display: flex; align-items: center;
+    padding: 0 9px; font-size: 11px; font-weight: 500;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+
+  .bar-scheduled { background: #EAF3DE; color: #27500A; border: 0.5px solid #97C459; }
+  .bar-triggered  { background: #EEEDFE; color: #3C3489; border: 0.5px solid #AFA9EC; }
+  .bar-tbd        { background: #F1EFE8; color: #5F5E5A; border: 0.5px solid #B4B2A9; border-style: dashed; }
+  .bar-awareness  { background: #E6F1FB; color: #0C447C; border: 0.5px solid #85B7EB; }
+
+  .milestone {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    width: 10px; height: 10px; border-radius: 50%;
+    left: 50%; margin-left: -5px;
+  }
+  .m-red { background: #c0392b; }
+  .milestone-label {
+    position: absolute; top: -18px; left: 50%; transform: translateX(-50%);
+    font-size: 10px; white-space: nowrap; font-weight: 600; color: #c0392b;
+  }
+
+  .today-col { background: rgba(192,57,43,0.04); }
+
+  tr:not(.hdr) td { border-top: 0.5px solid #ebebeb; }
+  .section-hdr td { padding-top: 16px; padding-bottom: 3px; border-top: none !important; }
+  .slabel { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .09em; color: #999; }
+
+  @media (prefers-color-scheme: dark) {
+    body { background: #111; color: #e8e8e0; }
+    .subtitle, .col-head, .row-label { color: #888; }
+    .col-head.today { color: #e57373; }
+    .bar-scheduled { background: #27500A; color: #C0DD97; border-color: #639922; }
+    .bar-triggered  { background: #3C3489; color: #CECBF6; border-color: #534AB7; }
+    .bar-tbd        { background: #2c2c2a; color: #B4B2A9; border-color: #5F5E5A; }
+    .bar-awareness  { background: #0C447C; color: #B5D4F4; border-color: #378ADD; }
+    tr:not(.hdr) td { border-top-color: #2a2a2a; }
+    .today-col { background: rgba(229,115,115,0.06); }
+    .m-red { background: #e57373; }
+    .milestone-label { color: #e57373; }
+    .slabel { color: #555; }
+    .row-label { color: #aaa; }
+    .row-owner { color: #666; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Dance Infusion — Social Post Calendar</h1>
+<p class="subtitle">Dance Infusion #2 · May 9, 2026 · 3–10 PM @ Signal, Brooklyn &nbsp;·&nbsp; Updated Apr 1, 2026</p>
+
+<div class="legend">
+  <div class="leg"><div class="leg-sq bar-scheduled"></div>Scheduled — date confirmed</div>
+  <div class="leg"><div class="leg-sq bar-triggered"></div>Triggered — post after partner goes live</div>
+  <div class="leg"><div class="leg-sq bar-awareness"></div>MS awareness content</div>
+  <div class="leg"><div class="leg-sq bar-tbd"></div>TBD — date not set</div>
+</div>
+
+<div class="grid-wrap">
+<table>
+  <thead>
+    <tr class="hdr">
+      <th class="row-label" style="text-align:left;font-weight:400;padding-bottom:10px;font-size:11px;color:#888;">Post</th>
+      <th class="col-head today">Apr 1</th>
+      <th class="col-head">Apr 3</th>
+      <th class="col-head">Apr 5</th>
+      <th class="col-head">Apr 11</th>
+      <th class="col-head">Apr 18</th>
+      <th class="col-head">Apr 25</th>
+      <th class="col-head">May 2</th>
+      <th class="col-head">May 9</th>
+    </tr>
+  </thead>
+  <tbody>
+
+    <tr class="section-hdr"><td class="slabel" colspan="9">Confirmed — scheduled</td></tr>
+
+    <tr>
+      <td class="row-label">Sauci Soni & Kristen London<span class="row-owner">Keith / Kendall</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell" colspan="1"><div class="bar bar-scheduled">Lineup announcement</div></td>
+      <td class="cell" colspan="6"></td>
+    </tr>
+
+    <tr>
+      <td class="row-label">Crossroads Café<span class="row-owner">Keith / Kendall</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell"></td>
+      <td class="cell" colspan="1"><div class="bar bar-scheduled">Vendor announcement</div></td>
+      <td class="cell" colspan="5"></td>
+    </tr>
+
+    <tr class="section-hdr"><td class="slabel" colspan="9">Triggered — post after partner goes live</td></tr>
+
+    <tr>
+      <td class="row-label">AOM Infusion<span class="row-owner">Keith</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell" colspan="3"><div class="bar bar-triggered">After AOM LinkedIn post</div></td>
+      <td class="cell" colspan="2"></td>
+    </tr>
+
+    <tr>
+      <td class="row-label">BeWell — blog + DANCE code<span class="row-owner">Keith</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell" colspan="3"><div class="bar bar-triggered">After BeWell publishes</div></td>
+      <td class="cell" colspan="2"></td>
+    </tr>
+
+    <tr>
+      <td class="row-label">Freemind Dance Studio<span class="row-owner">Keith / Kendall</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell" colspan="4"></td>
+      <td class="cell" colspan="2"><div class="bar bar-triggered">Raffle prize — closer to May 9</div></td>
+      <td class="cell"></td>
+    </tr>
+
+    <tr class="section-hdr"><td class="slabel" colspan="9">MS awareness content</td></tr>
+
+    <tr>
+      <td class="row-label">What the MS Society does<span class="row-owner">Kendall</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell" colspan="3"></td>
+      <td class="cell" colspan="2"><div class="bar bar-awareness">MS awareness — closer to May 9</div></td>
+      <td class="cell" colspan="2"></td>
+    </tr>
+
+    <tr class="section-hdr"><td class="slabel" colspan="9">TBD — date not yet set</td></tr>
+
+    <tr>
+      <td class="row-label">Pulse Devices video<span class="row-owner">Keith / Evan</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell" colspan="3"></td>
+      <td class="cell" colspan="3"><div class="bar bar-tbd">After shoot + edit</div></td>
+      <td class="cell"></td>
+    </tr>
+
+    <tr>
+      <td class="row-label">Yankees / MS hats raffle<span class="row-owner">Keith</span></td>
+      <td class="cell today-col"></td>
+      <td class="cell" colspan="4"></td>
+      <td class="cell" colspan="2"><div class="bar bar-tbd">At Keith's discretion</div></td>
+      <td class="cell"></td>
+    </tr>
+
+    <tr>
+      <td class="row-label" style="color:#ccc"></td>
+      <td class="cell today-col"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell"></td>
+      <td class="cell" style="position:relative;">
+        <div class="milestone m-red"></div>
+        <div class="milestone-label">May 9</div>
+      </td>
+    </tr>
+
+  </tbody>
+</table>
+</div>
+
+</body>
+</html>

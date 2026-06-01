@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dance Infusion #2 — Impact Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#22335a; --cream:#faf6ec; --cream2:#f1ead8;
+    --ink:#1b2335; --muted:#5d6678; --line:#e3dcc8; --accent:#c8a24a; --green:#3a8c4a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--cream);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:0 20px}
+  h1,h2,h3,.display{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.02em;line-height:1}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  a{color:var(--navy)}
+  /* HERO */
+  .hero{background:var(--navy);color:var(--cream);padding:64px 0 56px;text-align:center}
+  .hero .eyebrow{color:#c9b67e}
+  .hero .amount{font-family:"Bebas Neue";font-size:clamp(84px,22vw,168px);line-height:.86;color:var(--cream);margin:10px 0 4px}
+  .hero .to{font-family:"Bebas Neue";font-size:clamp(26px,7vw,46px);letter-spacing:.03em;color:#e9dcb6}
+  .hero .meta{margin-top:22px;font-size:15px;color:#c4cbda;letter-spacing:.01em}
+  .hero .subtitle{margin:20px auto 0;max-width:520px;font-size:17px;color:#dfe4ee;font-style:italic}
+  /* SECTIONS */
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  section h2{font-size:34px;color:var(--navy);margin:0 0 6px}
+  section .lede{font-size:18px;margin:0 0 18px;color:var(--ink)}
+  p{margin:0 0 14px}
+  .narr{font-size:17px;color:#2a3142}
+  /* GROWTH */
+  .growth-grid{display:grid;grid-template-columns:1fr;gap:14px;margin-top:8px}
+  .metric{border:1px solid var(--line);border-radius:14px;padding:16px 18px;background:#fff}
+  .metric .label{font-size:12px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:700}
+  .metric .vals{display:flex;align-items:baseline;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .metric .v1{font-family:"Bebas Neue";font-size:30px;color:var(--muted)}
+  .metric .arrow{color:var(--accent);font-size:18px;font-weight:700}
+  .metric .v2{font-family:"Bebas Neue";font-size:40px;color:var(--navy)}
+  .metric .pending{display:inline-block;font-family:"DM Sans";font-size:12px;font-weight:700;color:#9a7b1f;background:#f7eecd;border:1px solid #e7d49a;border-radius:999px;padding:2px 9px;letter-spacing:.04em}
+  .metric .note{font-size:12.5px;color:var(--muted);margin-top:8px}
+  .traj{font-size:14px;color:var(--muted);margin-top:14px}
+  /* TIERS */
+  .tier{margin:0 0 16px}
+  .tier .tname{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px}
+  .tier .members{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;font-weight:500}
+  /* PLACEHOLDER */
+  .ph{border:2px dashed #c9b67e;background:#fbf3da;border-radius:12px;padding:16px 18px;color:#7a6314;font-size:14px;margin:10px 0}
+  .ph b{font-family:"DM Sans";text-transform:uppercase;letter-spacing:.1em;font-size:11px;display:block;margin-bottom:4px;color:#9a7b1f}
+  .photoph{display:flex;align-items:center;justify-content:center;min-height:200px;border:2px dashed #c9b67e;background:#fbf3da;border-radius:12px;color:#9a7b1f;font-size:13px;text-align:center;padding:20px;margin:14px 0}
+  /* lists */
+  .inline-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
+  .people{margin:6px 0 0;padding:0;list-style:none}
+  .people li{padding:5px 0;border-bottom:1px dashed var(--line);font-size:15px}
+  .people li span{color:var(--muted)}
+  /* audit link + footer */
+  .audit-cta{display:block;text-align:center;background:var(--navy);color:var(--cream);text-decoration:none;border-radius:14px;padding:18px;font-size:16px;font-weight:700;margin:8px 0}
+  .audit-cta small{display:block;font-weight:400;color:#c4cbda;margin-top:4px;font-size:13px}
+  footer{padding:34px 0 60px;text-align:center;color:var(--muted);font-size:13px}
+  .quote{font-family:"Bebas Neue";font-size:30px;line-height:1.05;color:var(--navy);text-align:center;padding:8px 0}
+  /* PDF button */
+  .pdfbar{position:sticky;top:0;z-index:50;background:rgba(250,246,236,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+  .pdfbar .wrap{display:flex;justify-content:space-between;align-items:center;padding:10px 20px}
+  .pdfbar .brand{font-family:"Bebas Neue";font-size:20px;color:var(--navy);letter-spacing:.04em}
+  .btn{font-family:"DM Sans";font-weight:700;font-size:13px;letter-spacing:.04em;background:var(--accent);color:#1a1405;border:0;border-radius:999px;padding:9px 18px;cursor:pointer}
+  .err{max-width:720px;margin:40px auto;padding:20px;border:1px solid #e7c3c3;background:#fbeaea;border-radius:12px;color:#8a2a2a;font-size:14px}
+  @media print{
+    .pdfbar{display:none}
+    body{background:#fff}
+    .hero{background:#fff!important;color:var(--navy)!important;border-bottom:2px solid var(--navy);padding:24px 0}
+    .hero .amount,.hero .to{color:var(--navy)!important}
+    .hero .eyebrow{color:var(--muted)!important}
+    .hero .meta,.hero .subtitle{color:#333!important}
+    .audit-cta{background:#fff!important;color:var(--navy)!important;border:1.5px solid var(--navy)}
+    .audit-cta small{color:#555!important}
+    section{break-inside:avoid;padding:20px 0}
+    .ph,.photoph{background:#fff;border-color:#bbb;color:#555}
+    .metric{break-inside:avoid}
+  }
+</style>
+</head>
+<body>
+<div class="pdfbar"><div class="wrap"><span class="brand">DANCE INFUSION</span><button class="btn" onclick="window.print()">Export as PDF</button></div></div>
+
+<div id="app"><div class="err" style="display:none" id="err"></div></div>
+
+<script>
+const money = n => '$' + Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:0});
+const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+async function getJSON(path){ const r = await fetch(path + '?t=' + Date.now()); if(!r.ok) throw new Error('Could not load ' + path); return r.json(); }
+
+function PH(label, what){ return `<div class="ph"><b>[PLACEHOLDER] ${esc(label)}</b>${esc(what)}</div>`; }
+function PHOTO(desc){ return `<div class="photoph">📷 [PLACEHOLDER PHOTO]<br>${esc(desc)}</div>`; }
+
+// Growth metric row. v1 = DI#1 (may be null/pending), v2 = DI#2.
+function metric(label, di1, di2, note){
+  const v1 = (di1===null || di1===undefined)
+    ? `<span class="pending">DI #1 data pending</span>`
+    : `<span class="v1">${esc(di1)}</span>`;
+  return `<div class="metric">
+    <div class="label">${esc(label)}</div>
+    <div class="vals">${v1}<span class="arrow">→</span><span class="v2">${esc(di2)}</span></div>
+    ${note?`<div class="note">${esc(note)}</div>`:''}
+  </div>`;
+}
+
+function render(d2, content, d1){
+  const ev = content.event || {};
+  const name = ev.name || d2.config.event_name || 'Dance Infusion #2';
+  const date = ev.date || d2.config.event_date || '';
+  const venue = ev.venue || '';
+  const subtitle = ev.hero_subtitle || '';
+  const donated = 3000; // DI #2 total to mission, per dance_infusion.json reconciliation
+
+  // sponsor count / dj count (DI #2)
+  const sponsorCount = (d2.sponsors||[]).length;
+  const djCount = (d2.dj_allocations||[]).length;
+  // DI #2 tickets (paid + comp) from guest records — internal door list, NOT RA RSVP
+  const di2Tickets = (d2.guests||[]).reduce((s,g)=>s+(g.tickets||0),0);
+  const di2Records = (d2.guests||[]).length;
+
+  // DI #1 (from di1 json) — honor nulls
+  const d1Att = d1 && d1.attendance ? d1.attendance.attendance : null; // null by rule
+  const d1RaTix = d1 && d1.attendance ? d1.attendance.ra_tickets_sold : null;
+  const d1Reach = d1 && d1.reach ? d1.reach.ra_total_event_views : null;
+  const d1Sponsors = (d1 && d1.sponsors && d1.sponsors.count!=null) ? d1.sponsors.count : null;
+  const d1Donated = (d1 && d1.mission_impact) ? d1.mission_impact.donated_to_ms_society : null; // null
+
+  // DI #2 reach (RA event views) ≈1,147 derived from source % (flagged). Use ~ marker.
+  const di2Reach = '≈1,147';
+
+  const nar = content.narratives || {};
+
+  // sponsor tiers (no cash)
+  const tiers = (content.sponsor_display||[]).map(t=>`
+    <div class="tier"><div class="tname">${esc(t.tier)}</div>
+      <div class="members">${(t.members||[]).map(m=>`<span class="chip">${esc(m.name)}${m.note?` <em style="color:#9a7b1f;font-style:normal;font-size:12px">· ${esc(m.note)}</em>`:''}</span>`).join('')}</div>
+    </div>`).join('');
+
+  const team = (content.team||[]).map(p=>`<li><strong>${esc(p.name)}</strong> <span>— ${esc(p.role)}</span></li>`).join('');
+  const artists = (content.artists||[]).map(a=>`<span class="chip">${esc(a)}</span>`).join('');
+  const partners = (content.partner_orgs||[]).map(p=>`<li><strong>${esc(p.name)}</strong> <span>— ${esc(p.role)}</span></li>`).join('');
+
+  document.getElementById('app').innerHTML = `
+  <header class="hero">
+    <div class="wrap">
+      <div class="eyebrow">${esc(name)} · Impact Report</div>
+      <div class="amount">${money(donated)}</div>
+      <div class="to">to the National MS Society</div>
+      <div class="meta">${esc(date)}${venue?` · ${esc(venue)}`:''}</div>
+      ${subtitle?`<div class="subtitle">${esc(subtitle)}</div>`:''}
+    </div>
+  </header>
+
+  <section><div class="wrap">
+    ${PHOTO('Hero — wide event crowd shot, energy peak (story photo TBD)')}
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Why we dance</div>
+    <h2>For something bigger</h2>
+    <p class="narr">${esc(nar.why_we_dance||'')}</p>
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">The night</div>
+    <h2>May 9 at Signal NYC</h2>
+    <p class="narr">${esc(nar.the_event||'')}</p>
+    ${PHOTO('Inline — mid-tempo dance floor, smiling faces')}
+    ${PH('Human-moment quote','A real attendee/sponsor/MS-community quote to anchor the night. Do not fabricate — source from Keith.')}
+    <div class="quote">“[PLACEHOLDER — human-moment quote]”</div>
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Trajectory</div>
+    <h2>From #1 to #2</h2>
+    <p class="lede">Dance Infusion is building — here's the movement from our first event to our second.</p>
+    <div class="growth-grid">
+      ${metric('Donated to the mission', d1Donated, money(donated),
+        'DI #1 donated-to-MS figure not in available records — pending re-supply.')}
+      ${metric('Attendance', null, di2Tickets + ' tickets',
+        'DI #1: RA tickets sold = ' + (d1RaTix!=null?d1RaTix:'?') + ' (RSVP/tickets only, not confirmed attendance). DI #2: ' + di2Tickets + ' tickets issued across ' + di2Records + ' guest records (paid + comp).')}
+      ${metric('Sponsors', d1Sponsors, sponsorCount + ' sponsors',
+        'DI #1 sponsor count not recorded in available data.')}
+      ${metric('Reach (event views)', d1Reach, di2Reach + ' views',
+        'RA event views. DI #2 total derived from source breakdown (≈1,147) — verify against RA stats export.')}
+    </div>
+    <p class="traj">The mission number is the one that matters: every Dance Infusion is measured by what reaches the National MS Society. The trajectory is up.</p>
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Made possible by</div>
+    <h2>Our sponsors</h2>
+    ${tiers || '<p class="narr">Sponsor list loading…</p>'}
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">On the decks</div>
+    <h2>Artists</h2>
+    <div class="inline-list">${artists}</div>
+    <div class="eyebrow" style="margin-top:24px">Behind it</div>
+    <h2>The team</h2>
+    <ul class="people">${team}</ul>
+    <div class="eyebrow" style="margin-top:24px">Partners</div>
+    <ul class="people">${partners}</ul>
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">Reach</div>
+    <h2>Getting the word out</h2>
+    ${PH('Social reach numbers','Instagram impressions, story views, follower growth, hashtag mentions. Source from Keith — not in event data.')}
+  </div></section>
+
+  <section><div class="wrap">
+    <div class="eyebrow">What's next</div>
+    <h2>Dance Infusion #3</h2>
+    ${PH("What's next copy","Confirm the DI #3 framing/date with Keith. (A prior draft exists in impact_report_content.json → narratives.whats_next, but per the build brief this copy is not to be auto-published.)")}
+  </div></section>
+
+  <section style="border-bottom:0"><div class="wrap">
+    <a class="audit-cta" href="public-audit.html">See the full money breakdown →<small>Public transparency audit — where every dollar went</small></a>
+  </div></section>
+
+  <footer><div class="wrap">
+    ${esc(name)} · A Come With production benefiting the National MS Society<br>
+    ${esc((content.contact&&content.contact.instagram)||'')} · ${esc((content.contact&&content.contact.email)||'')}
+  </div></footer>
+  `;
+}
+
+(async function(){
+  try{
+    const d2 = await getJSON('../data/dance_infusion.json');
+    const content = await getJSON('../data/impact_report_content.json');
+    let d1 = null;
+    try { d1 = await getJSON('../../di-01-2024-09/data/dance_infusion_di1.json'); }
+    catch(e){ d1 = null; } // DI #1 optional — section renders "pending"
+    render(d2, content, d1);
+  }catch(e){
+    const el = document.getElementById('err');
+    el.style.display='block';
+    el.innerHTML = 'Could not build report: ' + esc(e.message) +
+      '<br><br>Serve from a local server so fetch() can read the JSON (file:// will be blocked). '+
+      'Run a server at the repo <code>events/</code> level and open '+
+      '<code>dance-infusion/di-02-2026-05/reports/impact-report.html</code>.';
+  }
+})();
+</script>
+</body>
+</html>
