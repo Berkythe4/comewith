@@ -1,0 +1,48 @@
+{
+  "_meta": {
+    "parsed": "2026-06-01",
+    "purpose": "Parked for later use. SEPARATE artist-showcase content event — NOT part of the Dance Infusion impact report or public audit. Do not reference in DI materials.",
+    "data_rule": "RA = tickets/RSVPs only, never attendance.",
+    "source_files": [
+      "20260117-ClubCafepresents_DanceInfu-list.csv (RA RSVP export)",
+      "Showcase_Crossroads_1.jpg (RA Stats: views, sources, sold/allocation, revenue)",
+      "Showcase_Crossroads_2.jpg",
+      "Showcase_Crossroads_3.jpg"
+    ]
+  },
+  "event": {
+    "name": "Club Cafe presents — Dance Infu… (artist showcase)",
+    "type": "artist-showcase",
+    "date_from_data": "2026-01-17",
+    "venue": null,
+    "venue_note": "Not present in source files."
+  },
+  "rsvps": {
+    "total_rsvp_tickets": 4,
+    "unique_rsvp_people": 3,
+    "allocation": 1000,
+    "sold_vs_allocation_display": "4 / 1,000",
+    "records": [
+      { "name": "Keith Berkman", "email": "Keith.berkman@gmail.com", "tickets": 1, "ticket_type": "Free RSVP", "date": "2026-01-13" },
+      { "name": "Liz McQuillan", "email": "emcquillan@gmail.com", "tickets": 2, "ticket_type": "Free RSVP", "date": "2026-01-13" },
+      { "name": "William Stuart", "email": "wbstuart@gmail.com", "tickets": 1, "ticket_type": "Free RSVP", "date": "2026-01-16" }
+    ]
+  },
+  "attendance": {
+    "attendance": null,
+    "attendance_note": "Not determinable. 4 free RSVPs recorded; RSVP is not attendance."
+  },
+  "revenue": {
+    "total_revenue": 0.00,
+    "note": "All tickets were Free RSVP ($0.00). Confirmed by CSV (Price = .00) and RA Stats 'Total revenue $0.00'."
+  },
+  "reach": {
+    "ra_total_event_views": 111,
+    "sources": [
+      { "source": "Direct",            "views": 47, "pct": 42.34 },
+      { "source": "Instagram",         "views": 24, "pct": 21.62 },
+      { "source": "RA event listings", "views": 22, "pct": 19.82 },
+      { "source": "Other",             "views": 13, "pct": 11.71 }
+    ]
+  }
+}
