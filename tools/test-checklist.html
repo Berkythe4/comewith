@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.style.visibility='hidden'</script>
+<script type="module" src="/staging/guard.js"></script>
+<title>Data Architecture — Test Checklist</title>
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a;--green:#3a8c4a;--red:#b3402f}
+  *{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,sans-serif;line-height:1.5}
+  header{background:var(--navy);color:var(--cream);padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:17px;margin:0}
+  .wrap{max-width:900px;margin:0 auto;padding:18px 20px 60px}
+  .progress{background:#fff;border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:14px}
+  .bar{height:10px;background:#eee;border-radius:6px;overflow:hidden;margin-top:6px}.bar > div{height:100%;background:var(--green)}
+  .phase{margin:18px 0 8px;font-size:14px;letter-spacing:.04em;text-transform:uppercase;color:var(--navy);font-weight:700;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .phase.gate{color:var(--red)}
+  .case{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;display:grid;grid-template-columns:24px 1fr;gap:10px}
+  .case.gate{border-color:#e7c3c3;background:#fdf6f5}
+  .case input[type=checkbox]{width:18px;height:18px;margin-top:2px}
+  .case .t{font-weight:600}
+  .case .how{font-size:13px;color:var(--muted)}
+  .case .exp{font-size:13px;color:var(--green);margin-top:2px}
+  .case.gate .exp{color:var(--red)}
+  .case textarea{width:100%;margin-top:6px;font:inherit;border:1px solid var(--line);border-radius:6px;padding:5px 7px;font-size:13px}
+  .neg{display:inline-block;font-size:10px;font-weight:700;background:#fbeaea;color:var(--red);border-radius:999px;padding:1px 7px;margin-left:6px;letter-spacing:.05em}
+  .note{font-size:13px;color:#7a6314;background:#fbf3da;border:1px solid #e7d49a;border-radius:8px;padding:10px 12px;margin-bottom:14px}
+</style>
+</head>
+<body>
+<header><h1>Data Architecture — Test Checklist <span style="font-weight:400;color:#c4cbda;font-size:13px">(reusable; persists to Supabase)</span></h1><span id="who" style="font-size:12px;color:#c4cbda"></span></header>
+<div class="wrap">
+  <div class="note">⚠ <b>Run on STAGING after applying migrations 023–028.</b> The 🔴 NEGATIVE tests are the external-actor RLS proof — they must pass <b>before any external-actor login is provisioned</b> (see the ROADMAP blocker: financial views must be revoked from <code>authenticated</code> + re-issued <code>security_invoker</code> first). Check-off state is shared (Supabase), so anyone can re-run after future changes.</div>
+  <div class="progress">Progress: <b id="pct">0%</b> (<span id="cnt">0/0</span>)<div class="bar"><div id="barfill" style="width:0%"></div></div></div>
+  <div id="cases"></div>
+</div>
+<script type="module">
+import { sb } from '/staging/guard.js';
+const $=s=>document.querySelector(s);
+
+const TESTS = [
+  // PHASE A
+  ['A','a.merge','Actor merge correctness','In Actor Inspector, merge a known duplicate (e.g. a DJ who is also a client) into one actor.','The surviving actor keeps both roles; provenance shows both source rows; the merged actor is soft-deleted; sponsorships/links reassigned.'],
+  ['A','a.overlap','Role overlap (one actor, many roles)','Find Crossroads Café (vendor+sponsor) or a DJ (artist+dj+customer).','One actor row carries multiple actor_roles; no duplicate person/org rows.'],
+  ['A','a.dedupe','Dedupe + provenance','Spot-check 5 actors against the legacy artists/contractors/clients/sponsors.','Each maps to the right legacy row(s) via actor_source_links; no obvious wrong merges (fix any by hand in the inspector).'],
+  ['A','a.sponsorship','Sponsorships repointed','Pick a sponsorship; confirm actor_id resolves to the right org.','sponsorships.actor_id set; sponsor_id still present (transition).'],
+  // PHASE B
+  ['B','b.participants','event_participants backfilled','Query participants for DI#2.','DI#2 DJs appear (from artist_bookings) with role + fee.'],
+  ['B','b.type','events.type migrated','Check events.type vs old series.','Come With Parties→party, Dance Infusion→dance_infusion, Production→production, else showcase; is_content_event true for showcase.'],
+  ['B','b.equip','equipment_usage writable','Attach gear to an event (purpose set) from the dashboard/SQL.','Row writes; appears for the event.'],
+  // PHASE C
+  ['C','c.content','content_items publish state','Create a content item, set publish_status=published.','Admin sees it; anon can read ONLY published rows.'],
+  ['C','c.tags','tags + taggables slicing','Tag an event with booth-to-wall.','taggable row created; visualizer can slice by it.'],
+  // PHASE C2
+  ['C2','c2.tasks','Task assignment','Create a task, assign to an actor.','task_assignments row; appears under the actor.'],
+  ['C2','c2.dayof','Day-of generator','Assign equipment + a DJ to an event, run generate_day_of_tasks(event_id).','Tasks created for each gear + DJ + fixed day_of templates; re-running does NOT duplicate.'],
+  ['C2','c2.contract','Contract + reconcile (no auto-actual)','Create a contract with a fee; mark paid.','No expenses/income row auto-created (Q9); paid flag set; reconcile manually.'],
+  ['C2','c2.budget','Budget variance math','Add a budget_line (expense) for an event with matching expenses.','v_budget_variance: variance = planned − actual_expense (category match).'],
+  ['C2','c2.touch','Touchpoint log','Log a touchpoint for a sponsor.','Row created; shows under the actor.'],
+  // PHASE D
+  ['D','d.union','v_data_points UNION','Query v_data_points for a snapshot key and event.net_pl.','Snapshot rows (live) + derived event rows (from MV) both present, same shape.'],
+  ['D','d.mv','Materialized refresh','refresh materialized view mv_event_data_points (or wait for 03:00 cron).','Derived rows reflect current event money.'],
+  ['D','d.formula','Tier-2 formula engine','In Visualizer, preview event.gross_revenue / event.attendance.','Evaluates client-side to revenue/attendee per event; no errors.'],
+  // PHASE E
+  ['E','e.timeseries','Visualizer time-series','Plot event.total_raised over time.','Line renders; target overlay if a kpi_target exists.'],
+  ['E','e.cross','Visualizer cross-entity','Group by subject → one line per event/series.','Multiple lines render.'],
+  ['E','e.slice','Visualizer slice-by-dim','Slice event_type = dance_infusion.','Only DI events included.'],
+  ['E','e.savemetric','Save a formula metric','Save a new formula metric; reload.','New metric_definitions row appears in the menu.'],
+  // SECURITY — role-scope matrix + anon
+  ['SEC','sec.anon','anon-401 on all financial views','Anon REST GET v_event_summary, v_kpi_event_financials, v_kpi_parties, v_kpi_dance_infusion, v_kpi_dashboard, v_budget_variance, v_data_points.','Every one returns 401.',true],
+  ['SEC','sec.admin','Admin can read financials','As master_admin, read the KPI views + v_data_points.','Returns rows (admin works).'],
+  ['SEC','sec.actor.fin','🔴 Actor CANNOT read financials','Log in as a non-admin actor (test account); select v_kpi_dashboard / v_data_points / v_budget_variance.','DENIED / 0 rows. (Requires the authenticated-lockdown gate shipped first.)',true],
+  ['SEC','sec.actor.others','🔴 Actor CANNOT read others\' data','As that actor: select other actors, other event_participants fees, sponsorships, budget_lines, income, expenses.','DENIED / 0 rows for everything not theirs.',true],
+  ['SEC','sec.actor.own','Actor CAN read ONLY own','As that actor: own actor row, own roles, own participation/fee, own contracts, tasks assigned to them.','Returns only their own rows; nothing else.',true],
+  ['SEC','sec.actor.taskstatus','Actor task status via RPC only','As that actor: call actor_set_task_status on an assigned task, then on an unassigned task.','Assigned: succeeds. Unassigned: error. No broad UPDATE possible.',true],
+  ['SEC','sec.dash','Admin dashboard still works','Open dashboard.html as admin; load each tab.','No regression from migrations 023–028.'],
+];
+
+let state={};
+async function load(){
+  const r = await sb.from('test_checklist_state').select('*');
+  if(r.error){ $('#cases').innerHTML='<div class="note">Could not load state — migration 028 applied?<br>'+r.error.message+'</div>'; }
+  (r.data||[]).forEach(x=>state[x.test_key]=x);
+  render();
+}
+function render(){
+  const phases=[...new Set(TESTS.map(t=>t[0]))];
+  let html='';
+  for(const ph of phases){
+    const gate = ph==='SEC';
+    html+=`<div class="phase ${gate?'gate':''}">${ph==='SEC'?'Security — role-scope matrix + anon (🔴 = gate before external logins)':'Phase '+ph}</div>`;
+    TESTS.filter(t=>t[0]===ph).forEach(([phase,key,title,how,exp,neg])=>{
+      const c=state[key]||{};
+      html+=`<div class="case ${neg?'gate':''}">
+        <input type="checkbox" data-k="${key}" ${c.checked?'checked':''}>
+        <div><div class="t">${title}${neg?'<span class="neg">NEGATIVE / GATE</span>':''}</div>
+          <div class="how">${how}</div><div class="exp">Expect: ${exp}</div>
+          <textarea data-n="${key}" rows="1" placeholder="notes / result…">${c.notes||''}</textarea></div></div>`;
+    });
+  }
+  $('#cases').innerHTML=html;
+  $('#cases').querySelectorAll('input[type=checkbox]').forEach(cb=>cb.onchange=()=>save(cb.dataset.k,{checked:cb.checked}));
+  $('#cases').querySelectorAll('textarea[data-n]').forEach(ta=>ta.onchange=()=>save(ta.dataset.n,{notes:ta.value}));
+  updateProgress();
+}
+async function save(key, patch){
+  state[key]={...(state[key]||{test_key:key}),...patch};
+  const {error}=await sb.from('test_checklist_state').upsert({test_key:key, checked:state[key].checked||false, notes:state[key].notes||null, updated_at:new Date().toISOString()});
+  if(error) alert(error.message); updateProgress();
+}
+function updateProgress(){
+  const total=TESTS.length, done=TESTS.filter(t=>state[t[1]]&&state[t[1]].checked).length;
+  const pct=Math.round(done/total*100);
+  $('#pct').textContent=pct+'%'; $('#cnt').textContent=done+'/'+total; $('#barfill').style.width=pct+'%';
+}
+document.addEventListener('staging:authed', e=>$('#who').textContent='signed in · '+e.detail.role.replace('_',' '));
+load();
+</script>
+</body>
+</html>
