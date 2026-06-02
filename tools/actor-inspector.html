@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- admin gate (reuses the staging guard: master_admin/sub_admin only) -->
+<script>document.documentElement.style.visibility='hidden'</script>
+<script type="module" src="/staging/guard.js"></script>
+<title>Actor Inspector — Come With</title>
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a;--green:#3a8c4a;--red:#b3402f}
+  *{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,sans-serif;line-height:1.5}
+  header{background:var(--navy);color:var(--cream);padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:18px;margin:0;letter-spacing:.02em}
+  header .who{font-size:12px;color:#c4cbda}
+  .wrap{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.2fr);gap:0;height:calc(100vh - 52px)}
+  .list,.detail{overflow:auto;padding:16px 18px}
+  .list{border-right:1px solid var(--line)}
+  .bar{display:flex;gap:8px;margin-bottom:12px}
+  input,select,textarea{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;width:100%}
+  .row{background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px;cursor:pointer}
+  .row:hover{border-color:var(--accent)}
+  .row.sel{border-color:var(--navy);box-shadow:0 0 0 1px var(--navy)}
+  .row .nm{font-weight:600}
+  .row .sub{font-size:12px;color:var(--muted)}
+  .badge{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:1px 8px;margin:2px 3px 0 0;background:#eef2f7;color:#3a4256}
+  .badge.kind{background:#f3e6c4;color:#8a6a1f}
+  .badge.src{background:#e9f3eb;color:var(--green)}
+  .btn{font:inherit;font-size:13px;font-weight:600;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;background:var(--accent);color:#1a1405}
+  .btn.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .btn.danger{background:#fbeaea;color:var(--red);border:1px solid #e7c3c3}
+  .field{margin-bottom:10px}.field label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-bottom:3px}
+  h2{font-size:15px;margin:18px 0 8px;color:var(--navy)}
+  .pill-row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .rolechip{display:inline-flex;align-items:center;gap:6px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:3px 6px 3px 10px;font-size:13px}
+  .rolechip button{border:0;background:#f0e9d6;border-radius:50%;width:18px;height:18px;cursor:pointer;color:var(--red);font-weight:700;line-height:1}
+  .msg{padding:8px 10px;border-radius:8px;font-size:13px;margin-bottom:10px}
+  .msg.ok{background:#e9f3eb;color:var(--green)}.msg.err{background:#fbeaea;color:var(--red)}
+  .empty{color:var(--muted);font-style:italic;padding:20px 0}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Actor Inspector <span style="font-weight:400;color:#c4cbda;font-size:13px">— verify &amp; fix the dedupe</span></h1>
+  <span class="who" id="who"></span>
+</header>
+<div class="wrap">
+  <div class="list">
+    <div class="bar">
+      <input id="search" placeholder="Search actors by name / email…">
+      <button class="btn ghost" id="reload">↻</button>
+    </div>
+    <div id="msg"></div>
+    <div id="rows"><div class="empty">Loading… (requires migration 023 applied)</div></div>
+  </div>
+  <div class="detail" id="detail"><div class="empty">Select an actor to inspect / edit.</div></div>
+</div>
+
+<script type="module">
+import { sb } from '/staging/guard.js';
+const $ = s => document.querySelector(s);
+const ROLES = ['artist','dj','contractor','customer','sponsor','team','performer','painter','dancer','vendor','venue_contact','host','crew'];
+let actors = [], roles = {}, sources = {}, sponsorships = {}, selId = null, mergeMode = false;
+
+function msg(t, kind='ok'){ const m=$('#msg'); if(!t){m.innerHTML='';return;} m.className='msg '+kind; m.textContent=t; setTimeout(()=>{if(m.textContent===t)m.innerHTML='';},4000); }
+
+async function load(){
+  // RLS lets admins read everything here; non-admins were already redirected by the guard.
+  const [a, r, s, sp] = await Promise.all([
+    sb.from('actors').select('*').is('deleted_at', null).order('display_name'),
+    sb.from('actor_roles').select('*'),
+    sb.from('actor_source_links').select('*'),
+    sb.from('sponsorships').select('id,event_id,actor_id,cash_amount,in_kind_value,tier,status'),
+  ]);
+  if(a.error){ $('#rows').innerHTML = '<div class="empty">Could not load actors — is migration 023 applied to this environment?<br><small>'+a.error.message+'</small></div>'; return; }
+  actors = a.data||[]; roles={}; sources={}; sponsorships={};
+  (r.data||[]).forEach(x=>(roles[x.actor_id]=roles[x.actor_id]||[]).push(x));
+  (s.data||[]).forEach(x=>(sources[x.actor_id]=sources[x.actor_id]||[]).push(x));
+  (sp.data||[]).forEach(x=>{ if(x.actor_id)(sponsorships[x.actor_id]=sponsorships[x.actor_id]||[]).push(x); });
+  draw();
+}
+
+function draw(){
+  const q = ($('#search').value||'').toLowerCase();
+  const list = actors.filter(a => !q || (a.display_name||'').toLowerCase().includes(q) || (a.email||'').toLowerCase().includes(q));
+  $('#rows').innerHTML = list.length ? list.map(a=>`
+    <div class="row ${a.id===selId?'sel':''}" data-id="${a.id}">
+      <div class="nm">${esc(a.display_name)} <span class="badge kind">${a.kind}</span></div>
+      <div class="sub">${esc(a.email||'—')}</div>
+      <div class="pill-row">${(roles[a.id]||[]).map(r=>`<span class="badge">${r.role}</span>`).join('')||'<span class="sub">no roles</span>'}
+        ${(sources[a.id]||[]).map(s=>`<span class="badge src">${s.source_table}</span>`).join('')}</div>
+    </div>`).join('') : '<div class="empty">No actors.</div>';
+  $('#rows').querySelectorAll('.row').forEach(el=>el.onclick=()=>select(el.dataset.id));
+}
+
+function select(id){
+  if(mergeMode && selId && id!==selId){ return doMerge(selId, id); }
+  selId = id; draw(); drawDetail();
+}
+
+function drawDetail(){
+  const a = actors.find(x=>x.id===selId); if(!a){ $('#detail').innerHTML='<div class="empty">Select an actor.</div>'; return; }
+  const rs = roles[a.id]||[], srcs = sources[a.id]||[], sps = sponsorships[a.id]||[];
+  $('#detail').innerHTML = `
+    <h2>Edit actor</h2>
+    ${['display_name','email','phone','instagram','website','legal_name'].map(f=>`
+      <div class="field"><label>${f.replace('_',' ')}</label><input data-f="${f}" value="${esc(a[f]||'')}"></div>`).join('')}
+    <div class="field"><label>kind</label><select data-f="kind">
+      <option ${a.kind==='person'?'selected':''}>person</option><option ${a.kind==='org'?'selected':''}>org</option></select></div>
+    <div class="pill-row"><button class="btn" id="save">Save fields</button>
+      <button class="btn danger" id="del">Soft-delete actor</button></div>
+
+    <h2>Roles</h2>
+    <div class="pill-row" id="roleChips">
+      ${rs.map(r=>`<span class="rolechip">${r.role}<button data-rid="${r.id}" title="remove">×</button></span>`).join('')||'<span class="sub">none</span>'}
+    </div>
+    <div class="pill-row" style="margin-top:8px">
+      <select id="newRole" style="width:auto">${ROLES.filter(x=>!rs.some(r=>r.role===x)).map(x=>`<option>${x}</option>`).join('')}</select>
+      <button class="btn ghost" id="addRole">+ add role</button>
+    </div>
+
+    <h2>Merged from (provenance)</h2>
+    <div class="pill-row">${srcs.map(s=>`<span class="badge src">${s.source_table} · ${s.source_id.slice(0,8)}</span>`).join('')||'<span class="sub">none</span>'}</div>
+
+    <h2>Sponsorship links</h2>
+    ${sps.length? sps.map(s=>`<div class="sub">event ${s.event_id.slice(0,8)} · $${s.cash_amount} ${s.tier?('· '+s.tier):''} · ${s.status}</div>`).join('') : '<div class="sub">none</div>'}
+
+    <h2>Merge duplicates</h2>
+    <button class="btn ghost" id="mergeBtn">${mergeMode?'Cancel merge — ':''}Merge ANOTHER actor INTO this one</button>
+    <div class="hint">Click here, then click a second actor in the list. Its roles, provenance, and
+      sponsorships move here; it is soft-deleted. Your safety net for the best-effort dedupe.</div>
+  `;
+  $('#save').onclick = saveFields;
+  $('#del').onclick = () => softDelete(a.id);
+  $('#addRole').onclick = addRole;
+  $('#roleChips').querySelectorAll('button[data-rid]').forEach(b=>b.onclick=()=>removeRole(b.dataset.rid));
+  $('#mergeBtn').onclick = () => { mergeMode=!mergeMode; msg(mergeMode?'Merge mode: click the actor to merge INTO this one.':'',mergeMode?'ok':'ok'); drawDetail(); };
+}
+
+async function saveFields(){
+  const patch={}; $('#detail').querySelectorAll('[data-f]').forEach(el=>patch[el.dataset.f]=el.value||null);
+  const {error}=await sb.from('actors').update(patch).eq('id',selId);
+  if(error)return msg(error.message,'err'); msg('Saved.'); await load(); drawDetail();
+}
+async function addRole(){
+  const role=$('#newRole').value; const {error}=await sb.from('actor_roles').insert({actor_id:selId,role});
+  if(error)return msg(error.message,'err'); msg('Role added.'); await load(); drawDetail();
+}
+async function removeRole(rid){ const {error}=await sb.from('actor_roles').delete().eq('id',rid);
+  if(error)return msg(error.message,'err'); msg('Role removed.'); await load(); drawDetail(); }
+async function softDelete(id){ if(!confirm('Soft-delete this actor?'))return;
+  const {error}=await sb.from('actors').update({deleted_at:new Date().toISOString()}).eq('id',id);
+  if(error)return msg(error.message,'err'); selId=null; msg('Soft-deleted.'); await load(); $('#detail').innerHTML='<div class="empty">Select an actor.</div>'; }
+
+async function doMerge(keepId, mergeId){
+  mergeMode=false;
+  const keep=actors.find(x=>x.id===keepId), gone=actors.find(x=>x.id===mergeId);
+  if(!confirm(`Merge "${gone.display_name}" INTO "${keep.display_name}"? Roles/provenance/sponsorships move; "${gone.display_name}" is soft-deleted.`)){ drawDetail(); return; }
+  // move provenance + sponsorships; copy roles (dedupe handled by unique index → ignore conflicts); soft-delete the merged actor
+  const e1=await sb.from('actor_source_links').update({actor_id:keepId}).eq('actor_id',mergeId);
+  const e2=await sb.from('sponsorships').update({actor_id:keepId}).eq('actor_id',mergeId);
+  for(const r of (roles[mergeId]||[])){ await sb.from('actor_roles').insert({actor_id:keepId,role:r.role}); } // unique-index conflicts are harmless
+  const e3=await sb.from('actors').update({deleted_at:new Date().toISOString()}).eq('id',mergeId);
+  const err=[e1,e2,e3].find(x=>x.error);
+  if(err)return msg(err.error.message,'err');
+  msg('Merged.'); selId=keepId; await load(); drawDetail();
+}
+
+const esc = s => String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+$('#search').oninput = draw;
+$('#reload').onclick = load;
+document.addEventListener('staging:authed', e => { $('#who').textContent = 'signed in · ' + e.detail.role.replace('_',' '); });
+load();
+</script>
+</body>
+</html>
