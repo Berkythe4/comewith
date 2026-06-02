@@ -210,9 +210,37 @@ public / expense-ratio internal (LEARNINGS §8); $9,557 reconciliation incl. fou
 confirmed; folder renamed **di-01-2024-09 → di-01-2025-09**. **Not yet public** — gated pending the
 consent sweep + placeholders (see below).
 
+## 🚫 BLOCKING DEPENDENCY — gate before ANY external-actor login
+
+**BLOCKER before ANY external-actor login is provisioned:** revoke the 5 financial views from
+`authenticated` and re-issue as `security_invoker` over RLS-gated tables (admins pass `is_admin()`,
+external actors get ZERO rows). Negative tests must pass on staging first. External logins are
+blocked until this ships.
+
+- Scope also covers the new financial objects: `v_budget_variance`, `v_data_points`,
+  `mv_event_data_points`.
+- ⚠ Applies to **all non-admin authenticated roles, including existing `customer` logins** — the
+  financial views are revoked from `anon` only today, so a customer-role login can already read
+  `v_kpi_*`. Check whether any live customer logins exist; if so this exposure is already live.
+- The dormant external-actor RLS tier is built (migrations 024/026) but **no external login is
+  provisioned**. Negative tests: `tools/test-checklist.html` → Security group (🔴).
+
+## Done (built; HELD for review/apply) — Data architecture A→E (migrations 023–028)
+
+Realizes the parked **event-model redesign** + the operational/analytical layers from
+`ComeWith_Data_Architecture_Concept.md`. **Files only — NOT applied** (push held; apply target +
+dedupe + RLS pending Keith's review). Build log: `events/dance-infusion/BUILD_LOG_data_architecture.md`.
+- **A (023)** actors + actor_roles + provenance; dedupe backfill; sponsorships→actors; `tools/actor-inspector.html`.
+- **B (024)** event_participants; events.type; dormant actor-self RLS tier.
+- **C (025)** content_items + tags/taggables.
+- **C2 (026)** stage/owner, contracts, files, tasks+assignments+day-of generator, budget_lines+variance, touchpoints.
+- **D (027)** metric_definitions, v_data_points (+ nightly materialized rollup).
+- **E** `tools/visualizer.html` (Tier-2 formula evaluator). **Checklist** `tools/test-checklist.html` (028).
+- Deviation: old people-tables NOT yet converted to views (dashboard still writes to them) — cutover later.
+
 ## Parked — design-first (each its own session)
 
-- **Event model redesign** — events are multi-axis, not a flat `series`: **TYPE**
+- **Event model redesign** — **⮕ BUILT (held): migrations 023–028 realize this — see "Done (built; HELD)" above; awaiting review + apply.** events are multi-axis, not a flat `series`: **TYPE**
   (Party / Dance Infusion / Production), **CONTENT** (`content_series`; content events
   graded on views/follows, not P&L), **SIGNATURE** tag (booth-to-wall), plus relational
   **LINKS** (`equipment_usage`, artists vs contractors, sponsors — TYPE may decide which
@@ -229,6 +257,11 @@ consent sweep + placeholders (see below).
 - **Flywheel redesign** — cyclical, metric-carrying boxes, moved to the bottom.
   Source: `ComeWith_Strategy_Dashboard.html` (in repo).
 - **Roadmap / timeline tool** — buy not build; Notion vs Trello TBD.
+- **Actor onboarding + MSA e-signing** — external actors (contractors/vendors/artists) self-onboard
+  and e-sign a Master Service Agreement, then get a scoped login to see their own data/tasks.
+  **Depends on this build** (actors + contracts + files + the external-actor RLS tier) **and is
+  hard-blocked by the financial-view lockdown above** (no external login until that ships + its
+  negative tests pass).
 
 ## Backlog (smaller, post-migration)
 

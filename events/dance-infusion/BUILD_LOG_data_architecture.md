@@ -157,6 +157,49 @@ and participation are scoped to that actor_id.
 ---
 
 ## 4. Verifications per phase
-- **Phase A:** migration is additive (no drops, no view replacement); does not touch financial views;
-  re-asserts nothing needed (no sensitive view created). Anon-401 invariant unaffected (prod
-  untouched). [to record on each commit]
+- **Phase A (023):** additive (no drops/no view replacement); doesn't touch financial views.
+- **Phase B (024):** additive; `series` KEPT so KPI exact-match views unaffected; dormant actor-self
+  policies grant nothing without a linked non-admin login.
+- **Phase C (025):** additive; only PUBLISHED content readable by anon; no financial exposure.
+- **Phase C2 (026):** additive; `v_budget_variance` (financial) anon-revoked at creation.
+- **Phase D (027):** additive; `mv_event_data_points` + `v_data_points` (financial) anon-revoked.
+- **Phase E / checklist (028):** UI + admin-only state table.
+- **Anon-401 invariant:** re-verified after Phase A (all 5 = 401); prod untouched throughout (files
+  only). New financial objects (`v_budget_variance`, `v_data_points`, `mv_event_data_points`) are
+  anon-revoked in their migrations — to be confirmed on apply via the checklist `sec.anon` test.
+
+## 5. Phases B–E shipped (held; not applied)
+- **B (024):** `event_participants` (+backfill from `artist_bookings`); `events.type`+`is_content_event`
+  from `series`; `equipment_usage.purpose`; dormant tier (`current_actor_id()` + actor-self SELECT).
+- **C (025):** `content_items` (+publish/embed/featured); `tags`+`taggables`; seeded `booth-to-wall`.
+- **C2 (026):** `events.stage`/`owner_actor_id`; `files`; `contracts` (paid flag, no auto-actual);
+  `tasks`+`task_assignments` (+`actor_set_task_status` RPC, no broad actor UPDATE); `task_templates`
+  + on-demand `generate_day_of_tasks()`; `budget_lines`+`v_budget_variance`; `touchpoints`.
+- **D (027):** `metric_definitions`; `mv_event_data_points` + `v_data_points`; nightly pg_cron; seed.
+- **E:** `tools/visualizer.html` (Tier-2 evaluator client-side).
+- **Checklist:** `tools/test-checklist.html` + `028` state table.
+
+## 6. 🚫 HARD BLOCKER (encoded in ROADMAP as a blocking dependency)
+> **Before ANY external-actor login is provisioned:** revoke the 5 financial views from
+> `authenticated` and re-issue as `security_invoker` over RLS-gated tables (admins pass
+> `is_admin()`, external actors get ZERO rows). Negative tests must pass on staging first.
+> External logins are blocked until this ships.
+- **Scope note (NEW finding):** the gate covers the financial **views**, and now also
+  `v_budget_variance`, `v_data_points`, `mv_event_data_points`. The dormant external-actor tier is
+  built but **no external login is provisioned** (per Keith). The external-actor NEGATIVE tests live
+  in `tools/test-checklist.html` (Security group, 🔴) for when logins go live.
+
+## 7. ⚠ New finding to surface (not fixed, per Keith's "don't fix mid-build")
+The financial views are revoked from `anon` but NOT `authenticated`, and **`customer`-role users are
+also `authenticated`**. So the exposure isn't only a *future* external-actor issue — **any existing
+customer-portal login can already read `v_kpi_*` today.** The lockdown gate (above) should therefore
+be scoped to *all* non-admin authenticated roles, and Keith should check whether any live
+`customer` logins exist; if so, the exposure may already be live (prioritize the gate accordingly).
+
+## 8. Apply / what's NOT done
+- Nothing applied (files only, push held) — apply target still Keith's call (staging/prod).
+- UI wiring of `equipment_usage` writes into the dashboard Log Event panel: schema ready, dashboard
+  wiring is a follow-up (not built).
+- KPI views still read `events.series` (exact-match contract) — repointing to `events.type` is a
+  later reviewed step.
+- All UIs (inspector, visualizer, checklist) are **untested** until the schema is applied.
