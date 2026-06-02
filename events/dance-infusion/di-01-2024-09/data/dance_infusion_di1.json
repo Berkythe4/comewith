@@ -1,15 +1,15 @@
 {
   "_meta": {
     "extracted": "2026-06-01",
+    "updated": "2026-06-01 (DI #1 figures CONFIRMED per updated brief, locked May 31)",
     "extracted_by": "autonomous build (DI2 Impact Report)",
-    "brief_missing": true,
-    "schema_note": "DI2_ImpactReport_Brief.md was not found in the repo. This schema was reconstructed from the build prompt's named fields (attendance, donated_to_ms_society, gross_revenue_internal, cost_to_raise_per_dollar) plus the DI #2 dance_infusion.json structure. Review against the real brief when available.",
-    "data_rules_applied": "RA = tickets/RSVPs only, never attendance. Money only from the financial list. No fabricated figures: missing/ambiguous values set null with a note.",
+    "data_rules_applied": "RA = tickets/RSVPs only, never attendance. Confirmed money figures come from the updated brief (locked). RA ticket/views figures from the RA export + screenshots.",
     "source_files": [
-      "20250906-DanceInfusionMS-list.csv (RA ticket export — the only financial/attendee list present)",
+      "20250906-DanceInfusionMS-list.csv (RA ticket export)",
       "DI1_RA_Snip_1.jpg (RA Stats: views, sources, sold/allocation, revenue)",
       "DI1_RA_Snip_2.jpg (RA: sales times, tickets-per-order)",
-      "DI1_RA_Snip_3.jpg (RA Insights: age, returning/new, gender, regions)"
+      "DI1_RA_Snip_3.jpg (RA Insights: age, returning/new, gender, regions)",
+      "DI2_ImpactReport_Brief.md (confirmed DI #1 totals)"
     ]
   },
 
@@ -17,32 +17,37 @@
     "name": "Dance Infusion #1",
     "series": "Dance Infusion",
     "beneficiary": "National MS Society",
-    "date_from_data": "2025-09-06",
+    "date": "2025-09-06",
     "date_display": "September 6, 2025",
-    "date_discrepancy_flag": "Folder is named 'di-01-2024-09' and _shared/series_summary.md says 'September 2024', but ALL DI #1 source data (ticket purchase dates 2025-07-20 → 2025-09-06; file named 20250906) indicates September 6, 2025. Folder/summary year appears off by one. NOT auto-renamed — needs Keith's decision.",
+    "date_note": "CONFIRMED Sept 6, 2025 per brief. Folder 'di-01-2024-09' is misnamed (true year 2025) — brief says rename when convenient; folder NOT renamed here.",
     "venue": null,
-    "venue_note": "Venue not present in available DI #1 source files."
+    "venue_note": "Venue not present in available DI #1 source files.",
+    "format_note": "Solo-run, 5 hours (1–6pm), off-peak. Proof of concept — not measured against any efficiency target."
   },
 
   "mission_impact": {
-    "donated_to_ms_society": null,
-    "donated_to_ms_society_note": "NOT determinable from available DI #1 files. The only financial list is the RA ticket export, which shows ticket sales — not the net amount actually remitted to the National MS Society. No donation/remittance record present. Needs re-supply.",
-    "currency": "USD"
+    "donated_to_ms_society": 1140,
+    "currency": "USD",
+    "source": "Confirmed in updated brief (locked May 31, 2026)."
   },
 
   "financials_internal": {
-    "gross_revenue_internal": null,
-    "gross_revenue_internal_note": "Total cross-channel internal gross NOT determinable. Only the RA ticketing channel is present in the data. No sponsor cash, direct donations, or other channels are recorded in the available DI #1 files.",
+    "total_raised": 2940,
+    "expenses": 1800,
+    "expenses_note": "Personally covered by Keith.",
+    "donated_to_ms_society": 1140,
+    "pct_to_mission": 39,
+    "pct_to_mission_note": "donated ÷ total raised = 1140/2940 = 39% (public metric). DI #1 was a smaller proof-of-concept; not measured against any efficiency target.",
+    "gross_revenue_internal": 2940,
+    "cost_to_raise_per_dollar": 1.58,
+    "cost_to_raise_note": "INTERNAL ONLY (dashboard, never public): expenses ÷ donated = 1800/1140 ≈ $1.58 to raise $1. Public framing is '% to mission' only.",
     "ra_ticket_gross_revenue": 1142.50,
-    "ra_ticket_gross_revenue_source": "Confirmed two ways: sum of Price column in 20250906-DanceInfusionMS-list.csv (42 rows) = $1,142.50, and RA Stats 'Total revenue $1,142.50' in DI1_RA_Snip_1.jpg.",
-    "cost_data_available": false,
-    "cost_to_raise_per_dollar": null,
-    "cost_to_raise_per_dollar_note": "No expense/cost data exists in any DI #1 source file. Ratio NOT computed (would be fabricated). DI #1 cost comparison therefore cannot be made — keep DI #1 out of any cost/ratio trajectory claim."
+    "ra_ticket_gross_revenue_source": "CSV Price-column sum (42 rows) = $1,142.50, matches RA Stats 'Total revenue $1,142.50'. (Subset of total_raised $2,940.)"
   },
 
   "attendance": {
     "attendance": null,
-    "attendance_note": "Attendance NOT determinable. RA is tickets/RSVPs only, not attendance. RA tickets SOLD = 42 (paid). Do not report 42 as attendance.",
+    "attendance_note": "Attendance NOT confirmed. RA is tickets/RSVPs only — RA tickets SOLD = 42 (paid). Do not report 42 as attendance.",
     "ra_tickets_sold": 42,
     "ra_allocation": 1600,
     "ra_sold_vs_allocation_display": "42 / 1,600"
@@ -56,7 +61,7 @@
       { "type": "Ticket $40 donation", "price_each": 35.00, "count": 7,  "subtotal": 245.00 }
     ],
     "total_subtotal": 1142.50,
-    "note": "'$25 donation' / '$40 donation' are RA ticket-tier labels (charged $21.90 / $35.00 respectively). They are NOT the amount donated to MS Society."
+    "note": "RA ticket-tier labels; not the amount donated to MS Society. RA ticket sales ($1,142.50) are a subset of total_raised ($2,940)."
   },
 
   "reach": {
@@ -74,7 +79,7 @@
 
   "sponsors": {
     "count": null,
-    "note": "No sponsor data present in available DI #1 files. Cannot confirm sponsor count."
+    "note": "No sponsor data present in available DI #1 files (DI #1 was solo-run)."
   },
 
   "demographics_ra": {
@@ -82,6 +87,8 @@
     "returning_vs_new": { "new_pct": 100, "returning_pct": 0 },
     "gender_of_purchaser": { "male_pct": 27, "female_pct": 47, "unspecified_pct": 27 },
     "tickets_per_order": { "1": 67, "2": 27, "3_4": 7, "5_plus": 0 },
-    "note": "Demographics are RA purchaser-based (from DI1_RA_Snip_2/3.jpg), not full-attendee demographics."
-  }
+    "note": "RA purchaser-based (DI1_RA_Snip_2/3.jpg), not full-attendee demographics."
+  },
+
+  "notes": "Solo-run, 5 hrs (1–6pm), off-peak. Proof of concept. Total raised $2,940 = $1,800 expense (Keith paid personally) + $1,140 donated to MS = 39% to mission. RA: 42 tickets, $1,142.50 ticket sales, 990 event views."
 }
