@@ -154,7 +154,6 @@ function render(d2, content, d1){
 
   const team = (content.team||[]).map(p=>`<li><strong>${esc(p.name)}</strong> <span>— ${esc(p.role)}</span></li>`).join('');
   const artists = (content.artists||[]).map(a=>`<span class="chip">${esc(a)}</span>`).join('');
-  const partners = (content.partner_orgs||[]).map(p=>`<li><strong>${esc(p.name)}</strong> <span>— ${esc(p.role)}</span></li>`).join('');
 
   document.getElementById('app').innerHTML = `
   <header class="hero">
@@ -218,8 +217,6 @@ function render(d2, content, d1){
     <div class="eyebrow" style="margin-top:24px">Behind it</div>
     <h2>The team</h2>
     <ul class="people">${team}</ul>
-    <div class="eyebrow" style="margin-top:24px">Partners</div>
-    <ul class="people">${partners}</ul>
   </div></section>
 
   <section><div class="wrap">
