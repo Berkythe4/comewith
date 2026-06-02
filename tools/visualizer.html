@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>document.documentElement.style.visibility='hidden'</script>
+<script type="module" src="/staging/guard.js"></script>
+<title>Visualizer — Come With</title>
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a;--green:#3a8c4a;--blue:#2a6496}
+  *{box-sizing:border-box}body{margin:0;background:var(--cream);color:var(--ink);font-family:system-ui,sans-serif}
+  header{background:var(--navy);color:var(--cream);padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:17px;margin:0}
+  .tabs{display:flex;gap:6px;padding:10px 20px 0}
+  .tab{padding:7px 14px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:#efe9d9;cursor:pointer;font-size:13px;font-weight:600}
+  .tab.active{background:#fff}
+  .panel{margin:0 20px 20px;background:#fff;border:1px solid var(--line);border-radius:0 10px 10px 10px;padding:16px}
+  label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:3px}
+  select,input,textarea{font:inherit;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  .controls{display:flex;gap:14px;flex-wrap:wrap;align-items:end;margin-bottom:14px}
+  .btn{font:inherit;font-size:13px;font-weight:600;border:0;border-radius:8px;padding:8px 14px;background:var(--accent);color:#1a1405;cursor:pointer}
+  .btn.ghost{background:#fff;border:1px solid var(--line)}
+  svg{width:100%;height:340px;background:#fdfbf5;border:1px solid var(--line);border-radius:8px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{display:inline-block;width:12px;height:3px;vertical-align:3px;margin-right:5px}
+  .msg{font-size:13px;color:var(--muted);padding:6px 0}
+  .err{color:#b3402f}
+  code{background:#f1ead8;padding:1px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<header><h1>Visualizer <span style="font-weight:400;color:#c4cbda;font-size:13px">— metric_definitions × v_data_points × kpi_targets</span></h1><span id="who" style="font-size:12px;color:#c4cbda"></span></header>
+<div class="tabs"><div class="tab active" data-t="chart">Chart</div><div class="tab" data-t="formula">New formula metric</div></div>
+
+<div class="panel" id="p-chart">
+  <div class="controls">
+    <div><label>Metric</label><select id="metric"></select></div>
+    <div><label>Group by subject</label><select id="groupSub"><option value="0">aggregate (sum/day)</option><option value="1">one line per subject</option></select></div>
+    <div><label>Slice: event_type</label><select id="sliceType"><option value="">all</option><option>party</option><option>dance_infusion</option><option>production</option><option>showcase</option></select></div>
+    <button class="btn" id="draw">Plot</button>
+  </div>
+  <svg id="chart" viewBox="0 0 900 340" preserveAspectRatio="none"></svg>
+  <div class="legend" id="legend"></div>
+  <div class="msg" id="cmsg"></div>
+</div>
+
+<div class="panel" id="p-formula" style="display:none">
+  <p class="msg">Tier-2: compose existing metric keys with <code>+ − × ÷</code> and parentheses. Evaluated safely client-side (no code execution). Example: <code>event.gross_revenue / event.attendance</code></p>
+  <div class="controls">
+    <div style="flex:1"><label>metric_key (new)</label><input id="fKey" style="width:100%" placeholder="event.revenue_per_attendee"></div>
+    <div style="flex:1"><label>label</label><input id="fLabel" style="width:100%" placeholder="Revenue / attendee"></div>
+    <div><label>unit</label><input id="fUnit" size="4" value="$"></div>
+  </div>
+  <div><label>expression</label><textarea id="fExpr" rows="2" style="width:100%" placeholder="event.gross_revenue / event.attendance"></textarea></div>
+  <div style="margin-top:10px"><button class="btn ghost" id="fPreview">Preview</button> <button class="btn" id="fSave">Save metric</button></div>
+  <div class="msg" id="fmsg"></div>
+</div>
+
+<script type="module">
+import { sb } from '/staging/guard.js';
+const $=s=>document.querySelector(s);
+let defs=[], targets={};
+
+document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
+  document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active')); t.classList.add('active');
+  $('#p-chart').style.display = t.dataset.t==='chart'?'':'none';
+  $('#p-formula').style.display = t.dataset.t==='formula'?'':'none';
+});
+
+async function init(){
+  const d = await sb.from('metric_definitions').select('*').eq('active',true).order('category');
+  if(d.error){ $('#cmsg').innerHTML='<span class="err">Could not load metric_definitions — migration 027 applied?<br>'+d.error.message+'</span>'; return; }
+  defs = d.data||[];
+  $('#metric').innerHTML = defs.map(m=>`<option value="${m.metric_key}">${m.label} (${m.metric_key})</option>`).join('');
+  const t = await sb.from('v_kpi_targets_current').select('*');
+  (t.data||[]).forEach(x=>targets[x.metric_key]=x);
+}
+
+// ---- safe arithmetic evaluator (shunting-yard; no eval) ----
+function tokenize(e){ return (e.match(/[A-Za-z_][A-Za-z0-9_.]*|\d+\.?\d*|[()+\-*/]/g))||[]; }
+function toRPN(tok){ const out=[],op=[],prec={'+':1,'-':1,'*':2,'/':2};
+  for(const t of tok){ if(/^[\d.]+$/.test(t)||/^[A-Za-z_]/.test(t))out.push(t);
+    else if(t in prec){ while(op.length&&prec[op[op.length-1]]>=prec[t])out.push(op.pop()); op.push(t);}
+    else if(t==='(')op.push(t); else if(t===')'){ while(op.length&&op[op.length-1]!=='(')out.push(op.pop()); op.pop(); } }
+  while(op.length)out.push(op.pop()); return out; }
+function evalRPN(rpn, vars){ const st=[];
+  for(const t of rpn){ if(t in {'+':1,'-':1,'*':2,'/':2}){ const b=st.pop(),a=st.pop();
+      st.push(t==='+'?a+b:t==='-'?a-b:t==='*'?a*b:(b===0?NaN:a/b)); }
+    else if(/^[\d.]+$/.test(t))st.push(parseFloat(t));
+    else { if(!(t in vars))return null; st.push(vars[t]); } }
+  return st.length===1?st[0]:null; }
+function metricsIn(expr){ return [...new Set((expr.match(/[A-Za-z_][A-Za-z0-9_.]*/g)||[]))]; }
+
+async function fetchPoints(keys, sliceType){
+  let q = sb.from('v_data_points').select('metric_key,subject_type,subject_id,captured_at,value,dims').in('metric_key',keys);
+  const r = await q; if(r.error) throw r.error;
+  let rows = r.data||[];
+  if(sliceType) rows = rows.filter(x=> (x.dims && x.dims.event_type)===sliceType);
+  return rows;
+}
+
+$('#draw').onclick = async () => {
+  $('#cmsg').textContent='Loading…';
+  try{
+    const key=$('#metric').value, perSub=$('#groupSub').value==='1', sliceType=$('#sliceType').value;
+    const def = defs.find(d=>d.metric_key===key);
+    let rows;
+    if(def && def.source_type==='formula'){
+      const keys=metricsIn(def.source_ref); const pts=await fetchPoints(keys, sliceType);
+      rows = evalFormula(def.source_ref, pts);
+    } else { rows = await fetchPoints([key], sliceType); }
+    drawChart(rows, perSub, key);
+    $('#cmsg').textContent = rows.length? '' : 'No data points (is the schema applied + populated?).';
+  }catch(e){ $('#cmsg').innerHTML='<span class="err">'+e.message+'</span>'; }
+};
+
+// evaluate a formula per (subject_id, captured_at) group where all operands exist
+function evalFormula(expr, pts){
+  const rpn=toRPN(tokenize(expr)); const groups={};
+  for(const p of pts){ const g=p.subject_id+'|'+p.captured_at; (groups[g]=groups[g]||{subject_id:p.subject_id,captured_at:p.captured_at,dims:p.dims,vals:{}}); groups[g].vals[p.metric_key]=Number(p.value); }
+  const out=[];
+  for(const g of Object.values(groups)){ const v=evalRPN(rpn,g.vals); if(v!=null&&!isNaN(v)) out.push({subject_id:g.subject_id,captured_at:g.captured_at,value:v,dims:g.dims}); }
+  return out;
+}
+
+function drawChart(rows, perSub, key){
+  const svg=$('#chart'); const W=900,H=340,padL=60,padB=30,padT=14,padR=14;
+  if(!rows.length){ svg.innerHTML=''; $('#legend').innerHTML=''; return; }
+  // series: aggregate by date, or per subject
+  const series={};
+  if(perSub){ rows.forEach(r=>{ (series[r.subject_id||'global']=series[r.subject_id||'global']||[]).push(r); }); }
+  else { const byDate={}; rows.forEach(r=>{ byDate[r.captured_at]=(byDate[r.captured_at]||0)+Number(r.value); });
+         series['total']=Object.entries(byDate).map(([d,v])=>({captured_at:d,value:v})); }
+  Object.values(series).forEach(s=>s.sort((a,b)=>a.captured_at<b.captured_at?-1:1));
+  const all=[].concat(...Object.values(series));
+  const dates=[...new Set(all.map(r=>r.captured_at))].sort();
+  let vmin=Math.min(0,...all.map(r=>r.value)), vmax=Math.max(...all.map(r=>r.value),1);
+  const tgt=targets[key]; if(tgt) vmax=Math.max(vmax,tgt.target_value);
+  const x=i=>padL+(dates.length<2?0:(i/(dates.length-1))*(W-padL-padR));
+  const y=v=>padT+(1-(v-vmin)/((vmax-vmin)||1))*(H-padT-padB);
+  const colors=['#16243f','#c8a24a','#3a8c4a','#2a6496','#b3402f','#8a6a1f'];
+  let svgs=`<line x1="${padL}" y1="${y(vmin)}" x2="${W-padR}" y2="${y(vmin)}" stroke="#ddd"/>`;
+  // target line
+  if(tgt) svgs+=`<line x1="${padL}" y1="${y(tgt.target_value)}" x2="${W-padR}" y2="${y(tgt.target_value)}" stroke="#c8a24a" stroke-dasharray="5 4"/><text x="${W-padR}" y="${y(tgt.target_value)-4}" font-size="10" fill="#9a7b1f" text-anchor="end">target ${tgt.target_value}</text>`;
+  svgs+=`<text x="6" y="${y(vmax)}" font-size="10" fill="#5d6678">${fmt(vmax)}</text><text x="6" y="${y(vmin)}" font-size="10" fill="#5d6678">${fmt(vmin)}</text>`;
+  const leg=[];
+  Object.entries(series).forEach(([name,s],i)=>{ const c=colors[i%colors.length];
+    const pts=s.map(r=>`${x(dates.indexOf(r.captured_at))},${y(r.value)}`).join(' ');
+    svgs+=`<polyline points="${pts}" fill="none" stroke="${c}" stroke-width="2"/>`;
+    s.forEach(r=>svgs+=`<circle cx="${x(dates.indexOf(r.captured_at))}" cy="${y(r.value)}" r="2.5" fill="${c}"/>`);
+    leg.push(`<span><i style="background:${c}"></i>${name==='total'?'total/day':String(name).slice(0,8)}</span>`);
+  });
+  if(dates.length) svgs+=`<text x="${padL}" y="${H-8}" font-size="10" fill="#5d6678">${dates[0]}</text><text x="${W-padR}" y="${H-8}" font-size="10" fill="#5d6678" text-anchor="end">${dates[dates.length-1]}</text>`;
+  svg.innerHTML=svgs; $('#legend').innerHTML=leg.join('');
+}
+const fmt=v=>Math.abs(v)>=1000?(v/1000).toFixed(1)+'k':(''+Math.round(v*100)/100);
+
+// formula preview/save
+$('#fPreview').onclick=async()=>{ $('#fmsg').textContent='Evaluating…';
+  try{ const expr=$('#fExpr').value.trim(); const keys=metricsIn(expr);
+    const bad=keys.filter(k=>!defs.some(d=>d.metric_key===k));
+    if(bad.length){ $('#fmsg').innerHTML='<span class="err">Unknown metric_key(s): '+bad.join(', ')+'</span>'; return; }
+    const pts=await fetchPoints(keys,''); const res=evalFormula(expr,pts);
+    $('#fmsg').textContent = res.length? `OK — evaluates to ${res.length} data points. e.g. ${fmt(res[0].value)} on ${res[0].captured_at}.` : 'Parses, but no overlapping data points yet.';
+  }catch(e){ $('#fmsg').innerHTML='<span class="err">'+e.message+'</span>'; } };
+$('#fSave').onclick=async()=>{ const metric_key=$('#fKey').value.trim(), label=$('#fLabel').value.trim(), unit=$('#fUnit').value, source_ref=$('#fExpr').value.trim();
+  if(!metric_key||!label||!source_ref){ $('#fmsg').textContent='Fill key, label, expression.'; return; }
+  const {error}=await sb.from('metric_definitions').insert({metric_key,label,unit,source_type:'formula',source_ref,category:'custom'});
+  if(error){ $('#fmsg').innerHTML='<span class="err">'+error.message+'</span>'; return; }
+  $('#fmsg').textContent='Saved. Reloading metrics…'; await init(); };
+
+document.addEventListener('staging:authed', e=>$('#who').textContent='signed in · '+e.detail.role.replace('_',' '));
+init();
+</script>
+</body>
+</html>
