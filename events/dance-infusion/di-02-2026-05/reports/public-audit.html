@@ -77,11 +77,12 @@ function render(d2){
   const marketing = ex('e3');                // Fliers / printing
   const talent = 0;                          // DJs performed for the cause; drink allocations comped (folded)
   const costs = venue + production + marketing + talent;
-  // Gross across all channels — from final reconciled audit (not a single JSON field)
-  const GROSS = 9264.89;
-
-  // Prescribed framing: ~70% cost / 30% to mission; target 40% cost / 60% to mission.
-  const MISSION_PCT = 30, TARGET_MISSION_PCT = 60;
+  // Total raised (public framing) = event costs + donated to mission.
+  // Per brief (locked May 31): $9,557 = $6,557 + $3,000. Derived live here = 9557.33, shown whole-dollar.
+  const totalRaised = costs + mission;
+  // PUBLIC metric = "% to the mission" (donated / total raised). Forward target begins DI #3.
+  const MISSION_PCT = Math.round(mission / totalRaised * 100);   // = 31
+  const TARGET_MISSION_PCT = 60;
 
   document.getElementById('app').innerHTML = `
   <header class="hero"><div class="wrap">
@@ -94,29 +95,29 @@ function render(d2){
 
   <section><div class="wrap">
     <div class="eyebrow">Money flow</div>
-    <h2>Gross → costs → mission</h2>
+    <h2>Total raised → event costs → mission</h2>
     <div class="flow">
-      <div class="row gross"><span class="k">Total raised, all channels</span><span class="v">${money(GROSS,2)}</span></div>
+      <div class="row gross"><span class="k">Total raised</span><span class="v">${money(totalRaised)}</span></div>
       <div class="sub">Less what it cost to produce the event:</div>
       <div class="groups">
-        <div class="group"><span>Venue <small>Signal NYC — bar &amp; space</small></span><span class="gv">${money(venue,2)}</span></div>
-        <div class="group"><span>Production <small>Crossroads Café — catering &amp; service</small></span><span class="gv">${money(production,2)}</span></div>
-        <div class="group"><span>Talent <small>DJs performed for the cause — no cash fee</small></span><span class="gv">${money(talent,2)}</span></div>
-        <div class="group"><span>Marketing <small>Printing &amp; flyers</small></span><span class="gv">${money(marketing,2)}</span></div>
+        <div class="group"><span>Venue <small>Signal NYC — bar &amp; space</small></span><span class="gv">${money(venue)}</span></div>
+        <div class="group"><span>Production <small>Crossroads Café — catering &amp; service</small></span><span class="gv">${money(production)}</span></div>
+        <div class="group"><span>Talent <small>DJs performed for the cause — no cash fee</small></span><span class="gv">${money(talent)}</span></div>
+        <div class="group"><span>Marketing <small>Printing &amp; flyers</small></span><span class="gv">${money(marketing)}</span></div>
       </div>
-      <div class="row"><span class="k">Total event costs</span><span class="v">${money(costs,2)}</span></div>
+      <div class="row"><span class="k">Total event costs</span><span class="v">${money(costs)}</span></div>
       <div class="row mission"><span class="k">To the mission — National MS Society</span><span class="v">${money(mission)}</span></div>
     </div>
-    <p class="note">Mission total includes ${money(c.ms_society_diy_direct||445)} given directly on the MS Society DIY page and ${money(c.third_party_ms_donations||130)} donated by partner Crossroads Café — both routed straight to the National MS Society rather than through event accounts, so the three figures above don't net to a single line.</p>
+    <p class="note">The ${money(mission)} to the mission includes ${money(c.ms_society_diy_direct||445)} given directly on the MS Society DIY page and ${money(c.third_party_ms_donations||130)} from partner Crossroads Café's revenue share — routed straight to the National MS Society. Figures rounded to the nearest dollar.</p>
   </div></section>
 
   <section><div class="wrap">
-    <div class="eyebrow">Cost efficiency</div>
+    <div class="eyebrow">% to the mission</div>
     <h2>How much reached the mission</h2>
     <div class="ratio">
       <div class="bar">
         <div class="mission" style="width:${MISSION_PCT}%">${MISSION_PCT}%</div>
-        <div class="costlabel">costs ${100-MISSION_PCT}%</div>
+        <div class="costlabel">event costs ${100-MISSION_PCT}%</div>
         <div class="target" style="left:${TARGET_MISSION_PCT}%"><span class="tlab">Target ${TARGET_MISSION_PCT}% →</span></div>
       </div>
       <div class="legend">
@@ -124,8 +125,8 @@ function render(d2){
         <span><i style="background:var(--cost)"></i>Event costs (${100-MISSION_PCT}%)</span>
         <span><i style="background:transparent;border-left:3px dashed var(--accent);border-radius:0;width:3px"></i>Goal: ${TARGET_MISSION_PCT}% to mission</span>
       </div>
-      <p class="sentence">For every $1 at Dance Infusion #2, $0.30 reached the mission. Our target is $0.60.</p>
-      <p class="note">Dance Infusion #2 ran at roughly a 70% cost ratio ($0.70 of every $1 covered event costs) against our 40% target ($0.40 cost / $0.60 to mission). This is our first fully reconciled year — figures and target shown on their own; no prior-event cost comparison is made because Dance Infusion #1 cost data is not available.</p>
+      <p class="sentence">Of every dollar raised at Dance Infusion #2, $0.31 reached the mission. Our commitment from Dance Infusion #3 forward: 60%.</p>
+      <p class="note">Dance Infusion #2 was a deliberate scale-up — prime time, full production — so 31% to the mission is our starting baseline. Our commitment from Dance Infusion #3 onward is 60% to the mission. (Dance Infusion #1 was a smaller proof-of-concept at a different scale, so the two aren't compared on this measure.)</p>
     </div>
   </div></section>
 
