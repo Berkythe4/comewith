@@ -200,6 +200,16 @@ entry forms (Log Event / Log Numbers / Edit Target incl. create-new + retire-met
 Income soft-delete. **Canonical revenue/P&L model** — net P&L now includes ticket revenue.
 Details + rationale in `DECISIONS.md`; live state in `CARRYOVER.md`.
 
+## Done — Dance Infusion #2 impact report + staging (June 2026)
+
+Files only, no migrations. Public **impact report** + **public audit**
+(`events/dance-infusion/di-02-2026-05/reports/impact-report.html` + `public-audit.html`), live from
+`dance_infusion.json` + `dance_infusion_di1.json`, PDF export. Money framing = **"% to the mission"**
+public / expense-ratio internal (LEARNINGS §8); $9,557 reconciliation incl. founder contribution
+(§9). Reusable **`/staging/` admin gate** reusing the dashboard's Supabase auth (§10). DI #1 data
+confirmed; folder renamed **di-01-2024-09 → di-01-2025-09**. **Not yet public** — gated pending the
+consent sweep + placeholders (see below).
+
 ## Parked — design-first (each its own session)
 
 - **Event model redesign** — events are multi-axis, not a flat `series`: **TYPE**
@@ -208,8 +218,14 @@ Details + rationale in `DECISIONS.md`; live state in `CARRYOVER.md`.
   **LINKS** (`equipment_usage`, artists vs contractors, sponsors — TYPE may decide which
   apply). **Design BEFORE migrating.** The 5 income-cleanup events use placeholder series
   to reassign afterward.
-- **DI #1 / #2 statistic backfill** — after the event-model design. Also fix the
-  "Dance Infusion MS" `event_date` (2026-09-08 → 2025-09-06).
+- **DI #1 / #2 statistic backfill** — after the event-model design. Note: the DI #1 *folder*
+  was renamed to `di-01-2025-09` (file side done, 2026-06-02), but the **dashboard `event_date`
+  fix is still pending** ("Dance Infusion MS" 2026-09-08 → 2025-09-06).
+- **Impact report → go public (gated on people, not code):** (1) **CONSENT SWEEP** — sponsors,
+  team, artists, raffle donors; identify the Yankees-hats donor; (2) fill placeholders
+  (human-moment quote, hero/inline photos, social reach, what's-next copy); (3) remove the 2
+  staging-guard lines from `impact-report.html` + `public-audit.html` to publish. Also: update
+  dashboard `di.cost_to_raise` target → 60%-to-mission so dashboard + audit reconcile (LEARNINGS §8).
 - **Flywheel redesign** — cyclical, metric-carrying boxes, moved to the bottom.
   Source: `ComeWith_Strategy_Dashboard.html` (in repo).
 - **Roadmap / timeline tool** — buy not build; Notion vs Trello TBD.

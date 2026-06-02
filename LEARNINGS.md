@@ -69,3 +69,51 @@ The 5 events created during the 2026-05-29 income reconciliation use the two exi
 values as **placeholders** (e.g. showcases / Production tagged "Come With Parties" so they
 don't pollute the DI fundraising trend). They will be reassigned once the event model is
 redesigned — see `CARRYOVER.md` "Parked / next" and `ROADMAP.md`.
+
+## Section 8 — Public metric is "% to the mission"; expense ratio is internal-only (2026-06-02)
+
+Same data, opposite framing. **Public** (impact report + audit) always says **"% to the mission"**
+= donated ÷ total raised (positive, donor-native). DI #2 = **31%** ($3,000 of $9,557). The words
+"expense ratio" / "cost-to-raise" and the dashboard's inverse (~70% / $0.70-per-$1) are **internal /
+dashboard only — never on a public page.**
+
+- The **60%-to-mission target is a FORWARD commitment from DI #3 on**, not a bar DI #2 was measured
+  against. Render the figure and the target together or not at all. Exact public line:
+  *"Of every dollar raised at Dance Infusion #2, $0.31 reached the mission. Our commitment from
+  Dance Infusion #3 forward: 60%."*
+- **DI #1 → DI #2 is an ABSOLUTE-GROWTH story, never an efficiency story:** donated **2.6×**
+  ($1,140→$3,000), raised **3.3×** ($2,940→$9,557). % to mission actually *fell* 39%→31% because
+  DI #2 scaled up (prime-time, full production) — that's truthful and stays on the audit as
+  baseline+forward-target; **never imply % to mission rose.**
+- **Why:** avoids the raw $9K-vs-$3K optics (Liz feedback) while staying honest. **Open thread:**
+  update the dashboard's internal `di.cost_to_raise` target to 40% expense / 60% to mission so the
+  dashboard and the public audit reconcile to one goal.
+
+## Section 9 — DI #2 "total raised = $9,557" reconciliation (2026-06-02)
+
+The public audit's total raised is **$9,557 = expenses $6,557 + donated $3,000** (whole-dollar).
+It reconciles as: **$9,264.89 gross from others + $130 Crossroads partner donation (routed directly
+to MS, never through event accounts) + ~$162 founder contribution that covered remaining event
+costs** — all counted as "raised" because money is fungible. The audit carries one understated,
+public-facing line: *"Total raised includes a founder contribution that covered remaining event
+costs."* Note the locked **$9,557 framing figure differs from the actual gross cash inflow
+($9,264.89)** — the difference is the externally-routed $130 + the founder top-up; the audit uses
+$9,557 deliberately (it's the costs+donated framing, not the bank inflow).
+
+## Section 10 — Staging is a reusable client-side admin gate (2026-06-02)
+
+`/staging/` gates review-before-publish pages by **reusing the dashboard's Supabase session auth** —
+same project + publishable key, `getSession()` → `profiles.role` ∈ {master_admin, sub_admin}
+(= `public.is_admin()`). **No second password system.** One front door: sign in at
+`/dashboard.html`, the session persists, every `/staging/` page sees it.
+
+- **Reusable pattern:** a single shared `staging/guard.js` + a **2-line include** in any page's
+  `<head>` (`visibility:hidden` flash-guard + the module). Adding a report needs no auth rewiring;
+  list it in the `REPORTS` manifest in `staging/index.html`. To publish a page publicly, delete the
+  2 lines.
+- **No session → redirect to `/dashboard.html`**; signed-in non-admin → "admins only" notice;
+  admin → reveal. Fail-closed (stays hidden if the guard can't load).
+- **Honest caveat (load-bearing):** this is **client-side gating on a static host — NOT real
+  security.** Good for keeping low-sensitivity review pages out of public view. **Genuinely
+  sensitive data (financials, rosters, venues) stays in Supabase behind RLS — never as static files
+  in staging.** Staging is a review surface, not a data store.

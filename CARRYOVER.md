@@ -1,46 +1,50 @@
-# Carryover — 2026-05-29 (session close)
+# Carryover — 2026-06-02 (session close)
 
-Session closed cleanly. For pickup: read this, then `LEARNINGS.md` (the why behind
-decisions), `ROADMAP.md` (parked + backlog), and `CLAUDE.md` (how-to-work conventions).
-The close ritual itself is in `SESSION_CLOSE_PROMPTS.md`.
+Session closed cleanly. For pickup: read this, then `LEARNINGS.md` (the why), `ROADMAP.md`
+(parked + backlog), `CLAUDE.md` (conventions). Close ritual: `SESSION_CLOSE_PROMPTS.md`.
+DI-content running log lives separately at
+`events/dance-infusion/di-02-2026-05/DanceInfusion_Updates_Log.md`.
 
 ## State summary
 
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at **comewith.org** (Netlify, auto-deploy from `master`).
-- **Migrations applied:** 015–022 (**highest = 022**); `supabase/migrations/` matches prod.
-- **Roles:** master_admin (Berky), sub_admin (Liz), customer — via `public.is_admin()`. Email+password and magic-link auth both live.
-- **Financial views:** anon-**revoked**, verified **401** — v_event_summary, v_kpi_event_financials, v_kpi_parties, v_kpi_dance_infusion, v_kpi_dashboard.
-- **Latest LEARNINGS §:** 7
-- **Homepage:** placeholder; admin dashboard `/dashboard.html`, default tab = **Strategy**.
-- **Git:** all shipped work pushed to `origin/master`.
+- **Migrations applied:** 015–022 (**highest = 022**); **unchanged this session — files only, no DB changes.**
+- **Roles:** master_admin (Berky), sub_admin (Liz), customer — via `public.is_admin()`.
+- **Financial views:** anon-**revoked**, verified **401** this close — v_event_summary, v_kpi_event_financials, v_kpi_parties, v_kpi_dance_infusion, v_kpi_dashboard.
+- **Latest LEARNINGS §:** 10
+- **Git:** DI impact-report work merged + pushed to `origin/master` (through `11e29c8`). **This close-out's commits (folder rename + ritual docs) are LOCAL, unpushed** by request.
+- **New this session:** `/staging/` admin-gated review area (LEARNINGS §10); DI #2 impact report + public audit live behind the gate.
 
 ## Tomorrow's default
 
-**CWF (Come With Fitness) BRD** — soft deadline **June 8**, hard **June 15**; Martin reviewing
-CWF late next week. Come With is **maintenance-only** until the BRD ships. **HARD RULE:** nothing
-Come With Fitness in the Come With dashboard/schema/pages until the BRD is done and there's an
-explicit go decision (LEARNINGS §5).
+**CWF (Come With Fitness) BRD** remains the calendar priority — soft **June 8**, hard **June 15**.
+Come With stays **maintenance-only**; HARD RULE: nothing Come With Fitness in the Come With
+dashboard / schema / pages until the BRD ships and there's an explicit go (LEARNINGS §5).
 
-## This session shipped (2026-05-29)
+**For the DI impact-report thread specifically:** the gate before it can post publicly is the
+**CONSENT SWEEP** (see Parked / next).
 
-- Auth: Berky master_admin, Liz sub_admin; email+password auth (magic-link fallback).
-- Real data on prod; homepage → placeholder.
-- KPI layer (migrations **015–022**): tables, views, RLS, anon-revoked financial views.
-- Strategy tab: KPI cards, formula hover-tooltips, flywheel (placeholder design).
-- Entry forms: Log Event, Log Numbers, Edit Target (+ create-new-metric, retire-metric).
-- `feedback_log` → Notes tab; event edit + soft-delete; Add Sponsor UI; per-event Money panel; Income delete.
-- **Money model fixed (022):** net P&L now includes ticket revenue. Canonical revenue definition — LEARNINGS §1.
-- Income↔events reconciled: 3 junk rows soft-deleted; 5 real events created + existing income linked (no double-count) — placeholder series, LEARNINGS §7.
+## This session shipped (2026-06-02) — files only, no migrations
+
+- DI #2 **impact report** (`…/di-02-2026-05/reports/impact-report.html`) + **public audit**
+  (`public-audit.html`), live from `dance_infusion.json` + `dance_infusion_di1.json`; PDF export.
+- Money framing locked: **"% to the mission"** public / expense-ratio internal (LEARNINGS §8);
+  **$9,557** total-raised reconciliation incl. ~$162 founder contribution (LEARNINGS §9).
+- Reusable **`/staging/` admin gate** reusing the dashboard's Supabase auth — `guard.js` + 2-line include + hub (LEARNINGS §10).
+- DI #1 data **confirmed** ($2,940 raised / $1,140 donated / 39% to mission); folder **renamed** `di-01-2024-09 → di-01-2025-09` (+ fetch path + series_summary fixed).
+- Removed duplicate "Partners" block from the report.
+- All merged to `origin/master` behind the gate; **homepage untouched / still public.**
 
 ## Parked / next
 
-The big one is the **event-model redesign** (events are multi-axis — TYPE / CONTENT / SIGNATURE
-plus relational links; design **before** migrating). DI #1/#2 backfill (and fix the "Dance Infusion
-MS" date to 2025-09-06), flywheel redesign, the roadmap/timeline tool, and the smaller backlog all
-live in `ROADMAP.md` (Parked + Backlog sections). **When Come With resumes: the event-model design
-session comes first** — the backfill, flywheel, and series reassignment all depend on it.
+- **CONSENT SWEEP** (gates the impact report going public): sponsors, team, artists, raffle donors — and **identify the Yankees-hats donor**.
+- **Placeholders to fill:** human-moment quote, hero/inline photos, social reach numbers, what's-next copy.
+- **To publish the report:** remove the 2 guard lines from `impact-report.html` + `public-audit.html`.
+- **Dashboard:** set internal `di.cost_to_raise` target to 40% expense / 60% to mission so dashboard + audit reconcile (LEARNINGS §8).
+- Still parked (unchanged): **event-model redesign** (design-first; the big one), DI dashboard `event_date` fix (2026-09-08 → 2025-09-06), flywheel redesign, roadmap/timeline tool, smaller backlog — all in `ROADMAP.md`.
 
 ## How to verify (quick)
 
-- Anon REST GET each financial view → expect **401** (see `SESSION_CLOSE_PROMPTS.md` step 1).
+- Anon REST GET each financial view → expect **401** (`SESSION_CLOSE_PROMPTS.md` step 1).
+- `/staging/` (logged out) → redirects to `/dashboard.html`; signed-in master_admin sees the report.
 - `git log --oneline` + highest number in `supabase/migrations/` = what's on prod.
