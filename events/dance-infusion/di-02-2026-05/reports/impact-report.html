@@ -247,7 +247,7 @@ function render(d2, content, d1){
     const d2 = await getJSON('../data/dance_infusion.json');
     const content = await getJSON('../data/impact_report_content.json');
     let d1 = null;
-    try { d1 = await getJSON('../../di-01-2024-09/data/dance_infusion_di1.json'); }
+    try { d1 = await getJSON('../../di-01-2025-09/data/dance_infusion_di1.json'); }
     catch(e){ d1 = null; } // DI #1 optional — section renders "pending"
     render(d2, content, d1);
   }catch(e){

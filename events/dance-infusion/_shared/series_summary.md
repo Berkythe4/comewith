@@ -6,7 +6,7 @@ Dance Infusion is a Come With production. It is a house-music event series partn
 Combine community, dance, and fundraising. Each event is measured both as a normal event (P&L) and as a fundraiser (total raised, cost-per-dollar-raised).
 
 ## Events
-- DI #1 — September 2024 (see di-01-2024-09\)
+- DI #1 — September 2025 (see di-01-2025-09\)
 - DI #2 — May 9, 2026, Signal NYC, Brooklyn (see di-02-2026-05\)
 - DI #3 — TBD
 
