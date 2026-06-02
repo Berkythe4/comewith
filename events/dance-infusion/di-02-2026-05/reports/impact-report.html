@@ -97,14 +97,15 @@ async function getJSON(path){ const r = await fetch(path + '?t=' + Date.now()); 
 function PH(label, what){ return `<div class="ph"><b>[PLACEHOLDER] ${esc(label)}</b>${esc(what)}</div>`; }
 function PHOTO(desc){ return `<div class="photoph">📷 [PLACEHOLDER PHOTO]<br>${esc(desc)}</div>`; }
 
-// Growth metric row. v1 = DI#1 (may be null/pending), v2 = DI#2.
-function metric(label, di1, di2, note){
+// Growth metric row. v1 = DI#1 (may be null/pending), v2 = DI#2, mult = e.g. "2.6×".
+function metric(label, di1, di2, note, mult){
   const v1 = (di1===null || di1===undefined)
     ? `<span class="pending">DI #1 data pending</span>`
     : `<span class="v1">${esc(di1)}</span>`;
+  const m = mult ? `<span style="margin-left:auto;align-self:center;font-family:'DM Sans';font-weight:700;font-size:13px;color:#1a1405;background:var(--accent);border-radius:999px;padding:2px 10px">${esc(mult)}</span>` : '';
   return `<div class="metric">
     <div class="label">${esc(label)}</div>
-    <div class="vals">${v1}<span class="arrow">→</span><span class="v2">${esc(di2)}</span></div>
+    <div class="vals">${v1}<span class="arrow">→</span><span class="v2">${esc(di2)}</span>${m}</div>
     ${note?`<div class="note">${esc(note)}</div>`:''}
   </div>`;
 }
@@ -129,10 +130,16 @@ function render(d2, content, d1){
   const d1RaTix = d1 && d1.attendance ? d1.attendance.ra_tickets_sold : null;
   const d1Reach = d1 && d1.reach ? d1.reach.ra_total_event_views : null;
   const d1Sponsors = (d1 && d1.sponsors && d1.sponsors.count!=null) ? d1.sponsors.count : null;
-  const d1Donated = (d1 && d1.mission_impact) ? d1.mission_impact.donated_to_ms_society : null; // null
+  const d1Donated = (d1 && d1.mission_impact) ? d1.mission_impact.donated_to_ms_society : null; // 1140 (confirmed)
+  const d1TotalRaised = (d1 && d1.financials_internal) ? d1.financials_internal.total_raised : null; // 2940 (confirmed)
 
   // DI #2 reach (RA event views) ≈1,147 derived from source % (flagged). Use ~ marker.
   const di2Reach = '≈1,147';
+
+  // DI #2 total raised = event costs + donated (scale-story figure only; shown ONLY in the growth comparison).
+  const exAmt = id => { const e=(d2.expenses||[]).find(x=>x.id===id); return e?e.amount:0; };
+  const di2TotalRaised = exAmt('e1')+exAmt('e2')+exAmt('e3')+exAmt('e4') + donated; // ≈9557
+  const growthX = (a,b) => (a&&b) ? (b/a).toFixed(1)+'×' : null;
 
   const nar = content.narratives || {};
 
@@ -177,20 +184,22 @@ function render(d2, content, d1){
   </div></section>
 
   <section><div class="wrap">
-    <div class="eyebrow">Trajectory</div>
+    <div class="eyebrow">Growth</div>
     <h2>From #1 to #2</h2>
-    <p class="lede">Dance Infusion is building — here's the movement from our first event to our second.</p>
+    <p class="lede">Dance Infusion #1 was a solo-run proof of concept — 5 hours, off-peak. Dance Infusion #2 was a bigger, prime-time, fully-produced event. Here's how it scaled.</p>
     <div class="growth-grid">
-      ${metric('Donated to the mission', d1Donated, money(donated),
-        'DI #1 donated-to-MS figure not in available records — pending re-supply.')}
+      ${metric('Donated to the mission', d1Donated!=null?money(d1Donated):null, money(donated),
+        'Net to the National MS Society — the number that matters.', growthX(d1Donated, donated))}
+      ${metric('Total raised', d1TotalRaised!=null?money(d1TotalRaised):null, money(di2TotalRaised),
+        'Overall scale of the event.', growthX(d1TotalRaised, di2TotalRaised))}
       ${metric('Attendance', null, di2Tickets + ' tickets',
-        'DI #1: RA tickets sold = ' + (d1RaTix!=null?d1RaTix:'?') + ' (RSVP/tickets only, not confirmed attendance). DI #2: ' + di2Tickets + ' tickets issued across ' + di2Records + ' guest records (paid + comp).')}
+        'DI #1: RA tickets sold = ' + (d1RaTix!=null?d1RaTix:'?') + ' (RSVP/tickets only, not confirmed attendance). DI #2: ' + di2Tickets + ' tickets across ' + di2Records + ' guest records (paid + comp).')}
       ${metric('Sponsors', d1Sponsors, sponsorCount + ' sponsors',
-        'DI #1 sponsor count not recorded in available data.')}
+        'DI #1 was solo-run — no sponsor roster recorded.')}
       ${metric('Reach (event views)', d1Reach, di2Reach + ' views',
         'RA event views. DI #2 total derived from source breakdown (≈1,147) — verify against RA stats export.')}
     </div>
-    <p class="traj">The mission number is the one that matters: every Dance Infusion is measured by what reaches the National MS Society. The trajectory is up.</p>
+    <p class="traj">Dance Infusion grew — more people, more partners, and more than double the dollars to the mission. Bigger every time.</p>
   </div></section>
 
   <section><div class="wrap">
