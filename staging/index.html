@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With — Staging</title>
+<!-- staging gate (2-line include): hide until the guard confirms an admin session -->
+<script>document.documentElement.style.visibility='hidden'</script>
+<script type="module" src="/staging/guard.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a}
+  *{box-sizing:border-box} body{margin:0;background:var(--cream);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px}
+  header{background:var(--navy);color:var(--cream);padding:40px 0 30px}
+  header .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#c9b67e;font-weight:700}
+  header h1{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.03em;font-size:48px;margin:8px 0 4px}
+  header p{color:#c4cbda;margin:0;font-size:14px}
+  .who{float:right;font-size:12px;color:#c4cbda;text-align:right}
+  .who a{color:#e9dcb6}
+  main{padding:30px 0 60px}
+  .note{background:#fbf3da;border:1px solid #e7d49a;border-radius:10px;padding:12px 16px;color:#7a6314;font-size:13px;margin-bottom:22px}
+  .card{display:block;text-decoration:none;color:inherit;background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px;transition:border-color .15s}
+  .card:hover{border-color:var(--accent)}
+  .card .t{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.02em;font-size:24px;color:var(--navy)}
+  .card .d{color:var(--muted);font-size:14px;margin-top:2px}
+  .card .tag{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#3a8c4a;background:#e9f3eb;border-radius:999px;padding:2px 9px;margin-left:8px;vertical-align:2px}
+  .empty{color:var(--muted);font-style:italic}
+  footer{border-top:1px solid var(--line);padding:18px 0;color:var(--muted);font-size:12px}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+  <div class="who" id="who"></div>
+  <div class="eyebrow">Come With · Internal</div>
+  <h1>Staging</h1>
+  <p>Review-before-publish pages. Admin-only. Production stays public and separate.</p>
+</div></header>
+<main><div class="wrap">
+  <div class="note">🔒 Client-side gated to admins (master_admin / sub_admin) via the same sign-in as the dashboard. For review pages only — never store sensitive data here as static files; that lives in Supabase behind RLS.</div>
+  <div id="list"></div>
+</div></main>
+<footer><div class="wrap">Come With · staging — not indexed, not linked from the public site.</div></footer>
+
+<script type="module">
+  // ---- REPORT MANIFEST ----
+  // To add a report: gate the page (2-line include in its <head>), then add an entry here.
+  const REPORTS = [
+    {
+      title: "Dance Infusion #2 — Impact Report",
+      desc: "Public one-pager: $3,000 to the National MS Society, growth story, sponsors.",
+      href: "/events/dance-infusion/di-02-2026-05/reports/impact-report.html",
+      status: "review"
+    },
+    {
+      title: "Dance Infusion #2 — Public Audit",
+      desc: "Transparency money-flow: total raised → costs → mission, 31% to mission with 60% forward target.",
+      href: "/events/dance-infusion/di-02-2026-05/reports/public-audit.html",
+      status: "review"
+    }
+  ];
+
+  function draw(){
+    const el = document.getElementById('list');
+    if(!REPORTS.length){ el.innerHTML = '<p class="empty">No reports in staging yet.</p>'; return; }
+    el.innerHTML = REPORTS.map(r =>
+      `<a class="card" href="${r.href}">
+        <span class="t">${r.title}</span>${r.status?`<span class="tag">${r.status}</span>`:''}
+        <div class="d">${r.desc}</div>
+      </a>`).join('');
+  }
+  // Render the list immediately (guard already hides the page until admin-verified).
+  draw();
+  // Show who's signed in once the guard confirms.
+  document.addEventListener('staging:authed', e => {
+    document.getElementById('who').innerHTML = 'signed in · ' + e.detail.role.replace('_',' ') + '<br><a href="/dashboard.html">← dashboard</a>';
+  });
+</script>
+</body>
+</html>
