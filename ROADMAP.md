@@ -19,7 +19,7 @@ items collected in project-phase-11-status memory.
 
 > ## ⛔ PRIORITY CONTEXT (read first)
 > **Come With is MAINTENANCE-ONLY.** The **CWF (Come With Fitness) BRD** is project #1 —
-> **soft June 8 / hard June 15, 2026**. Nothing Come With Fitness goes in *this* repo
+> **due June 15, 2026**. Nothing Come With Fitness goes in *this* repo
 > (dashboard / schema / pages) until the BRD is done **and** there's an explicit go
 > (LEARNINGS §5). Everything below is the Come-With dev roadmap, reconciled **2026-06-02**.
 
