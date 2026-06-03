@@ -2087,10 +2087,18 @@ $('panel-strategy').addEventListener('click', (e) => {
 // ===== Log Numbers — upsert metric_snapshots =====
 async function openLogNumbers() {
   const [{ data: cards }, { data: series }] = await Promise.all([
-    sb.from('v_kpi_dashboard').select('metric_key, label, unit').order('workstream'),
+    sb.from('v_kpi_dashboard').select('metric_key, label, unit, workstream').order('workstream'),
     sb.from('content_series').select('id, name').eq('active', true).order('name'),
   ]);
-  const metricOpts = (cards || []).map(c => `<option value="${escapeHtml(c.metric_key)}">${escapeHtml(c.label)} — ${escapeHtml(c.metric_key)}</option>`).join('');
+  // Group options under visible workstream headers (optgroups) so a metric never
+  // looks "missing" just because it sorts into a different workstream group.
+  const byWs = {};
+  (cards || []).forEach(c => { (byWs[c.workstream] = byWs[c.workstream] || []).push(c); });
+  const wsOrder = [...WS_ORDER, ...Object.keys(byWs).filter(w => !WS_ORDER.includes(w))];
+  const optFor = c => `<option value="${escapeHtml(c.metric_key)}">${escapeHtml(c.label)} — ${escapeHtml(c.metric_key)}</option>`;
+  const metricOpts = wsOrder.filter(ws => byWs[ws]).map(ws =>
+    `<optgroup label="${escapeHtml(WORKSTREAM[ws]?.label || ws)}">${byWs[ws].map(optFor).join('')}</optgroup>`
+  ).join('');
   const seriesOpts = (series || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
   openKpi('Log numbers', 'Upserts a reading into metric_snapshots', `
     <div class="modal-form-row"><label class="modal-label">Metric *</label>
