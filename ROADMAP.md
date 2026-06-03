@@ -192,91 +192,55 @@ preview — no build step required.
 
 ---
 
-## Done since Phase 11 — KPI / metrics + money model (May 2026)
+## Current state — reconciled 2026-06-02 (data-load close)
 
-Migrations **015–022**. Strategy tab (KPI cards, formula tooltips, placeholder flywheel),
-entry forms (Log Event / Log Numbers / Edit Target incl. create-new + retire-metric),
-`feedback_log` + Notes tab, event edit + soft-delete, per-event Money panel, Add Sponsor,
-Income soft-delete. **Canonical revenue/P&L model** — net P&L now includes ticket revenue.
-Details + rationale in `DECISIONS.md`; live state in `CARRYOVER.md`.
+### ✅ Done / LIVE on prod
+- **Migration & cutover (0–11) + KPI/metrics + money model (015–022)** — Strategy tab, entry forms
+  (Log Event / Numbers / Edit Target + create/retire-metric), feedback log + Notes, event edit +
+  soft-delete, Add Sponsor, per-event Money panel; canonical revenue/P&L (net P&L incl. tickets).
+- **DI #2 impact report + public audit + reusable `/staging/` gate** — "% to mission" framing,
+  founder-contribution note. Gated; **not yet public** (consent sweep — see Parked).
+- **Data architecture 023–028 APPLIED to prod AND POPULATED with reconciled DI data** — actors /
+  roles / event_participants, content_items + tags, workflow (tasks / templates / contracts / files /
+  budget_lines + variance / touchpoints), metric_definitions + v_data_points (+ nightly rollup).
+  DI#1 loaded at **39% to mission**, DI#2 at **31%**; role-overlap proven (Keith = dj+donor+sponsor+
+  team; Crossroads = vendor+sponsor); 17 actors, 5 DI#2 DJ participants, 12 sponsorships; no dup
+  actors; anon-401 holds. (`events/dance-infusion/DI_DATA_LOAD_LOG.md`.)
+- **Migration 029** — `sponsorships.sponsor_id` nullable (sponsorships attach to actors) + `actor_roles` `donor` role.
+- **Tools deployed + admin-gated** on comewith.org — `/tools/actor-inspector|test-checklist|visualizer.html`.
 
-## Done — Dance Infusion #2 impact report + staging (June 2026)
+### 🟡 Held (committed locally, push held for Keith)
+`261797d` (029 + DI load log), `5cbb51e` (roadmap backlog), + this close-out commit. Plus unmerged
+pushed branches `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`.
 
-Files only, no migrations. Public **impact report** + **public audit**
-(`events/dance-infusion/di-02-2026-05/reports/impact-report.html` + `public-audit.html`), live from
-`dance_infusion.json` + `dance_infusion_di1.json`, PDF export. Money framing = **"% to the mission"**
-public / expense-ratio internal (LEARNINGS §8); $9,557 reconciliation incl. founder contribution
-(§9). Reusable **`/staging/` admin gate** reusing the dashboard's Supabase auth (§10). DI #1 data
-confirmed; folder renamed **di-01-2024-09 → di-01-2025-09**. **Not yet public** — gated pending the
-consent sweep + placeholders (see below).
+### 🚫 GATED BLOCKER (hard dependency — keep)
+**Financial-view security fix — BEFORE any customer/external login:** revoke the 5 financial views
+(+ `v_budget_variance`, `v_data_points`, `mv_event_data_points`) from `authenticated`, re-issue as
+`security_invoker` over RLS-gated tables (non-admins get ZERO rows); negative tests pass on staging
+first (`tools/test-checklist.html` → Security 🔴). ⚠ Covers **existing `customer`-role logins too**
+(they're `authenticated`; views revoked from `anon` only today). The dormant actor-self RLS tier is
+built (024/026) but **no non-admin login is provisioned**.
 
-## 🚫 BLOCKING DEPENDENCY — gate before ANY external-actor login
+### 🟦 Queued (none deadline-bound)
+- **actor-inspector "Events" section** — show each actor's `event_participants` (event, role, fee).
+- **Guest layer + attendance** — tickets-as-attendance proxy, basis-tagged (no scan data); promote
+  guest → actor only on recurrence (LEARNINGS §11, §13).
+- **Tools nav in the dashboard** — link `/tools/*` from the admin dashboard.
+- **Mailing-list feature + DI #2 thank-you / survey send.**
+- **`third_party_donations` actor FK** — donations attributed by text `donor_name`, not linked to
+  actor rows (LEARNINGS §12, §14).
 
-**BLOCKER before ANY external-actor login is provisioned:** revoke the 5 financial views from
-`authenticated` and re-issue as `security_invoker` over RLS-gated tables (admins pass `is_admin()`,
-external actors get ZERO rows). Negative tests must pass on staging first. External logins are
-blocked until this ships.
+### ⏸ Parked (each its own session)
+- **Actor onboarding + MSA e-signing** — hard-blocked by the financial-view fix above.
+- **Roadmap planning tool** — buy not build (Notion vs Trello); separate from this dev roadmap.
+- **Flywheel redesign** — `ComeWith_Strategy_Dashboard.html`.
+- **`equipment_usage` UI wiring** into the Log Event panel (schema ready in 024).
+- **KPI views repoint `series` → `type`** (series exact-match contract kept for now).
+- **Impact report → public** — consent sweep (sponsors/team/artists/raffle; Yankees-hats donor) +
+  fill placeholders + remove the 2 `/staging/` guard lines; set dashboard `di.cost_to_raise` → 60%-to-mission.
+- **Smaller dev items** — Expenses CSV import; per-event line-item editor; reactivate-metric UI;
+  `FORM_DEFS` `created_by`-aware handler; DI dashboard `event_date` display fix.
 
-- Scope also covers the new financial objects: `v_budget_variance`, `v_data_points`,
-  `mv_event_data_points`.
-- ⚠ Applies to **all non-admin authenticated roles, including existing `customer` logins** — the
-  financial views are revoked from `anon` only today, so a customer-role login can already read
-  `v_kpi_*`. Check whether any live customer logins exist; if so this exposure is already live.
-- The dormant external-actor RLS tier is built (migrations 024/026) but **no external login is
-  provisioned**. Negative tests: `tools/test-checklist.html` → Security group (🔴).
-
-## Done (built; HELD for review/apply) — Data architecture A→E (migrations 023–028)
-
-Realizes the parked **event-model redesign** + the operational/analytical layers from
-`ComeWith_Data_Architecture_Concept.md`. **Files only — NOT applied** (push held; apply target +
-dedupe + RLS pending Keith's review). Build log: `events/dance-infusion/BUILD_LOG_data_architecture.md`.
-- **A (023)** actors + actor_roles + provenance; dedupe backfill; sponsorships→actors; `tools/actor-inspector.html`.
-- **B (024)** event_participants; events.type; dormant actor-self RLS tier.
-- **C (025)** content_items + tags/taggables.
-- **C2 (026)** stage/owner, contracts, files, tasks+assignments+day-of generator, budget_lines+variance, touchpoints.
-- **D (027)** metric_definitions, v_data_points (+ nightly materialized rollup).
-- **E** `tools/visualizer.html` (Tier-2 formula evaluator). **Checklist** `tools/test-checklist.html` (028).
-- Deviation: old people-tables NOT yet converted to views (dashboard still writes to them) — cutover later.
-
-## Parked — design-first (each its own session)
-
-- **Event model redesign** — **⮕ BUILT (held): migrations 023–028 realize this — see "Done (built; HELD)" above; awaiting review + apply.** events are multi-axis, not a flat `series`: **TYPE**
-  (Party / Dance Infusion / Production), **CONTENT** (`content_series`; content events
-  graded on views/follows, not P&L), **SIGNATURE** tag (booth-to-wall), plus relational
-  **LINKS** (`equipment_usage`, artists vs contractors, sponsors — TYPE may decide which
-  apply). **Design BEFORE migrating.** The 5 income-cleanup events use placeholder series
-  to reassign afterward.
-- **DI #1 / #2 statistic backfill** — after the event-model design. Note: the DI #1 *folder*
-  was renamed to `di-01-2025-09` (file side done, 2026-06-02), but the **dashboard `event_date`
-  fix is still pending** ("Dance Infusion MS" 2026-09-08 → 2025-09-06).
-- **Impact report → go public (gated on people, not code):** (1) **CONSENT SWEEP** — sponsors,
-  team, artists, raffle donors; identify the Yankees-hats donor; (2) fill placeholders
-  (human-moment quote, hero/inline photos, social reach, what's-next copy); (3) remove the 2
-  staging-guard lines from `impact-report.html` + `public-audit.html` to publish. Also: update
-  dashboard `di.cost_to_raise` target → 60%-to-mission so dashboard + audit reconcile (LEARNINGS §8).
-- **Flywheel redesign** — cyclical, metric-carrying boxes, moved to the bottom.
-  Source: `ComeWith_Strategy_Dashboard.html` (in repo).
-- **Roadmap / timeline tool** — buy not build; Notion vs Trello TBD.
-- **Actor onboarding + MSA e-signing** — external actors (contractors/vendors/artists) self-onboard
-  and e-sign a Master Service Agreement, then get a scoped login to see their own data/tasks.
-  **Depends on this build** (actors + contracts + files + the external-actor RLS tier) **and is
-  hard-blocked by the financial-view lockdown above** (no external login until that ships + its
-  negative tests pass).
-
-## Backlog (smaller, post-migration)
-
-- **Expenses CSV import** — dashboard button: drop a file → preview parsed rows
-  → confirm → bulk insert into `expenses`. Reuses the migration CSV logic. Use
-  case: bulk monthly bank / Simplifi export, instead of one-at-a-time entry.
-- **Per-event line-item editor** — in-place edit of ticket tiers / financial rows in the
-  Money panel (today it's delete-and-re-add only).
-- **Reactivate-metric UI** — un-retire a metric (currently done via "create a new metric"
-  with the same key).
-- **`created_by`-aware modal submit** — the shared Phase-4 `FORM_DEFS` submit handler
-  injects `created_by` into every insert, so tables without that column (e.g. `sponsors`)
-  can't use the standard path (Add Sponsor is a custom KPI-modal form as a workaround).
-  Make the handler only set `created_by` when the table has it, then fold custom forms
-  back onto the standard path. Low priority.
-- **actor-inspector — add an "Events" section** showing each actor's `event_participants`
-  (event, role, fee). The inspector currently shows roles + provenance + sponsorships but
-  not event links; verified via SQL for now (DI#2 DJs → Dance Infusion #2).
+### 🐞 Still-open bugs (re-verify when next in that flow)
+- Events Services Agreement (payment-method/recording-rights buttons, fee-total auto-update, client
+  auto-populate); dashboard tabs need filter/sort.

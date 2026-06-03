@@ -117,3 +117,34 @@ same project + publishable key, `getSession()` → `profiles.role` ∈ {master_a
   security.** Good for keeping low-sensitivity review pages out of public view. **Genuinely
   sensitive data (financials, rosters, venues) stays in Supabase behind RLS — never as static files
   in staging.** Staging is a review surface, not a data store.
+
+## Section 11 — Guests are a lighter layer than actors (2026-06-02)
+
+Ticket buyers / RSVPs stay in the lighter `guests` table — **not** promoted to `actors` by default
+(privacy + volume: thousands of attendees we won't otherwise track). **Promote a guest to an `actor`
+only on recurrence** (a guest who becomes a sponsor / vendor / performer / repeat). Keeps the actor
+graph meaningful instead of bloated.
+
+## Section 12 — Founder out-of-pocket = a donation attributed to Keith-the-actor (2026-06-02)
+
+Keith's out-of-pocket spend on his own events is modeled as a **donation from Keith-the-actor** (role
+`donor`), counted normally in `total_raised` — **not** a special "exclude-from-aggregates" category.
+Money is fungible; it made the raise possible, so it IS money raised, attributed to the donor like
+any other donor (DI#1 $1,800; DI#2 $162.44). Stored in `third_party_donations` with
+`donor_name='Keith Berkman'`. (Donations have no actor FK yet — §14 / backlog.)
+
+## Section 13 — Attendance = ticket-sales proxy, basis-tagged (2026-06-02)
+
+No scan/headcount data exists, so **RSVP ≠ attendance — never report RSVP as attendance.** Where a
+count is needed, use **ticket sales as the attendance proxy and tag the basis** ("tickets issued",
+"RA tickets"); leave true `attendance` null unless a real count exists. (DI#1: "42 RA tickets",
+attendance null.)
+
+## Section 14 — "% to mission" is derived, not stored (2026-06-02)
+
+The relational model has no native "donated" / "% to mission" field. It reconciles as
+**% to mission = 1 − cost_to_raise_per_dollar**, which holds because we model **net_pl = donated**
+(total_raised − expenses = what reached the mission: DI#1 2940−1800=1140; DI#2 9557−6557=3000).
+`v_kpi_dance_infusion.cost_to_raise_per_dollar` = expenses ÷ total_raised; public "% to mission" =
+1 − that. Headline figures also kept in `events.notes`. **Backlog:** add an actor FK to
+`third_party_donations` (donations currently attributed by text `donor_name`, not linked to actor rows).
