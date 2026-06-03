@@ -277,3 +277,6 @@ dedupe + RLS pending Keith's review). Build log: `events/dance-infusion/BUILD_LO
   can't use the standard path (Add Sponsor is a custom KPI-modal form as a workaround).
   Make the handler only set `created_by` when the table has it, then fold custom forms
   back onto the standard path. Low priority.
+- **actor-inspector — add an "Events" section** showing each actor's `event_participants`
+  (event, role, fee). The inspector currently shows roles + provenance + sponsorships but
+  not event links; verified via SQL for now (DI#2 DJs → Dance Infusion #2).
