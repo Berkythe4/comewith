@@ -255,6 +255,64 @@ body::before {
   border-color: var(--green);
 }
 
+/* EVENTS LIST (data-driven) */
+.events-loading {
+  text-align: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--concrete);
+  padding: 28px 0;
+}
+.event-list { display: flex; flex-direction: column; gap: 0; }
+.event-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 18px 0;
+  border-bottom: 1px solid var(--border);
+}
+.event-row:last-child { border-bottom: none; }
+.event-date {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--green);
+}
+.event-name {
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--text);
+  line-height: 1.4;
+}
+.event-venue {
+  font-size: 13px;
+  color: var(--concrete);
+  margin-top: -4px;
+}
+.event-ticket {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--green);
+  text-decoration: none;
+  border: 1px solid var(--border-green);
+  padding: 9px 18px;
+  margin-top: 2px;
+  transition: background 0.18s, border-color 0.18s;
+}
+.event-ticket:hover {
+  background: rgba(143,179,57,0.08);
+  border-color: var(--green);
+}
+
 /* CONTACT PANEL CONTENT */
 .contact-list { display: flex; flex-direction: column; gap: 0; }
 
@@ -377,13 +435,8 @@ a.contact-val:hover { color: var(--green); }
     <div class="panel-title">Events</div>
     <button class="panel-close" onclick="closePanel('events')">Close ×</button>
   </div>
-  <div class="events-teaser">
-    <div class="teaser-icon">◈</div>
-    <div class="teaser-heading">Something is coming.</div>
-    <div class="teaser-body">Events will be announced soon. Follow along to be the first to know.</div>
-    <a class="teaser-follow" href="https://instagram.com/comewithnyc" target="_blank">
-      Follow @comewithnyc →
-    </a>
+  <div id="eventsContent">
+    <div class="events-loading">Loading…</div>
   </div>
 </div>
 
@@ -432,6 +485,58 @@ function closePanel(type) {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') { closePanel('events'); closePanel('contact'); }
 });
+
+// ---- Upcoming events (data-driven from the public view) ----
+// Reads ONLY the anon-safe view v_public_events (name, date, venue, ticket link).
+// The events table and all financial views stay anon-revoked.
+const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const esc = (s) => { if (s == null) return ''; return String(s)
+  .replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;')
+  .replaceAll('"','&quot;').replaceAll("'", '&#39;'); };
+function fmtEventDate(d) {
+  // d is 'YYYY-MM-DD' — parse as local (avoid UTC shift) and format e.g. "Fri · Aug 15, 2026".
+  const [y, m, day] = String(d).split('-').map(Number);
+  if (!y || !m || !day) return esc(d);
+  const dt = new Date(y, m - 1, day);
+  return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })
+           .replace(',', ' ·');
+}
+const emptyEventsHtml = `
+  <div class="events-teaser">
+    <div class="teaser-icon">◈</div>
+    <div class="teaser-heading">Something is coming.</div>
+    <div class="teaser-body">No upcoming events announced just yet. Follow along to be the first to know.</div>
+    <a class="teaser-follow" href="https://instagram.com/comewithnyc" target="_blank">Follow @comewithnyc →</a>
+  </div>`;
+async function loadEvents() {
+  const el = document.getElementById('eventsContent');
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/v_public_events?select=name,event_date,venue_name,ticket_url,ticket_label&order=event_date.asc`,
+      { headers: { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${PUBLISHABLE_KEY}` } });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const rows = await res.json();
+    if (!Array.isArray(rows) || rows.length === 0) { el.innerHTML = emptyEventsHtml; return; }
+    el.innerHTML = '<div class="event-list">' + rows.map(r => {
+      const venue = r.venue_name ? `<div class="event-venue">${esc(r.venue_name)}</div>` : '';
+      const safeUrl = /^https?:\/\//i.test(r.ticket_url || '') ? r.ticket_url : '';  // http(s) only — no javascript: etc.
+      const ticket = safeUrl
+        ? `<a class="event-ticket" href="${esc(safeUrl)}" target="_blank" rel="noopener">${esc(r.ticket_label) || 'Get tickets'} →</a>`
+        : '';
+      return `<div class="event-row">
+        <div class="event-date">${fmtEventDate(r.event_date)}</div>
+        <div class="event-name">${esc(r.name)}</div>
+        ${venue}
+        ${ticket}
+      </div>`;
+    }).join('') + '</div>';
+  } catch (err) {
+    // Never leave a dead "Loading…" — fall back to the announce state.
+    el.innerHTML = emptyEventsHtml;
+  }
+}
+loadEvents();
 </script>
 
 </body>
