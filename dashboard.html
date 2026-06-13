@@ -2244,6 +2244,13 @@ function openLogEvent() {
       <div><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
       <div><label class="modal-label">Slug</label><input class="modal-input" name="slug" placeholder="auto from name"></div>
     </div>
+    <div class="kpi-section-h">Public listing</div>
+    <div class="kpi-hint">Shows on comewith.org only while public is on AND the date is today or later AND status isn't cancelled.</div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_public" style="width:auto;margin:0;"> Show on public site</label></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Ticket / RSVP URL</label><input class="modal-input" type="url" name="ticket_url" placeholder="https://…"></div>
+      <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" placeholder="Get tickets"></div>
+    </div>
     <div class="kpi-section-h">Tickets — one row per price tier</div>
     <div class="kpi-hint">tickets_sold counts quantity, not rows. Revenue stored = qty × unit price.</div>
     <div id="tier-list">${tierRowHtml()}</div>
@@ -2308,6 +2315,9 @@ async function submitLogEvent() {
   const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed' };
   const cap = kpiVal('capacity'); if (cap !== '') evRow.capacity = Number(cap);
   const att = kpiVal('total_attendance'); if (att !== '') evRow.total_attendance = Number(att);
+  evRow.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
+  const turl = kpiVal('ticket_url'); if (turl) evRow.ticket_url = turl;
+  const tlbl = kpiVal('ticket_label'); if (tlbl) evRow.ticket_label = tlbl;
 
   const { data: ev, error: evErr } = await sb.from('events').insert(evRow).select('id').single();
   if (evErr) throw new Error(evErr.code === '23505' ? `Slug "${slug}" already exists — set a unique slug.` : evErr.message);
@@ -2412,7 +2422,7 @@ async function submitLogNote() {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const { data: ev, error } = await sb.from('events')
-    .select('id, name, series, event_date, status, capacity, total_attendance').eq('id', id).single();
+    .select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label').eq('id', id).single();
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
   // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
   const seriesVals = SERIES_OPTIONS.includes(ev.series) ? SERIES_OPTIONS : [ev.series, ...SERIES_OPTIONS];
@@ -2430,7 +2440,14 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity" value="${ev.capacity ?? ''}"></div>
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
     </div>
-    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>`,
+    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+    <div class="kpi-section-h">Public listing</div>
+    <div class="kpi-hint">Shows on comewith.org only while public is on AND the date is today or later AND status isn't cancelled.</div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_public" style="width:auto;margin:0;"${ev.is_public ? ' checked' : ''}> Show on public site</label></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Ticket / RSVP URL</label><input class="modal-input" type="url" name="ticket_url" value="${escapeHtml(ev.ticket_url || '')}" placeholder="https://…"></div>
+      <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" value="${escapeHtml(ev.ticket_label || '')}" placeholder="Get tickets"></div>
+    </div>`,
     () => submitEditEvent(id), 'Save changes');
 }
 async function submitEditEvent(id) {
@@ -2443,6 +2460,9 @@ async function submitEditEvent(id) {
   const patch = { name, series, event_date, status: kpiVal('status') || 'planning' };
   const cap = kpiVal('capacity'); patch.capacity = cap === '' ? null : Number(cap);
   const att = kpiVal('total_attendance'); patch.total_attendance = att === '' ? null : Number(att);
+  patch.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
+  const turl = kpiVal('ticket_url'); patch.ticket_url = turl || null;
+  const tlbl = kpiVal('ticket_label'); patch.ticket_label = tlbl || null;
   const { error } = await sb.from('events').update(patch).eq('id', id);
   if (error) throw error;
   closeKpi(); toast('Event updated', 'ok');
