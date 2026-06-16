@@ -30,6 +30,32 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Event Hub Sprint 2: UX pass + Money bug + IG KPI)
+Fixed the Money-section bug and closed the hub's UX gaps. **Migration 032 APPLIED to prod** (additive):
+`event_participants.roles text[]` (backfilled, one-per-actor unique index), `generate_day_of_tasks`
+repointed to read `roles[]` overlap, and **audit triggers on tasks/contracts/event_participants** (reuse
+`audit_trigger_function`) so status/role transitions land in `audit_log` (answers the reporting Q10).
+- **Money bug root cause:** the hub Money section only launched a modal and never listed line items —
+  so adds showed in Overview's rollup but "vanished" in the Money tab. **Fix:** Money renders line items
+  **inline** in the hub, refetching on every write; shared `loadMoneyData`/`moneySectionsHTML`/`moneyMutate`
+  back both the hub-inline section and the Events-tab modal (one source of truth). Verified all 5 child types.
+- **Multi-role participants:** one row per person, `roles[]` multi-select chips (custom roles allowed),
+  `role` kept = `roles[1]` for back-compat. Day-of generator now catches a secondary `dj`/performer.
+- **People UX:** bulk "Add people" (search + multi-select existing + stage new + batch roles/fee in one
+  insert); full participant **edit** (roles/fee/bill_order/set times/contractor); fee→expense unchanged.
+- **Equipment:** multi-select assign (batch purpose/dates) + edit/remove.
+- **Contracts:** edit + inline document upload → `files(subject_type='contract')` → `contracts.document_id`,
+  signed-URL download. (No signing flow yet — still deferred.)
+- **IG KPI:** "Log IG" one form / 3 accounts (comewith/berky/danceinfusion) → upserts today's
+  `metric_snapshots`; live ▲/▼ delta vs last; entry points on **Strategy toolbar** AND the **hub header**.
+- **Off-prompt UX choices:** batch-default roles/fee then per-person edit (vs per-person-at-add); IG quick
+  action placed in the hub **header** (always one click from landing) rather than buried in Overview;
+  Overview "Open Money" now jumps to the inline section (no modal). Multi-role stored as `roles[]` (not a
+  child table) — simplest additive path given how the hub + generator read roles.
+- **Tests:** `tests/event_hub_sprint2_test.sql` (rolled-back, all green). **14 existing tabs untouched**
+  except the Strategy toolbar's new "Log IG" button. Deployed to master (Netlify).
+- **Note:** prod now has Keith's own sprint-1 live-test rows (1 contract, 1 equipment_usage, 1 task) — real, preserved.
+
 ## This session shipped (2026-06-16 — Event Hub, Sprint 1 of the module series)
 Built the **Event Detail Hub** in `dashboard.html` (additive; the 14 existing tabs untouched). Reached
 via an **Open** button on each Events row → a new `#panel-eventhub` with header (name + facts + **stage

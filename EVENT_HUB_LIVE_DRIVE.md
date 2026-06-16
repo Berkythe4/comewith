@@ -68,3 +68,35 @@ POST https://api.supabase.com/v1/projects/yaytdosxfhcqatmhctzk/database/query
   body: {"query": <contents of tests/event_hub_datalayer_test.sql>}
 Expect an ERROR message beginning "TEST_RESULTS_OK { … }".
 ```
+
+---
+
+# Sprint 2 — UX pass + Money fix + IG KPI (live-drive)
+
+Walk on `dashboard.html` signed in as admin.
+
+## Money bug (was: ticket added shows in Overview, not in Money)
+- [ ] Open an event → **Money** section. It now **lists line items inline** (Tickets / Other income / Expenses / Donations / Sponsorships) — not just a button.
+- [ ] Add a ticket tier (Tier + Qty + Unit $ → **Add**). It appears in the list **immediately**; **Overview** gross/ticket cards reflect it; the **Events** tab bar/totals update. Repeat for income, expense, donation, sponsorship — each shows instantly.
+- [ ] Delete a line → it disappears immediately and Overview updates.
+- [ ] The **Events-tab Money button** (modal) still works exactly as before.
+
+## People — bulk + multi-role + edit
+- [ ] **+ Add people** → search, tick **several** actors at once; type a name + **add** to stage brand-new people; pick **roles** (multi-select chips, add a custom one) + a batch fee → **Add selected** creates them all in one go.
+- [ ] Each person shows their **roles as chips**; multiple roles on **one row** (not duplicate rows).
+- [ ] **Edit** a person → change roles (chips), fee, bill order, set times, contractor flag — no remove-and-re-add. Saves and reflects instantly.
+- [ ] **Fee → expense** still one click (manual, run-once-warned). **Remove** removes the participation only.
+
+## Equipment — multi-select + edit
+- [ ] **+ Assign equipment** → tick **several** inventory items, set purpose + dates **once** → **Assign selected** creates all assignments.
+- [ ] **Edit** an assignment (purpose/dates/revenue); **Remove** clears it. Immediate reflection.
+
+## Contracts — edit + document
+- [ ] **+ Add contract** → optionally attach a **document** inline (uploads to the private bucket, links as the contract's doc).
+- [ ] **Edit** a contract (actor/kind/fee/status/notes) and replace its doc. **Doc** button downloads it via a signed URL. Inline **status** + **mark paid** still work.
+
+## IG followers KPI
+- [ ] **Strategy tab → "Log IG"** (and **event hub header → "Log IG followers"**) → one form, **3 accounts** (Come With / Berky / Dance Infusion), each showing last value; type a number to see the **▲/▼ delta**; **Save all** writes today's snapshots in one action.
+
+## Automated data-layer proof (green, rolled back)
+`tests/event_hub_sprint2_test.sql` — multi-role + role=roles[1], one-per-actor unique enforced, bulk people, multi-equipment, money inserts, contract edit + document_id wiring, **day-of generator reading a secondary `dj` from `roles[]`**, IG 3-account upsert, and audit_log capturing the hub tables. All assertions pass; zero rows persisted (counts verified unchanged).

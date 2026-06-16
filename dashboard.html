@@ -709,6 +709,41 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   font-family: 'Inconsolata', monospace; font-size: 0.72rem; padding: 3px 6px;
   border: 1px solid var(--border-strong); background: #fff; color: var(--ink);
 }
+
+/* Multi-role toggle chips (add/edit participant) */
+.role-pick { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.role-opt {
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem; letter-spacing: 0.04em;
+  padding: 4px 10px; border: 1px solid var(--border-strong); background: #fff; color: var(--ink);
+  cursor: pointer; user-select: none;
+}
+.role-opt:hover { border-color: var(--red); }
+.role-opt.on { background: var(--red); color: #fff; border-color: var(--red); }
+.role-custom { display: flex; gap: 6px; margin-top: 8px; }
+.role-custom input { flex: 1 1 auto; }
+
+/* Searchable multi-select picker (bulk add people / equipment) */
+.pick-search { width: 100%; margin-bottom: 8px; }
+.pick-list { max-height: 240px; overflow-y: auto; border: 1px solid var(--border); }
+.pick-row {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-bottom: 1px solid var(--border); cursor: pointer; font-size: 0.84rem;
+}
+.pick-row:last-child { border-bottom: none; }
+.pick-row:hover { background: rgba(193,59,42,0.04); }
+.pick-row.on { background: var(--green-bg); }
+.pick-row .pick-check {
+  width: 18px; height: 18px; border: 1.5px solid var(--border-strong); flex: 0 0 auto;
+  display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem; color: #fff;
+}
+.pick-row.on .pick-check { background: var(--green); border-color: var(--green); }
+.pick-row .pick-sub { font-size: 0.66rem; color: var(--mid); }
+.pick-selcount { font-size: 0.72rem; color: var(--mid); margin: 8px 0; }
+.pick-newrow { display: flex; gap: 6px; margin-top: 8px; }
+.pick-staged { display: inline-flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+.pick-staged .role-chip { background: var(--green-bg); color: var(--green); border-color: var(--green); }
+.kpi-delta { font-size: 0.68rem; color: var(--mid); margin-left: 6px; }
+.kpi-delta.up { color: var(--green); } .kpi-delta.down { color: var(--red-dk); }
 </style>
 </head>
 <body>
@@ -857,6 +892,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div class="strat-toolbar">
           <button class="strat-btn primary" data-kpi-open="event">Log event</button>
           <button class="strat-btn primary" data-kpi-open="numbers">Log numbers</button>
+          <button class="strat-btn primary" data-kpi-open="ig">Log IG</button>
           <button class="strat-btn primary" data-kpi-open="target">Edit target</button>
           <button class="strat-btn" data-strat-toggle>Manage cards</button>
         </div>
@@ -2224,7 +2260,7 @@ $('kpiModalForm').addEventListener('submit', async (e) => {
 // Toolbar dispatch (entry-form buttons live in the Strategy toolbar)
 $('panel-strategy').addEventListener('click', (e) => {
   const b = e.target.closest('[data-kpi-open]'); if (!b) return;
-  ({ event: openLogEvent, numbers: openLogNumbers, target: openEditTarget }[b.dataset.kpiOpen] || (() => {}))();
+  ({ event: openLogEvent, numbers: openLogNumbers, ig: openLogIG, target: openEditTarget }[b.dataset.kpiOpen] || (() => {}))();
 });
 
 // ===== Log Numbers — upsert metric_snapshots =====
@@ -2271,6 +2307,62 @@ async function submitLogNumbers() {
   }
   if (error) throw error;
   closeKpi(); toast('Reading saved', 'ok'); refreshStratIfActive();
+}
+
+// ===== Log IG followers — all 3 accounts in one form, one action =====
+const IG_ACCOUNTS = [
+  { key: 'instagram.followers.comewith', label: 'Come With' },
+  { key: 'instagram.followers.berky', label: 'Berky' },
+  { key: 'instagram.followers.danceinfusion', label: 'Dance Infusion' },
+];
+async function openLogIG() {
+  const { data } = await sb.from('metric_snapshots')
+    .select('metric_key, value, captured_on')
+    .in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null)
+    .order('captured_on', { ascending: false });
+  const last = {};
+  (data || []).forEach(r => { if (!(r.metric_key in last)) last[r.metric_key] = r; });
+  const rowFor = (a) => {
+    const l = last[a.key];
+    const ph = l ? `last ${fmtNum(l.value)} (${fmtDate(l.captured_on)})` : 'no prior reading';
+    return `<div class="modal-form-row">
+      <label class="modal-label">${escapeHtml(a.label)} <span class="kpi-delta" data-iglast="${l ? l.value : ''}"></span></label>
+      <input class="modal-input" type="number" step="1" min="0" data-ig="${escapeHtml(a.key)}" placeholder="${ph}"></div>`;
+  };
+  openKpi('Log IG followers', 'Today\'s follower count for all three accounts — one save', `
+    ${IG_ACCOUNTS.map(rowFor).join('')}
+    <div class="kpi-hint">Leave a field blank to skip it. Re-logging today overwrites today's value.</div>`,
+    submitLogIG, 'Save all');
+}
+// Live delta vs last reading (delegated once on the shared modal body).
+function igDeltaHandler(e) {
+  const inp = e.target.closest('[data-ig]'); if (!inp) return;
+  const span = inp.closest('.modal-form-row')?.querySelector('[data-iglast]'); if (!span) return;
+  const lastVal = span.dataset.iglast;
+  const cur = inp.value.trim();
+  if (lastVal === '' || lastVal == null || cur === '') { span.textContent = ''; span.className = 'kpi-delta'; return; }
+  const d = Number(cur) - Number(lastVal);
+  span.textContent = (d >= 0 ? '▲ +' : '▼ −') + fmtNum(Math.abs(d)) + ' vs last';
+  span.className = 'kpi-delta ' + (d >= 0 ? 'up' : 'down');
+}
+$('kpiModalBody').addEventListener('input', igDeltaHandler);
+async function submitLogIG() {
+  const { data: { session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || null;
+  const today = TODAY();
+  let n = 0;
+  for (const a of IG_ACCOUNTS) {
+    const el = $('kpiModalBody').querySelector(`[data-ig="${a.key}"]`);
+    const val = el?.value.trim(); if (!val) continue;
+    let { error } = await sb.from('metric_snapshots').insert({ metric_key: a.key, value: Number(val), captured_on: today, series_id: null, created_by: uid });
+    if (error && error.code === '23505') {
+      ({ error } = await sb.from('metric_snapshots').update({ value: Number(val) }).eq('metric_key', a.key).eq('captured_on', today).is('series_id', null));
+    }
+    if (error) throw error;
+    n++;
+  }
+  if (!n) throw new Error('Enter at least one follower count');
+  closeKpi(); toast(`Logged ${n} IG ${n === 1 ? 'account' : 'accounts'}`, 'ok'); refreshStratIfActive();
 }
 
 // ===== Edit Target — insert a versioned kpi_targets row (+ new-metric mode) =====
@@ -2637,16 +2729,9 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
 // ---- Per-event Money panel (Phase 13 — step 5: list + delete + add, no in-place edit) ----
 const moneyState = { eventId: null };
 
-async function openMoneyPanel(eventId) {
-  moneyState.eventId = eventId;
-  openKpi('Event money', 'Add or remove line items to fix entry mistakes', '<div class="panel-state"><span class="spinner"></span> Loading…</div>', () => { closeKpi(); }, 'Done');
-  await renderMoneyPanel();
-}
-
-async function renderMoneyPanel() {
-  const id = moneyState.eventId;
-  const [ev, tk, inc, exp, don, spo, sponsors] = await Promise.all([
-    sb.from('events').select('name').eq('id', id).single(),
+// Fetch every money child for an event (single source the panel AND the hub render from).
+async function loadMoneyData(id) {
+  const [tk, inc, exp, don, spo, sponsors] = await Promise.all([
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
     sb.from('income').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
@@ -2654,13 +2739,16 @@ async function renderMoneyPanel() {
     sb.from('sponsorships').select('id, cash_amount, in_kind_value, sponsor:sponsors(name)').eq('event_id', id),
     sb.from('sponsors').select('id, name').order('name'),
   ]);
-  $('kpiModalTitle').textContent = 'Money — ' + (ev.data?.name || 'event');
+  return { tk, inc, exp, don, spo, sponsors };
+}
+
+// Shared markup for the 5 money sections (used by both the modal and the inline hub section).
+function moneySectionsHTML({ tk, inc, exp, don, spo, sponsors }) {
   const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
   const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
   const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
   const sponsorOpts = (sponsors.data || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
-
-  $('kpiModalBody').innerHTML = `
+  return `
     <div class="money-section">
       <h4>Tickets</h4>
       ${list(tk.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.ticket_type)} × ${fmtNum(r.quantity)}</span><span class="mr-amt">${money(r.amount_paid)}</span>${del('ticketing', r.id)}</div>`)}
@@ -2690,48 +2778,66 @@ async function renderMoneyPanel() {
     </div>`;
 }
 
-// Delegated add/delete inside the money panel.
-// income/expenses soft-delete (deleted_at exists, views honor it); ticketing/donations/
-// sponsorships hard-delete (no deleted_at column).
+// Modal (used from the Events tab).
+async function openMoneyPanel(eventId) {
+  moneyState.eventId = eventId;
+  openKpi('Event money', 'Add or remove line items to fix entry mistakes', '<div class="panel-state"><span class="spinner"></span> Loading…</div>', () => { closeKpi(); }, 'Done');
+  await renderMoneyPanel();
+}
+async function renderMoneyPanel() {
+  const id = moneyState.eventId;
+  const ev = await sb.from('events').select('name').eq('id', id).single();
+  const data = await loadMoneyData(id);
+  $('kpiModalTitle').textContent = 'Money — ' + (ev.data?.name || 'event');
+  $('kpiModalBody').innerHTML = moneySectionsHTML(data);
+}
+
+// Shared add/delete core. `container` scopes the add-form inputs (modal body or hub body).
+// income/expenses soft-delete (deleted_at honored by views); ticketing/donations/sponsorships hard-delete.
+async function moneyMutate(targetEl, eventId, container) {
+  const delEl = targetEl.closest('[data-money-del]');
+  const addEl = targetEl.closest('[data-money-add]');
+  if (delEl) {
+    const [tbl, rid] = delEl.dataset.moneyDel.split(':');
+    const op = (tbl === 'income' || tbl === 'expenses')
+      ? sb.from(tbl).update({ deleted_at: new Date().toISOString() }).eq('id', rid)
+      : sb.from(tbl).delete().eq('id', rid);
+    const { error } = await op; if (error) throw error;
+    return;
+  }
+  const sec = addEl.closest('.money-section');
+  const v = (f) => { const el = sec.querySelector(`[data-f="${f}"]`); return el ? el.value.trim() : ''; };
+  const kind = addEl.dataset.moneyAdd;
+  const { data: { session } } = await sb.auth.getSession();
+  const uid = session?.user?.id || null;
+  let op;
+  if (kind === 'ticket') {
+    const qty = Number(v('qty')); if (!qty || qty < 1) throw new Error('Tier needs a quantity ≥ 1');
+    op = sb.from('ticketing').insert({ event_id: eventId, ticket_type: v('type') || 'General', quantity: Math.round(qty), amount_paid: +(qty * (Number(v('price')) || 0)).toFixed(2) });
+  } else if (kind === 'income' || kind === 'expense') {
+    const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
+    op = sb.from(kind === 'income' ? 'income' : 'expenses').insert({ event_id: eventId, date: TODAY(), amount: amt, category: v('category') || null, created_by: uid });
+  } else if (kind === 'donation') {
+    const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
+    op = sb.from('third_party_donations').insert({ event_id: eventId, date: TODAY(), amount: amt, donor_name: v('donor') || null });
+  } else if (kind === 'sponsorship') {
+    const sid = v('sponsor_id'); if (!sid) throw new Error('Pick a sponsor');
+    op = sb.from('sponsorships').insert({ event_id: eventId, sponsor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
+  }
+  const { error } = await op; if (error) throw error;
+}
+
+// Modal money clicks.
 $('kpiModalBody').addEventListener('click', async (e) => {
   if (!moneyState.eventId) return;
-  const delEl = e.target.closest('[data-money-del]');
-  const addEl = e.target.closest('[data-money-add]');
-  if (!delEl && !addEl) return;
+  const target = e.target.closest('[data-money-del],[data-money-add]');
+  if (!target) return;
   e.preventDefault();
   try {
-    if (delEl) {
-      const [tbl, rid] = delEl.dataset.moneyDel.split(':');
-      const op = (tbl === 'income' || tbl === 'expenses')
-        ? sb.from(tbl).update({ deleted_at: new Date().toISOString() }).eq('id', rid)
-        : sb.from(tbl).delete().eq('id', rid);
-      const { error } = await op; if (error) throw error;
-    } else {
-      const sec = addEl.closest('.money-section');
-      const v = (f) => { const el = sec.querySelector(`[data-f="${f}"]`); return el ? el.value.trim() : ''; };
-      const id = moneyState.eventId, kind = addEl.dataset.moneyAdd;
-      const { data: { session } } = await sb.auth.getSession();
-      const uid = session?.user?.id || null;
-      let op;
-      if (kind === 'ticket') {
-        const qty = Number(v('qty')); if (!qty || qty < 1) throw new Error('Tier needs a quantity ≥ 1');
-        op = sb.from('ticketing').insert({ event_id: id, ticket_type: v('type') || 'General', quantity: Math.round(qty), amount_paid: +(qty * (Number(v('price')) || 0)).toFixed(2) });
-      } else if (kind === 'income' || kind === 'expense') {
-        const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
-        op = sb.from(kind === 'income' ? 'income' : 'expenses').insert({ event_id: id, date: TODAY(), amount: amt, category: v('category') || null, created_by: uid });
-      } else if (kind === 'donation') {
-        const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
-        op = sb.from('third_party_donations').insert({ event_id: id, date: TODAY(), amount: amt, donor_name: v('donor') || null });
-      } else if (kind === 'sponsorship') {
-        const sid = v('sponsor_id'); if (!sid) throw new Error('Pick a sponsor');
-        op = sb.from('sponsorships').insert({ event_id: id, sponsor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
-      }
-      const { error } = await op; if (error) throw error;
-    }
+    await moneyMutate(target, moneyState.eventId, $('kpiModalBody'));
     await renderMoneyPanel();
     refreshStratIfActive();
     if (document.querySelector('#panel-events.active')) loadTab('events');
-    // Keep the hub's Overview cards in sync when money changes from inside the hub.
     if (document.querySelector('#panel-eventhub.active') && hub.eventId === moneyState.eventId && hub.section === 'overview') hubGoSection('overview');
   } catch (err) {
     toast(err.message || String(err), 'err');
@@ -2865,6 +2971,7 @@ function renderHubHead() {
       ${stageStepper(e.stage)}
       <div class="hub-head-actions">
         <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
+        <button class="hub-btn ghost" data-hub-action="log-ig" title="Capture today's follower counts for all 3 accounts">Log IG followers</button>
       </div>
     </div>`;
 }
@@ -2922,30 +3029,62 @@ async function hubSecOverview() {
       ${card('Attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
       ${card('Expenses', money(f?.total_expenses || 0))}
     </div>
-    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-action="money-panel">Open Money panel</button></div>
-    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the per-event Money panel. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>`;
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-sec="money">Open Money</button></div>
+    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>`;
 }
 
 // ---- Section: People (event_participants) ----
+// ---- Shared: multi-role toggle chips ----
+const ROLE_VOCAB = ['headliner', 'dj', 'opener', 'performer', 'painter', 'dancer', 'host', 'crew', 'photographer', 'producer', 'vendor'];
+function roleChipsHTML(selected = []) {
+  const sel = (selected || []).filter(Boolean);
+  const vocab = [...new Set([...ROLE_VOCAB, ...sel])]; // include any custom roles already on the record
+  const chips = vocab.map(r => `<button type="button" class="role-opt${sel.includes(r) ? ' on' : ''}" data-role="${escapeHtml(r)}">${escapeHtml(r)}</button>`).join('');
+  return `<div class="role-pick" data-rolepick>${chips}</div>
+    <div class="role-custom"><input class="modal-input" data-rolecustom placeholder="add a custom role…"><button type="button" class="hub-mini" data-rolecustom-add>+ add</button></div>`;
+}
+function readRoleChips() {
+  return [...$('kpiModalBody').querySelectorAll('[data-rolepick] .role-opt.on')].map(b => b.dataset.role);
+}
+// Wired once (delegated) on the shared modal body — handles every role-pick instance.
+$('kpiModalBody').addEventListener('click', (e) => {
+  const opt = e.target.closest('[data-rolepick] .role-opt');
+  if (opt) { opt.classList.toggle('on'); return; }
+  const add = e.target.closest('[data-rolecustom-add]');
+  if (add) {
+    const inp = $('kpiModalBody').querySelector('[data-rolecustom]');
+    const val = (inp?.value || '').trim().toLowerCase();
+    if (!val) return;
+    const pick = $('kpiModalBody').querySelector('[data-rolepick]');
+    let chip = [...pick.querySelectorAll('.role-opt')].find(b => b.dataset.role === val);
+    if (!chip) { chip = document.createElement('button'); chip.type = 'button'; chip.className = 'role-opt'; chip.dataset.role = val; chip.textContent = val; pick.appendChild(chip); }
+    chip.classList.add('on'); inp.value = '';
+  }
+});
+
 async function hubSecPeople() {
   const { data, error } = await sb.from('event_participants')
-    .select('id, role, fee, is_contractor, bill_order, set_start, set_end, actor:actors(id, display_name, kind)')
+    .select('id, role, roles, fee, is_contractor, bill_order, set_start, set_end, actor:actors(id, display_name, kind)')
     .eq('event_id', hub.eventId).order('bill_order', { ascending: true, nullsFirst: false }).order('role');
   if (error) throw error;
   hub.people = data || [];
-  const rows = hub.people.length ? hub.people.map(p => `
-    <div class="hub-li">
+  const rolesOf = (p) => (p.roles && p.roles.length ? p.roles : (p.role ? [p.role] : []));
+  const rows = hub.people.length ? hub.people.map(p => {
+    const chips = rolesOf(p).map(r => `<span class="role-chip">${escapeHtml(r)}</span>`).join(' ') || muted;
+    return `<div class="hub-li">
       <div class="li-main"><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
-        <div class="li-sub">${escapeHtml(p.role)}${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div>
+        <div class="li-sub"><span class="hub-roles">${chips}</span>${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div>
       </div>
       <div class="li-amt">${p.fee != null ? money(p.fee) : muted}</div>
       <div class="hub-li-actions">
+        <button class="hub-mini" data-hub-action="edit-participant" data-id="${escapeHtml(p.id)}">Edit</button>
         ${p.fee != null && Number(p.fee) > 0 ? `<button class="hub-mini" data-hub-fee2exp="${escapeHtml(p.id)}" title="Create a one-time expense from this fee">Fee → expense</button>` : ''}
         <button class="hub-mini danger" data-hub-del="event_participants:${escapeHtml(p.id)}" title="Remove from event">Remove</button>
       </div>
-    </div>`).join('') : `<div class="hub-empty">No participants yet.</div>`;
+    </div>`;
+  }).join('') : `<div class="hub-empty">No people yet. Add several at once →</div>`;
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>People</h3><button class="hub-btn" data-hub-action="add-participant">+ Add participant</button></div>
+    <div class="hub-sec-bar"><h3>People</h3><button class="hub-btn" data-hub-action="add-people">+ Add people</button></div>
     <div class="hub-list">${rows}</div>`;
 }
 
@@ -2976,11 +3115,26 @@ async function hubSecTasks() {
     <div class="hub-list">${rows}</div>`;
 }
 
-// ---- Section: Money (reuse the existing per-event Money panel) ----
+// ---- Section: Money (INLINE — line items live in the hub, refresh on every write) ----
+// Sprint-1 bug: this section only launched a modal and never listed line items, so adds
+// showed in Overview's rollup but "vanished" here. Now it renders the same sources inline.
 async function hubSecMoney() {
+  const data = await loadMoneyData(hub.eventId);
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Money</h3><button class="hub-btn" data-hub-action="money-panel">Open Money panel</button></div>
-    <p style="font-size:0.82rem;color:var(--mid);line-height:1.5;max-width:60ch;">The per-event Money panel manages ticket tiers, other income, expenses, donations and sponsorships for this event. It opens in a focused modal so you can add or remove line items without leaving the hub. Overview reflects the totals.</p>`;
+    <div class="hub-sec-bar"><h3>Money</h3></div>
+    ${moneySectionsHTML(data)}`;
+}
+// Inline money add/delete inside the hub → mutate, then re-render the section AND keep
+// Overview/Strategy/Events in sync. (Same source of truth as the modal.)
+async function hubMoneyMutate(targetEl) {
+  try {
+    await moneyMutate(targetEl, hub.eventId, $('hubSecBody'));
+    await hubSecMoney();
+    refreshStratIfActive();
+    if (document.querySelector('#panel-events.active')) loadTab('events');
+  } catch (err) {
+    toast(err.message || String(err), 'err');
+  }
 }
 
 // ---- Section: Equipment (equipment_usage — the missing write path) ----
@@ -2996,8 +3150,11 @@ async function hubSecEquipment() {
         <div class="li-sub">${escapeHtml(u.purpose || '—')}${u.start_date ? (' · ' + escapeHtml(fmtDate(u.start_date))) : ''}${u.end_date ? (' → ' + escapeHtml(fmtDate(u.end_date))) : ''}</div>
       </div>
       <div class="li-amt">${u.revenue_attributed != null ? money(u.revenue_attributed) : muted}</div>
-      <div class="hub-li-actions"><button class="hub-mini danger" data-hub-del="equipment_usage:${escapeHtml(u.id)}">Remove</button></div>
-    </div>`).join('') : `<div class="hub-empty">No equipment assigned to this event yet.</div>`;
+      <div class="hub-li-actions">
+        <button class="hub-mini" data-hub-action="edit-equipment" data-id="${escapeHtml(u.id)}">Edit</button>
+        <button class="hub-mini danger" data-hub-del="equipment_usage:${escapeHtml(u.id)}">Remove</button>
+      </div>
+    </div>`).join('') : `<div class="hub-empty">No equipment assigned yet. Assign several at once →</div>`;
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Equipment</h3><button class="hub-btn" data-hub-action="add-equipment">+ Assign equipment</button></div>
     <div class="hub-list">${rows}</div>`;
@@ -3006,7 +3163,7 @@ async function hubSecEquipment() {
 // ---- Section: Contracts (new contracts table — canonical) ----
 async function hubSecContracts() {
   const { data, error } = await sb.from('contracts')
-    .select('id, kind, fee, status, paid, actor:actors(display_name)')
+    .select('id, kind, fee, status, paid, notes, actor_id, document_id, actor:actors(display_name)')
     .eq('event_id', hub.eventId).order('created_at', { ascending: false });
   if (error) throw error;
   hub.contracts = data || [];
@@ -3014,11 +3171,13 @@ async function hubSecContracts() {
   const rows = hub.contracts.length ? hub.contracts.map(c => `
     <div class="hub-li">
       <div class="li-main"><strong>${escapeHtml(c.actor?.display_name || '—')}</strong>
-        <div class="li-sub">${escapeHtml(c.kind)}${c.fee != null ? (' · ' + money(c.fee)) : ''}</div>
+        <div class="li-sub">${escapeHtml(c.kind)}${c.fee != null ? (' · ' + money(c.fee)) : ''}${c.document_id ? ' · 📎 doc' : ''}</div>
       </div>
       <div class="hub-li-actions">
         ${cstat(c)}
         <button class="hub-mini" data-hub-cpaid="${escapeHtml(c.id)}">${c.paid ? '✓ paid' : 'mark paid'}</button>
+        ${c.document_id ? `<button class="hub-mini" data-hub-cdoc="${escapeHtml(c.id)}">Doc</button>` : ''}
+        <button class="hub-mini" data-hub-action="edit-contract" data-id="${escapeHtml(c.id)}">Edit</button>
         <button class="hub-mini danger" data-hub-del="contracts:${escapeHtml(c.id)}">Delete</button>
       </div>
     </div>`).join('') : `<div class="hub-empty">No contracts on this event yet.</div>`;
@@ -3089,57 +3248,121 @@ async function hubFeeToExpense(participantId) {
   refreshStratIfActive();
 }
 
-async function hubAddParticipant() {
+// ===== Bulk "Add people" — search + multi-select existing actors, stage new ones,
+// set default roles + fee once, insert all in one go. (Single-add is just N=1.)
+const addPeople = { selected: new Set(), staged: [] };
+async function hubAddPeople() {
   await hubLoadActors();
-  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}${a.roles && a.roles.length ? (' — ' + a.roles.join('/')) : ''}</option>`).join('');
-  const roleList = ['headliner', 'dj', 'opener', 'performer', 'painter', 'dancer', 'host', 'crew', 'photographer', 'producer', 'vendor'];
-  openKpi('Add participant', 'Links an actor to this event (event_participants)', `
-    <div class="modal-form-row"><label class="modal-label">Who *</label>
-      <select class="modal-select" name="mode" id="ep-mode">
-        <option value="existing">Pick an existing actor</option>
-        <option value="new">Create a new actor</option>
-      </select></div>
-    <div id="ep-existing">
-      <div class="modal-form-row"><label class="modal-label">Actor *</label>
-        <select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+  addPeople.selected = new Set(); addPeople.staged = [];
+  const already = new Set(hub.people.map(p => p.actor?.id).filter(Boolean));
+  openKpi('Add people', 'Select several at once — set roles + fee once, fine-tune each afterward', `
+    <input class="modal-input pick-search" data-pick-search placeholder="Search people…" autocomplete="off">
+    <div class="pick-list" data-pick-list></div>
+    <div class="pick-newrow">
+      <input class="modal-input" data-new-name placeholder="…or add a new person/org by name">
+      <select class="modal-select" style="max-width:110px" data-new-kind><option value="person">person</option><option value="org">org</option></select>
+      <button type="button" class="hub-mini" data-new-add>+ add</button>
     </div>
-    <div id="ep-new" style="display:none;">
-      <div class="modal-form-row half-row">
-        <div><label class="modal-label">Name *</label><input class="modal-input" name="new_name"></div>
-        <div><label class="modal-label">Kind</label><select class="modal-select" name="new_kind"><option value="person">person</option><option value="org">org</option></select></div>
-      </div>
+    <div class="pick-staged" data-staged></div>
+    <div class="pick-selcount" data-selcount>0 selected</div>
+    <div class="kpi-section-h">Roles for this batch *</div>
+    ${roleChipsHTML([])}
+    <div class="modal-form-row half-row" style="margin-top:10px;">
+      <div><label class="modal-label">Fee for batch ($, optional)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee"></div>
+      <div><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px;"><input type="checkbox" name="is_contractor" style="width:auto;margin:0;"> Contractors</label></div>
     </div>
-    <div class="modal-form-row half-row">
-      <div><label class="modal-label">Role *</label><input class="modal-input" name="role" list="ep-roles" placeholder="headliner, dj, painter…"></div>
-      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee"></div>
-    </div>
-    <datalist id="ep-roles">${roleList.map(r => `<option value="${r}">`).join('')}</datalist>
-    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_contractor" style="width:auto;margin:0;"> Contractor (paid collaborator)</label></div>`,
-    submitAddParticipant, 'Add participant');
-  const modeSel = $('kpiModalBody').querySelector('#ep-mode');
-  modeSel.addEventListener('change', () => {
-    const isNew = modeSel.value === 'new';
-    $('kpiModalBody').querySelector('#ep-existing').style.display = isNew ? 'none' : '';
-    $('kpiModalBody').querySelector('#ep-new').style.display = isNew ? '' : 'none';
+    <div class="kpi-hint">You can edit each person's roles, fee and set times after adding.</div>`,
+    submitAddPeople, 'Add selected');
+  const body = $('kpiModalBody');
+  const listEl = body.querySelector('[data-pick-list]');
+  const renderList = (filter = '') => {
+    const f = filter.trim().toLowerCase();
+    const rows = hub.actors
+      .filter(a => !already.has(a.id))
+      .filter(a => !f || a.display_name.toLowerCase().includes(f))
+      .map(a => `<div class="pick-row${addPeople.selected.has(a.id) ? ' on' : ''}" data-pick="${escapeHtml(a.id)}">
+        <span class="pick-check">✓</span>
+        <span>${escapeHtml(a.display_name)}<span class="pick-sub"> ${a.roles && a.roles.length ? a.roles.join('/') : a.kind}</span></span>
+      </div>`).join('');
+    listEl.innerHTML = rows || '<div class="hub-empty">No matches.</div>';
+  };
+  const updateCount = () => {
+    body.querySelector('[data-selcount]').textContent = (addPeople.selected.size + addPeople.staged.length) + ' selected';
+    body.querySelector('[data-staged]').innerHTML = addPeople.staged.map((s, i) => `<span class="role-chip" data-unstage="${i}" title="remove">${escapeHtml(s.name)} ✕</span>`).join('');
+  };
+  renderList(); updateCount();
+  body.querySelector('[data-pick-search]').addEventListener('input', (e) => renderList(e.target.value));
+  listEl.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-pick]'); if (!row) return;
+    const id = row.dataset.pick;
+    if (addPeople.selected.has(id)) addPeople.selected.delete(id); else addPeople.selected.add(id);
+    row.classList.toggle('on'); updateCount();
+  });
+  body.querySelector('[data-new-add]').addEventListener('click', () => {
+    const nameEl = body.querySelector('[data-new-name]'); const name = nameEl.value.trim();
+    if (!name) return;
+    addPeople.staged.push({ name, kind: body.querySelector('[data-new-kind]').value });
+    nameEl.value = ''; updateCount();
+  });
+  body.querySelector('[data-staged]').addEventListener('click', (e) => {
+    const chip = e.target.closest('[data-unstage]'); if (!chip) return;
+    addPeople.staged.splice(Number(chip.dataset.unstage), 1); updateCount();
   });
 }
-async function submitAddParticipant() {
-  const mode = kpiVal('mode');
-  const role = kpiVal('role'); if (!role) throw new Error('Role is required');
-  let actor_id;
-  if (mode === 'new') {
-    const nm = kpiVal('new_name'); if (!nm) throw new Error('New actor name is required');
-    const { data, error } = await sb.from('actors').insert({ display_name: nm, kind: kpiVal('new_kind') || 'person' }).select('id').single();
-    if (error) throw error; actor_id = data.id; hub.actors = null;
-  } else {
-    actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
-  }
+async function submitAddPeople() {
+  const roles = readRoleChips();
+  if (!roles.length) throw new Error('Pick at least one role for the batch');
+  if (addPeople.selected.size + addPeople.staged.length === 0) throw new Error('Select at least one person');
   const feeRaw = kpiVal('fee');
-  const row = { event_id: hub.eventId, actor_id, role, fee: feeRaw === '' ? null : Number(feeRaw),
-                is_contractor: !!$('kpiModalBody').querySelector('[name="is_contractor"]')?.checked };
-  const { error } = await sb.from('event_participants').insert(row);
-  if (error) throw new Error(error.code === '23505' ? 'That actor already has this role on this event.' : error.message);
-  closeKpi(); toast('Participant added', 'ok'); await hubReload('people');
+  const fee = feeRaw === '' ? null : Number(feeRaw);
+  const is_contractor = !!$('kpiModalBody').querySelector('[name="is_contractor"]')?.checked;
+  const actorIds = [...addPeople.selected];
+  // Create staged new actors first.
+  if (addPeople.staged.length) {
+    const { data, error } = await sb.from('actors').insert(addPeople.staged.map(s => ({ display_name: s.name, kind: s.kind }))).select('id');
+    if (error) throw error;
+    actorIds.push(...data.map(d => d.id)); hub.actors = null;
+  }
+  const rows = actorIds.map(actor_id => ({ event_id: hub.eventId, actor_id, role: roles[0], roles, fee, is_contractor }));
+  const { error } = await sb.from('event_participants').insert(rows);
+  if (error) throw error;
+  closeKpi(); toast(`${rows.length} ${rows.length === 1 ? 'person' : 'people'} added`, 'ok'); await hubReload('people');
+}
+
+// ===== Edit a participant (roles / fee / bill_order / set times / is_contractor) =====
+const toLocalInput = (ts) => (ts ? new Date(ts).toISOString().slice(0, 16) : '');
+async function hubEditParticipant(id) {
+  const p = hub.people.find(x => x.id === id); if (!p) return;
+  const roles = (p.roles && p.roles.length ? p.roles : (p.role ? [p.role] : []));
+  openKpi('Edit participant', escapeHtml(p.actor?.display_name || ''), `
+    <div class="kpi-section-h">Roles *</div>
+    ${roleChipsHTML(roles)}
+    <div class="modal-form-row half-row" style="margin-top:10px;">
+      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee" value="${p.fee ?? ''}"></div>
+      <div><label class="modal-label">Bill order</label><input class="modal-input" type="number" min="0" step="1" name="bill_order" value="${p.bill_order ?? ''}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Set start</label><input class="modal-input" type="datetime-local" name="set_start" value="${toLocalInput(p.set_start)}"></div>
+      <div><label class="modal-label">Set end</label><input class="modal-input" type="datetime-local" name="set_end" value="${toLocalInput(p.set_end)}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_contractor" style="width:auto;margin:0;"${p.is_contractor ? ' checked' : ''}> Contractor</label></div>`,
+    () => submitEditParticipant(id), 'Save changes');
+}
+async function submitEditParticipant(id) {
+  const roles = readRoleChips();
+  if (!roles.length) throw new Error('A participant needs at least one role');
+  const feeRaw = kpiVal('fee'); const bo = kpiVal('bill_order');
+  const ss = kpiVal('set_start'); const se = kpiVal('set_end');
+  const patch = {
+    roles, role: roles[0],
+    fee: feeRaw === '' ? null : Number(feeRaw),
+    bill_order: bo === '' ? null : Number(bo),
+    set_start: ss || null, set_end: se || null,
+    is_contractor: !!$('kpiModalBody').querySelector('[name="is_contractor"]')?.checked,
+  };
+  const { error } = await sb.from('event_participants').update(patch).eq('id', id);
+  if (error) throw error;
+  closeKpi(); toast('Participant updated', 'ok'); await hubReload('people');
 }
 
 async function hubAddTask() {
@@ -3196,53 +3419,154 @@ async function submitAssignTask(taskId) {
   closeKpi(); toast('Assigned', 'ok'); await hubReload('tasks');
 }
 
+// ===== Multi-select equipment assign — tick several, set purpose/dates once =====
+const addEquip = { selected: new Set() };
 async function hubAddEquipment() {
-  const { data: inv } = await sb.from('equipment_inventory').select('id, name, category').is('deleted_at', null).order('name');
-  const opts = (inv || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}${e.category ? (' — ' + e.category) : ''}</option>`).join('');
-  openKpi('Assign equipment', 'Creates an equipment_usage row for this event', `
-    <div class="modal-form-row"><label class="modal-label">Equipment *</label><select class="modal-select" name="equipment_id">${opts || '<option value="">— none in inventory —</option>'}</select></div>
-    <div class="modal-form-row half-row">
+  const { data: inv } = await sb.from('equipment_inventory').select('id, name, category, status').is('deleted_at', null).order('name');
+  addEquip.selected = new Set();
+  openKpi('Assign equipment', 'Tick several items — set purpose + dates once for the batch', `
+    <input class="modal-input pick-search" data-pick-search placeholder="Search inventory…" autocomplete="off">
+    <div class="pick-list" data-pick-list></div>
+    <div class="pick-selcount" data-selcount>0 selected</div>
+    <div class="modal-form-row half-row" style="margin-top:8px;">
       <div><label class="modal-label">Purpose</label><select class="modal-select" name="purpose"><option value="own_event">own_event</option><option value="rental">rental</option><option value="other">other</option></select></div>
-      <div><label class="modal-label">Revenue attributed ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="revenue_attributed"></div>
+      <div><label class="modal-label">Revenue / item ($, optional)</label><input class="modal-input" type="number" min="0" step="0.01" name="revenue_attributed"></div>
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Start</label><input class="modal-input" type="date" name="start_date" value="${escapeHtml(hub.event?.event_date || TODAY())}"></div>
       <div><label class="modal-label">End</label><input class="modal-input" type="date" name="end_date"></div>
     </div>`,
-    submitAddEquipment, 'Assign');
+    submitAddEquipment, 'Assign selected');
+  const body = $('kpiModalBody');
+  const listEl = body.querySelector('[data-pick-list]');
+  const renderList = (filter = '') => {
+    const f = filter.trim().toLowerCase();
+    const rows = (inv || []).filter(e => !f || e.name.toLowerCase().includes(f) || (e.category || '').toLowerCase().includes(f))
+      .map(e => `<div class="pick-row${addEquip.selected.has(e.id) ? ' on' : ''}" data-pick="${escapeHtml(e.id)}">
+        <span class="pick-check">✓</span>
+        <span>${escapeHtml(e.name)}<span class="pick-sub"> ${escapeHtml(e.category || e.status || '')}</span></span>
+      </div>`).join('');
+    listEl.innerHTML = rows || '<div class="hub-empty">No matches.</div>';
+  };
+  const updateCount = () => { body.querySelector('[data-selcount]').textContent = addEquip.selected.size + ' selected'; };
+  renderList(); updateCount();
+  body.querySelector('[data-pick-search]').addEventListener('input', (e) => renderList(e.target.value));
+  listEl.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-pick]'); if (!row) return;
+    const id = row.dataset.pick;
+    if (addEquip.selected.has(id)) addEquip.selected.delete(id); else addEquip.selected.add(id);
+    row.classList.toggle('on'); updateCount();
+  });
 }
 async function submitAddEquipment() {
-  const equipment_id = kpiVal('equipment_id'); if (!equipment_id) throw new Error('Pick equipment');
-  const row = { event_id: hub.eventId, equipment_id, purpose: kpiVal('purpose') || null,
-                start_date: kpiVal('start_date') || hub.event?.event_date || TODAY() };
-  const end = kpiVal('end_date'); if (end) row.end_date = end;
-  const rev = kpiVal('revenue_attributed'); if (rev !== '') row.revenue_attributed = Number(rev);
-  const { error } = await sb.from('equipment_usage').insert(row);
+  if (addEquip.selected.size === 0) throw new Error('Select at least one item');
+  const purpose = kpiVal('purpose') || null;
+  const start = kpiVal('start_date') || hub.event?.event_date || TODAY();
+  const end = kpiVal('end_date') || null;
+  const revRaw = kpiVal('revenue_attributed');
+  const rev = revRaw === '' ? null : Number(revRaw);
+  const rows = [...addEquip.selected].map(equipment_id => ({
+    event_id: hub.eventId, equipment_id, purpose, start_date: start, end_date: end, revenue_attributed: rev,
+  }));
+  const { error } = await sb.from('equipment_usage').insert(rows);
   if (error) throw error;
-  closeKpi(); toast('Equipment assigned', 'ok'); await hubReload('equipment');
+  closeKpi(); toast(`${rows.length} item${rows.length === 1 ? '' : 's'} assigned`, 'ok'); await hubReload('equipment');
+}
+// ===== Edit an equipment assignment =====
+async function hubEditEquipment(id) {
+  const u = hub.equipment.find(x => x.id === id); if (!u) return;
+  openKpi('Edit equipment assignment', escapeHtml(u.equipment?.name || ''), `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Purpose</label><select class="modal-select" name="purpose">${['own_event', 'rental', 'other'].map(p => `<option value="${p}"${p === u.purpose ? ' selected' : ''}>${p}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Revenue attributed ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="revenue_attributed" value="${u.revenue_attributed ?? ''}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Start</label><input class="modal-input" type="date" name="start_date" value="${escapeHtml(fmtDate(u.start_date) || '')}"></div>
+      <div><label class="modal-label">End</label><input class="modal-input" type="date" name="end_date" value="${escapeHtml(fmtDate(u.end_date) || '')}"></div>
+    </div>`,
+    () => submitEditEquipment(id), 'Save changes');
+}
+async function submitEditEquipment(id) {
+  const revRaw = kpiVal('revenue_attributed');
+  const patch = {
+    purpose: kpiVal('purpose') || null,
+    start_date: kpiVal('start_date') || hub.event?.event_date || TODAY(),
+    end_date: kpiVal('end_date') || null,
+    revenue_attributed: revRaw === '' ? null : Number(revRaw),
+  };
+  const { error } = await sb.from('equipment_usage').update(patch).eq('id', id);
+  if (error) throw error;
+  closeKpi(); toast('Assignment updated', 'ok'); await hubReload('equipment');
 }
 
+// Shared contract form (add + edit). `c` null for add. Includes inline doc upload.
+function contractFormHTML(c, actorOpts) {
+  const kinds = ['event_services', 'contractor', 'vendor', 'rental', 'sponsor'];
+  const stats = ['draft', 'sent', 'viewed', 'signed', 'countersigned', 'void'];
+  return `
+    <div class="modal-form-row"><label class="modal-label">Counterparty actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Kind *</label><select class="modal-select" name="kind">${kinds.map(k => `<option value="${k}"${c && c.kind === k ? ' selected' : ''}>${k}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee" value="${c?.fee ?? ''}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${stats.map(s => `<option value="${s}"${c && c.status === s ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2">${c ? escapeHtml(c.notes || '') : ''}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Document ${c?.document_id ? '(upload to replace)' : '(optional)'}</label><input class="modal-input" type="file" id="contractDoc"></div>`;
+}
+// Upload a contract's document → private 'agreements' bucket + files row (subject_type='contract').
+// Returns the new files.id, or null if no file chosen. Throws on failure.
+async function uploadContractDoc(contractId) {
+  const inp = $('contractDoc'); const file = inp?.files?.[0];
+  if (!file) return null;
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `contract/${contractId}/${Date.now()}_${safe}`;
+  const { error: upErr } = await sb.storage.from('agreements').upload(path, file, { upsert: false });
+  if (upErr) throw new Error('Doc upload failed: ' + upErr.message);
+  const { data: frow, error } = await sb.from('files')
+    .insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'contract', subject_id: contractId, kind: 'contract' })
+    .select('id').single();
+  if (error) throw new Error('Doc record failed: ' + error.message);
+  return frow.id;
+}
 async function hubAddContract() {
   await hubLoadActors();
   const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
-  openKpi('Add contract', 'Creates a contract (new contracts table — canonical)', `
-    <div class="modal-form-row"><label class="modal-label">Counterparty actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
-    <div class="modal-form-row half-row">
-      <div><label class="modal-label">Kind *</label><select class="modal-select" name="kind"><option value="event_services">event_services</option><option value="contractor">contractor</option><option value="vendor">vendor</option><option value="rental">rental</option><option value="sponsor">sponsor</option></select></div>
-      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee"></div>
-    </div>
-    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status"><option value="draft">draft</option><option value="sent">sent</option><option value="viewed">viewed</option><option value="signed">signed</option><option value="countersigned">countersigned</option><option value="void">void</option></select></div>
-    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2"></textarea></div>`,
-    submitAddContract, 'Add contract');
+  openKpi('Add contract', 'New contracts table — canonical (legacy agreements ignored)', contractFormHTML(null, actorOpts), submitAddContract, 'Add contract');
 }
 async function submitAddContract() {
   const actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
   const row = { event_id: hub.eventId, actor_id, kind: kpiVal('kind') || 'event_services', status: kpiVal('status') || 'draft' };
   const fee = kpiVal('fee'); if (fee !== '') row.fee = Number(fee);
   const notes = kpiVal('notes'); if (notes) row.notes = notes;
-  const { error } = await sb.from('contracts').insert(row);
+  const { data: c, error } = await sb.from('contracts').insert(row).select('id').single();
   if (error) throw error;
+  const docId = await uploadContractDoc(c.id);
+  if (docId) { const { error: ue } = await sb.from('contracts').update({ document_id: docId }).eq('id', c.id); if (ue) throw ue; }
   closeKpi(); toast('Contract added', 'ok'); await hubReload('contracts');
+}
+async function hubEditContract(id) {
+  const c = hub.contracts.find(x => x.id === id); if (!c) return;
+  await hubLoadActors();
+  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}"${a.id === c.actor_id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Edit contract', escapeHtml(c.actor?.display_name || ''), contractFormHTML(c, actorOpts), () => submitEditContract(id), 'Save changes');
+}
+async function submitEditContract(id) {
+  const actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
+  const fee = kpiVal('fee'); const notes = kpiVal('notes');
+  const patch = { actor_id, kind: kpiVal('kind'), status: kpiVal('status'), fee: fee === '' ? null : Number(fee), notes: notes || null };
+  const { error } = await sb.from('contracts').update(patch).eq('id', id);
+  if (error) throw error;
+  const docId = await uploadContractDoc(id);
+  if (docId) { const { error: ue } = await sb.from('contracts').update({ document_id: docId }).eq('id', id); if (ue) throw ue; }
+  closeKpi(); toast('Contract updated', 'ok'); await hubReload('contracts');
+}
+async function hubContractDocDownload(contractId) {
+  const c = hub.contracts?.find(x => x.id === contractId); if (!c || !c.document_id) return;
+  const { data: f, error } = await sb.from('files').select('bucket, path').eq('id', c.document_id).single();
+  if (error || !f) { toast('Document not found', 'err'); return; }
+  const { data, error: se } = await sb.storage.from(f.bucket).createSignedUrl(f.path, 3600);
+  if (se) { toast('Link failed: ' + se.message, 'err'); return; }
+  window.open(data.signedUrl, '_blank');
 }
 
 async function hubSetTaskStatus(id, status) {
@@ -3303,14 +3627,17 @@ async function hubDelete(spec) {
 
 const HUB_ACTIONS = {
   'edit-core': () => openEditEvent(hub.eventId),
-  'money-panel': () => openMoneyPanel(hub.eventId),
   'gen-dayof': hubGenerateDayOf,
-  'add-participant': hubAddParticipant,
+  'add-people': hubAddPeople,
+  'edit-participant': (el) => hubEditParticipant(el.dataset.id),
   'add-task': hubAddTask,
   'assign-task': (el) => hubAssignTask(el.dataset.id),
   'add-equipment': hubAddEquipment,
+  'edit-equipment': (el) => hubEditEquipment(el.dataset.id),
   'add-contract': hubAddContract,
+  'edit-contract': (el) => hubEditContract(el.dataset.id),
   'upload-file': hubDoUpload,
+  'log-ig': openLogIG,
 };
 
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
@@ -3318,10 +3645,14 @@ $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('bu
 $('panel-eventhub').addEventListener('click', (e) => {
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
   const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
+  // Inline Money section uses the shared money add/delete markup.
+  const moneyEl = e.target.closest('[data-money-add],[data-money-del]');
+  if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
   const fd = e.target.closest('[data-hub-fdl]'); if (fd) { hubFileDownload(fd.dataset.hubFdl); return; }
+  const cdoc = e.target.closest('[data-hub-cdoc]'); if (cdoc) { hubContractDocDownload(cdoc.dataset.hubCdoc); return; }
   const del = e.target.closest('[data-hub-del]'); if (del) { hubDelete(del.dataset.hubDel); return; }
 });
 $('panel-eventhub').addEventListener('change', (e) => {
