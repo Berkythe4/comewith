@@ -30,6 +30,19 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Sprint 4: chain fix + end-to-end verify + actors-only backfill)
+Theme = interconnection (prove the links, not the nodes). Migrations 035 + 036 applied to prod (additive).
+- **Venue-save bug = display/refetch**, not a save failure (DI#2.venue_id was correctly = Signal). The hub showed the name via a PostgREST FK-embed (`venue:venues(name)`) that returned null client-side; rest of `hubLoadEvent` already fetched owner explicitly. **Fix:** fetch venue explicitly by id (drop the embed). Now persists AND displays.
+- **One gear task, not N:** migration 035 generator emits a single "Load / test / setup gear (see equipment sheet)" + new **`v_event_equipment_sheet`** view; Equipment tab has a printable **Load-in sheet**.
+- **Venue-as-counterparty (A-a):** `venues.actor_id` (additive FK). Contract form preselects the venue's linked actor; "Make '<venue>' contractable" creates+links an org actor inline.
+- **Delete-resurrection fixed:** generator suppression now matches a title that exists for the event INCLUDING soft-deleted → a deleted task is never re-added. Idempotency + future-only edits preserved.
+- **036:** seeded a "Finalize & sign venue contract" outreach template (venue:booking) so the chain includes a contract task.
+- **End-to-end verify (Phase 2 gate, rolled back) on real DI#2:** venue→contacts surface→one gear task→rider→sound, load-in→booking, contract→booking→venue contractable→deleted stays deleted. All green.
+- **Backfill (Phase 4 — only persisting step):** actors + people-links ONLY, no money. Dry run found NO empty-in-DB+spreadsheet-money event → no POPULATE (DI#1 money already reconciled in the 2026-06-02 load; the `*-list.csv` files are attendee exports, not actor sources). **Created 3 actors** (32LVS, Gavin/Sara of Signal), **linked existing** (Keith→DI#1 dj solo-run, Kristen London→DI Artist Showcase), **5 people-links** (3 participants + Gavin=sound/Sara=other on Signal). Tagged `[BACKFILL 2026-06-16]`; idempotent; **DI#2 money counts identical before/after** (backup in `backups/prebackfill_2026-06-16_*.json`). Actors 20→23, no dups. Interconnection proven: backfilled Gavin auto-assigns DI#2's rider.
+- **Flagged for Keith (not guessed):** Crossroads Café Artist Showcase roster; Rich Klein affiliation; Sara's exact function; the 42 DI#1 ticket-buyers (attendees). See `BACKFILL_DRYRUN.md`.
+- **Off-prompt UX:** explicit-fetch over embed (matches owner pattern); load-in sheet as a print modal; venue-contractable affordance inline in the contract form; backfill deliberately conservative (people-only) because the DB already holds the money.
+- Deployed to master (Netlify). Existing 16 tabs / prior hub work untouched.
+
 ## This session shipped (2026-06-16 — Sprint 3: Venue/contact matrix (3a) + conditional workflows & template editor (3b))
 Resumed cleanly after a mid-3b.3 network drop (template-editor JS was the only unfinished piece — nav/panel/loadTab branch existed but `loadTemplates` et al. were missing; finished them). Both migrations were already applied to prod; re-verified objects + re-ran both test suites green before deploy.
 - **Migration 033 (applied):** `venue_contacts` + `vendor_contacts` link tables (contacts are ACTORS — no parallel people table); `v_venue_contacts` / `v_vendor_contacts` views (`security_invoker`, anon-revoked) carrying a `last_event_with` recency column = the SEAM for future frequency ranking (v1 only ORDERS by it — no ML).

@@ -123,3 +123,26 @@ Walk on `dashboard.html` signed in as admin.
 ## Automated data-layer proof (green, rolled back)
 - `tests/contact_matrix_test.sql` (3a gate) — venue CRUD, venue+vendor contact links, one-per-function enforced, set-venue-on-event, `v_venue_contacts` lookup with `last_event_with` recency seam. All green; zero persisted.
 - `tests/conditional_workflows_test.sql` (3b) — gear-off vs gear-on task sets, rider offset = T−14, **outreach auto-assigned to the sound contact**, booking outreach **degrades to unassigned + hint**, idempotent re-run, and **future-only** (editing a template leaves an already-generated task's due_date unchanged). All green; zero persisted (template offset rolled back).
+
+---
+
+# Sprint 4 — Chain fix + end-to-end verify + actors-only backfill
+
+## Chain fixes
+- [ ] **Venue saves AND displays:** open DI#2 → Overview shows **Venue — Signal** (was blank). Set/change venue persists and shows immediately. (Root cause was a stale FK-embed; now fetched explicitly like owner.)
+- [ ] **ONE gear task:** on a gear-providing event, "Generate task checklist" creates a single **"Load / test / setup gear (see equipment sheet)"** — not one per item. Equipment tab → **🖨 Load-in sheet** shows the printable per-item checklist.
+- [ ] **Venue is contractable:** on an event with a venue, **Contracts → + Add contract** → if the venue has no actor yet, a **"Make 'Signal' contractable"** button creates+links its org actor and preselects it as counterparty. Next time it's just there.
+- [ ] **Deleted task stays deleted:** delete a generated task → regenerate → it does **not** come back. Live tasks still don't duplicate; template edits still future-only.
+- [ ] **Outreach generates with a venue present:** rider → venue sound contact, load-in & contract → booking contact (or unassigned + hint if none on file).
+
+## Backfill result (people only — money untouched)
+- [ ] **3 new actors:** 32LVS, Gavin (Signal), Sara (Signal). No duplicates (KRNeY/Keith/Kristen London linked, not recreated). Actors 20 → 23.
+- [ ] **People-links:** DI#1 → Keith (dj, solo run); DI Artist Showcase → Kristen London + 32LVS; **Signal venue contacts** → Gavin (sound), Sara (other).
+- [ ] **Money proven untouched:** DI#2 income/expenses/sponsorships/donations counts identical before/after; DI#1 unchanged (its money was already reconciled — populating would double-count); no ticketing rows added anywhere.
+- [ ] **Interconnection on real data:** because Gavin was added as Signal's sound contact, generating DI#2's checklist now auto-assigns the rider to Gavin.
+
+## Automated proof (green, rolled back unless noted)
+- `tests/chain_fixes_test.sql` — one gear task, no per-item tasks, rider→sound, **deleted-stays-deleted**, venue↔actor link, equipment sheet. Zero persisted.
+- `tests/chain_e2e_verify.sql` — **full chain on the real DI#2 event**: venue resolves (Signal) → 2 contacts surface → one gear task → rider→sound, load-in→booking, contract→booking → venue contractable → deleted stays deleted. Zero persisted.
+- Backfill (the one persisting step): executed; verified money counts unchanged, no dup actors, links present, and the rolled-back interconnection check confirmed backfilled-Gavin auto-assigns the rider. Pre-write backup of all 5 financial/ticket tables in `backups/prebackfill_2026-06-16_*.json`.
+- Flagged for Keith (not guessed): Crossroads Café Artist Showcase performer roster, Rich Klein's affiliation, Sara's exact function, the 42 DI#1 ticket-buyers (attendees, not actors). See `BACKFILL_DRYRUN.md`.
