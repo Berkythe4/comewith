@@ -30,6 +30,16 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Attendee + mailing backfill with lifetime guest stats)
+Migration 037 applied to prod (additive). Backfilled attendees → guests → subscribers, money untouched.
+- **Sources:** 3 RA ticket exports (DI#1 42, Crossroads showcase 4, DI#2 20) = 66 rows → **45 unique guests** (dedupe by email). 0 no-email, 0 malformed, **0 explicit opt-outs**. The DI#2 door-list xlsx (81 names, **no emails**, fuzzy spellings overlapping RA) was **flagged, not imported** (no dedupe key → would dupe).
+- **Rule applied:** subscribe everyone with email except explicit opt-outs → **all 45 subscribed** (none opted out). **Deliverability exposure flagged:** 20 cold-only guests (bought a ticket, never ticked RA marketing) — DI#1 15/28, Crossroads 1/3, DI#2 14/16. Tagged by source/segment so a cold-set unsubscribe is a one-liner if Keith wants.
+- **Schema 037:** `guest_event_attendance` (additive guest↔event link carrying `amount_spent`) + `v_guest_stats` view (events_attended count+list, total_spent, first/last seen, subscribed). **Deliberately did NOT write `ticketing` rows** — that feeds `v_event_summary.ticket_revenue` and would double-count DI#1's reconciled income. Off-prompt: guest "total spent" comes from the link, event financials untouched.
+- **Result:** guests 45, subscribers 45 (all subscribed), subscriber_segments 47 (per-event), attendance 47. **No dup guests/subscribers** (dedupe by email). Multi-event proven: Claudia (DI#1+DI#2 $65.70), Liz McQuillan (Crossroads+DI#1 $70). **Money untouched: ticketing=3, income=6 unchanged.** Backups in `backups/preattendee_2026-06-16_*.json`. Idempotent, tagged `[ATTENDEE BACKFILL 2026-06-16]`.
+- **Surfacing:** Subscribers tab now shows real list + **Events + Total spent** columns (joined from `v_guest_stats`). Campaigns tab can send to the 45.
+- **Flagged for Keith:** the 20 cold subscriptions (deliverability); the 81-name door list (no emails). See `ATTENDEE_BACKFILL_DRYRUN.md`.
+- Deployed to master (Netlify). Existing tabs untouched except Subscribers enrichment.
+
 ## This session shipped (2026-06-16 — Sprint 4: chain fix + end-to-end verify + actors-only backfill)
 Theme = interconnection (prove the links, not the nodes). Migrations 035 + 036 applied to prod (additive).
 - **Venue-save bug = display/refetch**, not a save failure (DI#2.venue_id was correctly = Signal). The hub showed the name via a PostgREST FK-embed (`venue:venues(name)`) that returned null client-side; rest of `hubLoadEvent` already fetched owner explicitly. **Fix:** fetch venue explicitly by id (drop the embed). Now persists AND displays.

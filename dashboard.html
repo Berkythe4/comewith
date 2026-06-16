@@ -1118,8 +1118,9 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th>Name</th>
             <th>Status</th>
             <th>Segments</th>
+            <th class="num">Events</th>
+            <th class="num">Total spent</th>
             <th>Source</th>
-            <th>Confirmed</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -1586,13 +1587,17 @@ const renderers = {
       const segments = Array.isArray(r.subscriber_segments) && r.subscriber_segments.length
         ? r.subscriber_segments.map(s => s.segment).join(', ')
         : '';
+      const st = r._stats;
+      const ev = st && st.events_attended != null ? st.events_attended : '';
+      const spent = st && st.total_spent != null ? money(st.total_spent) : muted;
       return `<tr>
         <td class="truncate">${escapeHtml(r.email || '')}</td>
         <td>${escapeHtml(r.full_name || '') || muted}</td>
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
         <td>${escapeHtml(segments) || muted}</td>
+        <td class="num">${ev !== '' ? ev : muted}</td>
+        <td class="num">${spent}</td>
         <td>${escapeHtml(r.source || '') || muted}</td>
-        <td>${escapeHtml(fmtDate(r.confirmed_at)) || muted}</td>
       </tr>`;
     }).join('');
   },
@@ -1670,10 +1675,19 @@ const queries = {
     .order('stage_name')
     .limit(500),
 
-  subscribers: () => sb.from('subscribers')
-    .select('id, email, full_name, status, source, confirmed_at, created_at, subscriber_segments(segment)')
-    .order('created_at', { ascending: false })
-    .limit(500),
+  subscribers: async () => {
+    // Enrich with lifetime guest stats (events attended + total spent) by email.
+    const [subs, stats] = await Promise.all([
+      sb.from('subscribers')
+        .select('id, email, full_name, status, source, confirmed_at, created_at, subscriber_segments(segment)')
+        .order('created_at', { ascending: false }).limit(1000),
+      sb.from('v_guest_stats').select('email, events_attended, total_spent'),
+    ]);
+    if (subs.error) return subs;
+    const m = {}; (stats.data || []).forEach(s => { if (s.email) m[s.email.toLowerCase()] = s; });
+    const data = (subs.data || []).map(r => ({ ...r, _stats: m[(r.email || '').toLowerCase()] || null }));
+    return { data, error: null };
+  },
 
   campaigns: () => sb.from('mailing_campaigns')
     .select('id, name, subject, segment_filter, status, recipient_count, sent_at, created_at')
