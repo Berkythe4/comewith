@@ -415,6 +415,8 @@ body::before {
 }
 .row-btn:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
 .row-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+.row-btn.primary { background: var(--red); color: #fff; border-color: var(--red); }
+.row-btn.primary:hover:not(:disabled) { background: var(--red-dk); border-color: var(--red-dk); color: #fff; }
 
 /* Inline status edit selects (Phase 4 sprint 1) */
 .status-select {
@@ -574,6 +576,138 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   .sidebar-nav button.active { border-left-color: transparent; border-bottom-color: var(--red); }
   .sidebar-footer { flex: 1 1 100%; }
   .main { padding: 20px 16px 40px; }
+}
+
+/* ============================================================
+   EVENT HUB — operational home for a single event (Sprint 1).
+   Cohesive Come With identity; this screen is the template the
+   Equipment / Artist / Vendor modules follow.
+   ============================================================ */
+.hub-back {
+  display: inline-flex; align-items: center; gap: 6px; margin-bottom: 14px;
+  background: none; border: none; cursor: pointer; padding: 4px 0;
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--mid);
+}
+.hub-back:hover { color: var(--red); }
+.hub-head {
+  border: 1px solid var(--border); background: #fff; padding: 22px 24px; margin-bottom: 18px;
+}
+.hub-title {
+  font-family: 'Bebas Neue', sans-serif; font-size: 2.4rem; line-height: 1;
+  letter-spacing: 0.03em; color: var(--ink);
+}
+.hub-facts {
+  display: flex; flex-wrap: wrap; gap: 18px 28px; margin-top: 12px;
+  font-size: 0.8rem; color: var(--ink);
+}
+.hub-facts .lbl {
+  display: block; font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: var(--mid); margin-bottom: 3px;
+}
+.hub-head-actions { margin-top: 16px; display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* Stage stepper */
+.stage-stepper {
+  display: flex; flex-wrap: wrap; gap: 0; margin-top: 18px;
+  border: 1px solid var(--border); border-radius: 0; overflow: hidden;
+}
+.stage-step {
+  flex: 1 1 0; min-width: 96px; text-align: center; cursor: pointer;
+  padding: 9px 6px; background: var(--off); border: none; border-right: 1px solid var(--border);
+  font-family: 'Inconsolata', monospace; font-size: 0.62rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--mid); transition: background 0.15s, color 0.15s;
+  position: relative;
+}
+.stage-step:last-child { border-right: none; }
+.stage-step:hover { background: #fff; color: var(--ink); }
+.stage-step.done { color: var(--ink); background: #fff; }
+.stage-step.current { background: var(--red); color: #fff; font-weight: 500; }
+.stage-step.current::after { content: '●'; display: block; font-size: 0.5rem; margin-top: 2px; }
+
+/* Section sub-nav within the hub */
+.hub-secnav {
+  display: flex; flex-wrap: wrap; gap: 2px; margin-bottom: 16px;
+  border-bottom: 2px solid var(--ink);
+}
+.hub-secnav button {
+  background: none; border: none; cursor: pointer; padding: 9px 14px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.02rem; letter-spacing: 0.05em;
+  color: var(--mid); border-bottom: 3px solid transparent; margin-bottom: -2px;
+}
+.hub-secnav button:hover { color: var(--ink); }
+.hub-secnav button.active { color: var(--red); border-bottom-color: var(--red); }
+.hub-secnav button .sec-count {
+  font-family: 'Inconsolata', monospace; font-size: 0.62rem; color: var(--mid);
+  margin-left: 5px; vertical-align: middle;
+}
+
+.hub-sec { display: none; }
+.hub-sec.active { display: block; }
+.hub-sec-bar {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px;
+  margin-bottom: 12px; flex-wrap: wrap;
+}
+.hub-sec-bar h3 {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; letter-spacing: 0.04em; color: var(--ink);
+}
+
+/* Overview summary cards */
+.hub-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+.hub-card { border: 1px solid var(--border); background: #fff; padding: 14px 16px; }
+.hub-card .lbl { font-size: 0.56rem; letter-spacing: 0.16em; text-transform: uppercase; color: var(--mid); }
+.hub-card .val { font-family: 'Bebas Neue', sans-serif; font-size: 1.9rem; line-height: 1.1; margin-top: 6px; color: var(--ink); }
+.hub-card .val.neg { color: var(--red-dk); }
+.hub-card .val.pos { color: var(--green); }
+
+/* Hub list rows (people / tasks / equipment / contracts / files) */
+.hub-list { border: 1px solid var(--border); background: #fff; }
+.hub-li {
+  display: flex; align-items: center; gap: 12px; padding: 11px 14px;
+  border-bottom: 1px solid var(--border); font-size: 0.84rem;
+}
+.hub-li:last-child { border-bottom: none; }
+.hub-li .li-main { flex: 1 1 auto; min-width: 0; }
+.hub-li .li-main strong { font-weight: 700; }
+.hub-li .li-sub { font-size: 0.7rem; color: var(--mid); margin-top: 2px; }
+.hub-li .li-amt { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.hub-li-actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.hub-empty { padding: 22px 14px; text-align: center; color: var(--mid); font-style: italic; font-size: 0.82rem; }
+
+.hub-roles { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.role-chip {
+  font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--off); color: var(--mid); padding: 2px 6px; border: 1px solid var(--border);
+}
+
+/* Generate day-of callout */
+.dayof-callout {
+  border: 1px dashed var(--border-strong); background: var(--off);
+  padding: 16px 18px; margin-bottom: 16px;
+}
+.dayof-callout .doh {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; letter-spacing: 0.04em; color: var(--ink);
+}
+.dayof-callout p { font-size: 0.78rem; color: var(--mid); margin: 6px 0 12px; line-height: 1.5; }
+.dayof-hint { font-size: 0.72rem; color: var(--amber); margin-top: 8px; }
+
+.hub-btn {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.92rem; letter-spacing: 0.06em;
+  padding: 8px 16px; background: var(--red); color: #fff; border: none; cursor: pointer;
+}
+.hub-btn:hover:not(:disabled) { background: var(--red-dk); }
+.hub-btn.ghost { background: #fff; color: var(--ink); border: 1px solid var(--border-strong); }
+.hub-btn.ghost:hover { border-color: var(--red); color: var(--red); }
+.hub-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.hub-mini {
+  font-family: 'Inconsolata', monospace; font-size: 0.68rem; letter-spacing: 0.04em;
+  padding: 4px 9px; background: none; border: 1px solid var(--border-strong); color: var(--ink); cursor: pointer;
+}
+.hub-mini:hover { border-color: var(--red); color: var(--red); }
+.hub-mini.danger:hover { border-color: var(--red); color: var(--red); }
+.hub-status-sel {
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem; padding: 3px 6px;
+  border: 1px solid var(--border-strong); background: #fff; color: var(--ink);
 }
 </style>
 </head>
@@ -972,6 +1106,14 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <tbody></tbody>
         </table>
       </div>
+
+      <!-- ===== EVENT HUB (additive; reached from the Events tab) ===== -->
+      <div class="panel" id="panel-eventhub">
+        <button class="hub-back" id="hubBack">&larr; Back to events</button>
+        <div id="hubHead"></div>
+        <nav class="hub-secnav" id="hubSecNav"></nav>
+        <div id="hubSecBody"></div>
+      </div>
     </main>
 
   </div>
@@ -1322,6 +1464,7 @@ const renderers = {
         <td class="num">${r.capacity != null ? r.capacity : muted}</td>
         <td class="num">${r.total_attendance != null ? r.total_attendance : muted}</td>
         <td>
+          <button class="row-btn primary" data-event-open="${escapeHtml(r.id)}">Open</button>
           <button class="row-btn" data-event-money="${escapeHtml(r.id)}">Money</button>
           <button class="row-btn" data-event-edit="${escapeHtml(r.id)}">Edit</button>
           <button class="row-btn" data-event-delete="${escapeHtml(r.id)}">Delete</button>
@@ -2468,10 +2611,14 @@ async function submitEditEvent(id) {
   closeKpi(); toast('Event updated', 'ok');
   refreshStratIfActive();
   if (document.querySelector('#panel-events.active')) loadTab('events');
+  // If edited from inside the hub, refresh the hub header + overview.
+  if (document.querySelector('#panel-eventhub.active') && hub.eventId === id) openEventHub(id);
 }
 
 // Events row actions — edit / soft-delete (delegated)
 document.querySelector('main.main').addEventListener('click', async (e) => {
+  const openBtn = e.target.closest('[data-event-open]');
+  if (openBtn) { openEventHub(openBtn.dataset.eventOpen); return; }
   const moneyBtn = e.target.closest('[data-event-money]');
   if (moneyBtn) { openMoneyPanel(moneyBtn.dataset.eventMoney); return; }
   const editBtn = e.target.closest('[data-event-edit]');
@@ -2584,6 +2731,8 @@ $('kpiModalBody').addEventListener('click', async (e) => {
     await renderMoneyPanel();
     refreshStratIfActive();
     if (document.querySelector('#panel-events.active')) loadTab('events');
+    // Keep the hub's Overview cards in sync when money changes from inside the hub.
+    if (document.querySelector('#panel-eventhub.active') && hub.eventId === moneyState.eventId && hub.section === 'overview') hubGoSection('overview');
   } catch (err) {
     toast(err.message || String(err), 'err');
   }
@@ -2630,6 +2779,554 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
   toast('Income deleted', 'ok');
   refreshStratIfActive();
   loadTab('income');
+});
+
+// ============================================================
+// EVENT HUB — operational home for a single event (Sprint 1).
+// Additive surface, reached from the Events tab "Open" button.
+// Internal-admin only; reads/writes as the authenticated admin.
+// ============================================================
+const hub = { eventId: null, section: 'overview', event: null, actors: null, counts: null,
+              people: [], tasks: [], equipment: [], contracts: [], files: [] };
+const HUB_SECTIONS = [
+  ['overview', 'Overview'], ['people', 'People'], ['tasks', 'Tasks'], ['money', 'Money'],
+  ['equipment', 'Equipment'], ['contracts', 'Contracts'], ['files', 'Files'],
+];
+const STAGES = ['idea', 'planning', 'confirmed', 'live', 'wrapped', 'reported'];
+
+async function openEventHub(eventId) {
+  hub.eventId = eventId; hub.section = 'overview'; hub.actors = null;
+  for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-eventhub');
+  // Hub is reached from Events — keep that tab highlighted for orientation.
+  for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.tab === 'events');
+  window.scrollTo(0, 0);
+  $('hubHead').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading event…</div>';
+  $('hubSecNav').innerHTML = ''; $('hubSecBody').innerHTML = '';
+  await hubLoadEvent();
+  if (!hub.event) { $('hubHead').innerHTML = '<div class="panel-state err">Event not found.</div>'; return; }
+  $('mainTitle').textContent = hub.event.name;
+  await hubLoadCounts();
+  renderHubHead(); renderHubSecNav(); await hubGoSection('overview');
+}
+
+async function hubLoadEvent() {
+  const { data, error } = await sb.from('events')
+    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, venue:venues(name)')
+    .eq('id', hub.eventId).single();
+  hub.event = error ? null : data;
+  if (hub.event?.owner_actor_id) {
+    const { data: o } = await sb.from('actors').select('display_name').eq('id', hub.event.owner_actor_id).maybeSingle();
+    hub.event.owner_name = o?.display_name || null;
+  }
+}
+
+async function hubLoadCounts() {
+  const id = hub.eventId;
+  const [pp, tt, eq, cc, ff] = await Promise.all([
+    sb.from('event_participants').select('id', { count: 'exact', head: true }).eq('event_id', id),
+    sb.from('tasks').select('id', { count: 'exact', head: true }).eq('event_id', id).is('deleted_at', null),
+    sb.from('equipment_usage').select('id', { count: 'exact', head: true }).eq('event_id', id),
+    sb.from('contracts').select('id', { count: 'exact', head: true }).eq('event_id', id),
+    sb.from('files').select('id', { count: 'exact', head: true }).eq('subject_type', 'event').eq('subject_id', id),
+  ]);
+  hub.counts = { people: pp.count ?? 0, tasks: tt.count ?? 0, equipment: eq.count ?? 0, contracts: cc.count ?? 0, files: ff.count ?? 0 };
+}
+
+async function hubLoadActors() {
+  if (hub.actors) return hub.actors;
+  const { data, error } = await sb.from('v_actor_full').select('id, display_name, kind, roles').order('display_name');
+  if (error) { toast('Loading actors failed: ' + error.message, 'err'); hub.actors = []; return hub.actors; }
+  hub.actors = data || []; return hub.actors;
+}
+
+function stageStepper(cur) {
+  const ci = STAGES.indexOf(cur);
+  return '<div class="stage-stepper">' + STAGES.map((s, i) => {
+    const cls = s === cur ? 'current' : (ci > -1 && i < ci ? 'done' : '');
+    return `<button class="stage-step ${cls}" data-hub-stage="${s}" title="Set stage: ${s}">${s}</button>`;
+  }).join('') + '</div>';
+}
+
+function renderHubHead() {
+  const e = hub.event;
+  const fact = (l, v) => `<div><span class="lbl">${l}</span>${v || muted}</div>`;
+  const statusBadge = `<span class="badge badge-${escapeHtml((e.status || '').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span>`;
+  $('hubHead').innerHTML = `
+    <div class="hub-head">
+      <div class="hub-title">${escapeHtml(e.name)}</div>
+      <div class="hub-facts">
+        ${fact('Date', escapeHtml(fmtDate(e.event_date)))}
+        ${fact('Type', escapeHtml(e.type || '') || muted)}
+        ${fact('Series', escapeHtml(e.series || '') || muted)}
+        ${fact('Venue', escapeHtml(e.venue?.name || '') || muted)}
+        ${fact('Status', statusBadge)}
+        ${fact('Owner', escapeHtml(e.owner_name || '') || muted)}
+      </div>
+      ${stageStepper(e.stage)}
+      <div class="hub-head-actions">
+        <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
+      </div>
+    </div>`;
+}
+
+function renderHubSecNav() {
+  $('hubSecNav').innerHTML = HUB_SECTIONS.map(([k, lbl]) => {
+    const c = hub.counts?.[k];
+    const cc = (c != null) ? `<span class="sec-count">${c}</span>` : '';
+    return `<button data-hub-sec="${k}" class="${k === hub.section ? 'active' : ''}">${lbl}${cc}</button>`;
+  }).join('');
+}
+
+async function hubGoSection(name) {
+  hub.section = name;
+  for (const b of $('hubSecNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.hubSec === name);
+  $('hubSecBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading…</div>';
+  const fn = { overview: hubSecOverview, people: hubSecPeople, tasks: hubSecTasks, money: hubSecMoney,
+               equipment: hubSecEquipment, contracts: hubSecContracts, files: hubSecFiles }[name];
+  try { await fn(); } catch (err) { $('hubSecBody').innerHTML = `<div class="panel-state err">${escapeHtml(err.message || String(err))}</div>`; }
+}
+
+// Refresh counts + the active section (and call after writes).
+async function hubReload(section) {
+  await hubLoadCounts(); renderHubSecNav();
+  if (!section || section === hub.section) await hubGoSection(hub.section);
+}
+
+// ---- Section: Overview ----
+async function hubSecOverview() {
+  const { data: f } = await sb.from('v_kpi_event_financials')
+    .select('gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, capacity, total_attendance, total_expenses')
+    .eq('event_id', hub.eventId).maybeSingle();
+  const e = hub.event;
+  const sell = (f && f.capacity > 0) ? Math.round(f.tickets_sold / f.capacity * 1000) / 10 : null;
+  const net = f?.net_pl ?? 0;
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  const hasP = (hub.counts?.people || 0) > 0, hasE = (hub.counts?.equipment || 0) > 0;
+  const dayof = `
+    <div class="dayof-callout">
+      <div class="doh">Day-of task generator</div>
+      <p>Creates the day-of checklist from assigned gear, performers, and the standard ${escapeHtml(e.type || 'event')} templates. Run this once your lineup and equipment are locked — it's safe to run again (existing tasks with the same title are skipped, never duplicated).</p>
+      <button class="hub-btn" data-hub-action="gen-dayof">Generate day-of tasks</button>
+      ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
+    </div>`;
+  $('hubSecBody').innerHTML = `
+    ${dayof}
+    <div class="hub-cards">
+      ${card('Gross revenue', money(f?.gross_revenue || 0))}
+      ${card('Net P&L', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
+      ${e.type === 'dance_infusion' ? card('Total raised', money(f?.total_raised || 0)) : ''}
+      ${card('Ticket revenue', money(f?.ticket_revenue || 0))}
+      ${card('Tickets sold', fmtNum(f?.tickets_sold || 0))}
+      ${card('Capacity', f?.capacity != null ? fmtNum(f.capacity) : '—')}
+      ${card('Sell-through', sell != null ? (sell + '%') : '—')}
+      ${card('Attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
+      ${card('Expenses', money(f?.total_expenses || 0))}
+    </div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-action="money-panel">Open Money panel</button></div>
+    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the per-event Money panel. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>`;
+}
+
+// ---- Section: People (event_participants) ----
+async function hubSecPeople() {
+  const { data, error } = await sb.from('event_participants')
+    .select('id, role, fee, is_contractor, bill_order, set_start, set_end, actor:actors(id, display_name, kind)')
+    .eq('event_id', hub.eventId).order('bill_order', { ascending: true, nullsFirst: false }).order('role');
+  if (error) throw error;
+  hub.people = data || [];
+  const rows = hub.people.length ? hub.people.map(p => `
+    <div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
+        <div class="li-sub">${escapeHtml(p.role)}${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div>
+      </div>
+      <div class="li-amt">${p.fee != null ? money(p.fee) : muted}</div>
+      <div class="hub-li-actions">
+        ${p.fee != null && Number(p.fee) > 0 ? `<button class="hub-mini" data-hub-fee2exp="${escapeHtml(p.id)}" title="Create a one-time expense from this fee">Fee → expense</button>` : ''}
+        <button class="hub-mini danger" data-hub-del="event_participants:${escapeHtml(p.id)}" title="Remove from event">Remove</button>
+      </div>
+    </div>`).join('') : `<div class="hub-empty">No participants yet.</div>`;
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>People</h3><button class="hub-btn" data-hub-action="add-participant">+ Add participant</button></div>
+    <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Section: Tasks (tasks + task_assignments) ----
+async function hubSecTasks() {
+  const { data, error } = await sb.from('tasks')
+    .select('id, title, description, status, priority, due_date, task_assignments(id, role, actor:actors(display_name))')
+    .eq('event_id', hub.eventId).is('deleted_at', null)
+    .order('due_date', { ascending: true, nullsFirst: false }).order('created_at');
+  if (error) throw error;
+  hub.tasks = data || [];
+  const statusSel = (t) => `<select class="hub-status-sel" data-hub-tstatus="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const rows = hub.tasks.length ? hub.tasks.map(t => {
+    const who = (t.task_assignments || []).map(a => `${escapeHtml(a.actor?.display_name || '?')} (${escapeHtml(a.role)})`).join(', ');
+    return `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(t.title)}</strong>
+        <div class="li-sub">${t.priority ? ('[' + escapeHtml(t.priority) + '] ') : ''}${t.due_date ? ('due ' + escapeHtml(fmtDate(t.due_date)) + ' · ') : ''}${who ? ('→ ' + who) : 'unassigned'}</div>
+      </div>
+      <div class="hub-li-actions">
+        ${statusSel(t)}
+        <button class="hub-mini" data-hub-action="assign-task" data-id="${escapeHtml(t.id)}">Assign</button>
+        <button class="hub-mini danger" data-hub-del="tasks:${escapeHtml(t.id)}">Delete</button>
+      </div>
+    </div>`;
+  }).join('') : `<div class="hub-empty">No tasks yet. Add one, or generate the day-of checklist from Overview.</div>`;
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Tasks</h3><button class="hub-btn" data-hub-action="add-task">+ Add task</button></div>
+    <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Section: Money (reuse the existing per-event Money panel) ----
+async function hubSecMoney() {
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Money</h3><button class="hub-btn" data-hub-action="money-panel">Open Money panel</button></div>
+    <p style="font-size:0.82rem;color:var(--mid);line-height:1.5;max-width:60ch;">The per-event Money panel manages ticket tiers, other income, expenses, donations and sponsorships for this event. It opens in a focused modal so you can add or remove line items without leaving the hub. Overview reflects the totals.</p>`;
+}
+
+// ---- Section: Equipment (equipment_usage — the missing write path) ----
+async function hubSecEquipment() {
+  const { data, error } = await sb.from('equipment_usage')
+    .select('id, purpose, start_date, end_date, revenue_attributed, equipment:equipment_inventory(name, category)')
+    .eq('event_id', hub.eventId).order('start_date');
+  if (error) throw error;
+  hub.equipment = data || [];
+  const rows = hub.equipment.length ? hub.equipment.map(u => `
+    <div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(u.equipment?.name || '—')}</strong>
+        <div class="li-sub">${escapeHtml(u.purpose || '—')}${u.start_date ? (' · ' + escapeHtml(fmtDate(u.start_date))) : ''}${u.end_date ? (' → ' + escapeHtml(fmtDate(u.end_date))) : ''}</div>
+      </div>
+      <div class="li-amt">${u.revenue_attributed != null ? money(u.revenue_attributed) : muted}</div>
+      <div class="hub-li-actions"><button class="hub-mini danger" data-hub-del="equipment_usage:${escapeHtml(u.id)}">Remove</button></div>
+    </div>`).join('') : `<div class="hub-empty">No equipment assigned to this event yet.</div>`;
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Equipment</h3><button class="hub-btn" data-hub-action="add-equipment">+ Assign equipment</button></div>
+    <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Section: Contracts (new contracts table — canonical) ----
+async function hubSecContracts() {
+  const { data, error } = await sb.from('contracts')
+    .select('id, kind, fee, status, paid, actor:actors(display_name)')
+    .eq('event_id', hub.eventId).order('created_at', { ascending: false });
+  if (error) throw error;
+  hub.contracts = data || [];
+  const cstat = (c) => `<select class="hub-status-sel" data-hub-cstatus="${escapeHtml(c.id)}">${['draft', 'sent', 'viewed', 'signed', 'countersigned', 'void'].map(s => `<option value="${s}"${s === c.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const rows = hub.contracts.length ? hub.contracts.map(c => `
+    <div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(c.actor?.display_name || '—')}</strong>
+        <div class="li-sub">${escapeHtml(c.kind)}${c.fee != null ? (' · ' + money(c.fee)) : ''}</div>
+      </div>
+      <div class="hub-li-actions">
+        ${cstat(c)}
+        <button class="hub-mini" data-hub-cpaid="${escapeHtml(c.id)}">${c.paid ? '✓ paid' : 'mark paid'}</button>
+        <button class="hub-mini danger" data-hub-del="contracts:${escapeHtml(c.id)}">Delete</button>
+      </div>
+    </div>`).join('') : `<div class="hub-empty">No contracts on this event yet.</div>`;
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Contracts</h3><button class="hub-btn" data-hub-action="add-contract">+ Add contract</button></div>
+    <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Section: Files (files table; documents stored in the private 'agreements' bucket) ----
+async function hubSecFiles() {
+  const { data, error } = await sb.from('files')
+    .select('id, filename, kind, path, bucket, created_at')
+    .eq('subject_type', 'event').eq('subject_id', hub.eventId).order('created_at', { ascending: false });
+  if (error) throw error;
+  hub.files = data || [];
+  const rows = hub.files.length ? hub.files.map(f => `
+    <div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(f.filename || f.path)}</strong>
+        <div class="li-sub">${escapeHtml(f.kind || 'file')} · ${escapeHtml(fmtDate(f.created_at))}</div>
+      </div>
+      <div class="hub-li-actions">
+        <button class="hub-mini" data-hub-fdl="${escapeHtml(f.id)}">Download</button>
+        <button class="hub-mini danger" data-hub-del="files:${escapeHtml(f.id)}">Delete</button>
+      </div>
+    </div>`).join('') : `<div class="hub-empty">No files attached to this event yet.</div>`;
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Files</h3></div>
+    <div style="border:1px solid var(--border);background:#fff;padding:14px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <input type="file" id="hubFileInput" style="font-size:0.78rem;">
+      <select class="hub-status-sel" id="hubFileKind">
+        <option value="contract">contract</option><option value="rider">rider</option><option value="stage_plot">stage_plot</option>
+        <option value="invoice">invoice</option><option value="receipt">receipt</option><option value="photo">photo</option><option value="other" selected>other</option>
+      </select>
+      <button class="hub-btn" data-hub-action="upload-file">Upload</button>
+    </div>
+    <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Hub writes ----
+async function hubSetStage(stage) {
+  const { error } = await sb.from('events').update({ stage }).eq('id', hub.eventId);
+  if (error) { toast('Stage update failed: ' + error.message, 'err'); return; }
+  hub.event.stage = stage; renderHubHead(); toast('Stage → ' + stage, 'ok');
+}
+
+async function hubGenerateDayOf() {
+  if (!confirm('Generate the day-of checklist for this event?\n\nIt builds tasks from assigned gear, performers, and the standard templates. Safe to run again — tasks that already exist (by title) are skipped, never duplicated.')) return;
+  const { error } = await sb.rpc('generate_day_of_tasks', { p_event_id: hub.eventId });
+  if (error) { toast('Generate failed: ' + error.message, 'err'); return; }
+  toast('Day-of tasks generated', 'ok');
+  hub.section = 'tasks'; await hubReload('tasks');
+}
+
+async function hubFeeToExpense(participantId) {
+  const p = hub.people.find(x => x.id === participantId);
+  if (!p) return;
+  if (p.fee == null || !(Number(p.fee) > 0)) { toast('No fee on this participant', 'err'); return; }
+  if (!confirm(`Create an expense of ${money(p.fee)} for ${p.actor?.display_name || 'this participant'}?\n\nThis is a one-time manual post — it is not auto-tracked or linked back, so only run it once per fee.`)) return;
+  const { data: { session } } = await sb.auth.getSession();
+  const { error } = await sb.from('expenses').insert({
+    event_id: hub.eventId, date: TODAY(), amount: Number(p.fee), category: 'talent',
+    vendor: p.actor?.display_name || null,
+    description: `Participant fee — ${p.role}${p.actor?.display_name ? (' · ' + p.actor.display_name) : ''}`,
+    created_by: session?.user?.id || null,
+  });
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  toast('Expense created from fee', 'ok');
+  refreshStratIfActive();
+}
+
+async function hubAddParticipant() {
+  await hubLoadActors();
+  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}${a.roles && a.roles.length ? (' — ' + a.roles.join('/')) : ''}</option>`).join('');
+  const roleList = ['headliner', 'dj', 'opener', 'performer', 'painter', 'dancer', 'host', 'crew', 'photographer', 'producer', 'vendor'];
+  openKpi('Add participant', 'Links an actor to this event (event_participants)', `
+    <div class="modal-form-row"><label class="modal-label">Who *</label>
+      <select class="modal-select" name="mode" id="ep-mode">
+        <option value="existing">Pick an existing actor</option>
+        <option value="new">Create a new actor</option>
+      </select></div>
+    <div id="ep-existing">
+      <div class="modal-form-row"><label class="modal-label">Actor *</label>
+        <select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+    </div>
+    <div id="ep-new" style="display:none;">
+      <div class="modal-form-row half-row">
+        <div><label class="modal-label">Name *</label><input class="modal-input" name="new_name"></div>
+        <div><label class="modal-label">Kind</label><select class="modal-select" name="new_kind"><option value="person">person</option><option value="org">org</option></select></div>
+      </div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Role *</label><input class="modal-input" name="role" list="ep-roles" placeholder="headliner, dj, painter…"></div>
+      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee"></div>
+    </div>
+    <datalist id="ep-roles">${roleList.map(r => `<option value="${r}">`).join('')}</datalist>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_contractor" style="width:auto;margin:0;"> Contractor (paid collaborator)</label></div>`,
+    submitAddParticipant, 'Add participant');
+  const modeSel = $('kpiModalBody').querySelector('#ep-mode');
+  modeSel.addEventListener('change', () => {
+    const isNew = modeSel.value === 'new';
+    $('kpiModalBody').querySelector('#ep-existing').style.display = isNew ? 'none' : '';
+    $('kpiModalBody').querySelector('#ep-new').style.display = isNew ? '' : 'none';
+  });
+}
+async function submitAddParticipant() {
+  const mode = kpiVal('mode');
+  const role = kpiVal('role'); if (!role) throw new Error('Role is required');
+  let actor_id;
+  if (mode === 'new') {
+    const nm = kpiVal('new_name'); if (!nm) throw new Error('New actor name is required');
+    const { data, error } = await sb.from('actors').insert({ display_name: nm, kind: kpiVal('new_kind') || 'person' }).select('id').single();
+    if (error) throw error; actor_id = data.id; hub.actors = null;
+  } else {
+    actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
+  }
+  const feeRaw = kpiVal('fee');
+  const row = { event_id: hub.eventId, actor_id, role, fee: feeRaw === '' ? null : Number(feeRaw),
+                is_contractor: !!$('kpiModalBody').querySelector('[name="is_contractor"]')?.checked };
+  const { error } = await sb.from('event_participants').insert(row);
+  if (error) throw new Error(error.code === '23505' ? 'That actor already has this role on this event.' : error.message);
+  closeKpi(); toast('Participant added', 'ok'); await hubReload('people');
+}
+
+async function hubAddTask() {
+  await hubLoadActors();
+  const actorOpts = '<option value="">— unassigned —</option>' + hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Add task', 'Creates a task for this event (+ optional assignment)', `
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required></div>
+    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2"></textarea></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Priority</label><select class="modal-select" name="priority"><option value="">—</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></div>
+      <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Effort</label><input class="modal-input" type="number" min="0" step="1" name="effort"></div>
+      <div><label class="modal-label">Reward</label><input class="modal-input" type="number" min="0" step="1" name="reward"></div>
+    </div>
+    <div class="kpi-section-h">Assign (optional)</div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Assignee</label><select class="modal-select" name="assignee">${actorOpts}</select></div>
+      <div><label class="modal-label">As</label><select class="modal-select" name="assign_role"><option value="doer">doer</option><option value="owner">owner</option><option value="reviewer">reviewer</option></select></div>
+    </div>`,
+    submitAddTask, 'Add task');
+}
+async function submitAddTask() {
+  const title = kpiVal('title'); if (!title) throw new Error('Title is required');
+  const t = { event_id: hub.eventId, title, source: 'manual', status: 'todo' };
+  const desc = kpiVal('description'); if (desc) t.description = desc;
+  const pr = kpiVal('priority'); if (pr) t.priority = pr;
+  const dd = kpiVal('due_date'); if (dd) t.due_date = dd;
+  const ef = kpiVal('effort'); if (ef !== '') t.effort = Number(ef);
+  const rw = kpiVal('reward'); if (rw !== '') t.reward = Number(rw);
+  const { data, error } = await sb.from('tasks').insert(t).select('id').single();
+  if (error) throw error;
+  const assignee = kpiVal('assignee');
+  if (assignee) {
+    const { error: ae } = await sb.from('task_assignments').insert({ task_id: data.id, actor_id: assignee, role: kpiVal('assign_role') || 'doer' });
+    if (ae) toast('Task created, but assignment failed: ' + ae.message, 'err');
+  }
+  closeKpi(); toast('Task added', 'ok'); await hubReload('tasks');
+}
+
+async function hubAssignTask(taskId) {
+  await hubLoadActors();
+  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Assign task', 'Adds a task assignment', `
+    <div class="modal-form-row"><label class="modal-label">Actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Role</label><select class="modal-select" name="assign_role"><option value="doer">doer</option><option value="owner">owner</option><option value="reviewer">reviewer</option></select></div>`,
+    () => submitAssignTask(taskId), 'Assign');
+}
+async function submitAssignTask(taskId) {
+  const actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
+  const { error } = await sb.from('task_assignments').insert({ task_id: taskId, actor_id, role: kpiVal('assign_role') || 'doer' });
+  if (error) throw new Error(error.code === '23505' ? 'That actor already has this role on the task.' : error.message);
+  closeKpi(); toast('Assigned', 'ok'); await hubReload('tasks');
+}
+
+async function hubAddEquipment() {
+  const { data: inv } = await sb.from('equipment_inventory').select('id, name, category').is('deleted_at', null).order('name');
+  const opts = (inv || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}${e.category ? (' — ' + e.category) : ''}</option>`).join('');
+  openKpi('Assign equipment', 'Creates an equipment_usage row for this event', `
+    <div class="modal-form-row"><label class="modal-label">Equipment *</label><select class="modal-select" name="equipment_id">${opts || '<option value="">— none in inventory —</option>'}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Purpose</label><select class="modal-select" name="purpose"><option value="own_event">own_event</option><option value="rental">rental</option><option value="other">other</option></select></div>
+      <div><label class="modal-label">Revenue attributed ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="revenue_attributed"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Start</label><input class="modal-input" type="date" name="start_date" value="${escapeHtml(hub.event?.event_date || TODAY())}"></div>
+      <div><label class="modal-label">End</label><input class="modal-input" type="date" name="end_date"></div>
+    </div>`,
+    submitAddEquipment, 'Assign');
+}
+async function submitAddEquipment() {
+  const equipment_id = kpiVal('equipment_id'); if (!equipment_id) throw new Error('Pick equipment');
+  const row = { event_id: hub.eventId, equipment_id, purpose: kpiVal('purpose') || null,
+                start_date: kpiVal('start_date') || hub.event?.event_date || TODAY() };
+  const end = kpiVal('end_date'); if (end) row.end_date = end;
+  const rev = kpiVal('revenue_attributed'); if (rev !== '') row.revenue_attributed = Number(rev);
+  const { error } = await sb.from('equipment_usage').insert(row);
+  if (error) throw error;
+  closeKpi(); toast('Equipment assigned', 'ok'); await hubReload('equipment');
+}
+
+async function hubAddContract() {
+  await hubLoadActors();
+  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Add contract', 'Creates a contract (new contracts table — canonical)', `
+    <div class="modal-form-row"><label class="modal-label">Counterparty actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Kind *</label><select class="modal-select" name="kind"><option value="event_services">event_services</option><option value="contractor">contractor</option><option value="vendor">vendor</option><option value="rental">rental</option><option value="sponsor">sponsor</option></select></div>
+      <div><label class="modal-label">Fee ($)</label><input class="modal-input" type="number" min="0" step="0.01" name="fee"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status"><option value="draft">draft</option><option value="sent">sent</option><option value="viewed">viewed</option><option value="signed">signed</option><option value="countersigned">countersigned</option><option value="void">void</option></select></div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2"></textarea></div>`,
+    submitAddContract, 'Add contract');
+}
+async function submitAddContract() {
+  const actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor');
+  const row = { event_id: hub.eventId, actor_id, kind: kpiVal('kind') || 'event_services', status: kpiVal('status') || 'draft' };
+  const fee = kpiVal('fee'); if (fee !== '') row.fee = Number(fee);
+  const notes = kpiVal('notes'); if (notes) row.notes = notes;
+  const { error } = await sb.from('contracts').insert(row);
+  if (error) throw error;
+  closeKpi(); toast('Contract added', 'ok'); await hubReload('contracts');
+}
+
+async function hubSetTaskStatus(id, status) {
+  const { error } = await sb.from('tasks').update({ status }).eq('id', id);
+  if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  toast('Task → ' + status, 'ok');
+}
+async function hubSetContractStatus(id, status) {
+  const { error } = await sb.from('contracts').update({ status }).eq('id', id);
+  if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  toast('Contract → ' + status, 'ok');
+}
+async function hubToggleContractPaid(id) {
+  const c = hub.contracts?.find(x => x.id === id); if (!c) return;
+  const paid = !c.paid;
+  const { error } = await sb.from('contracts').update({ paid, paid_at: paid ? new Date().toISOString() : null }).eq('id', id);
+  if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  toast(paid ? 'Marked paid' : 'Marked unpaid', 'ok'); await hubReload('contracts');
+}
+
+async function hubDoUpload() {
+  const inp = $('hubFileInput'); const kind = $('hubFileKind')?.value || null;
+  const file = inp?.files?.[0]; if (!file) { toast('Pick a file first', 'err'); return; }
+  const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `event/${hub.eventId}/${Date.now()}_${safe}`;
+  toast('Uploading…', 'ok');
+  const { error: upErr } = await sb.storage.from('agreements').upload(path, file, { upsert: false });
+  if (upErr) { toast('Upload failed: ' + upErr.message, 'err'); return; }
+  const { error } = await sb.from('files').insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'event', subject_id: hub.eventId, kind });
+  if (error) { toast('File stored but DB row failed: ' + error.message, 'err'); return; }
+  toast('File uploaded', 'ok'); await hubReload('files');
+}
+async function hubFileDownload(id) {
+  const f = hub.files?.find(x => x.id === id); if (!f) return;
+  const { data, error } = await sb.storage.from(f.bucket).createSignedUrl(f.path, 3600);
+  if (error) { toast('Link failed: ' + error.message, 'err'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+
+async function hubDelete(spec) {
+  const [tbl, id] = spec.split(':');
+  const labels = { event_participants: 'Remove this participant from the event?', tasks: 'Delete this task?',
+                   equipment_usage: 'Remove this equipment assignment?', contracts: 'Delete this contract?', files: 'Delete this file?' };
+  if (!confirm(labels[tbl] || 'Delete this row?')) return;
+  let err;
+  if (tbl === 'tasks') {
+    ({ error: err } = await sb.from('tasks').update({ deleted_at: new Date().toISOString() }).eq('id', id));
+  } else if (tbl === 'files') {
+    const f = hub.files?.find(x => x.id === id);
+    if (f) await sb.storage.from(f.bucket).remove([f.path]);
+    ({ error: err } = await sb.from('files').delete().eq('id', id));
+  } else {
+    ({ error: err } = await sb.from(tbl).delete().eq('id', id));
+  }
+  if (err) { toast('Delete failed: ' + err.message, 'err'); return; }
+  toast('Removed', 'ok'); await hubReload();
+}
+
+const HUB_ACTIONS = {
+  'edit-core': () => openEditEvent(hub.eventId),
+  'money-panel': () => openMoneyPanel(hub.eventId),
+  'gen-dayof': hubGenerateDayOf,
+  'add-participant': hubAddParticipant,
+  'add-task': hubAddTask,
+  'assign-task': (el) => hubAssignTask(el.dataset.id),
+  'add-equipment': hubAddEquipment,
+  'add-contract': hubAddContract,
+  'upload-file': hubDoUpload,
+};
+
+$('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
+
+$('panel-eventhub').addEventListener('click', (e) => {
+  const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
+  const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
+  const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
+  const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
+  const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
+  const fd = e.target.closest('[data-hub-fdl]'); if (fd) { hubFileDownload(fd.dataset.hubFdl); return; }
+  const del = e.target.closest('[data-hub-del]'); if (del) { hubDelete(del.dataset.hubDel); return; }
+});
+$('panel-eventhub').addEventListener('change', (e) => {
+  const ts = e.target.closest('[data-hub-tstatus]'); if (ts) { hubSetTaskStatus(ts.dataset.hubTstatus, ts.value); return; }
+  const cs = e.target.closest('[data-hub-cstatus]'); if (cs) { hubSetContractStatus(cs.dataset.hubCstatus, cs.value); return; }
 });
 
 // ---- Initial session check ----

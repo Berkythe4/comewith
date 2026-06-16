@@ -30,6 +30,29 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Event Hub, Sprint 1 of the module series)
+Built the **Event Detail Hub** in `dashboard.html` (additive; the 14 existing tabs untouched). Reached
+via an **Open** button on each Events row → a new `#panel-eventhub` with header (name + facts + **stage
+stepper** + Edit core) and sections **Overview · People · Tasks · Money · Equipment · Contracts · Files**.
+- **People** = `event_participants` (add existing/new actor, role, fee; **one-click Fee→expense**, manual — not auto-posted).
+- **Tasks** = `tasks`+`task_assignments` (add, assign owner/doer/reviewer, inline status, soft-delete).
+- **Money** = reuses the existing per-event Money panel.
+- **Equipment** = `equipment_usage` — **the previously-unwritten event-attach path now writes** (feeds the day-of generator + ROI).
+- **Contracts** = new `contracts` table (canonical; legacy `agreements` ignored), kinds incl. vendor/sponsor; status + mark-paid.
+- **Files** = `files` table; documents in the private `agreements` bucket (signed-URL download).
+- **Stage stepper** (idea→…→reported) updates `events.stage`, distinct from public `status`.
+- **Day-of generator** = prominent button → `generate_day_of_tasks(p_event_id)`; idempotent.
+- **Schema add:** migration **031_v_actor_full.sql** APPLIED to prod — `v_actor_full` (actors + roles[],
+  `security_invoker=true`, anon-revoked). Establishes the **actor_*_details pattern** (`docs/ACTOR_DETAILS_PATTERN.md`)
+  the Artist/Vendor sprints follow. No `actor_*_details` tables built yet (by design).
+- **Locked decisions honored:** internal-admin only (no RLS/external-login changes), `type` enum as the
+  operational axis (`series`/KPI views untouched), full cohesive design (template for the other modules).
+- **Tests:** `tests/event_hub_datalayer_test.sql` — every hub write + the day-of RPC, run against prod
+  **in a rolled-back transaction** (zero rows persisted; counts verified unchanged). All green.
+- **Live-drive:** `EVENT_HUB_LIVE_DRIVE.md` (UI walkthrough).
+- **Deferred to follow-ups:** linking an uploaded file as a contract's `document_id` (Files + Contracts
+  ship separately today); a global cross-event task board; contract signing flow.
+
 ## This session shipped (2026-06-02 — data load)
 Applied 023–028 + 029 to prod; populated the model with reconciled DI#1/#2 data; resolved the DI#1
 duplicate (canonical "Dance Infusion #1"); proved role-overlap on real data; anon-401 held throughout.
