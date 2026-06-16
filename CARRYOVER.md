@@ -30,6 +30,18 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Guest module: ledger import + actor graduation + repeat KPI + reconcile + audit)
+Migrations 038 + 039 applied to prod (additive). DI#2 ledger people imported, money NEVER written.
+- **Import:** ledger 113 rows → 77 emails → 25 overlap skipped → **52 net-new guests** + DI#2 `guest_event_attendance` (amount_spent = guest stat only, NO ticketing/income). Guests **45→97**.
+- **Consent:** 0 net-new opt-outs; the **11 `ra_marketing_opt_in=False` were already-subscribed guests → UNSUBSCRIBED** (consent correction). Subscribers = 97 rows, **86 subscribed / 11 unsubscribed**.
+- **Actor graduation:** `guests.actor_id` (mig 038). 13 LINK to existing actors (variants resolved: Elizabeth→Liz, Sauci→DJ Sauci Soni, Keith→Berky — no dups), **15 CREATE** clean donor/sponsor/staff, **15 FLAG** (fuzzy dups + payout artifacts — not created/merged). Actors **23→38**; 15 guests graduated. Mig 039 added `'staff'` to actor_roles enum (additive, like 029's 'donor').
+- **Money untouched (proven):** DI#2 gross $9,557.33 / exp $6,557.33 / sponsor $6,225 / donations $292.44 — identical before/after. Dedupe: 0 dup guests/subs/actors. Backups in `backups/preguest_2026-06-16_*.json`.
+- **Guest module (new Guests tab):** v_guest_stats list + filters (search, event, **subscribed-only = mailing list**, returning-only) + per-guest profile (history, spend, subscribed, actor link). KPI strip from `v_guest_kpis`; per-event new/returning from `v_event_attendance_kpi`.
+- **Returning KPI:** DI#1 28 new/0 ret; Crossroads 2 new/1 ret (Liz); DI#2 67 new/1 ret (Claudia). 97 guests, 86 subscribed, 2 repeat, avg spend $58.87.
+- **Reconciliation (read-only, NOT a double-count):** ledger $19,114.33 = gross mixed activity — sponsorship $9,950 + expense $4,750.33 + ticket $1,513 + payout $1,291 + zeffe_pkg $860 + donation $750 + comp $0. Differs from DB's reconciled net by scope (expenses/payouts/comps + in-kind sponsorship + DIY donation stream). Soft flag: ledger shows a $750 individual-donation stream + $9,950 sponsorship (incl in-kind) the DB headline consolidates differently — review if MS-facing granular totals are needed. No financial data changed.
+- **Audit (`GUEST_ACTOR_AUDIT.md`, flag-only, nothing merged):** 6 same-human guest↔actor unlinked (Adam Cohen, Ethan Pollak, Francis/Theresa Berkman, Liz, Patrick — actor has no email so email-link didn't connect); 8 possible-dup/variant (Crossroads Café accent, Teri↔Theresa, etc. — 3 are likely *different* people, don't merge); Henry low-quality name; 5 payout artifacts excluded.
+- Deployed to master (Netlify). Existing tabs untouched except Subscribers (prior) + new Guests tab.
+
 ## This session shipped (2026-06-16 — Attendee + mailing backfill with lifetime guest stats)
 Migration 037 applied to prod (additive). Backfilled attendees → guests → subscribers, money untouched.
 - **Sources:** 3 RA ticket exports (DI#1 42, Crossroads showcase 4, DI#2 20) = 66 rows → **45 unique guests** (dedupe by email). 0 no-email, 0 malformed, **0 explicit opt-outs**. The DI#2 door-list xlsx (81 names, **no emails**, fuzzy spellings overlapping RA) was **flagged, not imported** (no dedupe key → would dupe).

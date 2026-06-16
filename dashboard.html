@@ -867,6 +867,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <button data-tab="events">Events</button>
         <button data-tab="venues">Venues</button>
         <button data-tab="templates">Templates</button>
+        <button data-tab="guests">Guests</button>
         <button data-tab="sponsors">Sponsors</button>
         <button data-tab="sponsorships">Sponsorships</button>
         <button data-tab="artists">Artists</button>
@@ -1180,6 +1181,11 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <!-- ===== TASK TEMPLATE EDITOR ===== -->
       <div class="panel" id="panel-templates">
         <div id="templatesBody"></div>
+      </div>
+
+      <!-- ===== GUEST MODULE ===== -->
+      <div class="panel" id="panel-guests">
+        <div id="guestsBody"></div>
       </div>
     </main>
 
@@ -1721,6 +1727,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'strategy') { await loadStrategy(); return; } // custom (non-table) renderer
   if (tab === 'venues') { await loadVenues(); return; } // custom (list/detail + contact matrix)
   if (tab === 'templates') { await loadTemplates(); return; } // custom (template editor)
+  if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
@@ -4208,6 +4215,96 @@ $('panel-templates').addEventListener('click', (e) => {
   const act = e.target.closest('[data-tmpl-action]'); if (act) {
     ({ add: () => openTemplateForm(null), edit: () => openTemplateForm(act.dataset.id) }[act.dataset.tmplAction] || (() => {}))();
   }
+});
+
+// ============================================================
+// GUEST MODULE — first-class guest list + lifetime stats + filters + repeat KPI.
+// The mailing list is the "subscribed" filter within this module.
+// ============================================================
+const guestState = { rows: [], filter: { q: '', event: '', subscribed: false, returning: false }, kpis: null, evKpi: [] };
+
+async function loadGuests() {
+  $('guestsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading guests…</div>';
+  const [stats, kpis, evk, gmap] = await Promise.all([
+    sb.from('v_guest_stats').select('guest_id, full_name, email, total_spent, events_attended, events, first_seen, last_seen, subscribed').order('total_spent', { ascending: false }),
+    sb.from('v_guest_kpis').select('*').maybeSingle(),
+    sb.from('v_event_attendance_kpi').select('name, attendees, new_attendees, returning_attendees, repeat_pct').order('event_date'),
+    sb.from('guests').select('id, actor_id, actor:actors(display_name)').not('actor_id', 'is', null),
+  ]);
+  if (stats.error) { $('guestsBody').innerHTML = `<div class="panel-state err">${escapeHtml(stats.error.message)}</div>`; return; }
+  const am = {}; (gmap.data || []).forEach(g => { am[g.id] = g.actor?.display_name || null; });
+  guestState.rows = (stats.data || []).map(r => ({ ...r, actor_name: am[r.guest_id] || null }));
+  guestState.kpis = kpis.data || null;
+  guestState.evKpi = evk.data || [];
+  renderGuests();
+}
+
+function renderGuests() {
+  const k = guestState.kpis;
+  const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+  const kpiStrip = k ? `<div class="hub-cards" style="margin-bottom:16px;">
+    ${card('Total guests', fmtNum(k.total_guests))}
+    ${card('Subscribed', fmtNum(k.subscribed))}
+    ${card('Repeat guests', fmtNum(k.repeat_guests))}
+    ${card('Avg spend / payer', money(k.avg_spend_per_paying_guest))}
+    ${card('Total guest spend', money(k.total_guest_spend))}
+  </div>` : '';
+  const evRows = guestState.evKpi.map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name)}</strong>
+    <div class="li-sub">${e.new_attendees} new · ${e.returning_attendees} returning · ${e.repeat_pct ?? 0}% repeat</div></div>
+    <div class="li-amt">${e.attendees} total</div></div>`).join('');
+  // distinct events for filter
+  const allEvents = [...new Set(guestState.rows.flatMap(r => r.events || []))].sort();
+  const f = guestState.filter;
+  const evOpts = '<option value="">All events</option>' + allEvents.map(e => `<option value="${escapeHtml(e)}"${f.event === e ? ' selected' : ''}>${escapeHtml(e)}</option>`).join('');
+  // apply filters
+  const ql = f.q.toLowerCase();
+  const list = guestState.rows.filter(r =>
+    (!ql || (r.full_name || '').toLowerCase().includes(ql) || (r.email || '').toLowerCase().includes(ql)) &&
+    (!f.event || (r.events || []).includes(f.event)) &&
+    (!f.subscribed || r.subscribed) &&
+    (!f.returning || r.events_attended > 1));
+  const rows = list.length ? list.map(r => `<div class="hub-li">
+    <div class="li-main"><strong>${escapeHtml(r.full_name || '—')}</strong>${r.actor_name ? ' <span class="role-chip">actor</span>' : ''}
+      <div class="li-sub">${escapeHtml(r.email || '')} · ${r.events_attended} event${r.events_attended === 1 ? '' : 's'}${r.subscribed ? '' : ' · not subscribed'}</div></div>
+    <div class="li-amt">${money(r.total_spent)}</div>
+    <div class="hub-li-actions">
+      ${r.subscribed ? '<span class="contact-fn">subscribed</span>' : '<span class="li-sub">—</span>'}
+      <button class="hub-mini" data-guest-profile="${escapeHtml(r.guest_id)}">Profile</button>
+    </div></div>`).join('') : '<div class="hub-empty">No guests match.</div>';
+  $('guestsBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Guests</h3><span class="li-sub">${list.length} of ${guestState.rows.length}</span></div>
+    ${kpiStrip}
+    ${evRows ? `<div class="lookup-box"><div class="lh">New vs returning per event</div><div class="hub-list">${evRows}</div></div>` : ''}
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" style="max-width:240px;" id="guestSearch" placeholder="Search name / email…" value="${escapeHtml(f.q)}">
+      <select class="hub-status-sel" id="guestEvent">${evOpts}</select>
+      <label class="li-sub" style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="guestSubbed" ${f.subscribed ? 'checked' : ''}> Subscribed only (mailing list)</label>
+      <label class="li-sub" style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="checkbox" id="guestReturning" ${f.returning ? 'checked' : ''}> Returning only</label>
+    </div>
+    <div class="hub-list">${rows}</div>`;
+  // wire filters (preserve focus on search)
+  const s = $('guestSearch'); s.addEventListener('input', () => { guestState.filter.q = s.value; renderGuests(); const n = $('guestSearch'); n.focus(); n.setSelectionRange(n.value.length, n.value.length); });
+  $('guestEvent').addEventListener('change', (e) => { guestState.filter.event = e.target.value; renderGuests(); });
+  $('guestSubbed').addEventListener('change', (e) => { guestState.filter.subscribed = e.target.checked; renderGuests(); });
+  $('guestReturning').addEventListener('change', (e) => { guestState.filter.returning = e.target.checked; renderGuests(); });
+}
+
+function guestProfile(id) {
+  const r = guestState.rows.find(x => x.guest_id === id); if (!r) return;
+  const events = (r.events || []).map(e => `<span class="role-chip">${escapeHtml(e)}</span>`).join(' ') || muted;
+  openKpi('Guest — ' + (r.full_name || ''), escapeHtml(r.email || ''), `
+    <div class="hub-cards">
+      <div class="hub-card"><div class="lbl">Events attended</div><div class="val">${r.events_attended}</div></div>
+      <div class="hub-card"><div class="lbl">Total spent</div><div class="val">${money(r.total_spent)}</div></div>
+      <div class="hub-card"><div class="lbl">Subscribed</div><div class="val">${r.subscribed ? 'Yes' : 'No'}</div></div>
+    </div>
+    <div class="modal-form-row" style="margin-top:12px;"><label class="modal-label">Event history</label><div>${events}</div></div>
+    <div class="modal-form-row"><label class="modal-label">First / last seen</label><div>${escapeHtml(fmtDate(r.first_seen)) || '—'} → ${escapeHtml(fmtDate(r.last_seen)) || '—'}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Actor record</label><div>${r.actor_name ? escapeHtml(r.actor_name) + ' <span class="role-chip">linked</span>' : '<span class="li-sub">not graduated to an actor</span>'}</div></div>`,
+    () => { closeKpi(); }, 'Close');
+}
+$('panel-guests').addEventListener('click', (e) => {
+  const p = e.target.closest('[data-guest-profile]'); if (p) { guestProfile(p.dataset.guestProfile); return; }
 });
 
 // ---- Initial session check ----
