@@ -744,6 +744,24 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .pick-staged .role-chip { background: var(--green-bg); color: var(--green); border-color: var(--green); }
 .kpi-delta { font-size: 0.68rem; color: var(--mid); margin-left: 6px; }
 .kpi-delta.up { color: var(--green); } .kpi-delta.down { color: var(--red-dk); }
+
+/* Venues / Vendors surface */
+.ven-toggle { display: inline-flex; border: 1px solid var(--border-strong); margin-bottom: 16px; }
+.ven-toggle button {
+  background: #fff; border: none; cursor: pointer; padding: 7px 16px;
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: 0.05em; color: var(--mid);
+}
+.ven-toggle button.active { background: var(--ink); color: var(--bg); }
+.contact-fn {
+  font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase;
+  background: var(--blue-bg); color: var(--blue); padding: 2px 6px; border: 1px solid var(--blue);
+}
+.contact-fn.primary { background: var(--red); color: #fff; border-color: var(--red); }
+.lookup-box {
+  border: 1px solid var(--border); background: var(--off); padding: 12px 14px; margin: 12px 0;
+}
+.lookup-box .lh { font-size: 0.6rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--mid); margin-bottom: 8px; }
+.lookup-contact { display: inline-flex; align-items: center; gap: 6px; margin: 0 8px 6px 0; font-size: 0.8rem; }
 </style>
 </head>
 <body>
@@ -847,6 +865,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <button data-tab="expenses">Expenses</button>
         <button data-tab="equipment">Equipment</button>
         <button data-tab="events">Events</button>
+        <button data-tab="venues">Venues</button>
+        <button data-tab="templates">Templates</button>
         <button data-tab="sponsors">Sponsors</button>
         <button data-tab="sponsorships">Sponsorships</button>
         <button data-tab="artists">Artists</button>
@@ -1149,6 +1169,16 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div id="hubHead"></div>
         <nav class="hub-secnav" id="hubSecNav"></nav>
         <div id="hubSecBody"></div>
+      </div>
+
+      <!-- ===== VENUES / VENDORS (contact matrix) ===== -->
+      <div class="panel" id="panel-venues">
+        <div id="venuesBody"></div>
+      </div>
+
+      <!-- ===== TASK TEMPLATE EDITOR ===== -->
+      <div class="panel" id="panel-templates">
+        <div id="templatesBody"></div>
       </div>
     </main>
 
@@ -1675,6 +1705,8 @@ function setLastRefreshed() {
 
 async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'strategy') { await loadStrategy(); return; } // custom (non-table) renderer
+  if (tab === 'venues') { await loadVenues(); return; } // custom (list/detail + contact matrix)
+  if (tab === 'templates') { await loadTemplates(); return; } // custom (template editor)
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
@@ -2657,7 +2689,7 @@ async function submitLogNote() {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const { data: ev, error } = await sb.from('events')
-    .select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label').eq('id', id).single();
+    .select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear').eq('id', id).single();
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
   // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
   const seriesVals = SERIES_OPTIONS.includes(ev.series) ? SERIES_OPTIONS : [ev.series, ...SERIES_OPTIONS];
@@ -2676,6 +2708,9 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+    <div class="kpi-section-h">Logistics</div>
+    <div class="kpi-hint">Drives the day-of checklist: gear-on generates load-in / soundcheck / breakdown / return; gear-off generates "confirm house gear with venue" instead.</div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="cw_providing_gear" style="width:auto;margin:0;"${ev.cw_providing_gear ? ' checked' : ''}> Come With is providing the gear</label></div>
     <div class="kpi-section-h">Public listing</div>
     <div class="kpi-hint">Shows on comewith.org only while public is on AND the date is today or later AND status isn't cancelled.</div>
     <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_public" style="width:auto;margin:0;"${ev.is_public ? ' checked' : ''}> Show on public site</label></div>
@@ -2696,6 +2731,7 @@ async function submitEditEvent(id) {
   const cap = kpiVal('capacity'); patch.capacity = cap === '' ? null : Number(cap);
   const att = kpiVal('total_attendance'); patch.total_attendance = att === '' ? null : Number(att);
   patch.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
+  patch.cw_providing_gear = !!$('kpiModalBody').querySelector('[name="cw_providing_gear"]')?.checked;
   const turl = kpiVal('ticket_url'); patch.ticket_url = turl || null;
   const tlbl = kpiVal('ticket_label'); patch.ticket_label = tlbl || null;
   const { error } = await sb.from('events').update(patch).eq('id', id);
@@ -2917,7 +2953,7 @@ async function openEventHub(eventId) {
 
 async function hubLoadEvent() {
   const { data, error } = await sb.from('events')
-    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, venue:venues(name)')
+    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, cw_providing_gear, venue:venues(name)')
     .eq('id', hub.eventId).single();
   hub.event = error ? null : data;
   if (hub.event?.owner_actor_id) {
@@ -2967,6 +3003,7 @@ function renderHubHead() {
         ${fact('Venue', escapeHtml(e.venue?.name || '') || muted)}
         ${fact('Status', statusBadge)}
         ${fact('Owner', escapeHtml(e.owner_name || '') || muted)}
+        ${fact('Gear', e.cw_providing_gear ? 'CW providing' : 'Venue / other')}
       </div>
       ${stageStepper(e.stage)}
       <div class="hub-head-actions">
@@ -3011,12 +3048,14 @@ async function hubSecOverview() {
   const hasP = (hub.counts?.people || 0) > 0, hasE = (hub.counts?.equipment || 0) > 0;
   const dayof = `
     <div class="dayof-callout">
-      <div class="doh">Day-of task generator</div>
-      <p>Creates the day-of checklist from assigned gear, performers, and the standard ${escapeHtml(e.type || 'event')} templates. Run this once your lineup and equipment are locked — it's safe to run again (existing tasks with the same title are skipped, never duplicated).</p>
-      <button class="hub-btn" data-hub-action="gen-dayof">Generate day-of tasks</button>
+      <div class="doh">Generate task checklist</div>
+      <p>Builds the standard ${escapeHtml(e.type || 'event')} checklist — across planning → wrap — from your templates, plus tasks for assigned gear & performers. Gear set to <strong>${e.cw_providing_gear ? 'CW providing' : 'venue / other'}</strong>, so it generates the ${e.cw_providing_gear ? 'load-in / soundcheck / breakdown / return' : 'confirm-house-gear-with-venue'} set. Outreach tasks auto-assign to your venue/vendor contacts. Safe to run again — existing tasks (by title) are never duplicated, and editing a template only affects future runs.</p>
+      <button class="hub-btn" data-hub-action="gen-dayof">Generate task checklist</button>
       ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
     </div>`;
+  const venueBlock = await hubVenueBlockHTML();
   $('hubSecBody').innerHTML = `
+    ${venueBlock}
     ${dayof}
     <div class="hub-cards">
       ${card('Gross revenue', money(f?.gross_revenue || 0))}
@@ -3365,9 +3404,27 @@ async function submitEditParticipant(id) {
   closeKpi(); toast('Participant updated', 'ok'); await hubReload('people');
 }
 
+// Grouped assignee options (3b.4): This event's people · Your team (always) · Venue contacts.
+// Team is ALWAYS assignable regardless of participation. Same actor may appear in >1 group.
+async function assigneeOptionsHTML(includeUnassigned) {
+  const [parts, teamRows, venueContacts] = await Promise.all([
+    sb.from('event_participants').select('actor:actors(id, display_name)').eq('event_id', hub.eventId),
+    sb.from('actor_roles').select('actor:actors(id, display_name, deleted_at)').eq('role', 'team').eq('active', true),
+    hub.event?.venue_id ? sb.from('v_venue_contacts').select('actor_id, display_name, function').eq('venue_id', hub.event.venue_id) : Promise.resolve({ data: [] }),
+  ]);
+  const grp = (label, rows) => rows.length ? `<optgroup label="${label}">${rows.join('')}</optgroup>` : '';
+  const ppl = (parts.data || []).map(p => p.actor).filter(Boolean)
+    .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`);
+  const team = (teamRows.data || []).map(r => r.actor).filter(a => a && !a.deleted_at)
+    .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`);
+  const ven = (venueContacts.data || [])
+    .map(c => `<option value="${escapeHtml(c.actor_id)}">${escapeHtml(c.display_name)}${c.function ? ' (' + escapeHtml(c.function) + ')' : ''}</option>`);
+  return (includeUnassigned ? '<option value="">— unassigned —</option>' : '')
+    + grp("This event's people", ppl) + grp('Your team', team) + grp('Venue contacts', ven);
+}
+
 async function hubAddTask() {
-  await hubLoadActors();
-  const actorOpts = '<option value="">— unassigned —</option>' + hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  const assigneeOpts = await assigneeOptionsHTML(true);
   openKpi('Add task', 'Creates a task for this event (+ optional assignment)', `
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required></div>
     <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2"></textarea></div>
@@ -3381,7 +3438,7 @@ async function hubAddTask() {
     </div>
     <div class="kpi-section-h">Assign (optional)</div>
     <div class="modal-form-row half-row">
-      <div><label class="modal-label">Assignee</label><select class="modal-select" name="assignee">${actorOpts}</select></div>
+      <div><label class="modal-label">Assignee</label><select class="modal-select" name="assignee">${assigneeOpts}</select></div>
       <div><label class="modal-label">As</label><select class="modal-select" name="assign_role"><option value="doer">doer</option><option value="owner">owner</option><option value="reviewer">reviewer</option></select></div>
     </div>`,
     submitAddTask, 'Add task');
@@ -3405,10 +3462,9 @@ async function submitAddTask() {
 }
 
 async function hubAssignTask(taskId) {
-  await hubLoadActors();
-  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
-  openKpi('Assign task', 'Adds a task assignment', `
-    <div class="modal-form-row"><label class="modal-label">Actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none on file —</option>'}</select></div>
+  const assigneeOpts = await assigneeOptionsHTML(false);
+  openKpi('Assign task', 'This event’s people · your team (always) · venue contacts', `
+    <div class="modal-form-row"><label class="modal-label">Assignee *</label><select class="modal-select" name="actor_id">${assigneeOpts || '<option value="">— none —</option>'}</select></div>
     <div class="modal-form-row"><label class="modal-label">Role</label><select class="modal-select" name="assign_role"><option value="doer">doer</option><option value="owner">owner</option><option value="reviewer">reviewer</option></select></div>`,
     () => submitAssignTask(taskId), 'Assign');
 }
@@ -3625,8 +3681,62 @@ async function hubDelete(spec) {
   toast('Removed', 'ok'); await hubReload();
 }
 
+// ---- Hub venue block + "last time" lookup (Part 3a) ----
+async function hubVenueBlockHTML() {
+  const e = hub.event;
+  if (!e.venue_id) {
+    return `<div class="lookup-box"><div class="lh">Venue</div>No venue set. <button class="hub-mini" data-hub-action="set-venue">Set venue</button></div>`;
+  }
+  const [{ data: contacts }, { data: lastEv }, { data: parts }] = await Promise.all([
+    sb.from('v_venue_contacts').select('*').eq('venue_id', e.venue_id),
+    sb.from('events').select('name, event_date').eq('venue_id', e.venue_id).is('deleted_at', null).lte('event_date', TODAY()).neq('id', e.id).order('event_date', { ascending: false }).limit(1),
+    sb.from('event_participants').select('actor_id').eq('event_id', e.id),
+  ]);
+  const involved = new Set((parts || []).map(p => p.actor_id));
+  const ordered = orderContacts(contacts || []);
+  const chips = ordered.length ? ordered.map(c => {
+    const fn = c.function ? `<span class="contact-fn${c.is_primary ? ' primary' : ''}">${escapeHtml(c.function)}</span>` : '';
+    const inv = involved.has(c.actor_id)
+      ? '<span class="li-sub">✓ involved</span>'
+      : `<button class="hub-mini" data-hub-involve="${escapeHtml(c.actor_id)}" title="Add as a participant on this event">involve</button>`;
+    return `<span class="lookup-contact">${escapeHtml(c.display_name)} ${fn} ${inv}</span>`;
+  }).join('') : '<span class="li-sub">No contacts on file yet — add them on the venue (Venues tab).</span>';
+  const last = (lastEv && lastEv[0]) ? ` · last event here: ${escapeHtml(lastEv[0].name)} (${escapeHtml(fmtDate(lastEv[0].event_date))})` : '';
+  return `<div class="lookup-box">
+    <div class="lh">Venue — ${escapeHtml(e.venue?.name || 'set')} <button class="hub-mini" data-hub-action="set-venue">Change</button>${last}</div>
+    <div>Contacts here: ${chips}</div></div>`;
+}
+async function hubSetVenue() {
+  const { data: venues } = await sb.from('venues').select('id, name, city').is('deleted_at', null).order('name');
+  const opts = (venues || []).map(v => `<option value="${escapeHtml(v.id)}"${v.id === hub.event.venue_id ? ' selected' : ''}>${escapeHtml(v.name)}${v.city ? (' — ' + escapeHtml(v.city)) : ''}</option>`).join('');
+  openKpi('Set venue', 'Pick an existing venue or create one inline', `
+    <div class="modal-form-row"><label class="modal-label">Mode</label><select class="modal-select" name="vmode" id="sv-mode"><option value="existing">Pick existing</option><option value="new">Create new</option></select></div>
+    <div id="sv-existing"><div class="modal-form-row"><label class="modal-label">Venue</label><select class="modal-select" name="venue_id">${opts || '<option value="">— none yet —</option>'}</select></div></div>
+    <div id="sv-new" style="display:none;"><div class="modal-form-row"><label class="modal-label">New venue name *</label><input class="modal-input" name="new_venue"></div></div>`,
+    submitSetVenue, 'Save venue');
+  const sel = $('kpiModalBody').querySelector('#sv-mode');
+  sel.addEventListener('change', () => { const n = sel.value === 'new'; $('kpiModalBody').querySelector('#sv-existing').style.display = n ? 'none' : ''; $('kpiModalBody').querySelector('#sv-new').style.display = n ? '' : 'none'; });
+}
+async function submitSetVenue() {
+  let venue_id;
+  if (kpiVal('vmode') === 'new') {
+    const nm = kpiVal('new_venue'); if (!nm) throw new Error('New venue name is required');
+    const { data, error } = await sb.from('venues').insert({ name: nm }).select('id').single();
+    if (error) throw error; venue_id = data.id;
+  } else { venue_id = kpiVal('venue_id'); if (!venue_id) throw new Error('Pick a venue'); }
+  const { error } = await sb.from('events').update({ venue_id }).eq('id', hub.eventId);
+  if (error) throw error;
+  closeKpi(); toast('Venue set', 'ok'); await openEventHub(hub.eventId);
+}
+async function hubInvolveContact(actorId) {
+  const { error } = await sb.from('event_participants').insert({ event_id: hub.eventId, actor_id: actorId, role: 'venue_contact', roles: ['venue_contact'] });
+  if (error && error.code !== '23505') { toast('Failed: ' + error.message, 'err'); return; }
+  toast('Added to this event', 'ok'); await hubReload(hub.section);
+}
+
 const HUB_ACTIONS = {
   'edit-core': () => openEditEvent(hub.eventId),
+  'set-venue': hubSetVenue,
   'gen-dayof': hubGenerateDayOf,
   'add-people': hubAddPeople,
   'edit-participant': (el) => hubEditParticipant(el.dataset.id),
@@ -3653,11 +3763,392 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
   const fd = e.target.closest('[data-hub-fdl]'); if (fd) { hubFileDownload(fd.dataset.hubFdl); return; }
   const cdoc = e.target.closest('[data-hub-cdoc]'); if (cdoc) { hubContractDocDownload(cdoc.dataset.hubCdoc); return; }
+  const inv = e.target.closest('[data-hub-involve]'); if (inv) { hubInvolveContact(inv.dataset.hubInvolve); return; }
   const del = e.target.closest('[data-hub-del]'); if (del) { hubDelete(del.dataset.hubDel); return; }
 });
 $('panel-eventhub').addEventListener('change', (e) => {
   const ts = e.target.closest('[data-hub-tstatus]'); if (ts) { hubSetTaskStatus(ts.dataset.hubTstatus, ts.value); return; }
   const cs = e.target.closest('[data-hub-cstatus]'); if (cs) { hubSetContractStatus(cs.dataset.hubCstatus, cs.value); return; }
+});
+
+// ============================================================
+// VENUES / VENDORS + CONTACT MATRIX (Part 3a)
+// Contacts are actors (reuse the model). venue_contacts / vendor_contacts link
+// them; v_venue_contacts / v_vendor_contacts are the ordered "who do we know here"
+// reads. The matrix accumulates so the "last time" lookup surfaces the right person.
+// ============================================================
+const venuesState = { mode: 'venues', view: 'list', ownerId: null, owner: null };
+const CONTACT_FUNCTIONS = ['booking', 'sound', 'day_of', 'gm', 'security', 'other'];
+
+async function loadVenues() { venuesState.view = 'list'; venuesState.ownerId = null; await renderVenues(); }
+
+async function renderVenues() {
+  if (venuesState.view === 'detail') return renderOwnerDetail();
+  const m = venuesState.mode;
+  $('venuesBody').innerHTML = `
+    <div class="ven-toggle">
+      <button data-ven-mode="venues" class="${m === 'venues' ? 'active' : ''}">Venues</button>
+      <button data-ven-mode="vendors" class="${m === 'vendors' ? 'active' : ''}">Vendors</button>
+    </div>
+    <div class="hub-sec-bar"><h3>${m === 'venues' ? 'Venues' : 'Vendors'}</h3>
+      <button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></div>
+    <div id="venList"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
+  if (m === 'venues') await renderVenueList(); else await renderVendorList();
+}
+
+async function renderVenueList() {
+  const { data, error } = await sb.from('venues')
+    .select('id, name, city, state, capacity, venue_contacts(id)').is('deleted_at', null).order('name');
+  if (error) { $('venList').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  const rows = (data || []).length ? data.map(v => {
+    const loc = [v.city, v.state].filter(Boolean).join(', ');
+    const n = (v.venue_contacts || []).length;
+    return `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(v.name)}</strong>
+        <div class="li-sub">${escapeHtml(loc) || '—'}${v.capacity ? (' · cap ' + v.capacity) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div>
+      <div class="hub-li-actions">
+        <button class="hub-mini" data-ven-open="${escapeHtml(v.id)}">Open</button>
+        <button class="hub-mini" data-ven-action="edit-venue" data-id="${escapeHtml(v.id)}">Edit</button>
+        <button class="hub-mini danger" data-ven-action="archive-venue" data-id="${escapeHtml(v.id)}">Archive</button>
+      </div></div>`;
+  }).join('') : `<div class="hub-empty">No venues yet. Add one →</div>`;
+  $('venList').innerHTML = `<div class="hub-list">${rows}</div>`;
+}
+
+async function renderVendorList() {
+  const [{ data: roleRows }, { data: vc }] = await Promise.all([
+    sb.from('actor_roles').select('actor:actors(id, display_name, kind, deleted_at)').eq('role', 'vendor').eq('active', true),
+    sb.from('vendor_contacts').select('vendor_actor_id'),
+  ]);
+  const counts = {}; (vc || []).forEach(r => { counts[r.vendor_actor_id] = (counts[r.vendor_actor_id] || 0) + 1; });
+  const vendors = (roleRows || []).map(r => r.actor).filter(a => a && !a.deleted_at)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+  const rows = vendors.length ? vendors.map(a => {
+    const n = counts[a.id] || 0;
+    return `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(a.display_name)}</strong><div class="li-sub">${escapeHtml(a.kind)} · ${n} contact${n === 1 ? '' : 's'}</div></div>
+      <div class="hub-li-actions"><button class="hub-mini" data-ven-open="${escapeHtml(a.id)}">Open</button></div></div>`;
+  }).join('') : `<div class="hub-empty">No vendors yet (an actor with the “vendor” role). Add one →</div>`;
+  $('venList').innerHTML = `<div class="hub-list">${rows}</div>`;
+}
+
+async function openOwnerDetail(id) {
+  venuesState.ownerId = id; venuesState.view = 'detail';
+  await renderOwnerDetail();
+}
+// Ordered contacts for an owner: primary first, then most-recently-involved, then last touched.
+// SEAM: last_event_with is the recency signal a future ranker would frequency-weight
+// (e.g. count events per contact at this venue). v1 only ORDERS by it — no ML.
+function orderContacts(list) {
+  return [...list].sort((a, b) =>
+    (Number(b.is_primary) - Number(a.is_primary)) ||
+    ((b.last_event_with || '') > (a.last_event_with || '') ? 1 : (b.last_event_with || '') < (a.last_event_with || '') ? -1 : 0) ||
+    ((b.last_touch || '') > (a.last_touch || '') ? 1 : -1));
+}
+
+async function renderOwnerDetail() {
+  const isVenue = venuesState.mode === 'venues';
+  const id = venuesState.ownerId;
+  $('venuesBody').innerHTML = `<button class="hub-back" data-ven-back>&larr; Back to ${isVenue ? 'venues' : 'vendors'}</button><div id="venDetailHead"></div>
+    <div class="hub-sec-bar"><h3>Contacts</h3><button class="hub-btn" data-ven-action="add-contact">+ Add contact</button></div>
+    <div id="venContacts"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
+  if (isVenue) {
+    const { data: v } = await sb.from('venues').select('*').eq('id', id).single();
+    venuesState.owner = v;
+    const { data: lastEv } = await sb.from('events')
+      .select('name, event_date').eq('venue_id', id).is('deleted_at', null)
+      .lte('event_date', TODAY()).order('event_date', { ascending: false }).limit(1);
+    const loc = [v?.address, v?.city, v?.state].filter(Boolean).join(', ');
+    const last = (lastEv && lastEv[0]) ? `${escapeHtml(lastEv[0].name)} (${escapeHtml(fmtDate(lastEv[0].event_date))})` : 'none yet';
+    $('venDetailHead').innerHTML = `<div class="hub-head">
+      <div class="hub-title">${escapeHtml(v?.name || '')}</div>
+      <div class="hub-facts">
+        <div><span class="lbl">Location</span>${escapeHtml(loc) || muted}</div>
+        <div><span class="lbl">Capacity</span>${v?.capacity ?? muted}</div>
+        <div><span class="lbl">Last event here</span>${last}</div>
+      </div>
+      <div class="hub-head-actions"><button class="hub-btn ghost" data-ven-action="edit-venue" data-id="${escapeHtml(id)}">Edit venue</button></div>
+    </div>`;
+    const { data: contacts } = await sb.from('v_venue_contacts').select('*').eq('venue_id', id);
+    renderContactList(orderContacts(contacts || []), 'venue');
+  } else {
+    const { data: a } = await sb.from('actors').select('display_name, kind, email, phone').eq('id', id).single();
+    venuesState.owner = a;
+    $('venDetailHead').innerHTML = `<div class="hub-head">
+      <div class="hub-title">${escapeHtml(a?.display_name || '')}</div>
+      <div class="hub-facts"><div><span class="lbl">Vendor</span>${escapeHtml(a?.kind || '')}</div>${a?.email ? `<div><span class="lbl">Email</span>${escapeHtml(a.email)}</div>` : ''}</div>
+    </div>`;
+    const { data: contacts } = await sb.from('v_vendor_contacts').select('*').eq('vendor_actor_id', id);
+    renderContactList(orderContacts(contacts || []), 'vendor');
+  }
+}
+
+function renderContactList(contacts, kind) {
+  const rows = contacts.length ? contacts.map(c => {
+    const fn = c.function ? `<span class="contact-fn${c.is_primary ? ' primary' : ''}">${escapeHtml(c.function)}${c.is_primary ? ' ★' : ''}</span>` : (c.is_primary ? '<span class="contact-fn primary">★ primary</span>' : '');
+    const info = [c.email, c.phone].filter(Boolean).join(' · ');
+    return `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(c.display_name)}</strong> ${fn}
+        <div class="li-sub">${escapeHtml(info) || '—'}${c.last_event_with ? (' · last here ' + escapeHtml(fmtDate(c.last_event_with))) : ''}</div></div>
+      <div class="hub-li-actions">
+        <button class="hub-mini" data-ven-action="edit-contact" data-id="${escapeHtml(c.id)}">Edit</button>
+        <button class="hub-mini danger" data-ven-cdel="${kind}:${escapeHtml(c.id)}">Remove</button>
+      </div></div>`;
+  }).join('') : `<div class="hub-empty">No contacts yet — add the booking / sound / day-of people as you work with them.</div>`;
+  $('venContacts').innerHTML = `<div class="hub-list">${rows}</div>`;
+}
+
+// ---- Venue add/edit ----
+function venueFormHTML(v) {
+  return `
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(v?.name || '')}" required></div>
+    <div class="modal-form-row"><label class="modal-label">Address</label><input class="modal-input" name="address" value="${escapeHtml(v?.address || '')}"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">City</label><input class="modal-input" name="city" value="${escapeHtml(v?.city || '')}"></div>
+      <div><label class="modal-label">State</label><input class="modal-input" name="state" value="${escapeHtml(v?.state || '')}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity" value="${v?.capacity ?? ''}"></div>
+      <div></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2">${v ? escapeHtml(v.notes || '') : ''}</textarea></div>`;
+}
+function openAddVenue() { openKpi('Add venue', 'Saves to public.venues', venueFormHTML(null), () => submitVenue(null), 'Save venue'); }
+async function openEditVenue(id) {
+  const { data: v, error } = await sb.from('venues').select('*').eq('id', id).single();
+  if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  openKpi('Edit venue', escapeHtml(v.name), venueFormHTML(v), () => submitVenue(id), 'Save changes');
+}
+async function submitVenue(id) {
+  const name = kpiVal('name'); if (!name) throw new Error('Venue name is required');
+  const cap = kpiVal('capacity');
+  const row = { name, address: kpiVal('address') || null, city: kpiVal('city') || null, state: kpiVal('state') || null,
+                capacity: cap === '' ? null : Number(cap), notes: kpiVal('notes') || null };
+  const op = id ? sb.from('venues').update(row).eq('id', id) : sb.from('venues').insert(row);
+  const { error } = await op; if (error) throw error;
+  closeKpi(); toast(id ? 'Venue updated' : 'Venue added', 'ok');
+  if (venuesState.view === 'detail') await renderOwnerDetail(); else await renderVenues();
+}
+async function archiveVenue(id) {
+  if (!confirm('Archive this venue? It is hidden from the list (soft delete) but events keep their link.')) return;
+  const { error } = await sb.from('venues').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Archive failed: ' + error.message, 'err'); return; }
+  toast('Venue archived', 'ok'); await renderVenues();
+}
+
+// ---- Add vendor (an actor with role=vendor) ----
+function openAddVendor() {
+  openKpi('Add vendor', 'A vendor is an actor with the “vendor” role', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Name *</label><input class="modal-input" name="name" required></div>
+      <div><label class="modal-label">Kind</label><select class="modal-select" name="kind"><option value="org">org</option><option value="person">person</option></select></div>
+    </div>`, submitAddVendor, 'Save vendor');
+}
+async function submitAddVendor() {
+  const name = kpiVal('name'); if (!name) throw new Error('Vendor name is required');
+  const { data: a, error } = await sb.from('actors').insert({ display_name: name, kind: kpiVal('kind') || 'org' }).select('id').single();
+  if (error) throw error;
+  const { error: re } = await sb.from('actor_roles').insert({ actor_id: a.id, role: 'vendor' });
+  if (re && re.code !== '23505') throw re;
+  hub.actors = null; closeKpi(); toast('Vendor added', 'ok'); await renderVenues();
+}
+
+// ---- Contact add/edit (shared for venue + vendor) ----
+async function openAddContact() {
+  await hubLoadActors();
+  const actorOpts = hub.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Add contact', 'Link a person (actor) to this ' + (venuesState.mode === 'venues' ? 'venue' : 'vendor'), contactFormHTML(null, actorOpts, true), () => submitContact(null), 'Add contact');
+  wireContactMode();
+}
+async function openEditContact(id) {
+  const isVenue = venuesState.mode === 'venues';
+  const view = isVenue ? 'v_venue_contacts' : 'v_vendor_contacts';
+  const { data: c, error } = await sb.from(view).select('*').eq('id', id).single();
+  if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  openKpi('Edit contact', escapeHtml(c.display_name), contactFormHTML(c, '', false), () => submitContact(id, c), 'Save changes');
+}
+function contactFormHTML(c, actorOpts, allowNew) {
+  const fnOpts = CONTACT_FUNCTIONS.map(f => `<option value="${f}"${c && c.function === f ? ' selected' : ''}>${f}</option>`).join('');
+  const picker = allowNew ? `
+    <div class="modal-form-row"><label class="modal-label">Who *</label>
+      <select class="modal-select" name="cmode" id="c-mode"><option value="existing">Pick an existing actor</option><option value="new">Create a new person</option></select></div>
+    <div id="c-existing"><div class="modal-form-row"><label class="modal-label">Actor *</label><select class="modal-select" name="actor_id">${actorOpts || '<option value="">— none —</option>'}</select></div></div>
+    <div id="c-new" style="display:none;"><div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="new_name"></div></div>`
+    : `<div class="modal-form-row"><label class="modal-label">Contact</label><input class="modal-input" value="${escapeHtml(c?.display_name || '')}" disabled></div>`;
+  return `${picker}
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Function</label><select class="modal-select" name="function"><option value="">—</option>${fnOpts}</select></div>
+      <div><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:22px;"><input type="checkbox" name="is_primary" style="width:auto;margin:0;"${c?.is_primary ? ' checked' : ''}> Primary for this function</label></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2">${c ? escapeHtml(c.notes || '') : ''}</textarea></div>`;
+}
+function wireContactMode() {
+  const sel = $('kpiModalBody').querySelector('#c-mode'); if (!sel) return;
+  sel.addEventListener('change', () => {
+    const isNew = sel.value === 'new';
+    $('kpiModalBody').querySelector('#c-existing').style.display = isNew ? 'none' : '';
+    $('kpiModalBody').querySelector('#c-new').style.display = isNew ? '' : 'none';
+  });
+}
+async function submitContact(id, existing) {
+  const isVenue = venuesState.mode === 'venues';
+  const fn = kpiVal('function') || null;
+  const is_primary = !!$('kpiModalBody').querySelector('[name="is_primary"]')?.checked;
+  const notes = kpiVal('notes') || null;
+  if (id) {
+    const { error } = await sb.from(isVenue ? 'venue_contacts' : 'vendor_contacts').update({ function: fn, is_primary, notes }).eq('id', id);
+    if (error) throw error;
+  } else {
+    let actor_id;
+    if (kpiVal('cmode') === 'new') {
+      const nm = kpiVal('new_name'); if (!nm) throw new Error('New person name is required');
+      const { data, error } = await sb.from('actors').insert({ display_name: nm, kind: 'person' }).select('id').single();
+      if (error) throw error; actor_id = data.id; hub.actors = null;
+    } else { actor_id = kpiVal('actor_id'); if (!actor_id) throw new Error('Pick an actor'); }
+    if (isVenue) {
+      const { error } = await sb.from('venue_contacts').insert({ venue_id: venuesState.ownerId, actor_id, function: fn, is_primary, notes });
+      if (error) throw new Error(error.code === '23505' ? 'That person already has this function here.' : error.message);
+      // keep the actor model consistent: tag them venue_contact (ignore if already)
+      const { error: re } = await sb.from('actor_roles').insert({ actor_id, role: 'venue_contact' });
+      if (re && re.code !== '23505') { /* non-fatal */ }
+    } else {
+      const { error } = await sb.from('vendor_contacts').insert({ vendor_actor_id: venuesState.ownerId, contact_actor_id: actor_id, function: fn, is_primary, notes });
+      if (error) throw new Error(error.code === '23505' ? 'That person already has this function for this vendor.' : error.message);
+    }
+  }
+  closeKpi(); toast('Contact saved', 'ok'); await renderOwnerDetail();
+}
+
+// Delegated events for the venues surface.
+$('panel-venues').addEventListener('click', (e) => {
+  const mode = e.target.closest('[data-ven-mode]'); if (mode) { venuesState.mode = mode.dataset.venMode; venuesState.view = 'list'; renderVenues(); return; }
+  const back = e.target.closest('[data-ven-back]'); if (back) { venuesState.view = 'list'; renderVenues(); return; }
+  const open = e.target.closest('[data-ven-open]'); if (open) { openOwnerDetail(open.dataset.venOpen); return; }
+  const cdel = e.target.closest('[data-ven-cdel]'); if (cdel) { venContactRemove(cdel.dataset.venCdel); return; }
+  const act = e.target.closest('[data-ven-action]'); if (act) {
+    const id = act.dataset.id;
+    ({ 'add-venue': openAddVenue, 'edit-venue': () => openEditVenue(id), 'archive-venue': () => archiveVenue(id),
+       'add-vendor': openAddVendor, 'add-contact': openAddContact, 'edit-contact': () => openEditContact(id) }[act.dataset.venAction] || (() => {}))();
+  }
+});
+async function venContactRemove(spec) {
+  const [kind, id] = spec.split(':');
+  if (!confirm('Remove this contact link? (The person stays in your actors — only the link here is removed.)')) return;
+  const { error } = await sb.from(kind === 'venue' ? 'venue_contacts' : 'vendor_contacts').delete().eq('id', id);
+  if (error) { toast('Remove failed: ' + error.message, 'err'); return; }
+  toast('Contact removed', 'ok'); await renderOwnerDetail();
+}
+
+// ============================================================
+// TASK TEMPLATE EDITOR (Part 3b.3) — Keith edits his standard workflows here.
+// Edits apply to FUTURE generation only; already-generated tasks are never rewritten
+// (generation reads templates at run time). CRUD + reorder over task_templates.
+// ============================================================
+const TMPL_EVENT_TYPES = ['party', 'dance_infusion', 'production', 'showcase'];
+const TMPL_PHASES = ['planning', 'promo', 'day_of', 'wrap'];
+const TARGET_FUNCS = ['', 'venue:booking', 'venue:sound', 'venue:day_of', 'venue:gm', 'venue:security', 'vendor'];
+let templatesCache = [];
+
+async function loadTemplates() { await renderTemplates(); }
+async function renderTemplates() {
+  const { data, error } = await sb.from('task_templates')
+    .select('id, event_type, title, default_offset_days, default_role, phase, gear_applicability, target_function, sort_order')
+    .order('event_type').order('phase').order('sort_order').order('title');
+  if (error) { $('templatesBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  templatesCache = data || [];
+  let html = `<div class="hub-sec-bar"><h3>Task templates</h3><button class="hub-btn" data-tmpl-action="add">+ Add template</button></div>
+    <div class="kpi-hint" style="margin-bottom:14px;">These are your standard checklists — the day-of generator builds from them. Editing here changes <strong>future</strong> generation only; it never rewrites tasks already generated on an event. “Applies when gear is” controls gear / no-gear / both event modes; “auto-assign” routes outreach tasks to that venue/vendor contact.</div>`;
+  for (const et of TMPL_EVENT_TYPES) {
+    const inType = templatesCache.filter(t => t.event_type === et);
+    if (!inType.length) continue;
+    html += `<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:1.05rem;">${et}</h3></div>`;
+    for (const ph of TMPL_PHASES) {
+      const rows = inType.filter(t => t.phase === ph);
+      if (!rows.length) continue;
+      html += `<div class="lookup-box"><div class="lh">${ph}</div><div class="hub-list">` + rows.map(t => {
+        const off = t.default_offset_days != null ? `T${t.default_offset_days >= 0 ? '+' : ''}${t.default_offset_days}` : '—';
+        const gear = `<span class="contact-fn">${escapeHtml(t.gear_applicability)}</span>`;
+        const tgt = t.target_function ? `<span class="contact-fn primary">→ ${escapeHtml(t.target_function)}</span>` : '';
+        return `<div class="hub-li">
+          <div class="li-main"><strong>${escapeHtml(t.title)}</strong> ${gear} ${tgt}<div class="li-sub">${off}${t.default_role ? (' · ' + escapeHtml(t.default_role)) : ''}</div></div>
+          <div class="hub-li-actions">
+            <button class="hub-mini" data-tmpl-up="${escapeHtml(t.id)}" title="Move up">↑</button>
+            <button class="hub-mini" data-tmpl-down="${escapeHtml(t.id)}" title="Move down">↓</button>
+            <button class="hub-mini" data-tmpl-action="edit" data-id="${escapeHtml(t.id)}">Edit</button>
+            <button class="hub-mini danger" data-tmpl-del="${escapeHtml(t.id)}">Remove</button>
+          </div></div>`;
+      }).join('') + `</div></div>`;
+    }
+  }
+  $('templatesBody').innerHTML = html;
+}
+
+function templateFormHTML(t) {
+  const opt = (vals, cur) => vals.map(x => `<option value="${escapeHtml(x)}"${(cur || '') === x ? ' selected' : ''}>${escapeHtml(x) || '— none —'}</option>`).join('');
+  return `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Event type *</label><select class="modal-select" name="event_type">${opt(TMPL_EVENT_TYPES, t?.event_type)}</select></div>
+      <div><label class="modal-label">Phase *</label><select class="modal-select" name="phase">${opt(TMPL_PHASES, t?.phase)}</select></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" value="${t ? escapeHtml(t.title) : ''}"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Offset days (− = before event)</label><input class="modal-input" type="number" step="1" name="default_offset_days" value="${t?.default_offset_days ?? ''}"></div>
+      <div><label class="modal-label">Sort order</label><input class="modal-input" type="number" step="1" name="sort_order" value="${t?.sort_order ?? 0}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Applies when gear is</label><select class="modal-select" name="gear_applicability">${opt(['both', 'gear', 'no_gear'], t?.gear_applicability || 'both')}</select></div>
+      <div><label class="modal-label">Auto-assign to</label><select class="modal-select" name="target_function">${opt(TARGET_FUNCS, t?.target_function || '')}</select></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Default role (optional label)</label><input class="modal-input" name="default_role" value="${t ? escapeHtml(t.default_role || '') : ''}"></div>`;
+}
+function openTemplateForm(id) {
+  const t = id ? templatesCache.find(x => x.id === id) : null;
+  openKpi(id ? 'Edit template' : 'Add template', 'Standard checklist item — affects FUTURE generation only', templateFormHTML(t), () => submitTemplate(id), id ? 'Save changes' : 'Add template');
+}
+async function submitTemplate(id) {
+  const title = kpiVal('title'); if (!title) throw new Error('Title is required');
+  const off = kpiVal('default_offset_days'); const so = kpiVal('sort_order');
+  const row = {
+    event_type: kpiVal('event_type'), phase: kpiVal('phase'), title,
+    default_offset_days: off === '' ? null : Number(off),
+    sort_order: so === '' ? 0 : Number(so),
+    gear_applicability: kpiVal('gear_applicability') || 'both',
+    target_function: kpiVal('target_function') || null,
+    default_role: kpiVal('default_role') || null,
+  };
+  const op = id ? sb.from('task_templates').update(row).eq('id', id) : sb.from('task_templates').insert(row);
+  const { error } = await op;
+  if (error) throw new Error(error.code === '23505' ? 'A template with that title already exists for this event type.' : error.message);
+  closeKpi(); toast(id ? 'Template updated' : 'Template added', 'ok'); await renderTemplates();
+}
+async function templateReorder(id, dir) {
+  const t = templatesCache.find(x => x.id === id); if (!t) return;
+  const group = templatesCache.filter(x => x.event_type === t.event_type && x.phase === t.phase)
+    .sort((a, b) => (a.sort_order - b.sort_order) || a.title.localeCompare(b.title));
+  const idx = group.findIndex(x => x.id === id);
+  const swap = dir === 'up' ? idx - 1 : idx + 1;
+  if (swap < 0 || swap >= group.length) return;
+  [group[idx], group[swap]] = [group[swap], group[idx]];
+  // Renumber the group sequentially (handles the many-zeros default cleanly).
+  for (let i = 0; i < group.length; i++) {
+    if (group[i].sort_order !== i) { const { error } = await sb.from('task_templates').update({ sort_order: i }).eq('id', group[i].id); if (error) { toast('Reorder failed: ' + error.message, 'err'); return; } }
+  }
+  await renderTemplates();
+}
+async function templateRemove(id) {
+  const t = templatesCache.find(x => x.id === id);
+  if (!confirm(`Remove template "${t?.title || ''}"? Future generation won't include it. Tasks already on events are untouched.`)) return;
+  const { error } = await sb.from('task_templates').delete().eq('id', id);
+  if (error) { toast('Remove failed: ' + error.message, 'err'); return; }
+  toast('Template removed', 'ok'); await renderTemplates();
+}
+$('panel-templates').addEventListener('click', (e) => {
+  const up = e.target.closest('[data-tmpl-up]'); if (up) { templateReorder(up.dataset.tmplUp, 'up'); return; }
+  const dn = e.target.closest('[data-tmpl-down]'); if (dn) { templateReorder(dn.dataset.tmplDown, 'down'); return; }
+  const del = e.target.closest('[data-tmpl-del]'); if (del) { templateRemove(del.dataset.tmplDel); return; }
+  const act = e.target.closest('[data-tmpl-action]'); if (act) {
+    ({ add: () => openTemplateForm(null), edit: () => openTemplateForm(act.dataset.id) }[act.dataset.tmplAction] || (() => {}))();
+  }
 });
 
 // ---- Initial session check ----

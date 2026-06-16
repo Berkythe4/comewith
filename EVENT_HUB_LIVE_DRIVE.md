@@ -100,3 +100,26 @@ Walk on `dashboard.html` signed in as admin.
 
 ## Automated data-layer proof (green, rolled back)
 `tests/event_hub_sprint2_test.sql` — multi-role + role=roles[1], one-per-actor unique enforced, bulk people, multi-equipment, money inserts, contract edit + document_id wiring, **day-of generator reading a secondary `dj` from `roles[]`**, IG 3-account upsert, and audit_log capturing the hub tables. All assertions pass; zero rows persisted (counts verified unchanged).
+
+---
+
+# Sprint 3 — Venue/contact matrix (3a) + conditional workflows & template editor (3b)
+
+## 3a — Venues + contact matrix + "last time" lookup
+- [ ] New **Venues** tab → list of venues (Add / Edit / Archive). Toggle **Venues | Vendors** at top.
+- [ ] **Open** a venue → detail with its fields, **"Last event here: …"**, and the **contact matrix** (people you deal with) — Add / Edit / Remove a contact, each with a **function** (booking / sound / day_of / gm / security) and a **primary** star.
+- [ ] Contacts are actors (pick existing or create new inline) — no parallel people table. Adding a venue contact tags them `venue_contact` in the actor model.
+- [ ] **Vendors** toggle → vendors are actors with the `vendor` role; each has its own contact matrix (`vendor_contacts`).
+- [ ] On an **event hub → Overview**, a **Venue** box: set/change the venue (pick or create inline). Once set, it surfaces **"Contacts here:"** (ordered primary-first, then most-recently-involved) with one-click **involve** (adds them as a participant), plus **"last event here"**.
+
+## 3b — Conditional workflows, outreach auto-assign, template editor, assign fix
+- [ ] **Edit event → Logistics → "Come With is providing the gear"** checkbox; the hub header shows **Gear: CW providing / Venue·other**.
+- [ ] **Generate task checklist** (hub Overview) branches on the gear flag: gear-on → load-in / soundcheck / breakdown / return; gear-off → "confirm house gear with venue". Idempotent (re-run never duplicates).
+- [ ] **Outreach tasks auto-assign via the matrix:** e.g. "Send rider to sound contact" lands on the venue's **sound** contact; "Confirm load-in time with venue" on the **booking** contact. If no contact is on file for that function, the task generates **unassigned with a "assign a … contact" hint** (prompting you to grow the matrix).
+- [ ] **Templates tab** = the standard-workflow editor: grouped by event type → phase; **add / edit / remove / reorder (↑↓)**; set **offset**, **phase**, **gear applicability** (gear / no_gear / both), and **auto-assign target** (venue:sound, venue:booking, vendor, …). Copy states edits are **future-only**.
+- [ ] **Editing a template does NOT rewrite tasks already on an event** — only future generation changes. (Proven by test.)
+- [ ] **Assign-task picker is grouped:** *This event's people* · *Your team* (always assignable) · *Venue contacts* — no longer "everyone".
+
+## Automated data-layer proof (green, rolled back)
+- `tests/contact_matrix_test.sql` (3a gate) — venue CRUD, venue+vendor contact links, one-per-function enforced, set-venue-on-event, `v_venue_contacts` lookup with `last_event_with` recency seam. All green; zero persisted.
+- `tests/conditional_workflows_test.sql` (3b) — gear-off vs gear-on task sets, rider offset = T−14, **outreach auto-assigned to the sound contact**, booking outreach **degrades to unassigned + hint**, idempotent re-run, and **future-only** (editing a template leaves an already-generated task's due_date unchanged). All green; zero persisted (template offset rolled back).
