@@ -200,7 +200,9 @@ preview — no build step required.
 
 ---
 
-## Current state — reconciled 2026-06-02 (data-load close)
+## Current state — reconciled 2026-06-16 (Guest-KPI-fix close)
+
+> **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
 
 ### ✅ Done / LIVE on prod
 - **Migration & cutover (0–11) + KPI/metrics + money model (015–022)** — Strategy tab, entry forms
@@ -216,10 +218,24 @@ preview — no build step required.
   actors; anon-401 holds. (`events/dance-infusion/DI_DATA_LOAD_LOG.md`.)
 - **Migration 029** — `sponsorships.sponsor_id` nullable (sponsorships attach to actors) + `actor_roles` `donor` role.
 - **Tools deployed + admin-gated** on comewith.org — `/tools/actor-inspector|test-checklist|visualizer.html`.
+- **MODULE SERIES — Event Hub & Guest layer (migrations 030–040), all live on master/Netlify:**
+  - **Event Hub** (sprints 1–2): per-event detail page — Overview/People/Tasks/Money/Equipment/Contracts/Files,
+    stage stepper, day-of generator, multi-role participants (`roles[]`), audit triggers, `v_actor_full`,
+    bulk add/edit, inline Money fix, contract docs, IG-followers KPI capture.
+  - **Venue / contact matrix** (sprint 3a): Venues tab, `venue_contacts`/`vendor_contacts`, "last time" lookup.
+  - **Conditional workflows + template editor** (sprint 3b): `events.cw_providing_gear`, gear-aware generation,
+    outreach templates auto-assigned via the matrix, in-dashboard Templates editor (future-only), grouped assign picker.
+  - **Chain fix** (sprint 4): venue-save display fix, ONE gear task + equipment sheet, venue-as-counterparty
+    (`venues.actor_id`), delete-stays-deleted; actors-only historical backfill (DI#1/showcase participants, Signal contacts).
+  - **Attendee + Guest module** (sprints 5–7): `guests`/`subscribers`/`guest_event_attendance`, DI#2 ledger import
+    (people-only, money never written), guest→actor graduation (`guests.actor_id`), Guests tab w/ lifetime stats +
+    filters (subscribed = mailing list), returning-attendee KPI **fixed (fuzzy name+email; DI#2 returning 1→12)**,
+    mission/business spend split (DI = MS-Society mission vs CW Parties business).
+  - **Counts (prod):** guests **97**, subscribers **86** subscribed (11 opt-out-respected), actors **38**, attendance **108**.
+  - **Money discipline held:** no financial rows written from any backfill; DI#1/DI#2 `v_event_summary` unchanged throughout.
 
 ### 🟡 Held (committed locally, push held for Keith)
-`261797d` (029 + DI load log), `5cbb51e` (roadmap backlog), + this close-out commit. Plus unmerged
-pushed branches `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`.
+`261797d` (029 + DI load log), `5cbb51e` (roadmap backlog). (Module-series work 030–040 is pushed to master.)
 
 ### 🚫 GATED BLOCKER (hard dependency — keep)
 **Financial-view security fix — BEFORE any customer/external login:** revoke the 5 financial views
@@ -229,14 +245,22 @@ first (`tools/test-checklist.html` → Security 🔴). ⚠ Covers **existing `cu
 (they're `authenticated`; views revoked from `anon` only today). The dormant actor-self RLS tier is
 built (024/026) but **no non-admin login is provisioned**.
 
-### 🟦 Queued (none deadline-bound)
-- **actor-inspector "Events" section** — show each actor's `event_participants` (event, role, fee).
-- **Guest layer + attendance** — tickets-as-attendance proxy, basis-tagged (no scan data); promote
-  guest → actor only on recurrence (LEARNINGS §11, §13).
-- **Tools nav in the dashboard** — link `/tools/*` from the admin dashboard.
-- **Mailing-list feature + DI #2 thank-you / survey send.**
-- **`third_party_donations` actor FK** — donations attributed by text `donor_name`, not linked to
-  actor rows (LEARNINGS §12, §14).
+### 🟦 Queued (dashboard backlog — order owned in planning chat)
+1. **Audit cleanup follow-up** — approve the 6 same-human guest↔actor links + review the 8 variant pairs
+   in `GUEST_ACTOR_AUDIT.md` (Keith's manual call; includes family records like Francis/Theresa Berkman).
+2. **Artist module** — repoint the stale Artists tab → actors + `actor_artist_details` (follow the
+   `docs/ACTOR_DETAILS_PATTERN.md` convention); Kristen London / 32LVS waiting to surface.
+3. **Vendor module** — same pattern, fast follow (vendor actors + `actor_vendor_details`; `vendor_contacts` exists).
+4. **Sponsor tab repoint** — sponsors → actors (sponsor role) like the artist/vendor repoint.
+5. **Full Equipment module** — CRUD + ROI view + rental-vs-own-use split (`equipment_usage` write path now exists).
+- Carryover smaller items: actor-inspector "Events" section; Tools nav in the dashboard;
+  DI#2 thank-you/survey send; `third_party_donations` actor FK (donations still text `donor_name`).
+
+### ❓ Decisions waiting on Keith (block nothing)
+- **Cold subscriptions** — keep or drop the ~20 attendees who never ticked RA marketing opt-in.
+- **81-name door list** (no emails) — import comps as guests or leave out.
+- **Audit merges** — which of the `GUEST_ACTOR_AUDIT.md` same-human links / variant pairs to approve
+  (3 flagged pairs are likely *different* people — do not merge).
 
 ### ⏸ Parked (each its own session)
 - **Actor onboarding + MSA e-signing** — hard-blocked by the financial-view fix above.

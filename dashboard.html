@@ -4225,36 +4225,34 @@ const guestState = { rows: [], filter: { q: '', event: '', subscribed: false, re
 
 async function loadGuests() {
   $('guestsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading guests…</div>';
-  const [stats, kpis, evk, gmap] = await Promise.all([
+  const [stats, kpis, evk, gmap, split] = await Promise.all([
     sb.from('v_guest_stats').select('guest_id, full_name, email, total_spent, events_attended, events, first_seen, last_seen, subscribed').order('total_spent', { ascending: false }),
     sb.from('v_guest_kpis').select('*').maybeSingle(),
     sb.from('v_event_attendance_kpi').select('name, attendees, new_attendees, returning_attendees, repeat_pct').order('event_date'),
     sb.from('guests').select('id, actor_id, actor:actors(display_name)').not('actor_id', 'is', null),
+    sb.from('v_guest_spend_split').select('guest_id, mission_spend, business_spend, other_spend'),
   ]);
   if (stats.error) { $('guestsBody').innerHTML = `<div class="panel-state err">${escapeHtml(stats.error.message)}</div>`; return; }
   const am = {}; (gmap.data || []).forEach(g => { am[g.id] = g.actor?.display_name || null; });
-  guestState.rows = (stats.data || []).map(r => ({ ...r, actor_name: am[r.guest_id] || null }));
+  const sm = {}; (split.data || []).forEach(s => { sm[s.guest_id] = s; });
+  guestState.rows = (stats.data || []).map(r => ({
+    ...r, actor_name: am[r.guest_id] || null,
+    mission_spend: Number(sm[r.guest_id]?.mission_spend || 0),
+    business_spend: Number(sm[r.guest_id]?.business_spend || 0),
+    other_spend: Number(sm[r.guest_id]?.other_spend || 0),
+  }));
   guestState.kpis = kpis.data || null;
   guestState.evKpi = evk.data || [];
   renderGuests();
 }
 
 function renderGuests() {
-  const k = guestState.kpis;
+  const f = guestState.filter;
   const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
-  const kpiStrip = k ? `<div class="hub-cards" style="margin-bottom:16px;">
-    ${card('Total guests', fmtNum(k.total_guests))}
-    ${card('Subscribed', fmtNum(k.subscribed))}
-    ${card('Repeat guests', fmtNum(k.repeat_guests))}
-    ${card('Avg spend / payer', money(k.avg_spend_per_paying_guest))}
-    ${card('Total guest spend', money(k.total_guest_spend))}
-  </div>` : '';
   const evRows = guestState.evKpi.map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name)}</strong>
     <div class="li-sub">${e.new_attendees} new · ${e.returning_attendees} returning · ${e.repeat_pct ?? 0}% repeat</div></div>
     <div class="li-amt">${e.attendees} total</div></div>`).join('');
-  // distinct events for filter
   const allEvents = [...new Set(guestState.rows.flatMap(r => r.events || []))].sort();
-  const f = guestState.filter;
   const evOpts = '<option value="">All events</option>' + allEvents.map(e => `<option value="${escapeHtml(e)}"${f.event === e ? ' selected' : ''}>${escapeHtml(e)}</option>`).join('');
   // apply filters
   const ql = f.q.toLowerCase();
@@ -4263,14 +4261,32 @@ function renderGuests() {
     (!f.event || (r.events || []).includes(f.event)) &&
     (!f.subscribed || r.subscribed) &&
     (!f.returning || r.events_attended > 1));
-  const rows = list.length ? list.map(r => `<div class="hub-li">
+  // KPI cards recompute for the FILTERED set
+  const active = !!(f.q || f.event || f.subscribed || f.returning);
+  const sum = (k) => list.reduce((a, r) => a + Number(r[k] || 0), 0);
+  const payers = list.filter(r => Number(r.total_spent) > 0);
+  const kpiStrip = `<div class="hub-cards" style="margin-bottom:6px;">
+    ${card(active ? 'Guests (filtered)' : 'Total guests', fmtNum(list.length))}
+    ${card('Subscribed', fmtNum(list.filter(r => r.subscribed).length))}
+    ${card('Repeat guests', fmtNum(list.filter(r => r.events_attended > 1).length))}
+    ${card('Avg spend / payer', money(payers.length ? sum('total_spent') / payers.length : 0))}
+    ${card('DI / Mission', money(sum('mission_spend')))}
+    ${card('CW / Revenue', money(sum('business_spend')))}
+  </div>
+  <div class="li-sub" style="margin-bottom:14px;">${active ? 'Cards reflect the active filter.' : 'Cards reflect all guests; apply a filter to scope them.'} <strong>DI / Mission</strong> = guest contributions to the National MS Society (not Come With revenue); <strong>CW / Revenue</strong> = Come With Parties business.</div>`;
+  const rows = list.length ? list.map(r => {
+    const mb = [];
+    if (r.mission_spend > 0) mb.push(`<span class="contact-fn primary" title="Dance Infusion — mission (MS Society)">DI ${money(r.mission_spend)}</span>`);
+    if (r.business_spend > 0) mb.push(`<span class="contact-fn" title="Come With Parties — business revenue">CW ${money(r.business_spend)}</span>`);
+    return `<div class="hub-li">
     <div class="li-main"><strong>${escapeHtml(r.full_name || '—')}</strong>${r.actor_name ? ' <span class="role-chip">actor</span>' : ''}
-      <div class="li-sub">${escapeHtml(r.email || '')} · ${r.events_attended} event${r.events_attended === 1 ? '' : 's'}${r.subscribed ? '' : ' · not subscribed'}</div></div>
+      <div class="li-sub">${escapeHtml(r.email || '')} · ${r.events_attended} event${r.events_attended === 1 ? '' : 's'}${r.subscribed ? '' : ' · not subscribed'} ${mb.join(' ')}</div></div>
     <div class="li-amt">${money(r.total_spent)}</div>
     <div class="hub-li-actions">
       ${r.subscribed ? '<span class="contact-fn">subscribed</span>' : '<span class="li-sub">—</span>'}
       <button class="hub-mini" data-guest-profile="${escapeHtml(r.guest_id)}">Profile</button>
-    </div></div>`).join('') : '<div class="hub-empty">No guests match.</div>';
+    </div></div>`;
+  }).join('') : '<div class="hub-empty">No guests match.</div>';
   $('guestsBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Guests</h3><span class="li-sub">${list.length} of ${guestState.rows.length}</span></div>
     ${kpiStrip}
@@ -4298,6 +4314,12 @@ function guestProfile(id) {
       <div class="hub-card"><div class="lbl">Total spent</div><div class="val">${money(r.total_spent)}</div></div>
       <div class="hub-card"><div class="lbl">Subscribed</div><div class="val">${r.subscribed ? 'Yes' : 'No'}</div></div>
     </div>
+    <div class="hub-cards" style="margin-top:10px;">
+      <div class="hub-card"><div class="lbl">DI / Mission</div><div class="val pos">${money(r.mission_spend)}</div></div>
+      <div class="hub-card"><div class="lbl">CW / Revenue</div><div class="val">${money(r.business_spend)}</div></div>
+      ${r.other_spend > 0 ? `<div class="hub-card"><div class="lbl">Other</div><div class="val">${money(r.other_spend)}</div></div>` : ''}
+    </div>
+    <div class="li-sub" style="margin-top:6px;">DI / Mission = this guest's contribution to the National MS Society (not Come With revenue).</div>
     <div class="modal-form-row" style="margin-top:12px;"><label class="modal-label">Event history</label><div>${events}</div></div>
     <div class="modal-form-row"><label class="modal-label">First / last seen</label><div>${escapeHtml(fmtDate(r.first_seen)) || '—'} → ${escapeHtml(fmtDate(r.last_seen)) || '—'}</div></div>
     <div class="modal-form-row"><label class="modal-label">Actor record</label><div>${r.actor_name ? escapeHtml(r.actor_name) + ' <span class="role-chip">linked</span>' : '<span class="li-sub">not graduated to an actor</span>'}</div></div>`,

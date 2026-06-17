@@ -30,6 +30,17 @@ an explicit go (LEARNINGS §5).
 ## Tomorrow's default
 **CWF BRD (June 15).** Come With stays maintenance-only.
 
+## This session shipped (2026-06-16 — Guest KPI fix: returning-match + filter-aware cards + mission/business split + ROADMAP)
+Diagnose-first, then fix. Migration 040 applied to prod (additive views). Money untouched throughout.
+- **Diagnosis (read-only gate):** DI#1 "28" is CORRECT — 42 RA rows = 42 tickets but 28 distinct buyers (10 multi-buys → 14 anonymous extra seats; RA captures only the buyer). The returning "1" had TWO bugs: (a) the sprint-6 ledger import skipped the 25 overlap emails → DI#1 people who also came to DI#2 got NO DI#2 attendance link (27/28 DI#1 guests lacked one); (b) returning was guest_id/email-exact, missing different-email/nickname same-person (Ethan Pollak, Liz↔Elizabeth).
+- **Fix A (recovery, additive, money-free):** added the missing DI#2 `guest_event_attendance` links for existing guests in the ledger → DI#2 attendance 68→77 (+9). Backup `backups/prekpifix_2026-06-16_*.json`.
+- **Fix B (migration 040):** `v_event_attendance_kpi` rebuilt with PERSON-identity matching (normalized full name + nickname canon, email fallback) — a KPI calc, not a record merge. **DI#2 returning 1 → 12** (43% of DI#1's 28; honestly below Keith's 50–75% gut because DI#1 has only 28 *identified* buyers, not 42 attendees, and some returnees used unmatchable identities). No false merges.
+- **Filter-aware cards:** Guests-tab KPI cards now recompute for the active filtered set (event/returning/subscribed), immediate.
+- **Mission/business split (`v_guest_spend_split`, type-driven):** DI = **mission** (MS-Society), CW Parties = **business**, else other. Surfaced in list + profile + cards, labeled "DI / Mission" vs "CW / Revenue" — never conflated.
+- **Verify:** DI#1 $2,940 / DI#2 $9,557.33 financials identical before/after; guests still 97 (recovery added links, not guests); attendance 99→108.
+- **ROADMAP.md reconciled** to true prod state: DONE (module series 030–040), QUEUED (audit cleanup → Artist → Vendor → Sponsor repoint → Equipment module), DECISIONS-WAITING (cold subs, door list, audit merges), GATED BLOCKER kept (financial-view lockdown before external login), pointer line kept.
+- Deployed to master (Netlify). Only guest/KPI surfacing touched.
+
 ## This session shipped (2026-06-16 — Guest module: ledger import + actor graduation + repeat KPI + reconcile + audit)
 Migrations 038 + 039 applied to prod (additive). DI#2 ledger people imported, money NEVER written.
 - **Import:** ledger 113 rows → 77 emails → 25 overlap skipped → **52 net-new guests** + DI#2 `guest_event_attendance` (amount_spent = guest stat only, NO ticketing/income). Guests **45→97**.
