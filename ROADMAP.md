@@ -200,11 +200,58 @@ preview — no build step required.
 
 ---
 
-## Current state — reconciled 2026-06-16 (Guest-KPI-fix close)
+## Current state — reconciled 2026-06-23 (Staff access + Social Calendar close)
 
 > **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
 
-### ✅ Done / LIVE on prod
+### ✅ Done / LIVE on prod — staff access + social calendar (2026-06-23)
+- **Migration 041 — staff access model** (APPLIED to prod): data-driven, grouped nav
+  (**Sales / Operations / Finance / Partners / Audience / Insights**) rendered from
+  `module_registry`; `profiles.staff_role` (`operations` / `marketing` / `full`);
+  `module_registry` + `user_module_access` (+ RLS); `user_can_access_module()` helper.
+  Client-side **signed-off badge gate** (non-master staff see only modules that are
+  signed off **and** in their role scope, with per-user grant/revoke overrides) and a
+  master-only **Team tab** (set roles, per-user access, and flip module sign-off).
+  Existing sub_admin (liz@comewith.org) backfilled to `staff_role='full'`.
+  **Signed off so far: Events, Team, Social Calendar** (everything else built-not-released).
+- **Migration 044 — Social Calendar** (APPLIED to prod): `social_posts` + `social_post_notes`
+  with **real per-module RLS** (clean leaf tables, no Events-hub coupling, so RLS was safe to
+  apply here). Stage pipeline idea→drafted→review→planned→scheduled→posted→archived;
+  **Timeline (default) / Board / List** views; full post CRUD; **threaded, timestamped notes**;
+  read-only **snapshot export** (self-contained chronological timeline → Print / Save-as-PDF)
+  to share with collaborators (e.g. Janelle) **without a login**.
+- **Deployed:** `staff-access-model` merged to master (`8fa2a62`), pushed; Netlify serving the
+  new `dashboard.html` to comewith.org. DB migrations **041 + 044 applied to prod**; the nav
+  also added a Social Calendar module and a master-only Team module.
+
+### 🔶 STAGED — committed but NOT applied (next deliberate session, in this order)
+Files are on master (`042`/`043` SQL, `invite-user/index.ts`) but inert — Netlify doesn't run
+them. Do these as one focused, rested session:
+1. **Apply 042** (hard per-module RLS) — first resolve the 4 `[VERIFY]` policy-name markers
+   (`task_templates`, `subscribers`, `mailing_campaigns`, `feedback_log`); the Events-hub
+   dependency carve (`can_use_events_module()`) is already built. **Then apply 043**
+   (`events.audited` publish gate: rebuilds the **5 money views** as `security_invoker` and
+   CASE-gates the money columns on `is_master_admin() OR audited`; re-asserts anon-revoke on
+   every rebuilt view). **Smoke-test with a throwaway staff account before trusting either.**
+2. **Deploy `invite-user` Edge Function** (authored, in repo, not deployed) — enables the Team
+   "＋ Add person" button:
+   `SUPABASE_ACCESS_TOKEN=$SBP_PAT supabase functions deploy invite-user --project-ref yaytdosxfhcqatmhctzk`
+3. **Create staff logins** — Martin (operations), Henry (operations), Janelle (marketing).
+   **ONLY after 043** so they never have a window of ungated financial access.
+
+**KNOWN GAP until 043 is applied:** any authenticated non-master (today only liz@comewith.org —
+a `sub_admin`, `full` scope, has a password but **never signed in**) can read the financial views
+via direct REST. The new nav only **hides** Finance; it does **not** RLS-gate it. No staff logins
+exist yet, so not currently exploitable — but **043 must precede any staff login creation.**
+
+### 🔁 Carrying forward
+- **Round-2 module sign-off (ongoing process)** — as Keith reviews each module, flip it
+  `signed_off` from the Team tab to release it to the staff roles whose scope includes it.
+  Only **Events / Team / Social Calendar** are released today; the rest are built but gated.
+- Events Services Agreement bug fixes + dashboard filter/sort (tracked under "Still-open bugs");
+  MSA e-signatures (tracked under "Parked" — still hard-blocked by the financial-view fix below).
+
+### ✅ Done / LIVE on prod — cumulative (through 2026-06-16)
 - **Migration & cutover (0–11) + KPI/metrics + money model (015–022)** — Strategy tab, entry forms
   (Log Event / Numbers / Edit Target + create/retire-metric), feedback log + Notes, event edit +
   soft-delete, Add Sponsor, per-event Money panel; canonical revenue/P&L (net P&L incl. tickets).
@@ -244,6 +291,17 @@ preview — no build step required.
 first (`tools/test-checklist.html` → Security 🔴). ⚠ Covers **existing `customer`-role logins too**
 (they're `authenticated`; views revoked from `anon` only today). The dormant actor-self RLS tier is
 built (024/026) but **no non-admin login is provisioned**.
+>
+> **⚠ Update 2026-06-23 — staged migration 043 is the START of this fix, not the whole thing:**
+> 043 rebuilds the **5 money views** (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+> `v_kpi_dance_infusion`, `v_kpi_dashboard`) as `security_invoker` and gates them on
+> `is_master_admin() OR events.audited`. It does **NOT** yet touch **`v_budget_variance`,
+> `v_data_points`, or `mv_event_data_points`** — extend 043 (or add a follow-up migration) to cover
+> those three before declaring this blocker closed. Also note the **model differs**: 043 implements
+> *staff-audited gating* (staff see audited events), whereas this blocker was written for
+> *customers/external get zero rows*; reconcile the two intents when applying. As of now **one
+> `sub_admin` login (liz) exists** and can still read all of these views via REST — see the staged
+> "KNOWN GAP" above.
 
 ### 🟦 Queued (dashboard backlog — order owned in planning chat)
 1. **Audit cleanup follow-up** — approve the 6 same-human guest↔actor links + review the 8 variant pairs
