@@ -152,6 +152,27 @@ body::before {
 .sidebar-nav button.active {
   color: var(--bg); border-left-color: var(--red); background: rgba(242,237,230,0.06);
 }
+/* Section header within the sidebar nav (data-driven grouping) */
+.nav-group-label {
+  padding: 14px 22px 5px; margin-top: 4px;
+  font-family: 'Inconsolata', monospace; font-size: 0.58rem; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: rgba(242,237,230,0.32);
+}
+.nav-group-label:first-child { margin-top: 0; }
+/* Make room for a trailing badge on each nav button */
+.sidebar-nav button { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.nav-badge {
+  font-family: 'Inconsolata', monospace; font-size: 0.5rem; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  padding: 2px 6px; border-radius: 2px; flex: 0 0 auto;
+}
+.nav-badge.signed { color: var(--green, #2E8E72); border: 1px solid rgba(46,142,114,0.5); }
+.nav-badge.review { color: rgba(242,237,230,0.45); border: 1px solid rgba(242,237,230,0.18); }
+.nav-badge.soon { color: #B5791F; border: 1px solid rgba(181,121,31,0.5); }
+.nav-badge.new  { color: #8362A8; border: 1px solid rgba(131,98,168,0.55); }
+/* master-only modules get a faint key marker */
+.sidebar-nav button .nav-lock { opacity: 0.5; font-size: 0.7em; }
 
 .sidebar-footer { padding: 14px 22px; border-top: 1px solid rgba(242,237,230,0.08); }
 .sidebar-footer button {
@@ -705,6 +726,22 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 }
 .hub-mini:hover { border-color: var(--red); color: var(--red); }
 .hub-mini.danger:hover { border-color: var(--red); color: var(--red); }
+.hub-mini.on { background: var(--green, #2E8E72); color: #fff; border-color: var(--green, #2E8E72); }
+.hub-mini:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Team management panel */
+.team-card { border: 1px solid var(--border); padding: 12px 14px; margin-top: 12px; }
+.team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.team-role { display: flex; align-items: center; gap: 8px; margin: 10px 0 8px; }
+.team-role label { font-size: 0.72rem; letter-spacing: 0.04em; color: var(--mid); }
+.team-ovr { display: flex; flex-wrap: wrap; gap: 6px; }
+.ovr-chip {
+  font-family: 'Inconsolata', monospace; font-size: 0.64rem; letter-spacing: 0.03em;
+  padding: 3px 8px; border: 1px solid var(--border-strong); background: none;
+  color: var(--mid); cursor: pointer; border-radius: 2px;
+}
+.ovr-chip:hover { border-color: var(--ink); color: var(--ink); }
+.ovr-chip.ovr-grant  { background: var(--green-bg, #e6f3ee); color: var(--green, #2E8E72); border-color: var(--green, #2E8E72); }
+.ovr-chip.ovr-revoke { background: rgba(193,59,42,0.08); color: var(--red); border-color: var(--red); }
 .hub-status-sel {
   font-family: 'Inconsolata', monospace; font-size: 0.72rem; padding: 3px 6px;
   border: 1px solid var(--border-strong); background: #fff; color: var(--ink);
@@ -856,25 +893,11 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         </div>
       </div>
 
-      <nav class="sidebar-nav" id="sidebarNav">
-        <button data-tab="strategy" class="active">Strategy</button>
-        <button data-tab="inquiries">Inquiries</button>
-        <button data-tab="agreements">Agreements</button>
-        <button data-tab="clients">Clients</button>
-        <button data-tab="income">Income</button>
-        <button data-tab="expenses">Expenses</button>
-        <button data-tab="equipment">Equipment</button>
-        <button data-tab="events">Events</button>
-        <button data-tab="venues">Venues</button>
-        <button data-tab="templates">Templates</button>
-        <button data-tab="guests">Guests</button>
-        <button data-tab="sponsors">Sponsors</button>
-        <button data-tab="sponsorships">Sponsorships</button>
-        <button data-tab="artists">Artists</button>
-        <button data-tab="subscribers">Subscribers</button>
-        <button data-tab="campaigns">Campaigns</button>
-        <button data-tab="notes">Notes</button>
-      </nav>
+      <!-- Nav is rendered from public.module_registry by renderNav() so the
+           grouping, signed-off badges, and per-role/per-user visibility stay
+           data-driven. data-tab values are preserved exactly (the menu->panel
+           contract). Static fallback removed intentionally. -->
+      <nav class="sidebar-nav" id="sidebarNav"></nav>
 
       <div class="sidebar-footer">
         <div class="footer-actions">
@@ -1187,6 +1210,29 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-guests">
         <div id="guestsBody"></div>
       </div>
+
+      <!-- ===== SOCIAL CALENDAR (placeholder — not yet built) ===== -->
+      <div class="panel" id="panel-social-calendar">
+        <div class="placeholder" style="max-width:640px;">
+          <strong>Social Calendar — coming soon.</strong>
+          <p style="margin:10px 0 0; line-height:1.6;">
+            A content/post planner for Come With + Dance Infusion across channels.
+            This is the one module still to be built. It is visible to master_admin
+            only until it ships; flip <code>built</code> &amp; <code>signed_off</code>
+            on the <code>social-calendar</code> row in <code>module_registry</code>
+            (or use the Team tab) to release it to marketing staff.
+          </p>
+          <p style="margin:10px 0 0; line-height:1.6; opacity:0.7;">
+            Reference: the static Dance Infusion post calendar lives at
+            <code>events/dance-infusion/di-02-2026-05/reports/DanceInfusion_PostCalendar.html</code>.
+          </p>
+        </div>
+      </div>
+
+      <!-- ===== TEAM (master_admin only — manage staff roles & access) ===== -->
+      <div class="panel" id="panel-team">
+        <div id="teamBody"></div>
+      </div>
     </main>
 
   </div>
@@ -1231,6 +1277,199 @@ function setMsg(text, kind = 'info') {
 // Display URL in login footer for at-a-glance confirmation
 $('metaUrl').textContent = new URL(SUPABASE_URL).host;
 
+// ===========================================================================
+// Staff access model (client-side gate). Mirrors public.user_can_access_module:
+//   * staff_role  = workflow scope (which module groups a person works in)
+//   * signed_off  = Keith's release gate (absolute; even a grant can't override)
+// Hard RLS enforcement is staged in migration 042/043 (not yet applied); this
+// is the live UX gate and the only thing standing today, so it is the source of
+// truth for what each person sees in the menu.
+// ===========================================================================
+const ME = { id: null, role: null, staff_role: null, isMaster: false };
+const NAV_GROUP_ORDER = ['Sales', 'Operations', 'Finance', 'Partners', 'Audience', 'Insights'];
+let MODULES = [];                 // module_registry rows
+let MY_OVERRIDES = {};            // { module_key: 'grant'|'revoke' } for the signed-in user
+const TEAM = { modules: [], people: [], overrides: {} };
+
+// Effective access for the signed-in user. Master sees all.
+function canAccessModule(m) {
+  if (ME.isMaster) return true;
+  if (!m.built || !m.signed_off || m.master_only) return false;
+  const ov = MY_OVERRIDES[m.key];
+  if (ov === 'revoke') return false;
+  if (ov === 'grant') return true;
+  return (m.default_roles || []).includes(ME.staff_role);
+}
+
+// Master-only status badge for a module (staff never see badges).
+function badgeForModule(m) {
+  if (!m.built) return { cls: 'soon', text: 'soon' };
+  if (m.signed_off) return { cls: 'signed', text: '✓' };
+  return { cls: 'review', text: 'review' };
+}
+
+// Build the sidebar nav from MODULES + access. Returns the first visible tab key.
+async function renderNav() {
+  const [reg, ov] = await Promise.all([
+    sb.from('module_registry').select('*').order('sort_order'),
+    ME.isMaster
+      ? Promise.resolve({ data: [] })
+      : sb.from('user_module_access').select('module_key, access').eq('user_id', ME.id),
+  ]);
+  MODULES = reg.data || [];
+  MY_OVERRIDES = {};
+  (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
+
+  const nav = $('sidebarNav');
+  nav.innerHTML = '';
+  let firstKey = null;
+
+  for (const group of NAV_GROUP_ORDER) {
+    const mods = MODULES
+      .filter(m => m.nav_group === group && canAccessModule(m))
+      .sort((a, b) => a.sort_order - b.sort_order);
+    if (!mods.length) continue;
+    const label = document.createElement('div');
+    label.className = 'nav-group-label';
+    label.textContent = group;
+    nav.appendChild(label);
+    for (const m of mods) {
+      if (!firstKey) firstKey = m.key;
+      const btn = document.createElement('button');
+      btn.dataset.tab = m.key;
+      btn.dataset.label = m.label;
+      let html = `<span>${m.master_only ? '<span class="nav-lock">🔑</span> ' : ''}${escapeHtml(m.label)}</span>`;
+      if (ME.isMaster) {
+        const b = badgeForModule(m);
+        if (b) html += `<span class="nav-badge ${b.cls}">${b.text}</span>`;
+      }
+      btn.innerHTML = html;
+      nav.appendChild(btn);
+    }
+  }
+  // Master keeps Strategy as the default landing tab when visible (continuity).
+  if (ME.isMaster && MODULES.some(m => m.key === 'strategy')) return 'strategy';
+  return firstKey;
+}
+
+// Activate a tab by key: toggle button + panel, set the title, load data.
+function activateTab(key) {
+  const btn = $('sidebarNav').querySelector(`button[data-tab="${key}"]`);
+  if (!btn) return;
+  for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
+  for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + key);
+  $('mainTitle').textContent = btn.dataset.label || btn.textContent;
+  loadTab(key);
+}
+
+// ---- Team management (master_admin only) ----------------------------------
+const STAFF_ROLE_OPTS = ['operations', 'marketing', 'full'];
+async function loadTeam() {
+  const body = $('teamBody');
+  if (!ME.isMaster) { body.innerHTML = '<div class="placeholder">Master admin only.</div>'; return; }
+  body.innerHTML = '<div class="placeholder">Loading team…</div>';
+  const [reg, ppl, ov] = await Promise.all([
+    sb.from('module_registry').select('*').order('sort_order'),
+    sb.from('profiles').select('id, full_name, email, role, staff_role').in('role', ['master_admin', 'sub_admin']).order('email'),
+    sb.from('user_module_access').select('user_id, module_key, access'),
+  ]);
+  if (reg.error) { body.innerHTML = '<div class="placeholder">' + escapeHtml(reg.error.message) + '</div>'; return; }
+  TEAM.modules = reg.data || [];
+  TEAM.people = ppl.data || [];
+  TEAM.overrides = {};
+  (ov.data || []).forEach(r => { (TEAM.overrides[r.user_id] ||= {})[r.module_key] = r.access; });
+  renderTeam();
+}
+
+function renderTeam() {
+  const mods = TEAM.modules;
+  // --- Section 1: module sign-off (the release control) ---
+  let s1 = `<div class="section-label">Modules — release control</div>
+    <div class="section-sub">Sign off a module to reveal it to every staff member whose role includes it. Unbuilt modules can't be signed off.</div>
+    <table class="data-table"><thead><tr><th>Module</th><th>Group</th><th>Default roles</th><th>Built</th><th>Signed off</th></tr></thead><tbody>`;
+  for (const m of mods) {
+    const lock = m.master_only ? ' <span class="nav-lock" title="master-only — staff never see this">🔑</span>' : '';
+    s1 += `<tr>
+      <td>${escapeHtml(m.label)}${lock}</td>
+      <td class="muted">${escapeHtml(m.nav_group)}</td>
+      <td class="muted">${m.master_only ? '—' : escapeHtml((m.default_roles || []).join(', ') || 'none')}</td>
+      <td><button class="hub-mini" data-mod-toggle="built" data-key="${m.key}">${m.built ? 'built' : 'not built'}</button></td>
+      <td><button class="hub-mini ${m.signed_off ? 'on' : ''}" data-mod-toggle="signed_off" data-key="${m.key}" ${m.built ? '' : 'disabled'}>${m.signed_off ? '✓ signed off' : 'sign off'}</button></td>
+    </tr>`;
+  }
+  s1 += '</tbody></table>';
+
+  // --- Section 2: people, staff_role + per-module overrides ---
+  const gateMods = mods.filter(m => !m.master_only); // overridable modules
+  let s2 = `<div class="section-label" style="margin-top:24px;">People — roles &amp; access</div>
+    <div class="section-sub">Set each person's workflow scope, then fine-tune individual access. Chips: <b>default</b> (role decides) → click → <b>grant</b> → <b>revoke</b>. A grant still can't reveal a module that isn't signed off.</div>`;
+  for (const p of TEAM.people) {
+    const isMasterRow = p.role === 'master_admin';
+    const ovr = TEAM.overrides[p.id] || {};
+    s2 += `<div class="team-card">
+      <div class="team-card-head">
+        <div><b>${escapeHtml(p.full_name || p.email)}</b> <span class="muted">${escapeHtml(p.email)}</span></div>
+        <div>${escapeHtml(p.role.replace('_', ' '))}</div>
+      </div>`;
+    if (isMasterRow) {
+      s2 += `<div class="muted" style="padding:6px 0;">Master admin — full access to everything, always.</div>`;
+    } else {
+      s2 += `<div class="team-role"><label>Workflow scope:</label>
+        <select class="modal-input" data-staff-role data-user="${p.id}" style="max-width:180px;">
+          <option value="">— none —</option>
+          ${STAFF_ROLE_OPTS.map(r => `<option value="${r}" ${p.staff_role === r ? 'selected' : ''}>${r}</option>`).join('')}
+        </select></div>
+        <div class="team-ovr">`;
+      for (const m of gateMods) {
+        const state = ovr[m.key] || 'default';
+        s2 += `<button class="ovr-chip ovr-${state}" data-ovr="${m.key}" data-user="${p.id}" title="${escapeHtml(m.label)} (${m.signed_off ? 'signed off' : 'not signed off yet'})">${escapeHtml(m.label)}: ${state}</button>`;
+      }
+      s2 += `</div>`;
+    }
+    s2 += `</div>`;
+  }
+  $('teamBody').innerHTML = s1 + s2;
+}
+
+async function setModuleFlag(key, field, current) {
+  const patch = { [field]: !current };
+  if (field === 'signed_off') patch.signed_off_at = !current ? new Date().toISOString() : null;
+  if (field === 'built' && current) patch.signed_off = false; // un-building also un-signs
+  const { error } = await sb.from('module_registry').update(patch).eq('key', key);
+  if (error) { alert(error.message); return; }
+  await loadTeam();
+}
+async function setStaffRole(uid, val) {
+  const { error } = await sb.from('profiles').update({ staff_role: val || null }).eq('id', uid);
+  if (error) { alert(error.message); return; }
+  await loadTeam();
+}
+async function cycleOverride(uid, key) {
+  const cur = (TEAM.overrides[uid] || {})[key];
+  let res;
+  if (!cur) res = await sb.from('user_module_access').upsert({ user_id: uid, module_key: key, access: 'grant', created_by: ME.id });
+  else if (cur === 'grant') res = await sb.from('user_module_access').upsert({ user_id: uid, module_key: key, access: 'revoke', created_by: ME.id });
+  else res = await sb.from('user_module_access').delete().eq('user_id', uid).eq('module_key', key);
+  if (res.error) { alert(res.error.message); return; }
+  await loadTeam();
+}
+
+// Delegated handlers for the Team panel.
+document.addEventListener('click', (e) => {
+  const mt = e.target.closest('[data-mod-toggle]');
+  if (mt) {
+    const m = TEAM.modules.find(x => x.key === mt.dataset.key);
+    if (m) setModuleFlag(mt.dataset.key, mt.dataset.modToggle, m[mt.dataset.modToggle]);
+    return;
+  }
+  const ov = e.target.closest('[data-ovr]');
+  if (ov) { cycleOverride(ov.dataset.user, ov.dataset.ovr); return; }
+});
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest('[data-staff-role]');
+  if (sel) setStaffRole(sel.dataset.user, sel.value);
+});
+
 // ---- Auth state ----
 async function renderForSession(session) {
   if (!session) { showLogin(); return; }
@@ -1239,7 +1478,7 @@ async function renderForSession(session) {
   // RLS policy lets the signed-in user select their own profile.
   const { data: profile, error } = await sb
     .from('profiles')
-    .select('full_name, role, email')
+    .select('full_name, role, email, staff_role')
     .eq('id', session.user.id)
     .single();
 
@@ -1249,15 +1488,23 @@ async function renderForSession(session) {
     return;
   }
 
+  ME.id = session.user.id;
+  ME.role = profile.role;
+  ME.staff_role = profile.staff_role;
+  ME.isMaster = profile.role === 'master_admin';
+
   const name = profile.full_name || profile.email;
   $('profileName').textContent = name;
-  $('profileRole').textContent = profile.role.replace('_', ' ');
+  $('profileRole').textContent =
+    profile.role.replace('_', ' ') + (profile.staff_role ? ' · ' + profile.staff_role : '');
   $('profileAvatar').textContent = (name[0] || '·').toUpperCase();
   showDash();
   $('refreshBtn').disabled = false;
-  // Load the currently active tab now that we have a session
-  const active = document.querySelector('.sidebar-nav button.active');
-  if (active) loadTab(active.dataset.tab);
+
+  // Build the nav from module_registry (+ this user's access), then open the
+  // first tab the user can actually see.
+  const firstTab = await renderNav();
+  if (firstTab) activateTab(firstTab);
 }
 
 sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
@@ -1728,7 +1975,8 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'venues') { await loadVenues(); return; } // custom (list/detail + contact matrix)
   if (tab === 'templates') { await loadTemplates(); return; } // custom (template editor)
   if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
-  if (!queries[tab]) return; // placeholder panels are no-ops
+  if (tab === 'team') { await loadTeam(); return; } // master-only team management
+  if (!queries[tab]) return; // placeholder panels are no-ops (e.g. social-calendar)
   setCount(tab, null);
   setPanelState(tab, 'loading', 'Loading ' + tab + '…');
   $('refreshBtn').disabled = true;
@@ -2104,11 +2352,7 @@ document.querySelector('main.main').addEventListener('change', async (e) => {
 $('sidebarNav').addEventListener('click', (e) => {
   const btn = e.target.closest('button[data-tab]');
   if (!btn) return;
-  const tab = btn.dataset.tab;
-  for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
-  for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + tab);
-  $('mainTitle').textContent = btn.textContent;
-  loadTab(tab);
+  activateTab(btn.dataset.tab);
 });
 
 // ---- Strategy / KPI section (Phase 13 — Part A, read-only) ----
