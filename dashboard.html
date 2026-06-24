@@ -1100,6 +1100,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
       <div class="panel" id="panel-equipment">
         <button class="add-btn" id="addEquipBtn">+ Add equipment</button>
+        <button class="add-btn" id="addWishlistBtn" style="margin-left:8px;">+ Wishlist item</button>
         <div id="equipFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;"></div>
         <div class="row-count" id="count-equipment">—</div>
         <div id="state-equipment"></div>
@@ -2347,10 +2348,16 @@ const queries = {
     .order('date', { ascending: false })
     .limit(500),
 
-  clients: () => sb.from('clients')
-    .select('id, full_name, email, phone, company, notes, created_at')
-    .order('created_at', { ascending: false })
-    .limit(500),
+  // Clients are actors (role 'customer') now — the legacy `clients` table is empty.
+  clients: async () => {
+    const { data, error } = await sb.from('actor_roles')
+      .select('actor:actors(id, display_name, email, phone, website, notes, created_at)').eq('role', 'customer');
+    if (error) return { error };
+    const rows = (data || []).map(r => r.actor).filter(Boolean)
+      .map(a => ({ id: a.id, full_name: a.display_name, email: a.email, phone: a.phone, company: a.website, notes: a.notes, created_at: a.created_at }))
+      .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    return { data: rows };
+  },
 
   equipment: () => sb.from('equipment_inventory')
     .select('id, name, category, brand, model, serial_number, status, daily_rate, purchase_price, current_value, purchase_date, notes')
@@ -2385,10 +2392,15 @@ const queries = {
     .order('cash_amount', { ascending: false })
     .limit(500),
 
-  artists: () => sb.from('artists')
-    .select('id, stage_name, genres, contact_email, status, signature_color')
-    .order('stage_name')
-    .limit(500),
+  // Artists/DJs are actors (role 'artist'/'dj') now — legacy `artists` table is empty.
+  artists: async () => {
+    const { data, error } = await sb.from('actor_roles')
+      .select('role, actor:actors(id, display_name, email)').in('role', ['artist', 'dj']);
+    if (error) return { error };
+    const seen = new Map();
+    for (const r of (data || [])) { const a = r.actor; if (!a) continue; if (!seen.has(a.id)) seen.set(a.id, { id: a.id, stage_name: a.display_name, genres: [r.role], contact_email: a.email, status: 'active' }); else seen.get(a.id).genres.push(r.role); }
+    return { data: [...seen.values()].sort((a, b) => a.stage_name.localeCompare(b.stage_name)) };
+  },
 
   subscribers: async () => {
     // Enrich with lifetime guest stats (events attended + total spent) by email.
@@ -2480,21 +2492,38 @@ $('refreshBtn').addEventListener('click', () => {
 
 // ===== Equipment inventory: category buckets (filter) + add/edit + usage history =====
 const EQUIP_CATEGORIES = ['DJ', 'Sound', 'Camera', 'Misc', 'Wire', 'Accessories'];
-const EQUIP_STATUSES = ['available', 'rented', 'maintenance', 'retired'];
+const EQUIP_STATUSES = ['available', 'rented', 'maintenance', 'retired', 'wishlist'];
+const EQUIP_CHILD_CATS = ['Wire', 'Accessories', 'Misc']; // can be bundled onto DJ/Sound gear
 let equipmentRows = [];
-let equipFilter = 'all';
+let equipSel = new Set();          // multi-select; empty = All. May contain category names + 'Wishlist'
+// True if a row passes the current multi-select filter.
+function equipVisible(r) {
+  if (equipSel.size === 0) return true;
+  const cats = [...equipSel].filter(c => c !== 'Wishlist');
+  const wl = equipSel.has('Wishlist');
+  const catMatch = cats.length ? (cats.includes(r.category) && r.status !== 'wishlist') : false;
+  const wlMatch = wl ? r.status === 'wishlist' : false;
+  return catMatch || wlMatch;
+}
 function renderEquipFilterBar() {
   const bar = $('equipFilterBar'); if (!bar) return;
   const counts = {};
   for (const r of equipmentRows) { const c = r.category || '—'; counts[c] = (counts[c] || 0) + 1; }
-  const chip = (key, label, n) => `<button type="button" class="role-opt${equipFilter === key ? ' on' : ''}" data-equip-filter="${escapeHtml(key)}">${escapeHtml(label)}${n != null ? ` <span class="sec-count">${n}</span>` : ''}</button>`;
-  bar.innerHTML = chip('all', 'All', equipmentRows.length)
+  const wishCount = equipmentRows.filter(r => r.status === 'wishlist').length;
+  const ownedCount = equipmentRows.length - wishCount;
+  const on = (key) => equipSel.has(key) ? ' on' : '';
+  const chip = (key, label, n, cls) => `<button type="button" class="role-opt${cls || ''}${on(key)}" data-equip-filter="${escapeHtml(key)}">${escapeHtml(label)}${n != null ? ` <span class="sec-count">${n}</span>` : ''}</button>`;
+  const stdActive = equipSel.has('DJ') && equipSel.has('Sound');
+  bar.innerHTML =
+    `<button type="button" class="role-opt${equipSel.size === 0 ? ' on' : ''}" data-equip-filter="all">All <span class="sec-count">${ownedCount}</span></button>`
+    + `<button type="button" class="role-opt${stdActive ? ' on' : ''}" data-equip-filter="standard" title="DJ + Sound">★ Standard</button>`
     + EQUIP_CATEGORIES.map(c => chip(c, c, counts[c] || 0)).join('')
-    + (counts['—'] ? chip('—', 'Uncategorized', counts['—']) : '');
+    + (counts['—'] ? chip('—', 'Uncategorized', counts['—']) : '')
+    + chip('Wishlist', 'Wishlist', wishCount);
 }
 function renderEquipmentTable() {
   const tbody = $('table-equipment').querySelector('tbody');
-  const rows = equipFilter === 'all' ? equipmentRows : equipmentRows.filter(r => (r.category || '—') === equipFilter);
+  const rows = equipmentRows.filter(equipVisible);
   tbody.innerHTML = rows.map(r => {
     const status = (r.status || 'available').toLowerCase();
     const bm = [r.brand, r.model].filter(Boolean).join(' ');
@@ -2507,21 +2536,43 @@ function renderEquipmentTable() {
       <td class="num">${r.daily_rate != null ? money(r.daily_rate) : muted}</td>
       <td class="num">${r.purchase_price != null ? money(r.purchase_price) : muted}</td>
     </tr>`;
-  }).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No equipment in this category.</td></tr>`;
+  }).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No equipment matches this filter.</td></tr>`;
 }
 $('equipFilterBar').addEventListener('click', (e) => {
   const b = e.target.closest('[data-equip-filter]'); if (!b) return;
-  equipFilter = b.dataset.equipFilter; renderEquipFilterBar(); renderEquipmentTable();
+  const key = b.dataset.equipFilter;
+  if (key === 'all') equipSel.clear();
+  else if (key === 'standard') { equipSel = new Set(['DJ', 'Sound']); }
+  else { if (equipSel.has(key)) equipSel.delete(key); else equipSel.add(key); }
+  renderEquipFilterBar(); renderEquipmentTable();
 });
 $('table-equipment').addEventListener('click', (e) => {
   const tr = e.target.closest('[data-equip-id]'); if (tr) openEditEquipment(tr.dataset.equipId);
 });
 $('addEquipBtn').addEventListener('click', () => openEditEquipment(null));
-async function openEditEquipment(id) {
+$('addWishlistBtn').addEventListener('click', () => openEditEquipment(null, { wishlist: true }));
+async function openEditEquipment(id, opts = {}) {
   const r = id ? equipmentRows.find(x => x.id === id) : null;
+  const defaultStatus = opts.wishlist ? 'wishlist' : (r?.status || 'available');
+  // DJ / Sound gear can carry bundled accessories/wires that travel with it.
+  const isParent = !!r && (r.category === 'DJ' || r.category === 'Sound');
+  let linkedChildIds = new Set();
+  if (isParent) {
+    const { data } = await sb.from('equipment_components').select('child_id').eq('parent_id', id);
+    linkedChildIds = new Set((data || []).map(c => c.child_id));
+  }
+  const childItems = equipmentRows.filter(x => EQUIP_CHILD_CATS.includes(x.category) && x.id !== id);
+  const bundleHTML = isParent ? `
+    <div class="kpi-section-h">Bundled gear — travels with this item</div>
+    <div class="kpi-hint">Internal ops only: when this item is assigned to an event, these accessories / wires / misc are auto-added too.</div>
+    <div class="pick-list" id="equipChildren" style="max-height:170px;overflow:auto;">
+      ${childItems.length ? childItems.map(c => `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+        <input type="checkbox" data-child="${escapeHtml(c.id)}" style="width:auto;margin:0;"${linkedChildIds.has(c.id) ? ' checked' : ''}>
+        <span>${escapeHtml(c.name)} <span class="pick-sub">${escapeHtml(c.category || '')}${c.serial_number ? ' · ' + escapeHtml(c.serial_number) : ''}</span></span></label>`).join('') : '<div class="hub-empty">No wire / accessory / misc items to bundle yet.</div>'}
+    </div>` : '';
   const catOpts = ['', ...EQUIP_CATEGORIES].map(c => `<option value="${c}"${(r?.category || '') === c ? ' selected' : ''}>${c || '— none —'}</option>`).join('');
-  const statusOpts = EQUIP_STATUSES.map(s => `<option value="${s}"${(r?.status || 'available') === s ? ' selected' : ''}>${s}</option>`).join('');
-  openKpi(id ? 'Edit equipment' : 'Add equipment', id ? escapeHtml(r?.name || '') : 'New inventory item', `
+  const statusOpts = EQUIP_STATUSES.map(s => `<option value="${s}"${defaultStatus === s ? ' selected' : ''}>${s}</option>`).join('');
+  openKpi(id ? 'Edit equipment' : (opts.wishlist ? 'Add wishlist item' : 'Add equipment'), id ? escapeHtml(r?.name || '') : 'New inventory item', `
     <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(r?.name || '')}" required></div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Category</label><select class="modal-select" name="category">${catOpts}</select></div>
@@ -2540,9 +2591,10 @@ async function openEditEquipment(id) {
       <div><label class="modal-label">Purchase date</label><input class="modal-input" type="date" name="purchase_date" value="${escapeHtml(r?.purchase_date || '')}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2">${escapeHtml(r?.notes || '')}</textarea></div>
+    ${bundleHTML}
     ${id ? `<div class="kpi-section-h">Event usage history</div><div id="equipUsage"><span class="li-sub">Loading…</span></div>
     <div style="margin-top:14px;"><button type="button" class="hub-mini danger" id="equipArchiveBtn">Archive item</button></div>` : ''}`,
-    () => submitEquipment(id), id ? 'Save changes' : 'Create item');
+    () => submitEquipment(id, isParent), id ? 'Save changes' : 'Create item');
   if (id) {
     loadEquipUsage(id);
     $('kpiModalBody').querySelector('#equipArchiveBtn')?.addEventListener('click', () => archiveEquipment(id));
@@ -2559,7 +2611,7 @@ async function loadEquipUsage(id) {
     <div class="li-sub">${u.event?.event_date ? escapeHtml(fmtDate(u.event.event_date)) : ''}${u.purpose ? ' · ' + escapeHtml(u.purpose) : ''}</div></div>
     <div class="li-amt">${u.revenue_attributed != null ? money(u.revenue_attributed) : ''}</div></div>`).join('');
 }
-async function submitEquipment(id) {
+async function submitEquipment(id, syncBundle) {
   const v = (f) => kpiVal(f);
   const name = v('name'); if (!name) throw new Error('Name is required');
   const numOrNull = (f) => { const x = v(f); return x === '' ? null : Number(x); };
@@ -2572,6 +2624,15 @@ async function submitEquipment(id) {
   const op = id ? sb.from('equipment_inventory').update(patch).eq('id', id)
                 : sb.from('equipment_inventory').insert(patch);
   const { error } = await op; if (error) throw error;
+  // Sync the bundled-children links (replace the set) for DJ/Sound parents.
+  if (id && syncBundle) {
+    const checked = [...$('kpiModalBody').querySelectorAll('#equipChildren [data-child]:checked')].map(el => el.dataset.child);
+    await sb.from('equipment_components').delete().eq('parent_id', id);
+    if (checked.length) {
+      const { error: ce } = await sb.from('equipment_components').insert(checked.map(child_id => ({ parent_id: id, child_id })));
+      if (ce) throw ce;
+    }
+  }
   closeKpi(); toast(id ? 'Equipment updated' : 'Equipment added', 'ok'); loadTab('equipment');
 }
 async function archiveEquipment(id) {
@@ -3371,14 +3432,15 @@ function openLogEvent() {
     const rows = $('tier-list').querySelectorAll('[data-tier]');
     if (rows.length > 1) e.target.closest('[data-tier]').remove();
   });
-  // Sponsorship needs an existing sponsor (FK). Only offer it if sponsors exist.
-  sb.from('sponsors').select('id, name').order('name').then(({ data }) => {
+  // Sponsorships attach to actors (sponsor-role). Only offer it if sponsor actors exist.
+  sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor').then(({ data }) => {
     if (!$('kpiModalOverlay').classList.contains('show')) return; // modal may have closed
-    if (!data || !data.length) {
+    const sponsors = (data || []).map(r => r.actor).filter(Boolean).sort((a, b) => a.display_name.localeCompare(b.display_name));
+    if (!sponsors.length) {
       $('sponsor-block').innerHTML = `<div class="kpi-hint">No sponsors on file — add one in the Sponsors tab to attach sponsorship revenue.</div>`;
       return;
     }
-    const opts = data.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+    const opts = sponsors.map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.display_name)}</option>`).join('');
     $('sponsor-block').innerHTML = `
       <div class="modal-form-row half-row">
         <div><label class="modal-label">Sponsor (optional)</label><select class="modal-select" name="sponsor_id"><option value="">— none —</option>${opts}</select></div>
@@ -3430,7 +3492,7 @@ async function submitLogEvent() {
   const donAmt = Number(kpiVal('donation_amount'));   if (donAmt > 0) ops.push(sb.from('third_party_donations').insert({ event_id, date: event_date, amount: donAmt }));
   const sponsorId = kpiVal('sponsor_id');
   if (sponsorId) ops.push(sb.from('sponsorships').insert({
-    event_id, sponsor_id: sponsorId,
+    event_id, actor_id: sponsorId,
     cash_amount: Number(kpiVal('sponsor_cash')) || 0, in_kind_value: Number(kpiVal('sponsor_inkind')) || 0,
     drink_tickets: 0, entry_tickets: 0, status: 'confirmed',
   }));
@@ -3619,7 +3681,7 @@ async function loadMoneyData(id) {
     sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
     sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, sponsor:sponsors(name), actor:actors(display_name)').eq('event_id', id),
-    sb.from('sponsors').select('id, name').order('name'),
+    sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor'),
   ]);
   return { tk, inc, exp, don, spo, sponsors };
 }
@@ -3629,7 +3691,7 @@ function moneySectionsHTML({ tk, inc, exp, don, spo, sponsors }) {
   const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
   const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
   const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
-  const sponsorOpts = (sponsors.data || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`).join('');
+  const sponsorOpts = (sponsors.data || []).map(s => s.actor).filter(Boolean).sort((a, b) => a.display_name.localeCompare(b.display_name)).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
   return `
     <div class="money-section">
       <h4>Tickets</h4>
@@ -3704,7 +3766,7 @@ async function moneyMutate(targetEl, eventId, container) {
     op = sb.from('third_party_donations').insert({ event_id: eventId, date: TODAY(), amount: amt, donor_name: v('donor') || null });
   } else if (kind === 'sponsorship') {
     const sid = v('sponsor_id'); if (!sid) throw new Error('Pick a sponsor');
-    op = sb.from('sponsorships').insert({ event_id: eventId, sponsor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
+    op = sb.from('sponsorships').insert({ event_id: eventId, actor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
   }
   const { error } = await op; if (error) throw error;
 }
@@ -4522,12 +4584,20 @@ async function submitAddEquipment() {
   const end = kpiVal('end_date') || null;
   const revRaw = kpiVal('revenue_attributed');
   const rev = revRaw === '' ? null : Number(revRaw);
-  const rows = [...addEquip.selected].map(equipment_id => ({
+  const ids = new Set(addEquip.selected);
+  // Auto-include bundled accessories/wires for any selected DJ/Sound parent (internal ops).
+  const { data: comps } = await sb.from('equipment_components').select('child_id').in('parent_id', [...ids]);
+  let bundled = 0;
+  for (const c of (comps || [])) { if (!ids.has(c.child_id)) { ids.add(c.child_id); bundled++; } }
+  const rows = [...ids].map(equipment_id => ({
     event_id: hub.eventId, equipment_id, purpose, start_date: start, end_date: end, revenue_attributed: rev,
   }));
+  // upsert-style: ignore items already on the event (no dupes when re-running)
   const { error } = await sb.from('equipment_usage').insert(rows);
-  if (error) throw error;
-  closeKpi(); toast(`${rows.length} item${rows.length === 1 ? '' : 's'} assigned`, 'ok'); await hubReload('equipment');
+  if (error && error.code !== '23505') throw error;
+  closeKpi();
+  toast(`${rows.length} item${rows.length === 1 ? '' : 's'} assigned${bundled ? ` (incl. ${bundled} bundled)` : ''}`, 'ok');
+  await hubReload('equipment');
 }
 // ===== Edit an equipment assignment =====
 async function hubEditEquipment(id) {
