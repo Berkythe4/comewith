@@ -1261,6 +1261,10 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div id="guestsBody"></div>
       </div>
 
+      <div class="panel" id="panel-actors">
+        <div id="actorsBody"></div>
+      </div>
+
       <!-- ===== SOCIAL CALENDAR (content planner + threaded notes) ===== -->
       <div class="panel" id="panel-social-calendar">
         <div class="social-toolbar">
@@ -2453,6 +2457,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'venues') { await loadVenues(); return; } // custom (list/detail + contact matrix)
   if (tab === 'templates') { await loadTemplates(); return; } // custom (template editor)
   if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
+  if (tab === 'actors') { await loadActors(); return; } // custom (actor registry — inline edit + sort)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5409,6 +5414,162 @@ $('panel-templates').addEventListener('click', (e) => {
 // The mailing list is the "subscribed" filter within this module.
 // ============================================================
 const guestState = { rows: [], filter: { q: '', event: '', subscribed: false, returning: false }, kpis: null, evKpi: [] };
+
+// ============================================================
+// ACTORS — master registry: add / inline-edit / sort / on-hold / roles
+// ============================================================
+const ACTOR_ROLE_VOCAB = ['artist', 'dj', 'contractor', 'customer', 'sponsor', 'team', 'performer', 'painter', 'dancer', 'vendor', 'venue_contact', 'host', 'crew', 'donor'];
+const ACTOR_COLS = [['display_name', 'Name'], ['kind', 'Kind'], ['roles', 'Roles'], ['email', 'Email'], ['phone', 'Phone'], ['instagram', 'Instagram'], ['events', 'Events'], ['derivedStatus', 'Status'], ['created_at', 'Added']];
+const actorState = { rows: [], sortKey: 'display_name', sortDir: 1, q: '', status: 'active+hold' };
+
+async function loadActors() {
+  $('actorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading actors…</div>';
+  const [aa, rr, pp] = await Promise.all([
+    sb.from('actors').select('id, display_name, legal_name, kind, email, phone, instagram, website, notes, status, deleted_at, created_at').order('display_name'),
+    sb.from('actor_roles').select('actor_id, role'),
+    sb.from('event_participants').select('actor_id'),
+  ]);
+  if (aa.error) { $('actorsBody').innerHTML = `<div class="panel-state err">${escapeHtml(aa.error.message)}</div>`; return; }
+  const rolesBy = {}; (rr.data || []).forEach(r => { (rolesBy[r.actor_id] = rolesBy[r.actor_id] || []).push(r.role); });
+  const evBy = {}; (pp.data || []).forEach(p => { evBy[p.actor_id] = (evBy[p.actor_id] || 0) + 1; });
+  actorState.rows = (aa.data || []).map(a => ({
+    ...a, roles: (rolesBy[a.id] || []).sort(), events: evBy[a.id] || 0,
+    derivedStatus: a.deleted_at ? 'archived' : (a.status || 'active'),
+  }));
+  renderActors();
+}
+function actorFiltered() {
+  const s = actorState, ql = s.q.toLowerCase();
+  let list = s.rows.filter(a => {
+    if (s.status === 'active' && a.derivedStatus !== 'active') return false;
+    else if (s.status === 'on_hold' && a.derivedStatus !== 'on_hold') return false;
+    else if (s.status === 'archived' && a.derivedStatus !== 'archived') return false;
+    else if (s.status === 'active+hold' && a.derivedStatus === 'archived') return false;
+    if (ql) { const hay = [a.display_name, a.email, a.phone, a.instagram, (a.roles || []).join(' '), a.legal_name].join(' ').toLowerCase(); if (!hay.includes(ql)) return false; }
+    return true;
+  });
+  const k = s.sortKey;
+  list.sort((a, b) => {
+    let av = a[k], bv = b[k];
+    if (k === 'roles') { av = (a.roles || []).join(','); bv = (b.roles || []).join(','); }
+    if (k === 'events') return (Number(av) - Number(bv)) * s.sortDir;
+    av = (av == null ? '' : String(av)).toLowerCase(); bv = (bv == null ? '' : String(bv)).toLowerCase();
+    return av < bv ? -s.sortDir : av > bv ? s.sortDir : 0;
+  });
+  return list;
+}
+function renderActors() {
+  const s = actorState;
+  s.status = s.status || 'active+hold';
+  $('actorsBody').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <button class="add-btn" data-aadd style="position:static;">+ Add actor</button>
+      <input class="modal-input" data-aq placeholder="Search name / email / role…" style="max-width:260px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-afilter>
+        ${[['active+hold', 'Active + on hold'], ['active', 'Active only'], ['on_hold', 'On hold'], ['archived', 'Archived'], ['all', 'All']].map(([v, l]) => `<option value="${v}"${s.status === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <span class="li-sub" data-acount></span>
+    </div>
+    <div id="actorsTable"></div>
+    <div class="kpi-hint" style="margin-top:8px;">Click a <strong>Name / Email / Phone / Instagram</strong> cell to edit inline (Enter or click away to save). Set <strong>Status</strong> to put someone on hold or archive. Click any column header to sort.</div>`;
+  renderActorsTable();
+}
+function renderActorsTable() {
+  const s = actorState, list = actorFiltered();
+  const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
+  const th = ACTOR_COLS.map(([key, lbl]) => `<th data-asort="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
+  const ed = (a, field) => `<td contenteditable="true" data-aedit="${field}" data-id="${escapeHtml(a.id)}" data-orig="${escapeHtml(a[field] || '')}" style="cursor:text;">${escapeHtml(a[field] || '')}</td>`;
+  const statusSel = (a) => `<select class="hub-status-sel" data-astatus="${escapeHtml(a.id)}">${['active', 'on_hold', 'archived'].map(v => `<option value="${v}"${a.derivedStatus === v ? ' selected' : ''}>${v.replace('_', ' ')}</option>`).join('')}</select>`;
+  const roleChips = (a) => (a.roles || []).map(r => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`).join(' ') || `<span class="muted">—</span>`;
+  const rows = list.map(a => `<tr${a.derivedStatus === 'on_hold' ? ' style="opacity:.6;"' : ''}>
+    ${ed(a, 'display_name')}
+    <td><select class="hub-status-sel" data-akind="${escapeHtml(a.id)}"><option value="person"${a.kind === 'person' ? ' selected' : ''}>person</option><option value="org"${a.kind === 'org' ? ' selected' : ''}>org</option></select></td>
+    <td>${roleChips(a)} <button class="hub-mini" data-aroles="${escapeHtml(a.id)}">edit</button></td>
+    ${ed(a, 'email')}${ed(a, 'phone')}${ed(a, 'instagram')}
+    <td class="num">${a.events || 0}</td>
+    <td>${statusSel(a)}</td>
+    <td class="li-sub">${escapeHtml(fmtDate(a.created_at))}</td>
+  </tr>`).join('') || `<tr><td colspan="${ACTOR_COLS.length}" class="muted" style="padding:14px;">No actors match.</td></tr>`;
+  $('actorsTable').innerHTML = `<table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
+  const cnt = $('actorsBody').querySelector('[data-acount]'); if (cnt) cnt.textContent = `${list.length} of ${s.rows.length}`;
+}
+async function saveActorField(td) {
+  const id = td.dataset.id, field = td.dataset.aedit, val = td.textContent.trim();
+  if (val === (td.dataset.orig || '')) return;
+  if (field === 'display_name' && !val) { td.textContent = td.dataset.orig || ''; toast('Name cannot be empty', 'err'); return; }
+  const { error } = await sb.from('actors').update({ [field]: val || null }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); td.textContent = td.dataset.orig || ''; return; }
+  td.dataset.orig = val;
+  const a = actorState.rows.find(x => x.id === id); if (a) a[field] = val || null;
+  toast('Saved', 'ok');
+}
+async function setActorStatus(id, v) {
+  const patch = v === 'archived' ? { deleted_at: new Date().toISOString() } : { status: v, deleted_at: null };
+  const { error } = await sb.from('actors').update(patch).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const a = actorState.rows.find(x => x.id === id);
+  if (a) { a.derivedStatus = v; if (v === 'archived') a.deleted_at = new Date().toISOString(); else { a.status = v; a.deleted_at = null; } }
+  toast(v === 'archived' ? 'Archived' : v === 'on_hold' ? 'Put on hold' : 'Set active', 'ok');
+  renderActorsTable();
+}
+async function setActorKind(id, v) {
+  const { error } = await sb.from('actors').update({ kind: v }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const a = actorState.rows.find(x => x.id === id); if (a) a.kind = v;
+}
+function openActorRoles(id) {
+  const a = actorState.rows.find(x => x.id === id); if (!a) return;
+  const sel = new Set(a.roles || []);
+  openKpi('Roles — ' + a.display_name, 'Toggle the roles this actor holds', `
+    <div class="role-pick">${ACTOR_ROLE_VOCAB.map(r => `<button type="button" class="role-opt${sel.has(r) ? ' on' : ''}" data-arole="${r}">${r}</button>`).join('')}</div>`,
+    async () => {
+      const picked = [...$('kpiModalBody').querySelectorAll('.role-opt.on')].map(b => b.dataset.arole);
+      const add = picked.filter(r => !sel.has(r)), rem = [...sel].filter(r => !picked.includes(r));
+      for (const r of add) { const { error } = await sb.from('actor_roles').insert({ actor_id: id, role: r }); if (error && error.code !== '23505') throw error; }
+      for (const r of rem) { const { error } = await sb.from('actor_roles').delete().eq('actor_id', id).eq('role', r); if (error) throw error; }
+      a.roles = picked.sort(); closeKpi(); toast('Roles updated', 'ok'); renderActorsTable();
+    }, 'Save roles');
+  $('kpiModalBody').querySelectorAll('[data-arole]').forEach(b => b.addEventListener('click', () => b.classList.toggle('on')));
+}
+function openAddActor() {
+  openKpi('Add actor', 'A person or org in the master registry', `
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="display_name" required></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Kind</label><select class="modal-select" name="kind"><option value="person">person</option><option value="org">org</option></select></div>
+      <div><label class="modal-label">Email</label><input class="modal-input" name="email"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Phone</label><input class="modal-input" name="phone"></div>
+      <div><label class="modal-label">Instagram</label><input class="modal-input" name="instagram"></div>
+    </div>
+    <div class="kpi-section-h">Roles</div>
+    <div class="role-pick">${ACTOR_ROLE_VOCAB.map(r => `<button type="button" class="role-opt" data-arole="${r}">${r}</button>`).join('')}</div>`,
+    submitAddActor, 'Create actor');
+  $('kpiModalBody').querySelectorAll('[data-arole]').forEach(b => b.addEventListener('click', () => b.classList.toggle('on')));
+}
+async function submitAddActor() {
+  const name = kpiVal('display_name'); if (!name) throw new Error('Name is required');
+  const { data, error } = await sb.from('actors').insert({ display_name: name, kind: kpiVal('kind') || 'person', email: kpiVal('email') || null, phone: kpiVal('phone') || null, instagram: kpiVal('instagram') || null }).select('id').single();
+  if (error) throw error;
+  const roles = [...$('kpiModalBody').querySelectorAll('.role-opt.on')].map(b => b.dataset.arole);
+  if (roles.length) { const { error: re } = await sb.from('actor_roles').insert(roles.map(role => ({ actor_id: data.id, role }))); if (re) throw re; }
+  closeKpi(); toast('Actor added', 'ok'); loadActors();
+}
+$('panel-actors').addEventListener('click', (e) => {
+  if (e.target.closest('[data-aadd]')) { openAddActor(); return; }
+  const sort = e.target.closest('[data-asort]'); if (sort) { const k = sort.dataset.asort; if (actorState.sortKey === k) actorState.sortDir *= -1; else { actorState.sortKey = k; actorState.sortDir = 1; } renderActorsTable(); return; }
+  const roles = e.target.closest('[data-aroles]'); if (roles) { openActorRoles(roles.dataset.aroles); return; }
+});
+$('panel-actors').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-aq]'); if (q) { actorState.q = q.value; renderActorsTable(); }
+});
+$('panel-actors').addEventListener('change', (e) => {
+  const fil = e.target.closest('[data-afilter]'); if (fil) { actorState.status = fil.value; renderActorsTable(); return; }
+  const st = e.target.closest('[data-astatus]'); if (st) { setActorStatus(st.dataset.astatus, st.value); return; }
+  const kd = e.target.closest('[data-akind]'); if (kd) { setActorKind(kd.dataset.akind, kd.value); return; }
+});
+$('panel-actors').addEventListener('focusout', (e) => { const td = e.target.closest('[data-aedit]'); if (td) saveActorField(td); });
+$('panel-actors').addEventListener('keydown', (e) => { const td = e.target.closest('[data-aedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
 
 async function loadGuests() {
   $('guestsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading guests…</div>';
