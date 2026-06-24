@@ -4104,9 +4104,12 @@ async function hubReload(section) {
 // ---- Section: Overview ----
 async function hubSecOverview() {
   const { data: f } = await sb.from('v_kpi_event_financials')
-    .select('gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, capacity, total_attendance, total_expenses')
+    .select('gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, capacity, total_attendance, total_expenses, other_income')
     .eq('event_id', hub.eventId).maybeSingle();
   const e = hub.event;
+  // Come With Production = a service gig for someone else's event — tickets/marketing/
+  // donations/sponsors are the HOST's, not ours; show only our service income, costs & gear.
+  const isProd = e.type === 'production' || e.series === 'Come With Production';
   const sell = (f && f.capacity > 0) ? Math.round(f.tickets_sold / f.capacity * 1000) / 10 : null;
   const net = f?.net_pl ?? 0;
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
@@ -4118,9 +4121,16 @@ async function hubSecOverview() {
       <button class="hub-btn" data-hub-action="gen-dayof">Generate task checklist</button>
       ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
     </div>`;
-  const venueBlock = await hubVenueBlockHTML();
-  $('hubSecBody').innerHTML = `
-    ${venueBlock}
+  const cards = isProd ? `
+    <div class="hub-cards">
+      ${card('Service income', money(f?.other_income || 0), (f?.other_income || 0) > 0 ? 'pos' : '')}
+      ${card('Expenses', money(f?.total_expenses || 0))}
+      ${card('Net to Come With', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
+      ${card('Equipment provided', fmtNum(hub.counts?.equipment || 0))}
+      ${card('Event attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
+    </div>
+    <div class="kpi-hint" style="margin-bottom:4px;max-width:62ch;">This is a <strong>Come With Production</strong> — a service gig (gear, setup, hosting) for someone else's event. Marketing, ticket sales, donations &amp; sponsors belong to the host, not Come With — track only your service income, expenses and equipment here.</div>`
+    : `
     <div class="hub-cards">
       ${card('Gross revenue', money(f?.gross_revenue || 0))}
       ${card('Net P&L', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
@@ -4131,9 +4141,16 @@ async function hubSecOverview() {
       ${card('Sell-through', sell != null ? (sell + '%') : '—')}
       ${card('Attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
       ${card('Expenses', money(f?.total_expenses || 0))}
-    </div>
+    </div>`;
+  const moneyNote = isProd
+    ? `Record your service income and costs in the Money section. Don't add the host's tickets / donations / sponsors here.`
+    : `Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.`;
+  const venueBlock = await hubVenueBlockHTML();
+  $('hubSecBody').innerHTML = `
+    ${venueBlock}
+    ${cards}
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-sec="money">Open Money</button></div>
-    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>
+    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">${moneyNote}</p>
     ${dayof}`;
 }
 
