@@ -5669,7 +5669,7 @@ $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.close
 // EVENTS DASHBOARD — the command center. Aggregates + filters + per-event metrics
 // that adapt to the event type (parties / Dance Infusion / production / content).
 // ============================================================
-const eventsDash = { rows: [], q: '', series: '', status: '', year: '' };
+const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false };
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
   const [ev, fin, mk, ig] = await Promise.all([
@@ -5689,6 +5689,7 @@ async function loadEventsDash() {
 function eventsFiltered() {
   const s = eventsDash, ql = s.q.toLowerCase();
   return s.rows.filter(e =>
+    (!s.completedOnly || (e.status || '') === 'completed') &&
     (!s.series || (e.series || '') === s.series) &&
     (!s.status || (e.status || '') === s.status) &&
     (!s.year || (e.event_date || '').slice(0, 4) === s.year) &&
@@ -5717,6 +5718,7 @@ function renderEventsDash() {
       <select class="hub-status-sel" data-evseries><option value="">All series</option>${seriesOpts.map(o => `<option value="${o}"${s.series === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
       <select class="hub-status-sel" data-evstatus><option value="">All statuses</option>${statusOpts.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o.replace('_', ' ')}</option>`).join('')}</select>
       <select class="hub-status-sel" data-evyear><option value="">All years</option>${years.map(y => `<option value="${y}"${s.year === y ? ' selected' : ''}>${y}</option>`).join('')}</select>
+      <label class="li-sub" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;"><input type="checkbox" data-evcompleted${s.completedOnly ? ' checked' : ''} style="width:auto;margin:0;"> Completed only</label>
       <button class="hub-mini" data-evclear>clear</button>
     </div>
     <div id="eventsTable"></div>`;
@@ -5788,9 +5790,10 @@ $('panel-events').addEventListener('change', (e) => {
   const se = e.target.closest('[data-evseries]'); if (se) { eventsDash.series = se.value; renderEventsBody(); return; }
   const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsBody(); return; }
   const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsBody(); return; }
+  const cp = e.target.closest('[data-evcompleted]'); if (cp) { eventsDash.completedOnly = cp.checked; renderEventsBody(); return; }
 });
 $('panel-events').addEventListener('click', (e) => {
-  if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; renderEventsDash(); }
+  if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; eventsDash.completedOnly = false; renderEventsDash(); }
 });
 
 // ============================================================
