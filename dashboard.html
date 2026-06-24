@@ -2259,7 +2259,7 @@ const renderers = {
     tbody.innerHTML = rows.map(r => {
       const status = (r.status || 'pending').toLowerCase();
       return `<tr>
-        <td>${escapeHtml(r.actor?.display_name || r.sponsor?.name || '—')}</td>
+        <td>${escapeHtml(r.actor?.display_name || '—')}</td>
         <td>${escapeHtml(r.event?.name || '—')}</td>
         <td>${escapeHtml(r.tier || '') || muted}</td>
         <td class="num">${money(r.cash_amount)}</td>
@@ -2310,17 +2310,18 @@ const renderers = {
     const tbody = $('table-campaigns').querySelector('tbody');
     tbody.innerHTML = rows.map(r => {
       const status = (r.status || 'draft').toLowerCase();
+      const previewBtn = `<button class="row-btn" data-preview-campaign="${escapeHtml(r.id)}">Preview</button>`;
       const sendBtn = status === 'draft'
         ? `<button class="row-btn" data-send-campaign="${escapeHtml(r.id)}">Send</button>`
         : (status === 'sending' ? `<span class="muted">sending…</span>` : '');
       return `<tr>
         <td>${escapeHtml(r.name || '')}</td>
         <td class="truncate">${escapeHtml(r.subject || '')}</td>
-        <td>${escapeHtml(r.segment_filter || '') || muted}</td>
+        <td>${escapeHtml(r.segment_filter || '') || '<span class="muted">all</span>'}</td>
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
         <td class="num">${r.recipient_count != null ? r.recipient_count : muted}</td>
         <td>${escapeHtml(fmtDate(r.sent_at)) || muted}</td>
-        <td>${sendBtn}</td>
+        <td style="display:flex;gap:6px;">${previewBtn}${sendBtn}</td>
       </tr>`;
     }).join('');
   },
@@ -2388,7 +2389,7 @@ const queries = {
   },
 
   sponsorships: () => sb.from('sponsorships')
-    .select('id, tier, cash_amount, drink_tickets, entry_tickets, status, sponsor:sponsors(name), actor:actors(display_name), event:events(name, event_date)')
+    .select('id, tier, cash_amount, drink_tickets, entry_tickets, status, actor:actors(display_name), event:events(name, event_date)')
     .order('cash_amount', { ascending: false })
     .limit(500),
 
@@ -2689,6 +2690,21 @@ function invalidateCacheFor(table) {
   if (table === 'agreements') dataCache.agreements = null;
 }
 
+// Mailing segments (with live subscribed counts) for the campaign "Send to" picker.
+let _segCache = null;
+async function loadCachedSegments() {
+  if (_segCache) return _segCache;
+  const { data } = await sb.from('subscriber_segments').select('segment, subscriber:subscribers(status)');
+  const m = {};
+  for (const r of (data || [])) { if (r.subscriber?.status === 'subscribed') m[r.segment] = (m[r.segment] || 0) + 1; }
+  _segCache = Object.entries(m).map(([segment, count]) => ({ segment, count })).sort((a, b) => b.count - a.count);
+  return _segCache;
+}
+async function subscribedTotal() {
+  const { count } = await sb.from('subscribers').select('id', { count: 'exact', head: true }).eq('status', 'subscribed');
+  return count || 0;
+}
+
 const TODAY = () => new Date().toISOString().slice(0, 10);
 
 const FORM_DEFS = {
@@ -2713,7 +2729,7 @@ const FORM_DEFS = {
       { name: 'name',           type: 'text',     label: 'Internal name',     required: true, placeholder: 'May newsletter' },
       { name: 'subject',        type: 'text',     label: 'Subject line',      required: true },
       { name: 'preview_text',   type: 'text',     label: 'Preview text', placeholder: 'Shows next to subject in inbox' },
-      { name: 'segment_filter', type: 'text',     label: 'Segment filter',    placeholder: 'leave blank for all subscribers' },
+      { name: 'segment_filter', type: 'select-segments', label: 'Send to' },
       { name: 'body_html',      type: 'textarea', label: 'Body (HTML)',       required: true },
     ],
   },
@@ -2770,6 +2786,10 @@ async function buildField(f) {
       return `<option value="${escapeHtml(a.id)}">${escapeHtml(lbl)}</option>`;
     }).join('');
     input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
+  } else if (f.type === 'select-segments') {
+    const [segs, total] = await Promise.all([loadCachedSegments(), subscribedTotal()]);
+    const opts = segs.map(s => `<option value="${escapeHtml(s.segment)}">${escapeHtml(s.segment)} — ${s.count} subscribed</option>`).join('');
+    input = `<select class="modal-select" name="${f.name}"><option value="">All subscribers — ${total}</option>${opts}</select>`;
   } else if (f.type === 'select-static') {
     const opts = f.options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
     input = `<select class="modal-select" name="${f.name}"${f.required ? ' required' : ''}>${opts}</select>`;
@@ -2845,12 +2865,35 @@ document.querySelector('main.main').addEventListener('click', (e) => {
   openModal(btn.dataset.add);
 });
 
+// Preview a campaign's rendered email (sandboxed) before sending.
+async function previewCampaign(id) {
+  const { data, error } = await sb.from('mailing_campaigns')
+    .select('subject, preview_text, body_html, body_text, segment_filter').eq('id', id).single();
+  if (error || !data) { toast('Could not load campaign', 'err'); return; }
+  const html = data.body_html || data.body_text || '<p style="font-family:sans-serif;color:#999;">(no body content)</p>';
+  const seg = data.segment_filter ? `Segment: ${data.segment_filter}` : 'All subscribers';
+  openKpi('Preview — ' + (data.subject || ''), seg, `
+    <div class="li-sub" style="margin-bottom:4px;"><strong>Subject:</strong> ${escapeHtml(data.subject || '')}</div>
+    ${data.preview_text ? `<div class="li-sub" style="margin-bottom:8px;"><strong>Preview:</strong> ${escapeHtml(data.preview_text)}</div>` : ''}
+    <iframe sandbox srcdoc="${escapeHtml(html)}" style="width:100%;height:52vh;border:1px solid var(--border);background:#fff;border-radius:6px;"></iframe>`,
+    () => closeKpi(), 'Close');
+}
+document.querySelector('main.main').addEventListener('click', (e) => {
+  const pv = e.target.closest('[data-preview-campaign]');
+  if (pv) { previewCampaign(pv.dataset.previewCampaign); }
+});
+
 // Send-campaign delegation (Phase 9 sprint 3)
 document.querySelector('main.main').addEventListener('click', async (e) => {
   const btn = e.target.closest('[data-send-campaign]');
   if (!btn || btn.disabled) return;
-  if (!confirm('Send this campaign to all matching subscribers? This cannot be undone.')) return;
   const id = btn.dataset.sendCampaign;
+  // Show the real audience size in the confirm so a blast is never a surprise.
+  const { data: c } = await sb.from('mailing_campaigns').select('segment_filter, subject').eq('id', id).single();
+  let audience;
+  if (c?.segment_filter) { const segs = await loadCachedSegments(); audience = segs.find(s => s.segment === c.segment_filter)?.count ?? 0; }
+  else audience = await subscribedTotal();
+  if (!confirm(`Send "${c?.subject || 'this campaign'}" to ${audience} subscriber${audience === 1 ? '' : 's'} now?\n\nThis sends real email and cannot be undone. Tip: Preview it first.`)) return;
   const original = btn.textContent;
   btn.disabled = true;
   btn.textContent = 'Sending…';
@@ -3700,7 +3743,7 @@ async function loadMoneyData(id) {
     sb.from('income').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
-    sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, sponsor:sponsors(name), actor:actors(display_name)').eq('event_id', id),
+    sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, actor:actors(display_name)').eq('event_id', id),
     sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor'),
   ]);
   return { tk, inc, exp, don, spo, sponsors };
@@ -3735,7 +3778,7 @@ function moneySectionsHTML({ tk, inc, exp, don, spo, sponsors }) {
     </div>
     <div class="money-section">
       <h4>Sponsorships</h4>
-      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.actor?.display_name || r.sponsor?.name || '—')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
+      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.actor?.display_name || '—')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
       ${sponsorOpts
         ? `<div class="money-add"><select data-f="sponsor_id"><option value="">— sponsor —</option>${sponsorOpts}</select><input data-f="cash" type="number" min="0" step="0.01" placeholder="Cash $"><input data-f="inkind" type="number" min="0" step="0.01" placeholder="In-kind $">${addBtn('sponsorship')}</div>`
         : `<div class="money-empty">No sponsors on file — add one in the Sponsors tab first.</div>`}
@@ -4182,7 +4225,7 @@ async function hubSecCustomers() {
   const id = hub.eventId;
   const [pp, spo, don, gea, sum] = await Promise.all([
     sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
-    sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email), sponsor:sponsors(name)').eq('event_id', id),
+    sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
     sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, guest:guests(full_name, email)').eq('event_id', id),
     sb.from('v_event_summary').select('ticket_revenue, tickets_sold, third_party_donations, sponsor_cash, sponsor_in_kind, revenue, expenses, net').eq('event_id', id).maybeSingle(),
@@ -4197,7 +4240,7 @@ async function hubSecCustomers() {
     return o;
   };
   for (const p of (pp.data || [])) { const o = rec(p.actor?.display_name, p.actor?.email); if (!o) continue; (p.roles?.length ? p.roles : [p.role]).filter(Boolean).forEach(r => o.roles.add(r)); if (p.fee) o.fee += Number(p.fee); }
-  for (const s of (spo.data || [])) { const o = rec(s.actor?.display_name || s.sponsor?.name, s.actor?.email); if (!o) continue; o.roles.add('sponsor'); o.sponsored += Number(s.cash_amount || 0) + Number(s.in_kind_value || 0); if (s.tier) o.tier = s.tier; }
+  for (const s of (spo.data || [])) { const o = rec(s.actor?.display_name, s.actor?.email); if (!o) continue; o.roles.add('sponsor'); o.sponsored += Number(s.cash_amount || 0) + Number(s.in_kind_value || 0); if (s.tier) o.tier = s.tier; }
   for (const d of (don.data || [])) { const o = rec(d.donor_name, null); if (!o) continue; o.roles.add('donor'); o.donated += Number(d.amount || 0); }
   for (const a of (gea.data || [])) {
     const o = rec(a.guest?.full_name, a.guest?.email); if (!o) continue;
