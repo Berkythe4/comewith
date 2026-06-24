@@ -2157,8 +2157,8 @@ const renderers = {
     tbody.innerHTML = rows.map(r => {
       const status = (r.status || 'draft').toLowerCase();
       const type = (r.agreement_type || '').toLowerCase();
-      const clientCell = r.client?.full_name ? escapeHtml(r.client.full_name) : muted;
-      const hasEmail = !!r.client?.email;
+      const clientCell = r.actor?.display_name ? escapeHtml(r.actor.display_name) : muted;
+      const hasEmail = !!r.actor?.email;
       const sendLabel = status === 'sent' ? 'Resend' : 'Send';
       // Only offer Send for draft/sent (already-signed/completed/cancelled don't get re-sent)
       const sendBtn = (status === 'draft' || status === 'sent') && hasEmail
@@ -2181,7 +2181,7 @@ const renderers = {
   income(rows) {
     const tbody = $('table-income').querySelector('tbody');
     tbody.innerHTML = rows.map(r => {
-      const clientCell = r.client?.full_name ? escapeHtml(r.client.full_name) : muted;
+      const clientCell = r.actor?.display_name ? escapeHtml(r.actor.display_name) : muted;
       return `<tr>
         <td>${escapeHtml(fmtDate(r.date))}</td>
         <td class="num">${money(r.amount)}</td>
@@ -2333,12 +2333,12 @@ const queries = {
     .limit(500),
 
   agreements: () => sb.from('agreements')
-    .select('id, agreement_type, status, event_date, total_amount, created_at, client:clients(full_name, email)')
+    .select('id, agreement_type, status, event_date, total_amount, created_at, actor:actors(display_name, email)')
     .order('created_at', { ascending: false })
     .limit(500),
 
   income: () => sb.from('income')
-    .select('id, date, amount, category, description, client:clients(full_name)')
+    .select('id, date, amount, category, description, actor:actors(display_name)')
     .is('deleted_at', null)
     .order('date', { ascending: false })
     .limit(500),
@@ -2554,22 +2554,35 @@ $('addWishlistBtn').addEventListener('click', () => openEditEquipment(null, { wi
 async function openEditEquipment(id, opts = {}) {
   const r = id ? equipmentRows.find(x => x.id === id) : null;
   const defaultStatus = opts.wishlist ? 'wishlist' : (r?.status || 'available');
-  // DJ / Sound gear can carry bundled accessories/wires that travel with it.
+  // DJ / Sound gear (parent) can carry bundled accessories/wires; a Wire/Accessory/Misc
+  // item (child) can be assigned onto its parent gear (reverse direction). Mutually exclusive.
   const isParent = !!r && (r.category === 'DJ' || r.category === 'Sound');
-  let linkedChildIds = new Set();
+  const isChild = !!r && EQUIP_CHILD_CATS.includes(r.category);
+  const syncMode = isParent ? 'parent' : (isChild ? 'child' : null);
+  let linked = new Set();
   if (isParent) {
     const { data } = await sb.from('equipment_components').select('child_id').eq('parent_id', id);
-    linkedChildIds = new Set((data || []).map(c => c.child_id));
+    linked = new Set((data || []).map(c => c.child_id));
+  } else if (isChild) {
+    const { data } = await sb.from('equipment_components').select('parent_id').eq('child_id', id);
+    linked = new Set((data || []).map(c => c.parent_id));
   }
   const childItems = equipmentRows.filter(x => EQUIP_CHILD_CATS.includes(x.category) && x.id !== id);
+  const parentItems = equipmentRows.filter(x => (x.category === 'DJ' || x.category === 'Sound') && x.id !== id);
+  const pickRow = (attr, c) => `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;">
+    <input type="checkbox" data-${attr}="${escapeHtml(c.id)}" style="width:auto;margin:0;"${linked.has(c.id) ? ' checked' : ''}>
+    <span>${escapeHtml(c.name)} <span class="pick-sub">${escapeHtml(c.category || '')}${c.serial_number ? ' · ' + escapeHtml(c.serial_number) : ''}</span></span></label>`;
   const bundleHTML = isParent ? `
     <div class="kpi-section-h">Bundled gear — travels with this item</div>
     <div class="kpi-hint">Internal ops only: when this item is assigned to an event, these accessories / wires / misc are auto-added too.</div>
     <div class="pick-list" id="equipChildren" style="max-height:170px;overflow:auto;">
-      ${childItems.length ? childItems.map(c => `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;">
-        <input type="checkbox" data-child="${escapeHtml(c.id)}" style="width:auto;margin:0;"${linkedChildIds.has(c.id) ? ' checked' : ''}>
-        <span>${escapeHtml(c.name)} <span class="pick-sub">${escapeHtml(c.category || '')}${c.serial_number ? ' · ' + escapeHtml(c.serial_number) : ''}</span></span></label>`).join('') : '<div class="hub-empty">No wire / accessory / misc items to bundle yet.</div>'}
-    </div>` : '';
+      ${childItems.length ? childItems.map(c => pickRow('child', c)).join('') : '<div class="hub-empty">No wire / accessory / misc items to bundle yet.</div>'}
+    </div>` : (isChild ? `
+    <div class="kpi-section-h">Assign to gear — travels with</div>
+    <div class="kpi-hint">Internal ops only: tick the DJ / Sound gear this item belongs to. Whenever that gear is assigned to an event, this item is auto-added too.</div>
+    <div class="pick-list" id="equipParents" style="max-height:170px;overflow:auto;">
+      ${parentItems.length ? parentItems.map(c => pickRow('parent', c)).join('') : '<div class="hub-empty">No DJ / Sound gear to assign to yet.</div>'}
+    </div>` : '');
   const catOpts = ['', ...EQUIP_CATEGORIES].map(c => `<option value="${c}"${(r?.category || '') === c ? ' selected' : ''}>${c || '— none —'}</option>`).join('');
   const statusOpts = EQUIP_STATUSES.map(s => `<option value="${s}"${defaultStatus === s ? ' selected' : ''}>${s}</option>`).join('');
   openKpi(id ? 'Edit equipment' : (opts.wishlist ? 'Add wishlist item' : 'Add equipment'), id ? escapeHtml(r?.name || '') : 'New inventory item', `
@@ -2594,7 +2607,7 @@ async function openEditEquipment(id, opts = {}) {
     ${bundleHTML}
     ${id ? `<div class="kpi-section-h">Event usage history</div><div id="equipUsage"><span class="li-sub">Loading…</span></div>
     <div style="margin-top:14px;"><button type="button" class="hub-mini danger" id="equipArchiveBtn">Archive item</button></div>` : ''}`,
-    () => submitEquipment(id, isParent), id ? 'Save changes' : 'Create item');
+    () => submitEquipment(id, syncMode), id ? 'Save changes' : 'Create item');
   if (id) {
     loadEquipUsage(id);
     $('kpiModalBody').querySelector('#equipArchiveBtn')?.addEventListener('click', () => archiveEquipment(id));
@@ -2624,13 +2637,18 @@ async function submitEquipment(id, syncBundle) {
   const op = id ? sb.from('equipment_inventory').update(patch).eq('id', id)
                 : sb.from('equipment_inventory').insert(patch);
   const { error } = await op; if (error) throw error;
-  // Sync the bundled-children links (replace the set) for DJ/Sound parents.
-  if (id && syncBundle) {
+  // Sync the bundling links (replace the set) — from the parent side or the child side.
+  if (id && syncMode === 'parent') {
     const checked = [...$('kpiModalBody').querySelectorAll('#equipChildren [data-child]:checked')].map(el => el.dataset.child);
     await sb.from('equipment_components').delete().eq('parent_id', id);
     if (checked.length) {
-      const { error: ce } = await sb.from('equipment_components').insert(checked.map(child_id => ({ parent_id: id, child_id })));
-      if (ce) throw ce;
+      const { error: ce } = await sb.from('equipment_components').insert(checked.map(child_id => ({ parent_id: id, child_id }))); if (ce) throw ce;
+    }
+  } else if (id && syncMode === 'child') {
+    const checked = [...$('kpiModalBody').querySelectorAll('#equipParents [data-parent]:checked')].map(el => el.dataset.parent);
+    await sb.from('equipment_components').delete().eq('child_id', id);
+    if (checked.length) {
+      const { error: ce } = await sb.from('equipment_components').insert(checked.map(parent_id => ({ parent_id, child_id: id }))); if (ce) throw ce;
     }
   }
   closeKpi(); toast(id ? 'Equipment updated' : 'Equipment added', 'ok'); loadTab('equipment');
@@ -2649,16 +2667,18 @@ async function archiveEquipment(id) {
 const dataCache = { clients: null, agreements: null };
 async function loadCachedClients() {
   if (dataCache.clients) return dataCache.clients;
-  const { data, error } = await sb.from('clients').select('id, full_name').order('full_name');
+  // "Clients" are actors with the 'customer' role now (legacy clients table retired).
+  const { data, error } = await sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'customer');
   if (error) { toast('Loading clients failed: ' + error.message, 'err'); return []; }
-  dataCache.clients = data || [];
+  dataCache.clients = (data || []).map(r => r.actor).filter(Boolean)
+    .map(a => ({ id: a.id, full_name: a.display_name })).sort((a, b) => a.full_name.localeCompare(b.full_name));
   return dataCache.clients;
 }
 async function loadCachedAgreements() {
   if (dataCache.agreements) return dataCache.agreements;
   const { data, error } = await sb
     .from('agreements')
-    .select('id, agreement_type, event_date, client:clients(full_name)')
+    .select('id, agreement_type, event_date, actor:actors(display_name)')
     .order('created_at', { ascending: false });
   if (error) { toast('Loading agreements failed: ' + error.message, 'err'); return []; }
   dataCache.agreements = data || [];
@@ -2681,7 +2701,7 @@ const FORM_DEFS = {
       { name: 'amount',       type: 'number',   label: 'Amount',        required: true, step: '0.01', min: 0, half: 'right' },
       { name: 'category',     type: 'text',     label: 'Category',      placeholder: 'e.g. event, rental, donation' },
       { name: 'description',  type: 'textarea', label: 'Description' },
-      { name: 'client_id',    type: 'select-clients',    label: 'Client (optional)' },
+      { name: 'actor_id',     type: 'select-clients',    label: 'Client (optional)' },
       { name: 'agreement_id', type: 'select-agreements', label: 'Agreement (optional)' },
     ],
   },
@@ -2704,7 +2724,7 @@ const FORM_DEFS = {
     fields: [
       { name: 'agreement_type', type: 'select-static', label: 'Type', required: true, options: ['events', 'rental'], half: 'left' },
       { name: 'event_date',     type: 'date',         label: 'Event date',                                          half: 'right' },
-      { name: 'client_id',      type: 'select-clients', label: 'Client', required: true },
+      { name: 'actor_id',       type: 'select-clients', label: 'Client', required: true },
       { name: 'venue_name',     type: 'text',         label: 'Venue name' },
       { name: 'venue_address',  type: 'text',         label: 'Venue address' },
       { name: 'subtotal',       type: 'number',       label: 'Subtotal',  step: '0.01', min: 0, half: 'left' },
@@ -2746,7 +2766,7 @@ async function buildField(f) {
     input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
   } else if (f.type === 'select-agreements') {
     const opts = (await loadCachedAgreements()).map(a => {
-      const lbl = `${a.agreement_type} · ${a.client?.full_name || 'no client'} · ${fmtDate(a.event_date) || '—'}`;
+      const lbl = `${a.agreement_type} · ${a.actor?.display_name || 'no client'} · ${fmtDate(a.event_date) || '—'}`;
       return `<option value="${escapeHtml(a.id)}">${escapeHtml(lbl)}</option>`;
     }).join('');
     input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
