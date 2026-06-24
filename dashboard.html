@@ -1115,6 +1115,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <div class="panel" id="panel-events">
+        <button class="add-btn" id="addEventBtn">+ Add event</button>
         <div class="row-count" id="count-events">—</div>
         <div id="state-events"></div>
         <table class="data-table" id="table-events" style="display:none;">
@@ -3631,6 +3632,7 @@ async function submitAddSponsor() {
   if (document.querySelector('#panel-sponsors.active')) loadTab('sponsors');
 }
 $('addSponsorBtn').addEventListener('click', openAddSponsor);
+$('addEventBtn').addEventListener('click', openLogEvent);
 
 // ---- Income row soft-delete (Phase 13) ----
 document.querySelector('main.main').addEventListener('click', async (e) => {
@@ -3968,11 +3970,12 @@ async function hubLoadInSheet() {
 // it surfaces detail that's spread across tables; event financials are unchanged.
 async function hubSecCustomers() {
   const id = hub.eventId;
-  const [pp, spo, don, gea] = await Promise.all([
+  const [pp, spo, don, gea, sum] = await Promise.all([
     sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email), sponsor:sponsors(name)').eq('event_id', id),
     sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
     sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, guest:guests(full_name, email)').eq('event_id', id),
+    sb.from('v_event_summary').select('ticket_revenue, tickets_sold, third_party_donations, sponsor_cash, sponsor_in_kind, revenue, expenses, net').eq('event_id', id).maybeSingle(),
   ]);
   const map = new Map();
   const norm = (n) => (n || '').trim().toLowerCase();
@@ -3991,7 +3994,8 @@ async function hubSecCustomers() {
     const tt = a.ticket_type || '';
     if (tt === 'donation') { o.roles.add('donor'); o.donated += Number(a.amount_spent || 0); }
     else if (tt === 'comp') { o.roles.add('guest'); }
-    else { o.roles.add('attendee'); o.spent += Number(a.amount_spent || 0); o.tickets += Number(a.quantity || 0); }
+    else { o.roles.add('attendee'); o.spent += Number(a.amount_spent || 0); }
+    o.tickets += Number(a.quantity || 0); // count tickets/entries for everyone, incl. comps
     if (a.source) o.sources.add(a.source);
   }
   const list = [...map.values()].map(o => ({ ...o, total: o.sponsored || o.donated || o.spent || o.fee }));
@@ -4000,11 +4004,13 @@ async function hubSecCustomers() {
 
   const has = (r) => (l) => l.roles.has(r);
   const nAtt = list.filter(has('attendee')).length, nDon = list.filter(has('donor')).length, nSpon = list.filter(has('sponsor')).length;
+  const namedTix = list.reduce((s, o) => s + o.tickets, 0);
   const roleChip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
   const amtCell = (o) => {
-    if (o.sponsored) return `${money(o.sponsored)} <span class="li-sub">sponsor</span>`;
-    if (o.donated) return `${money(o.donated)} <span class="li-sub">donated</span>`;
-    if (o.spent) return `${money(o.spent)} <span class="li-sub">${o.tickets ? o.tickets + ' tix' : 'spent'}</span>`;
+    const tix = o.tickets ? `<span class="li-sub">🎟 ${o.tickets}</span> ` : '';
+    if (o.sponsored) return `${tix}${money(o.sponsored)} <span class="li-sub">sponsor</span>`;
+    if (o.donated) return `${tix}${money(o.donated)} <span class="li-sub">donated</span>`;
+    if (o.spent || o.tickets) return `${tix}${money(o.spent)} <span class="li-sub">spent</span>`;
     if (o.fee) return `${money(o.fee)} <span class="li-sub">paid (fee)</span>`;
     return muted;
   };
@@ -4015,10 +4021,32 @@ async function hubSecCustomers() {
       </div>
       <div class="li-amt">${amtCell(o)}</div>
     </div>`).join('') : `<div class="hub-empty">No customers, attendees, donors or sponsors recorded for this event yet.</div>`;
+  // Reconciliation — ties the per-person detail to the event's audited financial totals.
+  const f = sum.data;
+  let recon = '';
+  if (f) {
+    const raised = Number(f.ticket_revenue || 0) + Number(f.revenue || 0) + Number(f.third_party_donations || 0) + Number(f.sponsor_cash || 0);
+    const houseTix = Math.max(0, Number(f.tickets_sold || 0) - namedTix);
+    const rrow = (l, v, strong) => `<div class="money-row"><span class="mr-main">${l}</span><span class="mr-amt"${strong ? ' style="font-weight:700;"' : ''}>${v}</span></div>`;
+    recon = `
+    <div class="money-section" style="margin-bottom:16px;">
+      <h4>Reconciliation — ties to audited totals</h4>
+      ${rrow('Tickets sold', `${fmtNum(f.tickets_sold || 0)} <span class="li-sub">(${namedTix} named + ${houseTix} comp / sponsor / house)</span>`)}
+      ${rrow('Ticket revenue', money(f.ticket_revenue || 0))}
+      ${rrow('Donations', money(f.third_party_donations || 0))}
+      ${rrow('Sponsor cash', money(f.sponsor_cash || 0))}
+      ${Number(f.sponsor_in_kind || 0) ? rrow('Sponsor in-kind', money(f.sponsor_in_kind)) : ''}
+      ${rrow('Other income (bank interest)', money(f.revenue || 0))}
+      ${rrow('Total raised', money(raised), true)}
+      ${rrow('Expenses', '−' + money(f.expenses || 0))}
+      ${rrow('Net to MS Society', money(raised - Number(f.expenses || 0)), true)}
+    </div>`;
+  }
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Customers</h3>
-      <span class="li-sub">${list.length} people · ${nAtt} attended · ${nDon} donors · ${nSpon} sponsors</span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name. Amounts are per-person detail; the event's reconciled financial totals live in the Money tab.</div>
+      <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · ${nAtt} attended · ${nDon} donors · ${nSpon} sponsors</span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name (🎟 = tickets/entries). Per-person detail above; the reconciliation below ties it to the event's audited financial totals (Money tab).</div>
+    ${recon}
     <div class="hub-list">${rows}</div>`;
 }
 
