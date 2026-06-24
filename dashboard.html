@@ -5746,6 +5746,7 @@ function renderEventsBody() {
     <div class="hub-cards">
       ${card('DI events', fmtNum(di.length))}
       ${card('Attendance', fmtNum(sum(di, e => e.total_attendance)))}
+      ${card('Tickets sold', fmtNum(sum(di, e => e.f.tickets_sold)))}
       ${card('Total raised', money(diRaised), diRaised > 0 ? 'pos' : '')}
       ${card('To MS Society', money(diMS), diMS > 0 ? 'pos' : '')}
     </div>
@@ -5797,7 +5798,7 @@ const expDash = { rows: [], events: [], q: '', event: '' };
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
   const [ex, ev] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
   ]);
   if (ex.error) { $('expensesBody').innerHTML = `<div class="panel-state err">${escapeHtml(ex.error.message)}</div>`; return; }
@@ -5807,9 +5808,12 @@ async function loadExpenses() {
 }
 function expFiltered() {
   const s = expDash, ql = s.q.toLowerCase();
-  return s.rows.filter(x =>
-    (s.event === '' || (s.event === '__none' ? !x.event_id : x.event_id === s.event)) &&
-    (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
+  const matchEvent = (x) =>
+    s.event === '' ? true :
+    s.event === '__none' ? (!x.event_id && !x.event_na) :   // truly unassigned — needs an event
+    s.event === '__na' ? !!x.event_na :
+    x.event_id === s.event;
+  return s.rows.filter(x => matchEvent(x) && (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
 }
 function renderExpenses() {
   const s = expDash;
@@ -5818,7 +5822,9 @@ function renderExpenses() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
       <input class="modal-input" data-expq placeholder="Search vendor / category / note…" style="max-width:240px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-expevfilter>
-        <option value="">All events</option><option value="__none"${s.event === '__none' ? ' selected' : ''}>— Unassigned —</option>
+        <option value="">All</option>
+        <option value="__none"${s.event === '__none' ? ' selected' : ''}>⚠ Needs an event</option>
+        <option value="__na"${s.event === '__na' ? ' selected' : ''}>N/A (overhead)</option>
         ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
       </select>
       <button class="hub-mini" data-expclear>clear</button>
@@ -5829,30 +5835,39 @@ function renderExpenses() {
 function renderExpensesBody() {
   const s = expDash, list = expFiltered();
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
-  const unTotal = list.filter(x => !x.event_id).reduce((t, x) => t + Number(x.amount || 0), 0);
+  const needsList = list.filter(x => !x.event_id && !x.event_na);
+  const needsTotal = needsList.reduce((t, x) => t + Number(x.amount || 0), 0);
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
   $('expAgg').innerHTML = `<div class="hub-cards">
     ${card('Expenses', fmtNum(list.length))}
     ${card('Total', money(total))}
-    ${card('Unassigned', money(unTotal), unTotal > 0 ? 'neg' : '')}
+    ${card('Needs an event', money(needsTotal) + (needsList.length ? ` <span class="li-sub">(${needsList.length})</span>` : ''), needsTotal > 0 ? 'neg' : 'pos')}
   </div>`;
-  const rows = list.map(x => `<tr${x.event_id ? '' : ' style="background:rgba(216,90,48,0.04);"'}>
+  const evSel = (x) => `<select class="hub-status-sel" data-expev="${escapeHtml(x.id)}">
+    <option value=""${!x.event_id && !x.event_na ? ' selected' : ''}>— needs event —</option>
+    <option value="__na"${x.event_na ? ' selected' : ''}>N/A (overhead)</option>
+    ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>`;
+  const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}>
     <td>${escapeHtml(fmtDate(x.date))}</td>
     <td class="num">${money(x.amount)}</td>
     <td>${escapeHtml(x.category || '') || muted}</td>
     <td>${escapeHtml(x.vendor || '') || muted}</td>
     <td class="truncate">${escapeHtml(truncate(x.description || '', 60)) || muted}</td>
-    <td><select class="hub-status-sel" data-expev="${escapeHtml(x.id)}"><option value="">— unassigned —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select></td>
+    <td>${evSel(x)}</td>
   </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">No expenses match.</td></tr>`;
   $('expTable').innerHTML = `<table class="data-table"><thead><tr>
     <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>Event</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
-async function setExpenseEvent(id, eventId) {
-  const { error } = await sb.from('expenses').update({ event_id: eventId || null }).eq('id', id);
+async function setExpenseEvent(id, val) {
+  // '' = needs event (clear both); '__na' = overhead; otherwise an event id.
+  const patch = val === '__na' ? { event_id: null, event_na: true }
+              : val === '' ? { event_id: null, event_na: false }
+              : { event_id: val, event_na: false };
+  const { error } = await sb.from('expenses').update(patch).eq('id', id);
   if (error) { toast('Failed: ' + error.message, 'err'); return; }
-  const x = expDash.rows.find(r => r.id === id); if (x) x.event_id = eventId || null;
-  toast(eventId ? 'Assigned to event' : 'Unassigned', 'ok');
+  const x = expDash.rows.find(r => r.id === id); if (x) { x.event_id = patch.event_id; x.event_na = patch.event_na; }
+  toast(val === '__na' ? 'Marked N/A' : val ? 'Assigned to event' : 'Needs an event', 'ok');
   renderExpensesBody();
 }
 $('panel-expenses').addEventListener('input', (e) => { const q = e.target.closest('[data-expq]'); if (q) { expDash.q = q.value; renderExpensesBody(); } });
