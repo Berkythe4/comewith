@@ -3494,7 +3494,7 @@ async function loadMoneyData(id) {
     sb.from('income').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
-    sb.from('sponsorships').select('id, cash_amount, in_kind_value, sponsor:sponsors(name)').eq('event_id', id),
+    sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, sponsor:sponsors(name), actor:actors(display_name)').eq('event_id', id),
     sb.from('sponsors').select('id, name').order('name'),
   ]);
   return { tk, inc, exp, don, spo, sponsors };
@@ -3529,7 +3529,7 @@ function moneySectionsHTML({ tk, inc, exp, don, spo, sponsors }) {
     </div>
     <div class="money-section">
       <h4>Sponsorships</h4>
-      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.sponsor?.name || '—')}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
+      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.actor?.display_name || r.sponsor?.name || '—')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
       ${sponsorOpts
         ? `<div class="money-add"><select data-f="sponsor_id"><option value="">— sponsor —</option>${sponsorOpts}</select><input data-f="cash" type="number" min="0" step="0.01" placeholder="Cash $"><input data-f="inkind" type="number" min="0" step="0.01" placeholder="In-kind $">${addBtn('sponsorship')}</div>`
         : `<div class="money-empty">No sponsors on file — add one in the Sponsors tab first.</div>`}
@@ -3653,8 +3653,8 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
 const hub = { eventId: null, section: 'overview', event: null, actors: null, counts: null,
               people: [], tasks: [], equipment: [], contracts: [], files: [] };
 const HUB_SECTIONS = [
-  ['overview', 'Overview'], ['people', 'People'], ['tasks', 'Tasks'], ['money', 'Money'],
-  ['equipment', 'Equipment'], ['contracts', 'Contracts'], ['files', 'Files'],
+  ['overview', 'Overview'], ['people', 'People'], ['customers', 'Customers'], ['tasks', 'Tasks'],
+  ['money', 'Money'], ['equipment', 'Equipment'], ['files', 'Files'],
 ];
 const STAGES = ['idea', 'planning', 'confirmed', 'live', 'wrapped', 'reported'];
 
@@ -3695,14 +3695,23 @@ async function hubLoadEvent() {
 
 async function hubLoadCounts() {
   const id = hub.eventId;
-  const [pp, tt, eq, cc, ff] = await Promise.all([
+  // Contracts no longer have their own tab — their attached docs surface under Files,
+  // and their counterparties under Customers. Pull them once to fold into both counts.
+  const { data: ctr } = await sb.from('contracts').select('id, document_id').eq('event_id', id);
+  hub.contractDocCount = (ctr || []).filter(c => c.document_id).length;
+  const [pp, tt, eq, ff, gea] = await Promise.all([
     sb.from('event_participants').select('id', { count: 'exact', head: true }).eq('event_id', id),
     sb.from('tasks').select('id', { count: 'exact', head: true }).eq('event_id', id).is('deleted_at', null),
     sb.from('equipment_usage').select('id', { count: 'exact', head: true }).eq('event_id', id),
-    sb.from('contracts').select('id', { count: 'exact', head: true }).eq('event_id', id),
     sb.from('files').select('id', { count: 'exact', head: true }).eq('subject_type', 'event').eq('subject_id', id),
+    sb.from('guest_event_attendance').select('guest_id', { count: 'exact', head: true }).eq('event_id', id),
   ]);
-  hub.counts = { people: pp.count ?? 0, tasks: tt.count ?? 0, equipment: eq.count ?? 0, contracts: cc.count ?? 0, files: ff.count ?? 0 };
+  hub.counts = {
+    people: pp.count ?? 0, tasks: tt.count ?? 0, equipment: eq.count ?? 0,
+    files: (ff.count ?? 0) + hub.contractDocCount,
+    // Customers is a deduped union — refined to the exact distinct count when the tab opens.
+    customers: (gea.count ?? 0) || (pp.count ?? 0),
+  };
 }
 
 async function hubLoadActors() {
@@ -3756,8 +3765,8 @@ async function hubGoSection(name) {
   hub.section = name;
   for (const b of $('hubSecNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.hubSec === name);
   $('hubSecBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading…</div>';
-  const fn = { overview: hubSecOverview, people: hubSecPeople, tasks: hubSecTasks, money: hubSecMoney,
-               equipment: hubSecEquipment, contracts: hubSecContracts, files: hubSecFiles }[name];
+  const fn = { overview: hubSecOverview, people: hubSecPeople, customers: hubSecCustomers, tasks: hubSecTasks,
+               money: hubSecMoney, equipment: hubSecEquipment, files: hubSecFiles }[name];
   try { await fn(); } catch (err) { $('hubSecBody').innerHTML = `<div class="panel-state err">${escapeHtml(err.message || String(err))}</div>`; }
 }
 
@@ -3787,7 +3796,6 @@ async function hubSecOverview() {
   const venueBlock = await hubVenueBlockHTML();
   $('hubSecBody').innerHTML = `
     ${venueBlock}
-    ${dayof}
     <div class="hub-cards">
       ${card('Gross revenue', money(f?.gross_revenue || 0))}
       ${card('Net P&L', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
@@ -3800,7 +3808,8 @@ async function hubSecOverview() {
       ${card('Expenses', money(f?.total_expenses || 0))}
     </div>
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-sec="money">Open Money</button></div>
-    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>`;
+    <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.</p>
+    ${dayof}`;
 }
 
 // ---- Section: People (event_participants) ----
@@ -3890,8 +3899,15 @@ async function hubSecTasks() {
 // showed in Overview's rollup but "vanished" here. Now it renders the same sources inline.
 async function hubSecMoney() {
   const data = await loadMoneyData(hub.eventId);
+  // For fundraiser-style events the per-buyer ticket/donor rows are kept on the
+  // attendee side (Customers) so the reconciled financial totals here stay matched
+  // to what was reported. Surface a pointer so the lump rows don't read as "missing".
+  const hint = hub.event?.type === 'dance_infusion'
+    ? `<div class="kpi-hint" style="margin-bottom:12px;">Per-attendee ticket &amp; donor detail (names, amounts, source) lives in the <strong>Customers</strong> tab. The rows below are the reconciled financial totals — editing them changes the event's reported revenue, raised &amp; net figures.</div>`
+    : '';
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Money</h3></div>
+    ${hint}
     ${moneySectionsHTML(data)}`;
 }
 // Inline money add/delete inside the hub → mutate, then re-render the section AND keep
@@ -3946,60 +3962,142 @@ async function hubLoadInSheet() {
   openKpi('Load-in sheet — ' + (hub.event?.name || ''), 'Check off as you load in · Ctrl/Cmd-P to print', `<div class="hub-list">${rows}</div>`, () => { closeKpi(); }, 'Done');
 }
 
-// ---- Section: Contracts (new contracts table — canonical) ----
-async function hubSecContracts() {
-  const { data, error } = await sb.from('contracts')
-    .select('id, kind, fee, status, paid, notes, actor_id, document_id, actor:actors(display_name)')
-    .eq('event_id', hub.eventId).order('created_at', { ascending: false });
-  if (error) throw error;
-  hub.contracts = data || [];
-  const cstat = (c) => `<select class="hub-status-sel" data-hub-cstatus="${escapeHtml(c.id)}">${['draft', 'sent', 'viewed', 'signed', 'countersigned', 'void'].map(s => `<option value="${s}"${s === c.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
-  const rows = hub.contracts.length ? hub.contracts.map(c => `
+// ---- Section: Customers (deduped union of everyone tied to the event) ----
+// Pulls participants, sponsors, third-party donors, and attendee/donor records
+// (guest_event_attendance) into ONE de-duplicated person list. This is a read lens —
+// it surfaces detail that's spread across tables; event financials are unchanged.
+async function hubSecCustomers() {
+  const id = hub.eventId;
+  const [pp, spo, don, gea] = await Promise.all([
+    sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
+    sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email), sponsor:sponsors(name)').eq('event_id', id),
+    sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
+    sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, guest:guests(full_name, email)').eq('event_id', id),
+  ]);
+  const map = new Map();
+  const norm = (n) => (n || '').trim().toLowerCase();
+  const rec = (name, email) => {
+    const k = norm(name); if (!k) return null;
+    let o = map.get(k);
+    if (!o) { o = { name: (name || '').trim(), email: email || '', roles: new Set(), spent: 0, donated: 0, sponsored: 0, fee: 0, tickets: 0, sources: new Set() }; map.set(k, o); }
+    if (email && !o.email) o.email = email;
+    return o;
+  };
+  for (const p of (pp.data || [])) { const o = rec(p.actor?.display_name, p.actor?.email); if (!o) continue; (p.roles?.length ? p.roles : [p.role]).filter(Boolean).forEach(r => o.roles.add(r)); if (p.fee) o.fee += Number(p.fee); }
+  for (const s of (spo.data || [])) { const o = rec(s.actor?.display_name || s.sponsor?.name, s.actor?.email); if (!o) continue; o.roles.add('sponsor'); o.sponsored += Number(s.cash_amount || 0) + Number(s.in_kind_value || 0); if (s.tier) o.tier = s.tier; }
+  for (const d of (don.data || [])) { const o = rec(d.donor_name, null); if (!o) continue; o.roles.add('donor'); o.donated += Number(d.amount || 0); }
+  for (const a of (gea.data || [])) {
+    const o = rec(a.guest?.full_name, a.guest?.email); if (!o) continue;
+    const tt = a.ticket_type || '';
+    if (tt === 'donation') { o.roles.add('donor'); o.donated += Number(a.amount_spent || 0); }
+    else if (tt === 'comp') { o.roles.add('guest'); }
+    else { o.roles.add('attendee'); o.spent += Number(a.amount_spent || 0); o.tickets += Number(a.quantity || 0); }
+    if (a.source) o.sources.add(a.source);
+  }
+  const list = [...map.values()].map(o => ({ ...o, total: o.sponsored || o.donated || o.spent || o.fee }));
+  list.sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
+  hub.counts.customers = list.length; renderHubSecNav();
+
+  const has = (r) => (l) => l.roles.has(r);
+  const nAtt = list.filter(has('attendee')).length, nDon = list.filter(has('donor')).length, nSpon = list.filter(has('sponsor')).length;
+  const roleChip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
+  const amtCell = (o) => {
+    if (o.sponsored) return `${money(o.sponsored)} <span class="li-sub">sponsor</span>`;
+    if (o.donated) return `${money(o.donated)} <span class="li-sub">donated</span>`;
+    if (o.spent) return `${money(o.spent)} <span class="li-sub">${o.tickets ? o.tickets + ' tix' : 'spent'}</span>`;
+    if (o.fee) return `${money(o.fee)} <span class="li-sub">paid (fee)</span>`;
+    return muted;
+  };
+  const rows = list.length ? list.map(o => `
     <div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(c.actor?.display_name || '—')}</strong>
-        <div class="li-sub">${escapeHtml(c.kind)}${c.fee != null ? (' · ' + money(c.fee)) : ''}${c.document_id ? ' · 📎 doc' : ''}</div>
+      <div class="li-main"><strong>${escapeHtml(o.name)}</strong>
+        <div class="li-sub">${[...o.roles].map(roleChip).join(' ')}${o.email ? ` · ${escapeHtml(o.email)}` : ''}${o.sources.size ? ` · <span class="li-sub">${escapeHtml([...o.sources].join(', '))}</span>` : ''}</div>
       </div>
-      <div class="hub-li-actions">
-        ${cstat(c)}
-        <button class="hub-mini" data-hub-cpaid="${escapeHtml(c.id)}">${c.paid ? '✓ paid' : 'mark paid'}</button>
-        ${c.document_id ? `<button class="hub-mini" data-hub-cdoc="${escapeHtml(c.id)}">Doc</button>` : ''}
-        <button class="hub-mini" data-hub-action="edit-contract" data-id="${escapeHtml(c.id)}">Edit</button>
-        <button class="hub-mini danger" data-hub-del="contracts:${escapeHtml(c.id)}">Delete</button>
-      </div>
-    </div>`).join('') : `<div class="hub-empty">No contracts on this event yet.</div>`;
+      <div class="li-amt">${amtCell(o)}</div>
+    </div>`).join('') : `<div class="hub-empty">No customers, attendees, donors or sponsors recorded for this event yet.</div>`;
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Contracts</h3><button class="hub-btn" data-hub-action="add-contract">+ Add contract</button></div>
+    <div class="hub-sec-bar"><h3>Customers</h3>
+      <span class="li-sub">${list.length} people · ${nAtt} attended · ${nDon} donors · ${nSpon} sponsors</span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name. Amounts are per-person detail; the event's reconciled financial totals live in the Money tab.</div>
     <div class="hub-list">${rows}</div>`;
 }
 
-// ---- Section: Files (files table; documents stored in the private 'agreements' bucket) ----
+// ---- Section: Files (unified document hub — doc-type "buckets" + vendor) ----
+// Replaces the old Contracts tab: every document, grouped by document type. Surfaces
+// BOTH event-attached files and files attached to this event's contracts (so a
+// countersigned contract uploaded against a contract record shows here, under Contract).
+const fileExt = (f) => { const m = /\.([a-z0-9]+)$/i.exec(f.filename || f.path || ''); return m ? m[1].toUpperCase() : (f.mime ? f.mime.split('/').pop().toUpperCase() : 'FILE'); };
+const fmtSize = (b) => b == null ? '' : (b < 1024 ? b + ' B' : b < 1048576 ? (b / 1024).toFixed(0) + ' KB' : (b / 1048576).toFixed(1) + ' MB');
 async function hubSecFiles() {
-  const { data, error } = await sb.from('files')
-    .select('id, filename, kind, path, bucket, created_at')
-    .eq('subject_type', 'event').eq('subject_id', hub.eventId).order('created_at', { ascending: false });
-  if (error) throw error;
-  hub.files = data || [];
-  const rows = hub.files.length ? hub.files.map(f => `
+  const id = hub.eventId;
+  const [dt, ef, ctr] = await Promise.all([
+    sb.from('document_types').select('slug, label, sort').order('sort'),
+    sb.from('files').select('id, filename, kind, path, bucket, mime, size, created_at, vendor:actors!files_vendor_actor_id_fkey(display_name)')
+      .eq('subject_type', 'event').eq('subject_id', id).order('created_at', { ascending: false }),
+    sb.from('contracts').select('id, status, document_id, actor:actors(display_name)').eq('event_id', id),
+  ]);
+  const docTypes = dt.data || [];
+  hub.docTypes = docTypes;
+  // event files (vendor from files.vendor_actor_id)
+  const files = (ef.data || []).map(f => ({ ...f, vendorName: f.vendor?.display_name || null }));
+  // contract-attached files (vendor = the contract's counterparty; read-only here)
+  const docIds = (ctr.data || []).map(c => c.document_id).filter(Boolean);
+  if (docIds.length) {
+    const { data: cf } = await sb.from('files').select('id, filename, kind, path, bucket, mime, size, created_at').in('id', docIds);
+    for (const f of (cf || [])) {
+      const c = (ctr.data || []).find(x => x.document_id === f.id);
+      files.push({ ...f, kind: f.kind || 'contract', vendorName: c?.actor?.display_name || null, fromContract: true, contractStatus: c?.status });
+    }
+  }
+  hub.files = files;
+  // bucketize: one section per registry doc type (in order), then any ad-hoc kinds present.
+  const byKind = new Map();
+  for (const f of files) { const k = f.kind || 'other'; (byKind.get(k) || byKind.set(k, []).get(k)).push(f); }
+  const known = new Set(docTypes.map(d => d.slug));
+  const buckets = docTypes.map(d => ({ slug: d.slug, label: d.label, items: byKind.get(d.slug) || [] }));
+  for (const [k, items] of byKind) if (!known.has(k)) buckets.push({ slug: k, label: k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), items });
+
+  const fileRow = (f) => `
     <div class="hub-li">
       <div class="li-main"><strong>${escapeHtml(f.filename || f.path)}</strong>
-        <div class="li-sub">${escapeHtml(f.kind || 'file')} · ${escapeHtml(fmtDate(f.created_at))}</div>
+        <div class="li-sub"><span class="role-chip" style="cursor:default;">${escapeHtml(fileExt(f))}</span>
+          ${f.vendorName ? ' · ' + escapeHtml(f.vendorName) : ''}${f.size ? ' · ' + fmtSize(f.size) : ''} · ${escapeHtml(fmtDate(f.created_at))}${f.fromContract ? ` · <span class="li-sub">📄 contract${f.contractStatus ? ' · ' + escapeHtml(f.contractStatus) : ''}</span>` : ''}</div>
       </div>
       <div class="hub-li-actions">
         <button class="hub-mini" data-hub-fdl="${escapeHtml(f.id)}">Download</button>
-        <button class="hub-mini danger" data-hub-del="files:${escapeHtml(f.id)}">Delete</button>
+        ${f.fromContract ? '' : `<button class="hub-mini danger" data-hub-del="files:${escapeHtml(f.id)}">Delete</button>`}
       </div>
-    </div>`).join('') : `<div class="hub-empty">No files attached to this event yet.</div>`;
+    </div>`;
+  const bucketHTML = buckets.map(b => `
+    <div class="money-section" style="margin-bottom:14px;">
+      <h4>${escapeHtml(b.label)} <span class="sec-count">${b.items.length}</span></h4>
+      ${b.items.length ? b.items.map(fileRow).join('') : `<div class="hub-empty" style="padding:8px 0;">No ${escapeHtml(b.label.toLowerCase())} files yet.</div>`}
+    </div>`).join('');
+
+  const kindOpts = docTypes.map(d => `<option value="${escapeHtml(d.slug)}">${escapeHtml(d.label)}</option>`).join('');
+  const actors = await hubLoadActors();
+  const vendorOpts = (actors || []).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Files</h3></div>
-    <div style="border:1px solid var(--border);background:#fff;padding:14px;margin-bottom:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <div class="hub-sec-bar"><h3>Files</h3>
+      <button class="hub-btn ghost" data-hub-action="add-doctype">+ Add document type</button></div>
+    <div style="border:1px solid var(--border);background:#fff;padding:14px;margin-bottom:16px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
       <input type="file" id="hubFileInput" style="font-size:0.78rem;">
-      <select class="hub-status-sel" id="hubFileKind">
-        <option value="contract">contract</option><option value="rider">rider</option><option value="stage_plot">stage_plot</option>
-        <option value="invoice">invoice</option><option value="receipt">receipt</option><option value="photo">photo</option><option value="other" selected>other</option>
-      </select>
+      <label class="li-sub">Type<select class="hub-status-sel" id="hubFileKind" style="margin-left:4px;">${kindOpts}</select></label>
+      <label class="li-sub">Vendor<select class="hub-status-sel" id="hubFileVendor" style="margin-left:4px;"><option value="">— none —</option>${vendorOpts}</select></label>
       <button class="hub-btn" data-hub-action="upload-file">Upload</button>
     </div>
-    <div class="hub-list">${rows}</div>`;
+    ${bucketHTML}`;
+}
+// Add a new document-type bucket (persists in document_types for all events).
+async function hubAddDocType() {
+  const label = (prompt('New document type (e.g. "Insurance Certificate"):') || '').trim();
+  if (!label) return;
+  const slug = label.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+  if (!slug) { toast('Enter a valid name', 'err'); return; }
+  const maxSort = Math.max(900, ...(hub.docTypes || []).map(d => d.sort || 0));
+  const { error } = await sb.from('document_types').insert({ slug, label, sort: maxSort + 1, is_standard: false });
+  if (error) { toast(error.code === '23505' ? 'That type already exists' : 'Failed: ' + error.message, 'err'); return; }
+  toast('Document type added', 'ok'); await hubSecFiles();
 }
 
 // ---- Hub writes ----
@@ -4410,14 +4508,15 @@ async function hubToggleContractPaid(id) {
 }
 
 async function hubDoUpload() {
-  const inp = $('hubFileInput'); const kind = $('hubFileKind')?.value || null;
+  const inp = $('hubFileInput'); const kind = $('hubFileKind')?.value || 'other';
+  const vendor_actor_id = $('hubFileVendor')?.value || null;
   const file = inp?.files?.[0]; if (!file) { toast('Pick a file first', 'err'); return; }
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `event/${hub.eventId}/${Date.now()}_${safe}`;
   toast('Uploading…', 'ok');
   const { error: upErr } = await sb.storage.from('agreements').upload(path, file, { upsert: false });
   if (upErr) { toast('Upload failed: ' + upErr.message, 'err'); return; }
-  const { error } = await sb.from('files').insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'event', subject_id: hub.eventId, kind });
+  const { error } = await sb.from('files').insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'event', subject_id: hub.eventId, kind, vendor_actor_id });
   if (error) { toast('File stored but DB row failed: ' + error.message, 'err'); return; }
   toast('File uploaded', 'ok'); await hubReload('files');
 }
@@ -4514,6 +4613,7 @@ const HUB_ACTIONS = {
   'add-contract': hubAddContract,
   'edit-contract': (el) => hubEditContract(el.dataset.id),
   'upload-file': hubDoUpload,
+  'add-doctype': hubAddDocType,
   'log-ig': openLogIG,
 };
 
