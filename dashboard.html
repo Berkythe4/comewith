@@ -4117,10 +4117,17 @@ async function hubReload(section) {
 
 // ---- Section: Overview ----
 async function hubSecOverview() {
-  const { data: f } = await sb.from('v_kpi_event_financials')
-    .select('gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, capacity, total_attendance, total_expenses, other_income')
-    .eq('event_id', hub.eventId).maybeSingle();
+  const [{ data: f }, { data: igSnaps }, { data: mkExp }] = await Promise.all([
+    sb.from('v_kpi_event_financials')
+      .select('gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, capacity, total_attendance, total_expenses, other_income')
+      .eq('event_id', hub.eventId).maybeSingle(),
+    sb.from('metric_snapshots').select('metric_key, value, captured_on').eq('source', 'event:' + hub.eventId),
+    sb.from('expenses').select('amount').eq('event_id', hub.eventId).is('deleted_at', null).ilike('category', '%marketing%'),
+  ]);
   const e = hub.event;
+  const igByKey = {}; (igSnaps || []).forEach(s => { igByKey[s.metric_key] = s.value; });
+  const igLogged = Object.keys(igByKey).length > 0;
+  const marketingSpend = (mkExp || []).reduce((t, x) => t + Number(x.amount || 0), 0);
   // Come With Production = a service gig for someone else's event — tickets/marketing/
   // donations/sponsors are the HOST's, not ours; show only our service income, costs & gear.
   const isProd = e.type === 'production' || e.series === 'Come With Production';
@@ -4159,10 +4166,21 @@ async function hubSecOverview() {
   const moneyNote = isProd
     ? `Record your service income and costs in the Money section. Don't add the host's tickets / donations / sponsors here.`
     : `Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.`;
+  // Engagement & marketing — IG follower snapshots captured for THIS event + marketing $ spent.
+  const igCards = IG_ACCOUNTS.map(a => card('IG · ' + a.label, igByKey[a.key] != null ? fmtNum(igByKey[a.key]) : '—')).join('');
+  const engagement = `
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Engagement &amp; marketing</h3>
+      <button class="hub-btn ghost" data-hub-action="log-ig">Log IG followers @ event</button></div>
+    <div class="hub-cards">
+      ${igCards}
+      ${card('Marketing spend', money(marketingSpend), marketingSpend > 0 ? 'neg' : '')}
+    </div>
+    <p style="font-size:0.78rem;color:var(--mid);max-width:62ch;">${igLogged ? `IG follower counts captured for this event (back-dated to ${escapeHtml(fmtDate(e.event_date))}).` : `No IG snapshot for this event yet — hit “Log IG followers @ event” (it back-dates to ${escapeHtml(fmtDate(e.event_date))}).`} Marketing spend = expenses categorised “marketing”.</p>`;
   const venueBlock = await hubVenueBlockHTML();
   $('hubSecBody').innerHTML = `
     ${venueBlock}
     ${cards}
+    ${engagement}
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-sec="money">Open Money</button></div>
     <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">${moneyNote}</p>
     ${dayof}`;
@@ -4458,8 +4476,11 @@ async function hubSecFiles() {
     </div>`).join('');
 
   const kindOpts = docTypes.map(d => `<option value="${escapeHtml(d.slug)}">${escapeHtml(d.label)}</option>`).join('');
-  const actors = await hubLoadActors();
-  const vendorOpts = (actors || []).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  // Vendor list = only actors assigned the 'vendor' role (not the whole registry).
+  const { data: ven } = await sb.from('actor_roles').select('actor:actors(id, display_name, deleted_at)').eq('role', 'vendor');
+  const vendorOpts = (ven || []).map(r => r.actor).filter(a => a && !a.deleted_at)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name))
+    .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Files</h3>
       <button class="hub-btn ghost" data-hub-action="add-doctype">+ Add document type</button></div>
@@ -4709,7 +4730,10 @@ async function hubAddEquipment() {
   const { data: inv } = await sb.from('equipment_inventory').select('id, name, category, status').is('deleted_at', null).order('name');
   addEquip.selected = new Set();
   openKpi('Assign equipment', 'Tick several items — set purpose + dates once for the batch', `
-    <input class="modal-input pick-search" data-pick-search placeholder="Search inventory…" autocomplete="off">
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <input class="modal-input pick-search" data-pick-search placeholder="Search inventory…" autocomplete="off" style="flex:1;">
+      <select class="hub-status-sel" data-eqcat><option value="">All categories</option>${EQUIP_CATEGORIES.map(c => `<option value="${c}">${c}</option>`).join('')}</select>
+    </div>
     <div class="pick-list" data-pick-list></div>
     <div class="pick-selcount" data-selcount>0 selected</div>
     <div class="modal-form-row half-row" style="margin-top:8px;">
@@ -4723,9 +4747,12 @@ async function hubAddEquipment() {
     submitAddEquipment, 'Assign selected');
   const body = $('kpiModalBody');
   const listEl = body.querySelector('[data-pick-list]');
-  const renderList = (filter = '') => {
-    const f = filter.trim().toLowerCase();
-    const rows = (inv || []).filter(e => !f || e.name.toLowerCase().includes(f) || (e.category || '').toLowerCase().includes(f))
+  const searchEl = body.querySelector('[data-pick-search]');
+  const catEl = body.querySelector('[data-eqcat]');
+  const renderList = () => {
+    const f = (searchEl.value || '').trim().toLowerCase();
+    const cat = catEl.value;
+    const rows = (inv || []).filter(e => (!cat || (e.category || '') === cat) && (!f || e.name.toLowerCase().includes(f) || (e.category || '').toLowerCase().includes(f)))
       .map(e => `<div class="pick-row${addEquip.selected.has(e.id) ? ' on' : ''}" data-pick="${escapeHtml(e.id)}">
         <span class="pick-check">✓</span>
         <span>${escapeHtml(e.name)}<span class="pick-sub"> ${escapeHtml(e.category || e.status || '')}</span></span>
@@ -4734,7 +4761,8 @@ async function hubAddEquipment() {
   };
   const updateCount = () => { body.querySelector('[data-selcount]').textContent = addEquip.selected.size + ' selected'; };
   renderList(); updateCount();
-  body.querySelector('[data-pick-search]').addEventListener('input', (e) => renderList(e.target.value));
+  searchEl.addEventListener('input', renderList);
+  catEl.addEventListener('change', renderList);
   listEl.addEventListener('click', (e) => {
     const row = e.target.closest('[data-pick]'); if (!row) return;
     const id = row.dataset.pick;
