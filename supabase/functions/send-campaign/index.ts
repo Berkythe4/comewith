@@ -65,6 +65,8 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => ({}));
     const campaign_id = (body.campaign_id || "").toString().trim();
     if (!campaign_id) return jsonError(400, "campaign_id required");
+    // Optional: a single address to send a one-off TEST to (no list send, no status change).
+    const test_email = (body.test_email || "").toString().trim();
 
     // Load campaign
     const { data: campaign, error: cErr } = await admin
@@ -73,6 +75,30 @@ Deno.serve(async (req) => {
       .eq("id", campaign_id)
       .single();
     if (cErr || !campaign) return jsonError(404, "campaign not found");
+
+    const resendKey = Deno.env.get("RESEND_API_KEY");
+    if (!resendKey) return jsonError(500, "RESEND_API_KEY not set");
+    const resend = new Resend(resendKey);
+
+    // TEST SEND — one email to the given address. No list send, no status change,
+    // no mailing_events logging. Works on any campaign (even an already-sent one).
+    if (test_email) {
+      const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">This is a <strong>TEST</strong> send. The real email includes a working personal unsubscribe link.</p>`;
+      const html = (campaign.body_html || campaign.body_text || "") + footer;
+      const testRes = await resend.emails.send({
+        from: FROM,
+        to: test_email,
+        replyTo: REPLY_TO,
+        subject: "[TEST] " + campaign.subject,
+        html,
+      });
+      if (testRes.error) return jsonError(502, "test send failed: " + testRes.error.message);
+      return new Response(
+        JSON.stringify({ success: true, test: true, sent_to: test_email, id: testRes.data?.id || null }),
+        { headers: JSON_HEADERS },
+      );
+    }
+
     if (campaign.status === "sent") return jsonError(409, "campaign already sent");
     if (campaign.status === "sending") return jsonError(409, "campaign send in progress");
 
@@ -109,14 +135,7 @@ Deno.serve(async (req) => {
       return jsonError(500, "couldn't load recipients: " + rErr.message);
     }
 
-    // Send
-    const resendKey = Deno.env.get("RESEND_API_KEY");
-    if (!resendKey) {
-      await admin.from("mailing_campaigns").update({ status: "failed" }).eq("id", campaign_id);
-      return jsonError(500, "RESEND_API_KEY not set");
-    }
-    const resend = new Resend(resendKey);
-
+    // Send (resend client already created above)
     let sent = 0;
     let failed = 0;
     for (const r of recipients || []) {

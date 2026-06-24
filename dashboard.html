@@ -2310,9 +2310,12 @@ const renderers = {
     const tbody = $('table-campaigns').querySelector('tbody');
     tbody.innerHTML = rows.map(r => {
       const status = (r.status || 'draft').toLowerCase();
-      const previewBtn = `<button class="row-btn" data-preview-campaign="${escapeHtml(r.id)}">Preview</button>`;
+      const id = escapeHtml(r.id);
+      const previewBtn = `<button class="row-btn" data-preview-campaign="${id}">Preview</button>`;
+      const testBtn = `<button class="row-btn" data-test-campaign="${id}">Test</button>`;
+      const statsBtn = `<button class="row-btn" data-stats-campaign="${id}">Stats</button>`;
       const sendBtn = status === 'draft'
-        ? `<button class="row-btn" data-send-campaign="${escapeHtml(r.id)}">Send</button>`
+        ? `<button class="row-btn" data-send-campaign="${id}">Send</button>`
         : (status === 'sending' ? `<span class="muted">sending…</span>` : '');
       return `<tr>
         <td>${escapeHtml(r.name || '')}</td>
@@ -2321,7 +2324,7 @@ const renderers = {
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
         <td class="num">${r.recipient_count != null ? r.recipient_count : muted}</td>
         <td>${escapeHtml(fmtDate(r.sent_at)) || muted}</td>
-        <td style="display:flex;gap:6px;">${previewBtn}${sendBtn}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">${previewBtn}${testBtn}${statsBtn}${sendBtn}</td>
       </tr>`;
     }).join('');
   },
@@ -2878,9 +2881,57 @@ async function previewCampaign(id) {
     <iframe sandbox srcdoc="${escapeHtml(html)}" style="width:100%;height:52vh;border:1px solid var(--border);background:#fff;border-radius:6px;"></iframe>`,
     () => closeKpi(), 'Close');
 }
+// Send a TEST of a campaign to one address (defaults to your own email).
+async function testCampaign(id) {
+  const { data: { session } } = await sb.auth.getSession();
+  const to = (prompt('Send a test of this campaign to:', session?.user?.email || '') || '').trim();
+  if (!to) return;
+  toast('Sending test…', 'ok');
+  const { data, error } = await sb.functions.invoke('send-campaign', { body: { campaign_id: id, test_email: to } });
+  if (error) {
+    let detail = error.message;
+    try { const ctx = error.context; if (ctx?.body) detail = (await ctx.body).error || detail; } catch (_) {}
+    toast('Test failed: ' + detail, 'err'); return;
+  }
+  toast('Test sent to ' + (data?.sent_to || to), 'ok');
+}
+
+// Per-campaign stats from mailing_events — so you never have to open Resend.
+async function campaignStats(id) {
+  openKpi('Campaign stats', '', '<div class="panel-state"><span class="spinner"></span> Loading…</div>', () => closeKpi(), 'Close');
+  const [{ data: ev, error }, { data: camp }] = await Promise.all([
+    sb.from('mailing_events').select('event_type, subscriber_id').eq('campaign_id', id),
+    sb.from('mailing_campaigns').select('name, recipient_count, sent_at').eq('id', id).single(),
+  ]);
+  if (error) { $('kpiModalBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  $('kpiModalTitle').textContent = 'Campaign stats — ' + (camp?.name || '');
+  const rows = ev || [];
+  const cnt = (t) => rows.filter(e => e.event_type === t).length;
+  const uniq = (t) => new Set(rows.filter(e => e.event_type === t).map(e => e.subscriber_id)).size;
+  const sent = cnt('sent') || camp?.recipient_count || 0;
+  const delivered = uniq('delivered'), opened = uniq('opened'), clicked = uniq('clicked');
+  const bounced = uniq('bounced'), complained = uniq('complained'), failed = cnt('failed_to_send');
+  const base = delivered || sent;
+  const pct = (n, d) => d > 0 ? (Math.round(n / d * 1000) / 10) + '%' : '—';
+  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${fmtNum(v)}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  $('kpiModalBody').innerHTML = (rows.length || sent) ? `
+    <div class="hub-cards">
+      ${card('Sent', sent, camp?.sent_at ? fmtDate(camp.sent_at) : '')}
+      ${card('Delivered', delivered, pct(delivered, sent) + ' of sent')}
+      ${card('Opened', opened, pct(opened, base) + ' open rate')}
+      ${card('Clicked', clicked, pct(clicked, base) + ' click rate')}
+      ${card('Bounced', bounced, pct(bounced, sent))}
+      ${card('Complained', complained, 'spam reports')}
+      ${failed ? card('Failed to send', failed) : ''}
+    </div>
+    <div class="kpi-hint" style="margin-top:10px;">Counts are unique people. Delivered / opened / clicked / bounced are populated by the Resend webhook — if they read 0 after a send, the webhook isn't wired yet.</div>`
+    : `<div class="hub-empty">No send events yet — this campaign hasn't been sent.</div>`;
+}
+
 document.querySelector('main.main').addEventListener('click', (e) => {
-  const pv = e.target.closest('[data-preview-campaign]');
-  if (pv) { previewCampaign(pv.dataset.previewCampaign); }
+  const pv = e.target.closest('[data-preview-campaign]'); if (pv) { previewCampaign(pv.dataset.previewCampaign); return; }
+  const ts = e.target.closest('[data-test-campaign]'); if (ts) { testCampaign(ts.dataset.testCampaign); return; }
+  const st = e.target.closest('[data-stats-campaign]'); if (st) { campaignStats(st.dataset.statsCampaign); return; }
 });
 
 // Send-campaign delegation (Phase 9 sprint 3)
