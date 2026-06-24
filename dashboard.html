@@ -1085,18 +1085,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
       <div class="panel" id="panel-expenses">
         <button class="add-btn" data-add="expense">+ Add expense</button>
-        <div class="row-count" id="count-expenses">—</div>
-        <div id="state-expenses"></div>
-        <table class="data-table" id="table-expenses" style="display:none;">
-          <thead><tr>
-            <th>Date</th>
-            <th class="num">Amount</th>
-            <th>Category</th>
-            <th>Vendor</th>
-            <th>Description</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="expensesBody"></div>
       </div>
       <div class="panel" id="panel-equipment">
         <button class="add-btn" id="addEquipBtn">+ Add equipment</button>
@@ -2445,6 +2434,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
   if (tab === 'actors') { await loadActors(); return; } // custom (actor registry — inline edit + sort)
   if (tab === 'events') { await loadEventsDash(); return; } // custom (command-center dashboard)
+  if (tab === 'expenses') { await loadExpenses(); return; } // custom (inline event assignment)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5734,20 +5724,34 @@ function renderEventsDash() {
 }
 function renderEventsBody() {
   const list = eventsFiltered();
-  const sum = (fn) => list.reduce((t, e) => t + (Number(fn(e)) || 0), 0);
-  const aggNet = sum(e => e.f.net_pl);
-  const aggMS = list.filter(e => e.series === 'Dance Infusion').reduce((t, e) => t + Number(e.f.net_pl || 0), 0);
-  const aggMktg = sum(e => e.marketing);
+  const isDI = (e) => e.type === 'dance_infusion' || e.series === 'Dance Infusion';
+  const sum = (arr, fn) => arr.reduce((t, e) => t + (Number(fn(e)) || 0), 0);
+  const biz = list.filter(e => !isDI(e)), di = list.filter(isDI);
+  const bizRev = sum(biz, e => e.f.gross_revenue), bizNet = sum(biz, e => e.f.net_pl);
+  const diRaised = sum(di, e => e.f.total_raised), diMS = sum(di, e => e.f.net_pl);
+  const aggMktg = sum(list, e => e.marketing);
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
-  $('eventsAgg').innerHTML = `<div class="hub-cards">
-    ${card('Events', fmtNum(list.length))}
-    ${card('Attendance', fmtNum(sum(e => e.total_attendance)))}
-    ${card('Tickets sold', fmtNum(sum(e => e.f.tickets_sold)))}
-    ${card('Gross revenue', money(sum(e => e.f.gross_revenue)))}
-    ${card('Net P&L', money(aggNet), aggNet < 0 ? 'neg' : (aggNet > 0 ? 'pos' : ''))}
-    ${card('Raised for MS', money(aggMS), aggMS > 0 ? 'pos' : '')}
-    ${card('Marketing spend', money(aggMktg), aggMktg > 0 ? 'neg' : '')}
-  </div>`;
+  // Business (parties / production / content) and Dance Infusion (charity) are kept
+  // completely separate — they're distinctly different money models.
+  $('eventsAgg').innerHTML = `
+    <div class="li-sub" style="margin:2px 0 4px;font-weight:700;">Business — parties · production · content</div>
+    <div class="hub-cards">
+      ${card('Events', fmtNum(biz.length))}
+      ${card('Attendance', fmtNum(sum(biz, e => e.total_attendance)))}
+      ${card('Tickets sold', fmtNum(sum(biz, e => e.f.tickets_sold)))}
+      ${card('Revenue', money(bizRev))}
+      ${card('Net P&L', money(bizNet), bizNet < 0 ? 'neg' : (bizNet > 0 ? 'pos' : ''))}
+    </div>
+    <div class="li-sub" style="margin:14px 0 4px;font-weight:700;">Dance Infusion — charity</div>
+    <div class="hub-cards">
+      ${card('DI events', fmtNum(di.length))}
+      ${card('Attendance', fmtNum(sum(di, e => e.total_attendance)))}
+      ${card('Total raised', money(diRaised), diRaised > 0 ? 'pos' : '')}
+      ${card('To MS Society', money(diMS), diMS > 0 ? 'pos' : '')}
+    </div>
+    <div class="hub-cards" style="margin-top:14px;">
+      ${card('Marketing spend (all)', money(aggMktg), aggMktg > 0 ? 'neg' : '')}
+    </div>`;
   const typeChip = (e) => { const t = e.series || e.type || ''; return t ? `<span class="role-chip" style="cursor:default;">${escapeHtml(t)}</span>` : ''; };
   const rows = list.map(e => {
     const f = e.f, r = eventResult(e);
@@ -5781,6 +5785,83 @@ $('panel-events').addEventListener('change', (e) => {
 });
 $('panel-events').addEventListener('click', (e) => {
   if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; renderEventsDash(); }
+});
+
+// ============================================================
+// EXPENSES — table with inline event assignment + filters.
+// Process for Simplifi uploads: import expenses → here → filter "Unassigned" →
+// pick the event from the dropdown on each event-specific row (most stay unassigned
+// = business overhead / capital).
+// ============================================================
+const expDash = { rows: [], events: [], q: '', event: '' };
+async function loadExpenses() {
+  $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
+  const [ex, ev] = await Promise.all([
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+  ]);
+  if (ex.error) { $('expensesBody').innerHTML = `<div class="panel-state err">${escapeHtml(ex.error.message)}</div>`; return; }
+  expDash.events = ev.data || [];
+  expDash.rows = ex.data || [];
+  renderExpenses();
+}
+function expFiltered() {
+  const s = expDash, ql = s.q.toLowerCase();
+  return s.rows.filter(x =>
+    (s.event === '' || (s.event === '__none' ? !x.event_id : x.event_id === s.event)) &&
+    (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
+}
+function renderExpenses() {
+  const s = expDash;
+  $('expensesBody').innerHTML = `
+    <div id="expAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-expq placeholder="Search vendor / category / note…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-expevfilter>
+        <option value="">All events</option><option value="__none"${s.event === '__none' ? ' selected' : ''}>— Unassigned —</option>
+        ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
+      </select>
+      <button class="hub-mini" data-expclear>clear</button>
+    </div>
+    <div id="expTable"></div>`;
+  renderExpensesBody();
+}
+function renderExpensesBody() {
+  const s = expDash, list = expFiltered();
+  const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
+  const unTotal = list.filter(x => !x.event_id).reduce((t, x) => t + Number(x.amount || 0), 0);
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  $('expAgg').innerHTML = `<div class="hub-cards">
+    ${card('Expenses', fmtNum(list.length))}
+    ${card('Total', money(total))}
+    ${card('Unassigned', money(unTotal), unTotal > 0 ? 'neg' : '')}
+  </div>`;
+  const rows = list.map(x => `<tr${x.event_id ? '' : ' style="background:rgba(216,90,48,0.04);"'}>
+    <td>${escapeHtml(fmtDate(x.date))}</td>
+    <td class="num">${money(x.amount)}</td>
+    <td>${escapeHtml(x.category || '') || muted}</td>
+    <td>${escapeHtml(x.vendor || '') || muted}</td>
+    <td class="truncate">${escapeHtml(truncate(x.description || '', 60)) || muted}</td>
+    <td><select class="hub-status-sel" data-expev="${escapeHtml(x.id)}"><option value="">— unassigned —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select></td>
+  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">No expenses match.</td></tr>`;
+  $('expTable').innerHTML = `<table class="data-table"><thead><tr>
+    <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>Event</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function setExpenseEvent(id, eventId) {
+  const { error } = await sb.from('expenses').update({ event_id: eventId || null }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = expDash.rows.find(r => r.id === id); if (x) x.event_id = eventId || null;
+  toast(eventId ? 'Assigned to event' : 'Unassigned', 'ok');
+  renderExpensesBody();
+}
+$('panel-expenses').addEventListener('input', (e) => { const q = e.target.closest('[data-expq]'); if (q) { expDash.q = q.value; renderExpensesBody(); } });
+$('panel-expenses').addEventListener('change', (e) => {
+  const ef = e.target.closest('[data-expevfilter]'); if (ef) { expDash.event = ef.value; renderExpensesBody(); return; }
+  const ev = e.target.closest('[data-expev]'); if (ev) { setExpenseEvent(ev.dataset.expev, ev.value); return; }
+});
+$('panel-expenses').addEventListener('click', (e) => {
+  if (e.target.closest('[data-expclear]')) { expDash.q = ''; expDash.event = ''; renderExpenses(); }
 });
 
 async function loadGuests() {
