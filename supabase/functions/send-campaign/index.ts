@@ -92,7 +92,10 @@ Deno.serve(async (req) => {
         subject: "[TEST] " + campaign.subject,
         html,
       });
-      if (testRes.error) return jsonError(502, "test send failed: " + testRes.error.message);
+      if (testRes.error) {
+        console.error("test send failed:", JSON.stringify(testRes.error));
+        return jsonError(502, "Resend rejected the test: " + testRes.error.message);
+      }
       return new Response(
         JSON.stringify({ success: true, test: true, sent_to: test_email, id: testRes.data?.id || null }),
         { headers: JSON_HEADERS },

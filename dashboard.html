@@ -2881,6 +2881,14 @@ async function previewCampaign(id) {
     <iframe sandbox srcdoc="${escapeHtml(html)}" style="width:100%;height:52vh;border:1px solid var(--border);background:#fff;border-radius:6px;"></iframe>`,
     () => closeKpi(), 'Close');
 }
+// Pull the real error message out of a supabase functions invoke error
+// (FunctionsHttpError exposes the Response as error.context).
+async function fnErrorDetail(error) {
+  let detail = error?.message || String(error);
+  try { if (error?.context && typeof error.context.json === 'function') { const j = await error.context.json(); if (j?.error) detail = j.error; } } catch (_) {}
+  return detail;
+}
+
 // Send a TEST of a campaign to one address (defaults to your own email).
 async function testCampaign(id) {
   const { data: { session } } = await sb.auth.getSession();
@@ -2888,11 +2896,7 @@ async function testCampaign(id) {
   if (!to) return;
   toast('Sending test…', 'ok');
   const { data, error } = await sb.functions.invoke('send-campaign', { body: { campaign_id: id, test_email: to } });
-  if (error) {
-    let detail = error.message;
-    try { const ctx = error.context; if (ctx?.body) detail = (await ctx.body).error || detail; } catch (_) {}
-    toast('Test failed: ' + detail, 'err'); return;
-  }
+  if (error) { toast('Test failed: ' + await fnErrorDetail(error), 'err'); return; }
   toast('Test sent to ' + (data?.sent_to || to), 'ok');
 }
 
@@ -2952,9 +2956,7 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
   if (error) {
     btn.disabled = false;
     btn.textContent = original;
-    let detail = error.message;
-    try { const ctx = error.context; if (ctx?.body) detail = (await ctx.body).error || detail; } catch (_) {}
-    toast('Send failed: ' + detail, 'err');
+    toast('Send failed: ' + await fnErrorDetail(error), 'err');
     return;
   }
   toast(`Sent to ${data.sent} of ${data.total} subscribers`, 'ok');
