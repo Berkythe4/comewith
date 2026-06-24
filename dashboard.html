@@ -5438,23 +5438,29 @@ const guestState = { rows: [], filter: { q: '', event: '', subscribed: false, re
 // ============================================================
 // ACTORS — master registry: add / inline-edit / sort / on-hold / roles
 // ============================================================
-const ACTOR_ROLE_VOCAB = ['artist', 'dj', 'contractor', 'customer', 'sponsor', 'team', 'performer', 'painter', 'dancer', 'vendor', 'venue_contact', 'host', 'crew', 'donor'];
-const ACTOR_COLS = [['display_name', 'Name'], ['kind', 'Kind'], ['roles', 'Roles'], ['email', 'Email'], ['phone', 'Phone'], ['instagram', 'Instagram'], ['events', 'Events'], ['derivedStatus', 'Status'], ['created_at', 'Added']];
-const actorState = { rows: [], sortKey: 'display_name', sortDir: 1, q: '', status: 'active+hold' };
+const ACTOR_ROLE_VOCAB = ['artist', 'dj', 'contractor', 'customer', 'sponsor', 'team', 'staff', 'performer', 'painter', 'dancer', 'vendor', 'venue_contact', 'host', 'crew', 'donor', 'photographer', 'videographer', 'producer', 'organizer', 'volunteer', 'partner', 'designer'];
+const ACTOR_COLS = [['display_name', 'Name'], ['kind', 'Kind'], ['roles', 'Roles'], ['org', 'Org / members'], ['email', 'Email'], ['phone', 'Phone'], ['instagram', 'Instagram'], ['events', 'Events'], ['derivedStatus', 'Status'], ['created_at', 'Added']];
+const actorState = { rows: [], orgs: [], venues: [], sortKey: 'display_name', sortDir: 1, q: '', status: 'active+hold', roleFilter: new Set(), kind: 'all' };
 
 async function loadActors() {
   $('actorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading actors…</div>';
-  const [aa, rr, pp] = await Promise.all([
-    sb.from('actors').select('id, display_name, legal_name, kind, email, phone, instagram, website, notes, status, deleted_at, created_at').order('display_name'),
+  const [aa, rr, pp, vv] = await Promise.all([
+    sb.from('actors').select('id, display_name, legal_name, kind, email, phone, instagram, website, notes, status, org_id, deleted_at, created_at').order('display_name'),
     sb.from('actor_roles').select('actor_id, role'),
     sb.from('event_participants').select('actor_id'),
+    sb.from('venues').select('id, name, actor_id').is('deleted_at', null).order('name'),
   ]);
   if (aa.error) { $('actorsBody').innerHTML = `<div class="panel-state err">${escapeHtml(aa.error.message)}</div>`; return; }
   const rolesBy = {}; (rr.data || []).forEach(r => { (rolesBy[r.actor_id] = rolesBy[r.actor_id] || []).push(r.role); });
   const evBy = {}; (pp.data || []).forEach(p => { evBy[p.actor_id] = (evBy[p.actor_id] || 0) + 1; });
-  actorState.rows = (aa.data || []).map(a => ({
+  const all = aa.data || [];
+  actorState.orgs = all.filter(a => a.kind === 'org' && !a.deleted_at).map(o => ({ id: o.id, display_name: o.display_name }));
+  actorState.venues = vv.data || [];
+  const orgName = {}; actorState.orgs.forEach(o => orgName[o.id] = o.display_name);
+  actorState.rows = all.map(a => ({
     ...a, roles: (rolesBy[a.id] || []).sort(), events: evBy[a.id] || 0,
     derivedStatus: a.deleted_at ? 'archived' : (a.status || 'active'),
+    orgName: a.org_id ? (orgName[a.org_id] || null) : null,
   }));
   renderActors();
 }
@@ -5465,7 +5471,10 @@ function actorFiltered() {
     else if (s.status === 'on_hold' && a.derivedStatus !== 'on_hold') return false;
     else if (s.status === 'archived' && a.derivedStatus !== 'archived') return false;
     else if (s.status === 'active+hold' && a.derivedStatus === 'archived') return false;
-    if (ql) { const hay = [a.display_name, a.email, a.phone, a.instagram, (a.roles || []).join(' '), a.legal_name].join(' ').toLowerCase(); if (!hay.includes(ql)) return false; }
+    if (s.kind === 'person' && a.kind !== 'person') return false;
+    if (s.kind === 'org' && a.kind !== 'org') return false;
+    if (s.roleFilter.size && !(a.roles || []).some(r => s.roleFilter.has(r))) return false;
+    if (ql) { const hay = [a.display_name, a.email, a.phone, a.instagram, (a.roles || []).join(' '), a.legal_name, a.orgName].join(' ').toLowerCase(); if (!hay.includes(ql)) return false; }
     return true;
   });
   const k = s.sortKey;
@@ -5482,16 +5491,24 @@ function renderActors() {
   const s = actorState;
   s.status = s.status || 'active+hold';
   $('actorsBody').innerHTML = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
       <button class="add-btn" data-aadd style="position:static;">+ Add actor</button>
-      <input class="modal-input" data-aq placeholder="Search name / email / role…" style="max-width:260px;" value="${escapeHtml(s.q)}">
+      <input class="modal-input" data-aq placeholder="Search name / email / role / org…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-akindfilter>
+        ${[['all', 'People + orgs'], ['person', 'People only'], ['org', 'Orgs only']].map(([v, l]) => `<option value="${v}"${s.kind === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
       <select class="hub-status-sel" data-afilter>
         ${[['active+hold', 'Active + on hold'], ['active', 'Active only'], ['on_hold', 'On hold'], ['archived', 'Archived'], ['all', 'All']].map(([v, l]) => `<option value="${v}"${s.status === v ? ' selected' : ''}>${l}</option>`).join('')}
       </select>
       <span class="li-sub" data-acount></span>
     </div>
+    <div style="margin-bottom:12px;">
+      <span class="li-sub" style="margin-right:6px;">Filter by role:</span>
+      <span class="role-pick" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${ACTOR_ROLE_VOCAB.map(r => `<button type="button" class="role-opt${s.roleFilter.has(r) ? ' on' : ''}" data-arolefilter="${r}">${r}</button>`).join('')}
+        <button type="button" class="hub-mini" data-arolefilter="__clear">clear</button></span>
+    </div>
     <div id="actorsTable"></div>
-    <div class="kpi-hint" style="margin-top:8px;">Click a <strong>Name / Email / Phone / Instagram</strong> cell to edit inline (Enter or click away to save). Set <strong>Status</strong> to put someone on hold or archive. Click any column header to sort.</div>`;
+    <div class="kpi-hint" style="margin-top:8px;">Click a <strong>Name / Email / Phone / Instagram</strong> cell to edit inline (Enter or click away to save). Assign a person to an <strong>Org</strong>, or click an org's venue count to assign venues. Status puts someone on hold or archives. Multi-select roles above to filter; click any column header to sort.</div>`;
   renderActorsTable();
 }
 function renderActorsTable() {
@@ -5501,10 +5518,22 @@ function renderActorsTable() {
   const ed = (a, field) => `<td contenteditable="true" data-aedit="${field}" data-id="${escapeHtml(a.id)}" data-orig="${escapeHtml(a[field] || '')}" style="cursor:text;">${escapeHtml(a[field] || '')}</td>`;
   const statusSel = (a) => `<select class="hub-status-sel" data-astatus="${escapeHtml(a.id)}">${['active', 'on_hold', 'archived'].map(v => `<option value="${v}"${a.derivedStatus === v ? ' selected' : ''}>${v.replace('_', ' ')}</option>`).join('')}</select>`;
   const roleChips = (a) => (a.roles || []).map(r => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`).join(' ') || `<span class="muted">—</span>`;
+  // Live counts so org rows stay accurate after assignments.
+  const memberCount = {}; s.rows.forEach(a => { if (a.org_id && !a.deleted_at) memberCount[a.org_id] = (memberCount[a.org_id] || 0) + 1; });
+  const venueCount = {}; s.venues.forEach(v => { if (v.actor_id) venueCount[v.actor_id] = (venueCount[v.actor_id] || 0) + 1; });
+  const orgCell = (a) => {
+    if (a.kind === 'org') {
+      const vc = venueCount[a.id] || 0;
+      return `<span class="li-sub">${memberCount[a.id] || 0} ppl</span> · <button class="hub-mini" data-aorgvenues="${escapeHtml(a.id)}">${vc} venue${vc === 1 ? '' : 's'}</button>`;
+    }
+    const opts = s.orgs.map(o => `<option value="${escapeHtml(o.id)}"${a.org_id === o.id ? ' selected' : ''}>${escapeHtml(o.display_name)}</option>`).join('');
+    return `<select class="hub-status-sel" data-aorg="${escapeHtml(a.id)}"><option value="">— none —</option>${opts}</select>`;
+  };
   const rows = list.map(a => `<tr${a.derivedStatus === 'on_hold' ? ' style="opacity:.6;"' : ''}>
     ${ed(a, 'display_name')}
     <td><select class="hub-status-sel" data-akind="${escapeHtml(a.id)}"><option value="person"${a.kind === 'person' ? ' selected' : ''}>person</option><option value="org"${a.kind === 'org' ? ' selected' : ''}>org</option></select></td>
     <td>${roleChips(a)} <button class="hub-mini" data-aroles="${escapeHtml(a.id)}">edit</button></td>
+    <td>${orgCell(a)}</td>
     ${ed(a, 'email')}${ed(a, 'phone')}${ed(a, 'instagram')}
     <td class="num">${a.events || 0}</td>
     <td>${statusSel(a)}</td>
@@ -5536,6 +5565,35 @@ async function setActorKind(id, v) {
   const { error } = await sb.from('actors').update({ kind: v }).eq('id', id);
   if (error) { toast('Failed: ' + error.message, 'err'); return; }
   const a = actorState.rows.find(x => x.id === id); if (a) a.kind = v;
+  loadActors(); // kind change shifts org dropdown / org-list membership
+}
+async function setActorOrg(id, orgId) {
+  const { error } = await sb.from('actors').update({ org_id: orgId || null }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const a = actorState.rows.find(x => x.id === id);
+  if (a) { a.org_id = orgId || null; a.orgName = orgId ? (actorState.orgs.find(o => o.id === orgId)?.display_name || null) : null; }
+  toast(orgId ? 'Assigned to org' : 'Removed from org', 'ok');
+  renderActorsTable();
+}
+// Assign which venues an org operates (sets venues.actor_id).
+function openOrgVenues(orgId) {
+  const org = actorState.rows.find(a => a.id === orgId);
+  openKpi('Venues — ' + (org?.display_name || ''), 'Tick the venues this org operates', `
+    <div class="hub-list">${(actorState.venues || []).length ? actorState.venues.map(v => {
+      const other = v.actor_id && v.actor_id !== orgId;
+      const otherName = other ? (actorState.orgs.find(o => o.id === v.actor_id)?.display_name || 'another org') : '';
+      return `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;"><input type="checkbox" data-vassign="${escapeHtml(v.id)}" style="width:auto;margin:0;"${v.actor_id === orgId ? ' checked' : ''}><span>${escapeHtml(v.name)}${other ? ` <span class="li-sub">(currently ${escapeHtml(otherName)})</span>` : ''}</span></label>`;
+    }).join('') : '<div class="hub-empty">No venues yet — add them in the Venues tab.</div>'}</div>`,
+    async () => {
+      for (const v of actorState.venues) {
+        const cb = $('kpiModalBody').querySelector(`[data-vassign="${v.id}"]`);
+        let newVal = v.actor_id;
+        if (cb?.checked) newVal = orgId;
+        else if (v.actor_id === orgId) newVal = null;
+        if (newVal !== v.actor_id) { const { error } = await sb.from('venues').update({ actor_id: newVal }).eq('id', v.id); if (error) throw error; v.actor_id = newVal; }
+      }
+      closeKpi(); toast('Venues updated', 'ok'); renderActorsTable();
+    }, 'Save venues');
 }
 function openActorRoles(id) {
   const a = actorState.rows.find(x => x.id === id); if (!a) return;
@@ -5562,6 +5620,7 @@ function openAddActor() {
       <div><label class="modal-label">Phone</label><input class="modal-input" name="phone"></div>
       <div><label class="modal-label">Instagram</label><input class="modal-input" name="instagram"></div>
     </div>
+    <div class="modal-form-row"><label class="modal-label">Org (if a person at a company)</label><select class="modal-select" name="org_id"><option value="">— none —</option>${(actorState.orgs || []).map(o => `<option value="${escapeHtml(o.id)}">${escapeHtml(o.display_name)}</option>`).join('')}</select></div>
     <div class="kpi-section-h">Roles</div>
     <div class="role-pick">${ACTOR_ROLE_VOCAB.map(r => `<button type="button" class="role-opt" data-arole="${r}">${r}</button>`).join('')}</div>`,
     submitAddActor, 'Create actor');
@@ -5569,7 +5628,7 @@ function openAddActor() {
 }
 async function submitAddActor() {
   const name = kpiVal('display_name'); if (!name) throw new Error('Name is required');
-  const { data, error } = await sb.from('actors').insert({ display_name: name, kind: kpiVal('kind') || 'person', email: kpiVal('email') || null, phone: kpiVal('phone') || null, instagram: kpiVal('instagram') || null }).select('id').single();
+  const { data, error } = await sb.from('actors').insert({ display_name: name, kind: kpiVal('kind') || 'person', email: kpiVal('email') || null, phone: kpiVal('phone') || null, instagram: kpiVal('instagram') || null, org_id: kpiVal('org_id') || null }).select('id').single();
   if (error) throw error;
   const roles = [...$('kpiModalBody').querySelectorAll('.role-opt.on')].map(b => b.dataset.arole);
   if (roles.length) { const { error: re } = await sb.from('actor_roles').insert(roles.map(role => ({ actor_id: data.id, role }))); if (re) throw re; }
@@ -5577,16 +5636,26 @@ async function submitAddActor() {
 }
 $('panel-actors').addEventListener('click', (e) => {
   if (e.target.closest('[data-aadd]')) { openAddActor(); return; }
+  const rf = e.target.closest('[data-arolefilter]');
+  if (rf) {
+    const r = rf.dataset.arolefilter;
+    if (r === '__clear') { actorState.roleFilter.clear(); $('panel-actors').querySelectorAll('[data-arolefilter]').forEach(c => c.classList.remove('on')); }
+    else { if (actorState.roleFilter.has(r)) { actorState.roleFilter.delete(r); rf.classList.remove('on'); } else { actorState.roleFilter.add(r); rf.classList.add('on'); } }
+    renderActorsTable(); return;
+  }
   const sort = e.target.closest('[data-asort]'); if (sort) { const k = sort.dataset.asort; if (actorState.sortKey === k) actorState.sortDir *= -1; else { actorState.sortKey = k; actorState.sortDir = 1; } renderActorsTable(); return; }
   const roles = e.target.closest('[data-aroles]'); if (roles) { openActorRoles(roles.dataset.aroles); return; }
+  const ov = e.target.closest('[data-aorgvenues]'); if (ov) { openOrgVenues(ov.dataset.aorgvenues); return; }
 });
 $('panel-actors').addEventListener('input', (e) => {
   const q = e.target.closest('[data-aq]'); if (q) { actorState.q = q.value; renderActorsTable(); }
 });
 $('panel-actors').addEventListener('change', (e) => {
   const fil = e.target.closest('[data-afilter]'); if (fil) { actorState.status = fil.value; renderActorsTable(); return; }
+  const kf = e.target.closest('[data-akindfilter]'); if (kf) { actorState.kind = kf.value; renderActorsTable(); return; }
   const st = e.target.closest('[data-astatus]'); if (st) { setActorStatus(st.dataset.astatus, st.value); return; }
   const kd = e.target.closest('[data-akind]'); if (kd) { setActorKind(kd.dataset.akind, kd.value); return; }
+  const org = e.target.closest('[data-aorg]'); if (org) { setActorOrg(org.dataset.aorg, org.value); return; }
 });
 $('panel-actors').addEventListener('focusout', (e) => { const td = e.target.closest('[data-aedit]'); if (td) saveActorField(td); });
 $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.closest('[data-aedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
