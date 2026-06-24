@@ -3366,7 +3366,7 @@ const IG_ACCOUNTS = [
   { key: 'instagram.followers.berky', label: 'Berky' },
   { key: 'instagram.followers.danceinfusion', label: 'Dance Infusion' },
 ];
-async function openLogIG() {
+async function openLogIG(ctx = {}) {
   const { data } = await sb.from('metric_snapshots')
     .select('metric_key, value, captured_on')
     .in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null)
@@ -3380,9 +3380,15 @@ async function openLogIG() {
       <label class="modal-label">${escapeHtml(a.label)} <span class="kpi-delta" data-iglast="${l ? l.value : ''}"></span></label>
       <input class="modal-input" type="number" step="1" min="0" data-ig="${escapeHtml(a.key)}" placeholder="${ph}"></div>`;
   };
-  openKpi('Log IG followers', 'Today\'s follower count for all three accounts — one save', `
+  const date = ctx.date || TODAY();
+  const backdated = ctx.date && ctx.date !== TODAY();
+  openKpi('Log IG followers', ctx.label ? 'For ' + ctx.label : 'Follower count for all three accounts — one save', `
+    <div class="modal-form-row"><label class="modal-label">Reading date</label><input class="modal-input" type="date" name="ig_date" value="${escapeHtml(date)}"></div>
+    <input type="hidden" name="ig_source" value="${escapeHtml(ctx.source || '')}">
+    <input type="hidden" name="ig_label" value="${escapeHtml(ctx.label || '')}">
+    ${backdated ? `<div class="kpi-hint" style="margin-bottom:8px;">📌 Back-dated to <strong>${escapeHtml(ctx.label || 'this event')}</strong> (${escapeHtml(fmtDate(date))}). Change the date above to log for a different day.</div>` : ''}
     ${IG_ACCOUNTS.map(rowFor).join('')}
-    <div class="kpi-hint">Leave a field blank to skip it. Re-logging today overwrites today's value.</div>`,
+    <div class="kpi-hint">Leave a field blank to skip it. Re-logging the same date overwrites that date's value.</div>`,
     submitLogIG, 'Save all');
 }
 // Live delta vs last reading (delegated once on the shared modal body).
@@ -3400,20 +3406,23 @@ $('kpiModalBody').addEventListener('input', igDeltaHandler);
 async function submitLogIG() {
   const { data: { session } } = await sb.auth.getSession();
   const uid = session?.user?.id || null;
-  const today = TODAY();
+  const when = kpiVal('ig_date') || TODAY();
+  const source = kpiVal('ig_source') || null;       // e.g. 'event:<id>' so the reading is traceable to the event
+  const label = kpiVal('ig_label') || null;
+  const notes = label ? `At event: ${label}` : null;
   let n = 0;
   for (const a of IG_ACCOUNTS) {
     const el = $('kpiModalBody').querySelector(`[data-ig="${a.key}"]`);
     const val = el?.value.trim(); if (!val) continue;
-    let { error } = await sb.from('metric_snapshots').insert({ metric_key: a.key, value: Number(val), captured_on: today, series_id: null, created_by: uid });
+    let { error } = await sb.from('metric_snapshots').insert({ metric_key: a.key, value: Number(val), captured_on: when, series_id: null, source, notes, created_by: uid });
     if (error && error.code === '23505') {
-      ({ error } = await sb.from('metric_snapshots').update({ value: Number(val) }).eq('metric_key', a.key).eq('captured_on', today).is('series_id', null));
+      ({ error } = await sb.from('metric_snapshots').update({ value: Number(val), source, notes }).eq('metric_key', a.key).eq('captured_on', when).is('series_id', null));
     }
     if (error) throw error;
     n++;
   }
   if (!n) throw new Error('Enter at least one follower count');
-  closeKpi(); toast(`Logged ${n} IG ${n === 1 ? 'account' : 'accounts'}`, 'ok'); refreshStratIfActive();
+  closeKpi(); toast(`Logged ${n} IG ${n === 1 ? 'account' : 'accounts'} for ${fmtDate(when)}`, 'ok'); refreshStratIfActive();
 }
 
 // ===== Edit Target — insert a versioned kpi_targets row (+ new-metric mode) =====
@@ -4078,7 +4087,7 @@ function renderHubHead() {
       ${stageStepper(e.stage)}
       <div class="hub-head-actions">
         <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
-        <button class="hub-btn ghost" data-hub-action="log-ig" title="Capture today's follower counts for all 3 accounts">Log IG followers</button>
+        <button class="hub-btn ghost" data-hub-action="log-ig" title="Log follower counts — defaults to this event's date so it's back-dated to the event">Log IG followers</button>
       </div>
     </div>`;
 }
@@ -4443,7 +4452,8 @@ async function hubSecFiles() {
     </div>`;
   const bucketHTML = buckets.map(b => `
     <div class="money-section" style="margin-bottom:14px;">
-      <h4>${escapeHtml(b.label)} <span class="sec-count">${b.items.length}</span></h4>
+      <h4 style="display:flex;align-items:center;gap:8px;">${escapeHtml(b.label)} <span class="sec-count">${b.items.length}</span>
+        <button class="hub-mini" data-hubupload="${escapeHtml(b.slug)}" style="margin-left:auto;">+ upload</button></h4>
       ${b.items.length ? b.items.map(fileRow).join('') : `<div class="hub-empty" style="padding:8px 0;">No ${escapeHtml(b.label.toLowerCase())} files yet.</div>`}
     </div>`).join('');
 
@@ -4888,18 +4898,27 @@ async function hubToggleContractPaid(id) {
   toast(paid ? 'Marked paid' : 'Marked unpaid', 'ok'); await hubReload('contracts');
 }
 
-async function hubDoUpload() {
-  const inp = $('hubFileInput'); const kind = $('hubFileKind')?.value || 'other';
-  const vendor_actor_id = $('hubFileVendor')?.value || null;
-  const file = inp?.files?.[0]; if (!file) { toast('Pick a file first', 'err'); return; }
+// Core upload — used by the shared form AND the per-bucket "+ upload" buttons.
+async function hubUploadFile(file, kind, vendor_actor_id) {
+  if (!file) { toast('Pick a file first', 'err'); return; }
   const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
   const path = `event/${hub.eventId}/${Date.now()}_${safe}`;
   toast('Uploading…', 'ok');
   const { error: upErr } = await sb.storage.from('agreements').upload(path, file, { upsert: false });
   if (upErr) { toast('Upload failed: ' + upErr.message, 'err'); return; }
-  const { error } = await sb.from('files').insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'event', subject_id: hub.eventId, kind, vendor_actor_id });
+  const { error } = await sb.from('files').insert({ bucket: 'agreements', path, filename: file.name, mime: file.type || null, size: file.size, subject_type: 'event', subject_id: hub.eventId, kind: kind || 'other', vendor_actor_id: vendor_actor_id || null });
   if (error) { toast('File stored but DB row failed: ' + error.message, 'err'); return; }
-  toast('File uploaded', 'ok'); await hubReload('files');
+  toast('Uploaded to ' + (kind || 'other').replace(/_/g, ' '), 'ok'); await hubReload('files');
+}
+async function hubDoUpload() {
+  await hubUploadFile($('hubFileInput')?.files?.[0], $('hubFileKind')?.value || 'other', $('hubFileVendor')?.value || null);
+}
+// Per-bucket upload: opens a file picker and files it straight into that doc-type bucket.
+function hubBucketUpload(slug) {
+  const inp = document.createElement('input');
+  inp.type = 'file';
+  inp.onchange = () => { const f = inp.files?.[0]; if (f) hubUploadFile(f, slug, $('hubFileVendor')?.value || null); };
+  inp.click();
 }
 async function hubFileDownload(id) {
   const f = hub.files?.find(x => x.id === id); if (!f) return;
@@ -4995,7 +5014,7 @@ const HUB_ACTIONS = {
   'edit-contract': (el) => hubEditContract(el.dataset.id),
   'upload-file': hubDoUpload,
   'add-doctype': hubAddDocType,
-  'log-ig': openLogIG,
+  'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
 };
 
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
@@ -5009,6 +5028,7 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
+  const up = e.target.closest('[data-hubupload]'); if (up) { hubBucketUpload(up.dataset.hubupload); return; }
   const fd = e.target.closest('[data-hub-fdl]'); if (fd) { hubFileDownload(fd.dataset.hubFdl); return; }
   const cdoc = e.target.closest('[data-hub-cdoc]'); if (cdoc) { hubContractDocDownload(cdoc.dataset.hubCdoc); return; }
   const inv = e.target.closest('[data-hub-involve]'); if (inv) { hubInvolveContact(inv.dataset.hubInvolve); return; }
