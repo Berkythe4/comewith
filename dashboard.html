@@ -1099,12 +1099,15 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         </table>
       </div>
       <div class="panel" id="panel-equipment">
+        <button class="add-btn" id="addEquipBtn">+ Add equipment</button>
+        <div id="equipFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;"></div>
         <div class="row-count" id="count-equipment">—</div>
         <div id="state-equipment"></div>
         <table class="data-table" id="table-equipment" style="display:none;">
           <thead><tr>
             <th>Name</th>
             <th>Category</th>
+            <th>Serial</th>
             <th>Brand / Model</th>
             <th>Status</th>
             <th class="num">Daily rate</th>
@@ -1141,8 +1144,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <thead><tr>
             <th>Name</th>
             <th>Contact</th>
-            <th>Website</th>
-            <th>Notes</th>
+            <th class="num">Cash sponsored</th>
+            <th>Events</th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -2213,19 +2216,9 @@ const renderers = {
   },
 
   equipment(rows) {
-    const tbody = $('table-equipment').querySelector('tbody');
-    tbody.innerHTML = rows.map(r => {
-      const status = (r.status || 'available').toLowerCase();
-      const bm = [r.brand, r.model].filter(Boolean).join(' ');
-      return `<tr>
-        <td>${escapeHtml(r.name || '')}</td>
-        <td>${escapeHtml(r.category || '') || muted}</td>
-        <td>${escapeHtml(bm) || muted}</td>
-        <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
-        <td class="num">${r.daily_rate != null ? money(r.daily_rate) : muted}</td>
-        <td class="num">${r.purchase_price != null ? money(r.purchase_price) : muted}</td>
-      </tr>`;
-    }).join('');
+    equipmentRows = rows;            // cache for client-side category filtering
+    renderEquipmentTable();
+    renderEquipFilterBar();
   },
 
   events(rows) {
@@ -2253,10 +2246,10 @@ const renderers = {
   sponsors(rows) {
     const tbody = $('table-sponsors').querySelector('tbody');
     tbody.innerHTML = rows.map(r => `<tr>
-      <td>${escapeHtml(r.name || '')}</td>
-      <td class="truncate">${escapeHtml(r.contact_email || r.contact_name || '') || muted}</td>
-      <td class="truncate">${r.website ? `<a href="${escapeHtml(r.website)}" target="_blank">${escapeHtml(r.website)}</a>` : muted}</td>
-      <td class="truncate">${escapeHtml(truncate(r.notes || '', 60)) || muted}</td>
+      <td>${escapeHtml(r.display_name || '')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</td>
+      <td class="truncate">${escapeHtml(r.email || r.phone || '') || muted}</td>
+      <td class="num">${r.cash ? money(r.cash) : muted}${r.inkind ? ` <span class="li-sub">+${money(r.inkind)} in-kind</span>` : ''}</td>
+      <td class="truncate">${r.events.length ? escapeHtml([...new Set(r.events)].join(', ')) : muted}</td>
     </tr>`).join('');
   },
 
@@ -2265,7 +2258,7 @@ const renderers = {
     tbody.innerHTML = rows.map(r => {
       const status = (r.status || 'pending').toLowerCase();
       return `<tr>
-        <td>${escapeHtml(r.sponsor?.name || '—')}</td>
+        <td>${escapeHtml(r.actor?.display_name || r.sponsor?.name || '—')}</td>
         <td>${escapeHtml(r.event?.name || '—')}</td>
         <td>${escapeHtml(r.tier || '') || muted}</td>
         <td class="num">${money(r.cash_amount)}</td>
@@ -2360,8 +2353,9 @@ const queries = {
     .limit(500),
 
   equipment: () => sb.from('equipment_inventory')
-    .select('id, name, category, brand, model, status, daily_rate, purchase_price')
-    .order('name', { ascending: true })
+    .select('id, name, category, brand, model, serial_number, status, daily_rate, purchase_price, current_value, purchase_date, notes')
+    .is('deleted_at', null)
+    .order('serial_number', { ascending: true, nullsFirst: false })
     .limit(500),
 
   events: () => sb.from('events')
@@ -2370,13 +2364,24 @@ const queries = {
     .order('event_date', { ascending: false })
     .limit(500),
 
-  sponsors: () => sb.from('sponsors')
-    .select('id, name, contact_name, contact_email, contact_phone, website, notes')
-    .order('name')
-    .limit(500),
+  // Sponsors live on the actor model now (sponsorships.actor_id), not the legacy
+  // `sponsors` table. Merge sponsor-role actors with their sponsorship totals so the
+  // tab reflects exactly what's attached to events.
+  sponsors: async () => {
+    const [sps, roles] = await Promise.all([
+      sb.from('sponsorships').select('cash_amount, in_kind_value, tier, status, actor:actors(id, display_name, email, phone, website, notes), event:events(name, event_date)'),
+      sb.from('actor_roles').select('actor:actors(id, display_name, email, phone, website, notes)').eq('role', 'sponsor'),
+    ]);
+    if (sps.error) return sps;
+    const m = new Map();
+    const add = (a) => { if (!a) return null; let o = m.get(a.id); if (!o) { o = { ...a, cash: 0, inkind: 0, events: [], tier: null }; m.set(a.id, o); } return o; };
+    for (const r of (roles.data || [])) add(r.actor);
+    for (const s of (sps.data || [])) { const o = add(s.actor); if (!o) continue; o.cash += Number(s.cash_amount || 0); o.inkind += Number(s.in_kind_value || 0); if (s.tier) o.tier = s.tier; if (s.event?.name) o.events.push(s.event.name); }
+    return { data: [...m.values()].sort((a, b) => (b.cash - a.cash) || a.display_name.localeCompare(b.display_name)) };
+  },
 
   sponsorships: () => sb.from('sponsorships')
-    .select('id, tier, cash_amount, drink_tickets, entry_tickets, status, sponsor:sponsors(name), event:events(name, event_date)')
+    .select('id, tier, cash_amount, drink_tickets, entry_tickets, status, sponsor:sponsors(name), actor:actors(display_name), event:events(name, event_date)')
     .order('cash_amount', { ascending: false })
     .limit(500),
 
@@ -2472,6 +2477,109 @@ $('refreshBtn').addEventListener('click', () => {
   const active = document.querySelector('.sidebar-nav button.active');
   if (active) loadTab(active.dataset.tab);
 });
+
+// ===== Equipment inventory: category buckets (filter) + add/edit + usage history =====
+const EQUIP_CATEGORIES = ['DJ', 'Sound', 'Camera', 'Misc', 'Wire', 'Accessories'];
+const EQUIP_STATUSES = ['available', 'rented', 'maintenance', 'retired'];
+let equipmentRows = [];
+let equipFilter = 'all';
+function renderEquipFilterBar() {
+  const bar = $('equipFilterBar'); if (!bar) return;
+  const counts = {};
+  for (const r of equipmentRows) { const c = r.category || '—'; counts[c] = (counts[c] || 0) + 1; }
+  const chip = (key, label, n) => `<button type="button" class="role-opt${equipFilter === key ? ' on' : ''}" data-equip-filter="${escapeHtml(key)}">${escapeHtml(label)}${n != null ? ` <span class="sec-count">${n}</span>` : ''}</button>`;
+  bar.innerHTML = chip('all', 'All', equipmentRows.length)
+    + EQUIP_CATEGORIES.map(c => chip(c, c, counts[c] || 0)).join('')
+    + (counts['—'] ? chip('—', 'Uncategorized', counts['—']) : '');
+}
+function renderEquipmentTable() {
+  const tbody = $('table-equipment').querySelector('tbody');
+  const rows = equipFilter === 'all' ? equipmentRows : equipmentRows.filter(r => (r.category || '—') === equipFilter);
+  tbody.innerHTML = rows.map(r => {
+    const status = (r.status || 'available').toLowerCase();
+    const bm = [r.brand, r.model].filter(Boolean).join(' ');
+    return `<tr data-equip-id="${escapeHtml(r.id)}" style="cursor:pointer;">
+      <td>${escapeHtml(r.name || '')}</td>
+      <td>${escapeHtml(r.category || '') || muted}</td>
+      <td>${escapeHtml(r.serial_number || '') || muted}</td>
+      <td>${escapeHtml(bm) || muted}</td>
+      <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
+      <td class="num">${r.daily_rate != null ? money(r.daily_rate) : muted}</td>
+      <td class="num">${r.purchase_price != null ? money(r.purchase_price) : muted}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No equipment in this category.</td></tr>`;
+}
+$('equipFilterBar').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-equip-filter]'); if (!b) return;
+  equipFilter = b.dataset.equipFilter; renderEquipFilterBar(); renderEquipmentTable();
+});
+$('table-equipment').addEventListener('click', (e) => {
+  const tr = e.target.closest('[data-equip-id]'); if (tr) openEditEquipment(tr.dataset.equipId);
+});
+$('addEquipBtn').addEventListener('click', () => openEditEquipment(null));
+async function openEditEquipment(id) {
+  const r = id ? equipmentRows.find(x => x.id === id) : null;
+  const catOpts = ['', ...EQUIP_CATEGORIES].map(c => `<option value="${c}"${(r?.category || '') === c ? ' selected' : ''}>${c || '— none —'}</option>`).join('');
+  const statusOpts = EQUIP_STATUSES.map(s => `<option value="${s}"${(r?.status || 'available') === s ? ' selected' : ''}>${s}</option>`).join('');
+  openKpi(id ? 'Edit equipment' : 'Add equipment', id ? escapeHtml(r?.name || '') : 'New inventory item', `
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(r?.name || '')}" required></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Category</label><select class="modal-select" name="category">${catOpts}</select></div>
+      <div><label class="modal-label">Serial #</label><input class="modal-input" name="serial_number" value="${escapeHtml(r?.serial_number || '')}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Brand</label><input class="modal-input" name="brand" value="${escapeHtml(r?.brand || '')}"></div>
+      <div><label class="modal-label">Model</label><input class="modal-input" name="model" value="${escapeHtml(r?.model || '')}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+      <div><label class="modal-label">Daily rate $</label><input class="modal-input" type="number" min="0" step="0.01" name="daily_rate" value="${r?.daily_rate ?? ''}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Purchase price $</label><input class="modal-input" type="number" min="0" step="0.01" name="purchase_price" value="${r?.purchase_price ?? ''}"></div>
+      <div><label class="modal-label">Purchase date</label><input class="modal-input" type="date" name="purchase_date" value="${escapeHtml(r?.purchase_date || '')}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-textarea" name="notes" rows="2">${escapeHtml(r?.notes || '')}</textarea></div>
+    ${id ? `<div class="kpi-section-h">Event usage history</div><div id="equipUsage"><span class="li-sub">Loading…</span></div>
+    <div style="margin-top:14px;"><button type="button" class="hub-mini danger" id="equipArchiveBtn">Archive item</button></div>` : ''}`,
+    () => submitEquipment(id), id ? 'Save changes' : 'Create item');
+  if (id) {
+    loadEquipUsage(id);
+    $('kpiModalBody').querySelector('#equipArchiveBtn')?.addEventListener('click', () => archiveEquipment(id));
+  }
+}
+async function loadEquipUsage(id) {
+  const el = $('kpiModalBody')?.querySelector('#equipUsage'); if (!el) return;
+  const { data, error } = await sb.from('equipment_usage')
+    .select('purpose, start_date, revenue_attributed, event:events(name, event_date)')
+    .eq('equipment_id', id).order('start_date', { ascending: false });
+  if (error) { el.innerHTML = `<span class="li-sub">Could not load usage.</span>`; return; }
+  if (!data || !data.length) { el.innerHTML = `<span class="li-sub">Not used on any event yet.</span>`; return; }
+  el.innerHTML = data.map(u => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(u.event?.name || '—')}</strong>
+    <div class="li-sub">${u.event?.event_date ? escapeHtml(fmtDate(u.event.event_date)) : ''}${u.purpose ? ' · ' + escapeHtml(u.purpose) : ''}</div></div>
+    <div class="li-amt">${u.revenue_attributed != null ? money(u.revenue_attributed) : ''}</div></div>`).join('');
+}
+async function submitEquipment(id) {
+  const v = (f) => kpiVal(f);
+  const name = v('name'); if (!name) throw new Error('Name is required');
+  const numOrNull = (f) => { const x = v(f); return x === '' ? null : Number(x); };
+  const patch = {
+    name, category: v('category') || null, serial_number: v('serial_number') || null,
+    brand: v('brand') || null, model: v('model') || null, status: v('status') || 'available',
+    daily_rate: numOrNull('daily_rate'), purchase_price: numOrNull('purchase_price'),
+    purchase_date: v('purchase_date') || null, notes: v('notes') || null,
+  };
+  const op = id ? sb.from('equipment_inventory').update(patch).eq('id', id)
+                : sb.from('equipment_inventory').insert(patch);
+  const { error } = await op; if (error) throw error;
+  closeKpi(); toast(id ? 'Equipment updated' : 'Equipment added', 'ok'); loadTab('equipment');
+}
+async function archiveEquipment(id) {
+  if (!confirm('Archive this item? It will be hidden from the inventory list (event history is kept).')) return;
+  const { error } = await sb.from('equipment_inventory').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Archive failed: ' + error.message, 'err'); return; }
+  closeKpi(); toast('Item archived', 'ok'); loadTab('equipment');
+}
 
 // ---- Modal / write forms (Phase 4 sprints 2-3) ----
 
@@ -3411,9 +3519,13 @@ async function submitLogNote() {
 // and soft-deletes via deleted_at. Ticket tiers / financial child rows are NOT
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
-  const { data: ev, error } = await sb.from('events')
-    .select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear').eq('id', id).single();
+  const [{ data: ev, error }, { data: venues }] = await Promise.all([
+    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description').eq('id', id).single(),
+    sb.from('venues').select('id, name, city').is('deleted_at', null).order('name'),
+  ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  const venueOpts = '<option value="">— no venue —</option>' + (venues || []).map(v =>
+    `<option value="${escapeHtml(v.id)}"${v.id === ev.venue_id ? ' selected' : ''}>${escapeHtml(v.name)}${v.city ? ' — ' + escapeHtml(v.city) : ''}</option>`).join('');
   // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
   const seriesVals = SERIES_OPTIONS.includes(ev.series) ? SERIES_OPTIONS : [ev.series, ...SERIES_OPTIONS];
   const seriesOpts = '<option value="" disabled>— Select series —</option>' +
@@ -3431,6 +3543,13 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+    <div class="kpi-section-h">Venue & schedule</div>
+    <div class="modal-form-row"><label class="modal-label">Venue</label><select class="modal-select" name="venue_id">${venueOpts}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Doors time</label><input class="modal-input" type="time" name="doors_time" value="${escapeHtml((ev.doors_time || '').slice(0, 5))}"></div>
+      <div><label class="modal-label">End time</label><input class="modal-input" type="time" name="end_time" value="${escapeHtml((ev.end_time || '').slice(0, 5))}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2">${escapeHtml(ev.description || '')}</textarea></div>
     <div class="kpi-section-h">Logistics</div>
     <div class="kpi-hint">Drives the day-of checklist: gear-on generates load-in / soundcheck / breakdown / return; gear-off generates "confirm house gear with venue" instead.</div>
     <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="cw_providing_gear" style="width:auto;margin:0;"${ev.cw_providing_gear ? ' checked' : ''}> Come With is providing the gear</label></div>
@@ -3457,6 +3576,10 @@ async function submitEditEvent(id) {
   patch.cw_providing_gear = !!$('kpiModalBody').querySelector('[name="cw_providing_gear"]')?.checked;
   const turl = kpiVal('ticket_url'); patch.ticket_url = turl || null;
   const tlbl = kpiVal('ticket_label'); patch.ticket_label = tlbl || null;
+  patch.venue_id = kpiVal('venue_id') || null;
+  patch.doors_time = kpiVal('doors_time') || null;
+  patch.end_time = kpiVal('end_time') || null;
+  patch.description = kpiVal('description') || null;
   const { error } = await sb.from('events').update(patch).eq('id', id);
   if (error) throw error;
   closeKpi(); toast('Event updated', 'ok');
@@ -3622,12 +3745,17 @@ function openAddSponsor() {
 async function submitAddSponsor() {
   const name = kpiVal('name');
   if (!name) throw new Error('Sponsor name is required');
-  const row = { name };
-  for (const f of ['contact_name', 'contact_email', 'contact_phone', 'website', 'notes']) {
-    const val = kpiVal(f); if (val) row[f] = val;
-  }
-  const { error } = await sb.from('sponsors').insert(row);
+  // Sponsors are actors now (kind=org) with a 'sponsor' role — so they tie into
+  // sponsorships, Customers, and the actor graph everywhere else.
+  const notes = [kpiVal('contact_name') ? 'Contact: ' + kpiVal('contact_name') : '', kpiVal('notes')].filter(Boolean).join(' · ');
+  const { data: a, error } = await sb.from('actors').insert({
+    display_name: name, kind: 'org',
+    email: kpiVal('contact_email') || null, phone: kpiVal('contact_phone') || null,
+    website: kpiVal('website') || null, notes: notes || null,
+  }).select('id').single();
   if (error) throw error;
+  const { error: re } = await sb.from('actor_roles').insert({ actor_id: a.id, role: 'sponsor' });
+  if (re && re.code !== '23505') throw re;
   closeKpi(); toast('Sponsor added', 'ok');
   if (document.querySelector('#panel-sponsors.active')) loadTab('sponsors');
 }
@@ -4745,25 +4873,34 @@ async function renderOwnerDetail() {
   const isVenue = venuesState.mode === 'venues';
   const id = venuesState.ownerId;
   $('venuesBody').innerHTML = `<button class="hub-back" data-ven-back>&larr; Back to ${isVenue ? 'venues' : 'vendors'}</button><div id="venDetailHead"></div>
+    ${isVenue ? `<div class="hub-sec-bar"><h3>Event history</h3></div><div id="venEvents"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>` : ''}
     <div class="hub-sec-bar"><h3>Contacts</h3><button class="hub-btn" data-ven-action="add-contact">+ Add contact</button></div>
     <div id="venContacts"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
   if (isVenue) {
     const { data: v } = await sb.from('venues').select('*').eq('id', id).single();
     venuesState.owner = v;
-    const { data: lastEv } = await sb.from('events')
-      .select('name, event_date').eq('venue_id', id).is('deleted_at', null)
-      .lte('event_date', TODAY()).order('event_date', { ascending: false }).limit(1);
+    // Full event history at this venue (events flow through here via events.venue_id).
+    const { data: evs } = await sb.from('events')
+      .select('id, name, event_date, status').eq('venue_id', id).is('deleted_at', null)
+      .order('event_date', { ascending: false });
+    const past = (evs || []).filter(e => e.event_date <= TODAY());
     const loc = [v?.address, v?.city, v?.state].filter(Boolean).join(', ');
-    const last = (lastEv && lastEv[0]) ? `${escapeHtml(lastEv[0].name)} (${escapeHtml(fmtDate(lastEv[0].event_date))})` : 'none yet';
+    const last = past[0] ? `${escapeHtml(past[0].name)} (${escapeHtml(fmtDate(past[0].event_date))})` : 'none yet';
     $('venDetailHead').innerHTML = `<div class="hub-head">
       <div class="hub-title">${escapeHtml(v?.name || '')}</div>
       <div class="hub-facts">
         <div><span class="lbl">Location</span>${escapeHtml(loc) || muted}</div>
         <div><span class="lbl">Capacity</span>${v?.capacity ?? muted}</div>
+        <div><span class="lbl">Events here</span>${(evs || []).length}</div>
         <div><span class="lbl">Last event here</span>${last}</div>
       </div>
       <div class="hub-head-actions"><button class="hub-btn ghost" data-ven-action="edit-venue" data-id="${escapeHtml(id)}">Edit venue</button></div>
     </div>`;
+    const evRows = (evs || []).length ? evs.map(e => `<div class="hub-li" data-ven-event="${escapeHtml(e.id)}" style="cursor:pointer;">
+      <div class="li-main"><strong>${escapeHtml(e.name)}</strong>
+        <div class="li-sub">${escapeHtml(fmtDate(e.event_date))} · ${escapeHtml((e.status || '').replace('_', ' '))}</div></div>
+      <div class="li-amt"><span class="li-sub">open →</span></div></div>`).join('') : `<div class="hub-empty">No events at this venue yet.</div>`;
+    $('venEvents').innerHTML = `<div class="hub-list">${evRows}</div>`;
     const { data: contacts } = await sb.from('v_venue_contacts').select('*').eq('venue_id', id);
     renderContactList(orderContacts(contacts || []), 'venue');
   } else {
@@ -4918,6 +5055,7 @@ async function submitContact(id, existing) {
 $('panel-venues').addEventListener('click', (e) => {
   const mode = e.target.closest('[data-ven-mode]'); if (mode) { venuesState.mode = mode.dataset.venMode; venuesState.view = 'list'; renderVenues(); return; }
   const back = e.target.closest('[data-ven-back]'); if (back) { venuesState.view = 'list'; renderVenues(); return; }
+  const evOpen = e.target.closest('[data-ven-event]'); if (evOpen) { openEventHub(evOpen.dataset.venEvent); return; }
   const open = e.target.closest('[data-ven-open]'); if (open) { openOwnerDetail(open.dataset.venOpen); return; }
   const cdel = e.target.closest('[data-ven-cdel]'); if (cdel) { venContactRemove(cdel.dataset.venCdel); return; }
   const act = e.target.closest('[data-ven-action]'); if (act) {
