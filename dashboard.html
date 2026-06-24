@@ -1120,21 +1120,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
       <div class="panel" id="panel-events">
         <button class="add-btn" id="addEventBtn">+ Add event</button>
-        <div class="row-count" id="count-events">—</div>
-        <div id="state-events"></div>
-        <table class="data-table" id="table-events" style="display:none;">
-          <thead><tr>
-            <th>Date</th>
-            <th>Name</th>
-            <th>Series</th>
-            <th>Status</th>
-            <th class="num">Bar min</th>
-            <th class="num">Capacity</th>
-            <th class="num">Attendance</th>
-            <th>Actions</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="eventsBody"></div>
       </div>
 
       <div class="panel" id="panel-sponsors">
@@ -2458,6 +2444,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'templates') { await loadTemplates(); return; } // custom (template editor)
   if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
   if (tab === 'actors') { await loadActors(); return; } // custom (actor registry — inline edit + sort)
+  if (tab === 'events') { await loadEventsDash(); return; } // custom (command-center dashboard)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5687,6 +5674,114 @@ $('panel-actors').addEventListener('change', (e) => {
 });
 $('panel-actors').addEventListener('focusout', (e) => { const td = e.target.closest('[data-aedit]'); if (td) saveActorField(td); });
 $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.closest('[data-aedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
+
+// ============================================================
+// EVENTS DASHBOARD — the command center. Aggregates + filters + per-event metrics
+// that adapt to the event type (parties / Dance Infusion / production / content).
+// ============================================================
+const eventsDash = { rows: [], q: '', series: '', status: '', year: '' };
+async function loadEventsDash() {
+  $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
+  const [ev, fin, mk, ig] = await Promise.all([
+    sb.from('events').select('id, name, series, type, status, event_date, capacity, total_attendance').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('v_kpi_event_financials').select('event_id, gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, total_expenses'),
+    sb.from('expenses').select('event_id, amount').is('deleted_at', null).ilike('category', '%marketing%'),
+    sb.from('metric_snapshots').select('metric_key, value, source').like('source', 'event:%'),
+  ]);
+  if (ev.error) { $('eventsBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
+  const finBy = {}; (fin.data || []).forEach(r => { finBy[r.event_id] = r; });
+  const mkBy = {}; (mk.data || []).forEach(x => { mkBy[x.event_id] = (mkBy[x.event_id] || 0) + Number(x.amount || 0); });
+  const igKeys = new Set(IG_ACCOUNTS.map(a => a.key));
+  const igBy = {}; (ig.data || []).forEach(s => { if (!igKeys.has(s.metric_key)) return; const id = (s.source || '').replace('event:', ''); igBy[id] = (igBy[id] || 0) + Number(s.value || 0); });
+  eventsDash.rows = (ev.data || []).map(e => ({ ...e, f: finBy[e.id] || {}, marketing: mkBy[e.id] || 0, ig: igBy[e.id] || 0 }));
+  renderEventsDash();
+}
+function eventsFiltered() {
+  const s = eventsDash, ql = s.q.toLowerCase();
+  return s.rows.filter(e =>
+    (!s.series || (e.series || '') === s.series) &&
+    (!s.status || (e.status || '') === s.status) &&
+    (!s.year || (e.event_date || '').slice(0, 4) === s.year) &&
+    (!ql || (e.name || '').toLowerCase().includes(ql)));
+}
+// The adaptive headline metric per event type.
+function eventResult(e) {
+  const net = Number(e.f.net_pl || 0), cls = net < 0 ? 'neg' : (net > 0 ? 'pos' : '');
+  const di = e.type === 'dance_infusion' || e.series === 'Dance Infusion';
+  const prod = e.type === 'production' || e.series === 'Come With Production';
+  const content = e.type === 'showcase' || e.series === 'Content Creation';
+  if (di) return { lbl: 'to MS', html: `<span class="${cls}">${money(net)}</span>` };
+  if (prod) return { lbl: 'net to CW', html: `<span class="${cls}">${money(net)}</span>` };
+  if (content) return { lbl: 'IG reach', html: e.ig ? fmtNum(e.ig) : muted };
+  return { lbl: 'net P&L', html: `<span class="${cls}">${money(net)}</span>` };
+}
+function renderEventsDash() {
+  const s = eventsDash;
+  const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
+  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation'];
+  const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'];
+  $('eventsBody').innerHTML = `
+    <div id="eventsAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-evq placeholder="Search events…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-evseries><option value="">All series</option>${seriesOpts.map(o => `<option value="${o}"${s.series === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-evstatus><option value="">All statuses</option>${statusOpts.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o.replace('_', ' ')}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-evyear><option value="">All years</option>${years.map(y => `<option value="${y}"${s.year === y ? ' selected' : ''}>${y}</option>`).join('')}</select>
+      <button class="hub-mini" data-evclear>clear</button>
+    </div>
+    <div id="eventsTable"></div>`;
+  renderEventsBody();
+}
+function renderEventsBody() {
+  const list = eventsFiltered();
+  const sum = (fn) => list.reduce((t, e) => t + (Number(fn(e)) || 0), 0);
+  const aggNet = sum(e => e.f.net_pl);
+  const aggMS = list.filter(e => e.series === 'Dance Infusion').reduce((t, e) => t + Number(e.f.net_pl || 0), 0);
+  const aggMktg = sum(e => e.marketing);
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  $('eventsAgg').innerHTML = `<div class="hub-cards">
+    ${card('Events', fmtNum(list.length))}
+    ${card('Attendance', fmtNum(sum(e => e.total_attendance)))}
+    ${card('Tickets sold', fmtNum(sum(e => e.f.tickets_sold)))}
+    ${card('Gross revenue', money(sum(e => e.f.gross_revenue)))}
+    ${card('Net P&L', money(aggNet), aggNet < 0 ? 'neg' : (aggNet > 0 ? 'pos' : ''))}
+    ${card('Raised for MS', money(aggMS), aggMS > 0 ? 'pos' : '')}
+    ${card('Marketing spend', money(aggMktg), aggMktg > 0 ? 'neg' : '')}
+  </div>`;
+  const typeChip = (e) => { const t = e.series || e.type || ''; return t ? `<span class="role-chip" style="cursor:default;">${escapeHtml(t)}</span>` : ''; };
+  const rows = list.map(e => {
+    const f = e.f, r = eventResult(e);
+    return `<tr>
+      <td>${escapeHtml(fmtDate(e.event_date))}</td>
+      <td><strong>${escapeHtml(e.name || '')}</strong><div class="li-sub">${typeChip(e)}</div></td>
+      <td><span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span></td>
+      <td class="num">${e.total_attendance != null ? fmtNum(e.total_attendance) : muted}</td>
+      <td class="num">${f.tickets_sold ? fmtNum(f.tickets_sold) : muted}</td>
+      <td class="num">${f.gross_revenue ? money(f.gross_revenue) : muted}</td>
+      <td class="num">${r.html} <span class="li-sub">${r.lbl}</span></td>
+      <td class="num">${e.marketing ? money(e.marketing) : muted}</td>
+      <td style="white-space:nowrap;">
+        <button class="row-btn primary" data-event-open="${escapeHtml(e.id)}">Open</button>
+        <button class="row-btn" data-event-money="${escapeHtml(e.id)}">Money</button>
+        <button class="row-btn" data-event-edit="${escapeHtml(e.id)}">Edit</button>
+        <button class="row-btn" data-event-delete="${escapeHtml(e.id)}">Delete</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
+  $('eventsTable').innerHTML = `<table class="data-table"><thead><tr>
+    <th>Date</th><th>Event</th><th>Status</th><th class="num">Attendance</th><th class="num">Tickets</th>
+    <th class="num">Revenue</th><th class="num">Result</th><th class="num">Mktg $</th><th>Actions</th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+}
+$('panel-events').addEventListener('input', (e) => { const q = e.target.closest('[data-evq]'); if (q) { eventsDash.q = q.value; renderEventsBody(); } });
+$('panel-events').addEventListener('change', (e) => {
+  const se = e.target.closest('[data-evseries]'); if (se) { eventsDash.series = se.value; renderEventsBody(); return; }
+  const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsBody(); return; }
+  const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsBody(); return; }
+});
+$('panel-events').addEventListener('click', (e) => {
+  if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; renderEventsDash(); }
+});
 
 async function loadGuests() {
   $('guestsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading guests…</div>';
