@@ -3260,7 +3260,13 @@ $('strat-manage-list').addEventListener('change', async (e) => {
 });
 
 // ---- KPI entry forms (Phase 13 — Part B) ----
-const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion']; // locked series contract — no CWF
+// Series feed the KPI views by EXACT string (CLAUDE.md series contract). 'Come With
+// Production' = events produced as a service for other people (e.g. Maxwell House 4/20).
+const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation']; // no CWF
+// Keep events.type (axis for templates / content flag) in sync with the series choice.
+function seriesToType(series) {
+  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase' })[series] || 'showcase';
+}
 const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
 let kpiSubmit = null;
 let tierIdx = 0;
@@ -3588,7 +3594,7 @@ async function submitLogEvent() {
 
   let slug = kpiVal('slug');
   if (!slug) slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || ('event-' + Date.now());
-  const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed' };
+  const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed', type: seriesToType(series), is_content_event: seriesToType(series) === 'showcase' };
   const cap = kpiVal('capacity'); if (cap !== '') evRow.capacity = Number(cap);
   const att = kpiVal('total_attendance'); if (att !== '') evRow.total_attendance = Number(att);
   evRow.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
@@ -3699,7 +3705,7 @@ async function submitLogNote() {
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }] = await Promise.all([
     sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description').eq('id', id).single(),
-    sb.from('venues').select('id, name, city').is('deleted_at', null).order('name'),
+    sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
   const venueOpts = '<option value="">— no venue —</option>' + (venues || []).map(v =>
@@ -3739,6 +3745,16 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" value="${escapeHtml(ev.ticket_label || '')}" placeholder="Get tickets"></div>
     </div>`,
     () => submitEditEvent(id), 'Save changes');
+  // Auto-fill capacity from the chosen venue's capacity (only overwrites when the venue has one).
+  const venueSel = $('kpiModalBody').querySelector('[name="venue_id"]');
+  const capInput = $('kpiModalBody').querySelector('[name="capacity"]');
+  if (venueSel && capInput) {
+    const capByVenue = Object.fromEntries((venues || []).map(v => [v.id, v.capacity]));
+    venueSel.addEventListener('change', () => {
+      const c = capByVenue[venueSel.value];
+      if (c != null) capInput.value = c;
+    });
+  }
 }
 async function submitEditEvent(id) {
   const name = kpiVal('name');
@@ -3748,6 +3764,7 @@ async function submitEditEvent(id) {
   if (!series) throw new Error('Series is required');
   if (!event_date) throw new Error('Date is required');
   const patch = { name, series, event_date, status: kpiVal('status') || 'planning' };
+  patch.type = seriesToType(series); patch.is_content_event = seriesToType(series) === 'showcase';
   const cap = kpiVal('capacity'); patch.capacity = cap === '' ? null : Number(cap);
   const att = kpiVal('total_attendance'); patch.total_attendance = att === '' ? null : Number(att);
   patch.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
