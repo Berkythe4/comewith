@@ -5726,23 +5726,30 @@ function renderEventsBody() {
   const list = eventsFiltered();
   const isDI = (e) => e.type === 'dance_infusion' || e.series === 'Dance Infusion';
   const sum = (arr, fn) => arr.reduce((t, e) => t + (Number(fn(e)) || 0), 0);
-  const biz = list.filter(e => !isDI(e)), di = list.filter(isDI);
-  const bizRev = sum(biz, e => e.f.gross_revenue), bizNet = sum(biz, e => e.f.net_pl), bizMktg = sum(biz, e => e.marketing);
-  const diRaised = sum(di, e => e.f.total_raised), diMS = sum(di, e => e.f.net_pl), diMktg = sum(di, e => e.marketing);
+  const isParty = (e) => e.type === 'party' || e.series === 'Come With Parties';
+  // Three distinct money models: Come With Parties (the revenue business),
+  // Production & content (≈ net $0 until charging), and Dance Infusion (charity).
+  const parties = list.filter(isParty), di = list.filter(isDI), pc = list.filter(e => !isDI(e) && !isParty(e));
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
-  // Business (parties / production / content) and Dance Infusion (charity) are kept
-  // completely separate — they're distinctly different money models.
+  const grp = (label, sub) => `<div class="li-sub" style="margin:${sub ? '14' : '2'}px 0 4px;font-weight:700;">${label}</div>`;
+  const moneyGroup = (arr) => {
+    const net = sum(arr, e => e.f.net_pl), mk = sum(arr, e => e.marketing);
+    return `<div class="hub-cards">
+      ${card('Events', fmtNum(arr.length))}
+      ${card('Attendance', fmtNum(sum(arr, e => e.total_attendance)))}
+      ${card('Tickets sold', fmtNum(sum(arr, e => e.f.tickets_sold)))}
+      ${card('Revenue', money(sum(arr, e => e.f.gross_revenue)))}
+      ${card('Net P&L', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
+      ${card('Marketing spend', money(mk), mk > 0 ? 'neg' : '')}
+    </div>`;
+  };
+  const diRaised = sum(di, e => e.f.total_raised), diMS = sum(di, e => e.f.net_pl), diMktg = sum(di, e => e.marketing);
   $('eventsAgg').innerHTML = `
-    <div class="li-sub" style="margin:2px 0 4px;font-weight:700;">Business — parties · production · content</div>
-    <div class="hub-cards">
-      ${card('Events', fmtNum(biz.length))}
-      ${card('Attendance', fmtNum(sum(biz, e => e.total_attendance)))}
-      ${card('Tickets sold', fmtNum(sum(biz, e => e.f.tickets_sold)))}
-      ${card('Revenue', money(bizRev))}
-      ${card('Net P&L', money(bizNet), bizNet < 0 ? 'neg' : (bizNet > 0 ? 'pos' : ''))}
-      ${card('Marketing spend', money(bizMktg), bizMktg > 0 ? 'neg' : '')}
-    </div>
-    <div class="li-sub" style="margin:14px 0 4px;font-weight:700;">Dance Infusion — charity</div>
+    ${grp('Come With Parties')}
+    ${moneyGroup(parties)}
+    ${grp('Production &amp; content — service / content (≈ net $0 until you charge)', true)}
+    ${moneyGroup(pc)}
+    ${grp('Dance Infusion — charity', true)}
     <div class="hub-cards">
       ${card('DI events', fmtNum(di.length))}
       ${card('Attendance', fmtNum(sum(di, e => e.total_attendance)))}
