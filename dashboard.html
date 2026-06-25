@@ -971,6 +971,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="main-header">
         <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
+          <button class="refresh-btn wf-trigger" id="workflowBtn" title="See how everything connects, end to end">🗺️ Workflow</button>
           <button class="refresh-btn" id="logNoteBtn">＋ Log note</button>
           <span class="last-refreshed" id="lastRefreshed"></span>
           <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
@@ -6498,10 +6499,186 @@ $('panel-guests').addEventListener('click', (e) => {
   const p = e.target.closest('[data-guest-profile]'); if (p) { guestProfile(p.dataset.guestProfile); return; }
 });
 
+// ===== Workflow map — how everything connects, with a jump to each screen =====
+const WORKFLOW = [
+  { lane: 'crm', n: 1, ico: '📥', t: 'Inquiry', where: 'Inquiries',
+    short: 'A lead lands from the public site.',
+    detail: `Anyone who fills out the inquiry form on comewith.org shows up here. Triage the pipeline (new → contacted → quoted → converted / lost) and read the full request: event type, date, services, budget, message.`,
+    links: [{ t: 'Open Inquiries', tab: 'inquiries' }] },
+  { lane: 'crm', n: 2, ico: '🤝', t: 'Convert → client', where: 'Clients',
+    short: 'Turn a hot lead into a client.',
+    detail: `One click on an inquiry creates a customer actor and marks the lead converted. The Clients tab is your roster — inquiry & agreement counts, total contracted, total paid, last activity.`,
+    links: [{ t: 'Open Clients', tab: 'clients' }] },
+  { lane: 'crm', n: 3, ico: '📝', t: 'Agreement', where: 'Agreements',
+    short: 'Draft the contract, tied to an event.',
+    detail: `Create an agreement for the client (events or rental), set fee / deposit / terms, and link it to the event. The Agreements tab tracks contracted vs signed value.`,
+    links: [{ t: 'Open Agreements', tab: 'agreements' }] },
+  { lane: 'crm', n: 4, ico: '✍️', t: 'Send → e-sign', where: 'Agreements',
+    short: 'Client signs online; you get notified.',
+    detail: `"Send" emails the client a secure signing link. They type-sign on the web and you get an "Agreement signed" email. Status moves draft → sent → signed.`,
+    links: [{ t: 'Open Agreements', tab: 'agreements' }] },
+  { lane: 'crm', n: 5, ico: '📎', t: 'Auto-file', where: '→ Event Files', auto: true,
+    short: 'The signed copy files itself into the event.',
+    detail: `The moment it's signed, a snapshot of the agreement is generated and dropped into the linked event's Files → Contract bucket automatically — no manual upload.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'hub', n: 6, ico: '🎉', t: 'Event', where: 'Events',
+    short: 'The record everything hangs off.',
+    detail: `Create and track the event: series, type (party / Dance Infusion / production / content), date, status. Open any event to reach its hub — overview, people, money, files, social.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'hub', n: 7, ico: '📍', t: 'Venue', where: 'Venues', auto: true,
+    short: 'Pick a venue; capacity auto-fills.',
+    detail: `Assign a venue and the event capacity auto-fills from it. Venues carry address, contact, and an optional org actor so they can be a contract counterparty.`,
+    links: [{ t: 'Open Venues', tab: 'venues' }] },
+  { lane: 'hub', n: 8, ico: '🎧', t: 'Lineup', where: 'Hub · People',
+    short: 'Add DJs, host, photo / video to the bill.',
+    detail: `In the event hub's People section, add participants with role, fee, set times and notes. The people themselves live in Actors (DJs, hosts, vendors, sponsors…).`,
+    links: [{ t: 'Open Events', tab: 'events' }, { t: 'Open Actors', tab: 'actors' }] },
+  { lane: 'hub', n: 9, ico: '📄', t: 'Contracts', where: 'Hub · Contracts',
+    short: 'Counterparty deals — DJs, venue, vendors.',
+    detail: `Separate from client Agreements: these are the people you book or pay. Track fee, status, paid, and attach each one's document. Lives in the event hub's Contracts.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'hub', n: 10, ico: '🗂️', t: 'Documents', where: 'Hub · Files',
+    short: 'Every doc in its own bucket.',
+    detail: `The Files tab has a bucket per document type — contract, technical & hospitality rider, stage plot, COI, permit, invoice, receipt, floor plan, W-9, photo, run-of-show. Upload manually or let signing auto-file.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'money', n: 11, ico: '🎟️', t: 'Tickets', where: 'Hub · Money',
+    short: 'Sales + attendance.',
+    detail: `Log ticket tiers (presale / door / VIP) with quantity and revenue — powers tickets sold, sell-through and gross. Resident Advisor CSVs import here too.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'money', n: 12, ico: '👥', t: 'Guests', where: 'Guests',
+    short: 'Who came + what they spent.',
+    detail: `The guest roster with per-event attendance, spend and mailing opt-in. Flags which guests are subscribed to the email list.`,
+    links: [{ t: 'Open Guests', tab: 'guests' }] },
+  { lane: 'money', n: 13, ico: '💵', t: 'Income', where: 'Income',
+    short: 'Non-ticket revenue.',
+    detail: `Service fees, bar share, merch — anything that isn't a ticket. Link each row to a payer (actor) and the event.`,
+    links: [{ t: 'Open Income', tab: 'income' }] },
+  { lane: 'money', n: 14, ico: '🧾', t: 'Expenses', where: 'Expenses',
+    short: 'Costs, vendors, receipts.',
+    detail: `Log talent, venue, bar, marketing spend. Link a vendor actor, attach a receipt, assign to the event (or flag N/A for overhead). Simplifi imports land here.`,
+    links: [{ t: 'Open Expenses', tab: 'expenses' }] },
+  { lane: 'money', n: 15, ico: '🏷️', t: 'Sponsors', where: 'Sponsorships',
+    short: 'Cash + in-kind support.',
+    detail: `Per-event sponsorships — cash, in-kind value, drink / entry tickets, tier, status. Sponsors are actors with a sponsor role.`,
+    links: [{ t: 'Open Sponsorships', tab: 'sponsorships' }] },
+  { lane: 'money', n: 16, ico: '❤️', t: 'Donations', where: 'Hub · Money',
+    short: 'Charity round-ups + raffle.',
+    detail: `Third-party donations tied to the event (donor, amount, processor). Feeds "total raised" — central to Dance Infusion charity events.`,
+    links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'mkt', n: 17, ico: '📣', t: 'Social', where: 'Social Calendar',
+    short: 'Plan, schedule and note posts.',
+    detail: `Timeline / board / list of posts per event — channels, pillar, stage (idea → posted) with timestamped threaded notes. Snapshot export for sharing.`,
+    links: [{ t: 'Open Social Calendar', tab: 'social-calendar' }] },
+  { lane: 'kpi', n: 18, ico: '📊', t: 'P&L + KPIs', where: 'Strategy', auto: true,
+    short: 'Everything rolls up automatically.',
+    detail: `The event's money and attendance flow straight into the Event Hub money tab and the Strategy KPIs — gross, net P&L, total raised, sell-through — with no re-entry. Manual metrics (IG, YouTube) layer on top.`,
+    links: [{ t: 'Open Strategy', tab: 'strategy' }] },
+];
+const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
+function renderWorkflowMap() {
+  let html = '';
+  for (const lane of ['crm', 'hub', 'money', 'mkt', 'kpi']) {
+    const steps = WORKFLOW.filter(s => s.lane === lane);
+    html += `<div class="wf-band wf-${lane}"><div class="wf-band-h">${WF_LANES[lane]}</div><div class="wf-row">` +
+      steps.map(s => `<button class="wf-step" data-wf="${s.n}">${s.auto ? '<span class="wf-star">⭐</span>' : ''}<span class="wf-n">${s.n}</span><span class="wf-ico">${s.ico}</span><span class="wf-t">${escapeHtml(s.t)}</span><span class="wf-w">${escapeHtml(s.where)}</span></button>`).join('<span class="wf-arrow">→</span>') +
+      `</div></div>`;
+  }
+  $('wfMap').innerHTML = html;
+}
+function showWfDetail(n) {
+  const s = WORKFLOW.find(x => x.n === n); if (!s) return;
+  const links = s.links.map(l => `<button class="wf-go" data-wf-go="${escapeHtml(l.tab)}">${escapeHtml(l.t)} →</button>`).join('');
+  $('wfDetail').innerHTML = `<div class="wf-detail-card">
+    <button class="wf-detail-close" data-wf-back>← all steps</button>
+    <div class="wf-detail-ico">${s.ico}</div>
+    <div class="wf-detail-step">Step ${s.n}${s.auto ? ' · ⭐ automated' : ''} · ${escapeHtml(s.where)}</div>
+    <h3>${escapeHtml(s.t)}</h3>
+    <p class="wf-detail-short">${escapeHtml(s.short)}</p>
+    <p>${escapeHtml(s.detail)}</p>
+    <div class="wf-go-row">${links}</div></div>`;
+  $('wfDetail').classList.add('show');
+}
+function openWorkflow() { renderWorkflowMap(); $('wfDetail').classList.remove('show'); $('workflowOverlay').classList.add('show'); }
+function closeWorkflow() { $('workflowOverlay').classList.remove('show'); }
+$('workflowBtn').addEventListener('click', openWorkflow);
+$('workflowOverlay').addEventListener('click', (e) => {
+  if (e.target === $('workflowOverlay') || e.target.closest('#wfClose')) { closeWorkflow(); return; }
+  if (e.target.closest('[data-wf-back]')) { $('wfDetail').classList.remove('show'); return; }
+  const go = e.target.closest('[data-wf-go]');
+  if (go) {
+    const k = go.dataset.wfGo;
+    const btn = $('sidebarNav').querySelector(`button[data-tab="${k}"]`);
+    if (!btn) { toast("That screen isn't enabled for your role.", 'err'); return; }
+    closeWorkflow(); activateTab(k); return;
+  }
+  const step = e.target.closest('[data-wf]');
+  if (step) showWfDetail(Number(step.dataset.wf));
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && $('workflowOverlay').classList.contains('show')) {
+    if ($('wfDetail').classList.contains('show')) $('wfDetail').classList.remove('show');
+    else closeWorkflow();
+  }
+});
+
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
 await renderForSession(session);
 </script>
+
+<style>
+.wf-trigger{background:linear-gradient(120deg,#3B6D11,#5B8C2A)!important;color:#fff!important;border-color:#3B6D11!important;font-weight:600}
+.wf-overlay{position:fixed;inset:0;background:rgba(20,16,12,.55);backdrop-filter:blur(3px);z-index:5000;display:none;align-items:flex-start;justify-content:center;padding:26px 14px;overflow:auto}
+.wf-overlay.show{display:flex}
+.wf-modal{background:#FBF9F5;border-radius:18px;max-width:1080px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,.4);position:relative;overflow:hidden}
+.wf-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;padding:20px 24px;background:linear-gradient(120deg,#1A1410,#3B2A18);color:#fff}
+.wf-head h2{margin:0;font-size:1.25rem}
+.wf-head p{margin:5px 0 0;color:#D8CDBC;font-size:.85rem;max-width:640px}
+.wf-close{background:rgba(255,255,255,.14);color:#fff;border:none;width:34px;height:34px;border-radius:9px;font-size:1rem;cursor:pointer;flex:0 0 auto}
+.wf-body{padding:18px 22px 24px;max-height:calc(100vh - 150px);overflow:auto}
+.wf-band{border-radius:14px;padding:13px 15px 16px;margin-bottom:11px;border:1px solid #E5DED3}
+.wf-band-h{font-size:.72rem;letter-spacing:1.3px;text-transform:uppercase;font-weight:700;margin-bottom:11px}
+.wf-row{display:flex;flex-wrap:wrap;align-items:stretch;gap:0}
+.wf-step{flex:1 1 138px;min-width:138px;background:#fff;border:1px solid #E5DED3;border-radius:12px;padding:11px 11px 10px;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:2px;text-align:left;font:inherit;color:inherit;transition:transform .08s,box-shadow .08s}
+.wf-step:hover{transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.12)}
+.wf-n{position:absolute;top:-9px;left:-9px;width:22px;height:22px;border-radius:50%;color:#fff;font-size:.7rem;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff}
+.wf-ico{font-size:1.4rem;line-height:1}
+.wf-t{font-weight:700;font-size:.9rem}
+.wf-w{font-size:.66rem;color:#8A7F72;text-transform:uppercase;letter-spacing:.4px}
+.wf-arrow{align-self:center;color:#CFC6B8;font-weight:700;padding:0 3px;flex:0 0 auto}
+.wf-star{position:absolute;top:-8px;right:-6px;background:#B8860B;color:#fff;font-size:.6rem;padding:2px 6px;border-radius:999px;z-index:1}
+.wf-crm{background:#EAF3E0}.wf-crm .wf-band-h{color:#3B6D11}.wf-crm .wf-n{background:#3B6D11}
+.wf-hub{background:#E2EEF7}.wf-hub .wf-band-h{color:#1F5C8B}.wf-hub .wf-n{background:#1F5C8B}
+.wf-money{background:#F7EBE0}.wf-money .wf-band-h{color:#A6531C}.wf-money .wf-n{background:#A6531C}
+.wf-mkt{background:#F2E6F5}.wf-mkt .wf-band-h{color:#7A2E8A}.wf-mkt .wf-n{background:#7A2E8A}
+.wf-kpi{background:#1A1410}.wf-kpi .wf-band-h{color:#E9C46A}.wf-kpi .wf-n{background:#B8860B}.wf-kpi .wf-step{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16);color:#fff}.wf-kpi .wf-w{color:#C9BCA6}
+.wf-detail{position:absolute;inset:0;background:rgba(20,16,12,.45);display:none;align-items:center;justify-content:center;padding:22px}
+.wf-detail.show{display:flex}
+.wf-detail-card{background:#fff;border-radius:16px;max-width:520px;width:100%;padding:20px 24px 22px;box-shadow:0 20px 50px rgba(0,0,0,.35);position:relative}
+.wf-detail-ico{font-size:2.2rem;line-height:1}
+.wf-detail-step{font-size:.7rem;color:#8A7F72;text-transform:uppercase;letter-spacing:.6px;margin-top:5px}
+.wf-detail-card h3{margin:2px 0 8px;font-size:1.2rem}
+.wf-detail-short{font-weight:600;margin:0 0 8px}
+.wf-detail-card p{font-size:.9rem;color:#3f3a33;line-height:1.5;margin:0 0 10px}
+.wf-detail-close{background:none;border:none;color:#8A7F72;cursor:pointer;font-size:.82rem;padding:0;margin-bottom:6px}
+.wf-go-row{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.wf-go{background:#3B6D11;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:.85rem}
+.wf-go:hover{background:#2f570d}
+@media(max-width:720px){.wf-arrow{display:none}.wf-row{flex-direction:column}}
+</style>
+<div class="wf-overlay" id="workflowOverlay">
+  <div class="wf-modal">
+    <div class="wf-head">
+      <div>
+        <h2>How Come With works — end to end</h2>
+        <p>Inquiry → signed deal → event → money → report. Click any step for detail and a jump straight to that screen.</p>
+      </div>
+      <button class="wf-close" id="wfClose" aria-label="Close">✕</button>
+    </div>
+    <div class="wf-body"><div id="wfMap"></div></div>
+    <div class="wf-detail" id="wfDetail"></div>
+  </div>
+</div>
 
 </body>
 </html>
