@@ -1074,19 +1074,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
-        <div class="row-count" id="count-income">—</div>
-        <div id="state-income"></div>
-        <table class="data-table" id="table-income" style="display:none;">
-          <thead><tr>
-            <th>Date</th>
-            <th class="num">Amount</th>
-            <th>Category</th>
-            <th>Description</th>
-            <th>Client</th>
-            <th>Actions</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="incomeBody"></div>
       </div>
       <div class="panel" id="panel-expenses">
         <button class="add-btn" data-add="expense">+ Add expense</button>
@@ -1150,17 +1138,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <div class="panel" id="panel-artists">
-        <div class="row-count" id="count-artists">—</div>
-        <div id="state-artists"></div>
-        <table class="data-table" id="table-artists" style="display:none;">
-          <thead><tr>
-            <th>Stage name</th>
-            <th>Genres</th>
-            <th>Contact</th>
-            <th>Status</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="artistsBody"></div>
       </div>
 
       <div class="panel" id="panel-subscribers">
@@ -2440,6 +2418,8 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'actors') { await loadActors(); return; } // custom (actor registry — inline edit + sort)
   if (tab === 'events') { await loadEventsDash(); return; } // custom (command-center dashboard)
   if (tab === 'expenses') { await loadExpenses(); return; } // custom (inline event assignment)
+  if (tab === 'income') { await loadIncome(); return; } // custom (inline event + payer assignment)
+  if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5876,12 +5856,14 @@ $('panel-events').addEventListener('click', (e) => {
 const expDash = { rows: [], events: [], q: '', event: '' };
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
-  const [ex, ev] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+  const [ex, ev, ac] = await Promise.all([
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
   if (ex.error) { $('expensesBody').innerHTML = `<div class="panel-state err">${escapeHtml(ex.error.message)}</div>`; return; }
   expDash.events = ev.data || [];
+  expDash.actors = ac.data || [];
   expDash.rows = ex.data || [];
   renderExpenses();
 }
@@ -5916,27 +5898,72 @@ function renderExpensesBody() {
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
   const needsList = list.filter(x => !x.event_id && !x.event_na);
   const needsTotal = needsList.reduce((t, x) => t + Number(x.amount || 0), 0);
+  const byCat = {}; list.forEach(x => { const c = x.category || '—'; byCat[c] = (byCat[c] || 0) + Number(x.amount || 0); });
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
   $('expAgg').innerHTML = `<div class="hub-cards">
     ${card('Expenses', fmtNum(list.length))}
     ${card('Total', money(total))}
     ${card('Needs an event', money(needsTotal) + (needsList.length ? ` <span class="li-sub">(${needsList.length})</span>` : ''), needsTotal > 0 ? 'neg' : 'pos')}
+    ${Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, v]) => card(c, money(v))).join('')}
   </div>`;
+  const ed = (x, field, num) => `<td contenteditable="true" data-expedit="${field}" data-id="${escapeHtml(x.id)}" data-orig="${escapeHtml(x[field] ?? '')}"${num ? ' class="num"' : ''} style="cursor:text;">${field === 'amount' ? money(x.amount) : (escapeHtml(x[field] || '') || '')}</td>`;
   const evSel = (x) => `<select class="hub-status-sel" data-expev="${escapeHtml(x.id)}">
     <option value=""${!x.event_id && !x.event_na ? ' selected' : ''}>— needs event —</option>
     <option value="__na"${x.event_na ? ' selected' : ''}>N/A (overhead)</option>
     ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>`;
+  const vaSel = (x) => `<select class="hub-status-sel" data-expva="${escapeHtml(x.id)}"><option value="">— link —</option>${s.actors.map(a => `<option value="${escapeHtml(a.id)}"${x.vendor_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
+  const receipt = (x) => x.receipt_path ? `<button class="hub-mini" data-exprcpt="${escapeHtml(x.id)}">📎 view</button>` : `<button class="hub-mini" data-exprcptup="${escapeHtml(x.id)}">upload</button>`;
   const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}>
     <td>${escapeHtml(fmtDate(x.date))}</td>
-    <td class="num">${money(x.amount)}</td>
-    <td>${escapeHtml(x.category || '') || muted}</td>
-    <td>${escapeHtml(x.vendor || '') || muted}</td>
-    <td class="truncate">${escapeHtml(truncate(x.description || '', 60)) || muted}</td>
+    ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'vendor')}
+    <td>${vaSel(x)}</td>
+    ${ed(x, 'description')}
     <td>${evSel(x)}</td>
-  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">No expenses match.</td></tr>`;
+    <td>${receipt(x)}</td>
+  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No expenses match.</td></tr>`;
   $('expTable').innerHTML = `<table class="data-table"><thead><tr>
-    <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Description</th><th>Event</th>
+    <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Vendor actor</th><th>Description</th><th>Event</th><th>Receipt</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function saveExpenseField(td) {
+  const id = td.dataset.id, field = td.dataset.expedit;
+  const x = expDash.rows.find(r => r.id === id); if (!x) return;
+  let val = td.textContent.trim(), patchVal;
+  if (field === 'amount') { patchVal = Number(val.replace(/[^0-9.\-]/g, '')); if (!Number.isFinite(patchVal)) { td.textContent = money(x.amount); toast('Bad amount', 'err'); return; } if (patchVal === Number(x.amount)) return; }
+  else { if (val === (td.dataset.orig || '')) return; patchVal = val || null; }
+  const { error } = await sb.from('expenses').update({ [field]: patchVal }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  x[field] = patchVal; td.dataset.orig = field === 'amount' ? patchVal : (patchVal || '');
+  if (field === 'amount') { td.textContent = money(patchVal); renderExpensesBody(); }
+  toast('Saved', 'ok');
+}
+async function setExpenseVendorActor(id, val) {
+  const { error } = await sb.from('expenses').update({ vendor_actor_id: val || null }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = expDash.rows.find(r => r.id === id); if (x) x.vendor_actor_id = val || null;
+  toast('Vendor linked', 'ok');
+}
+async function viewReceipt(id) {
+  const x = expDash.rows.find(r => r.id === id); if (!x?.receipt_path) return;
+  const { data, error } = await sb.storage.from('receipts').createSignedUrl(x.receipt_path, 3600);
+  if (error) { toast('Link failed: ' + error.message, 'err'); return; }
+  window.open(data.signedUrl, '_blank');
+}
+function uploadReceipt(id) {
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/jpeg,image/png,image/webp,application/pdf';
+  inp.onchange = async () => {
+    const f = inp.files?.[0]; if (!f) return;
+    const safe = f.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `expense/${id}/${Date.now()}_${safe}`;
+    toast('Uploading…', 'ok');
+    const { error: ue } = await sb.storage.from('receipts').upload(path, f, { upsert: false });
+    if (ue) { toast('Upload failed: ' + ue.message, 'err'); return; }
+    const { error } = await sb.from('expenses').update({ receipt_path: path }).eq('id', id);
+    if (error) { toast('Saved file, DB row failed: ' + error.message, 'err'); return; }
+    const x = expDash.rows.find(r => r.id === id); if (x) x.receipt_path = path;
+    toast('Receipt attached', 'ok'); renderExpensesBody();
+  };
+  inp.click();
 }
 async function setExpenseEvent(id, val) {
   // '' = needs event (clear both); '__na' = overhead; otherwise an event id.
@@ -5953,9 +5980,161 @@ $('panel-expenses').addEventListener('input', (e) => { const q = e.target.closes
 $('panel-expenses').addEventListener('change', (e) => {
   const ef = e.target.closest('[data-expevfilter]'); if (ef) { expDash.event = ef.value; renderExpensesBody(); return; }
   const ev = e.target.closest('[data-expev]'); if (ev) { setExpenseEvent(ev.dataset.expev, ev.value); return; }
+  const va = e.target.closest('[data-expva]'); if (va) { setExpenseVendorActor(va.dataset.expva, va.value); return; }
 });
+$('panel-expenses').addEventListener('focusout', (e) => { const td = e.target.closest('[data-expedit]'); if (td) saveExpenseField(td); });
+$('panel-expenses').addEventListener('keydown', (e) => { const td = e.target.closest('[data-expedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
 $('panel-expenses').addEventListener('click', (e) => {
-  if (e.target.closest('[data-expclear]')) { expDash.q = ''; expDash.event = ''; renderExpenses(); }
+  if (e.target.closest('[data-expclear]')) { expDash.q = ''; expDash.event = ''; renderExpenses(); return; }
+  const rc = e.target.closest('[data-exprcpt]'); if (rc) { viewReceipt(rc.dataset.exprcpt); return; }
+  const ru = e.target.closest('[data-exprcptup]'); if (ru) { uploadReceipt(ru.dataset.exprcptup); return; }
+});
+
+// ============================================================
+// INCOME — table with inline edit + event + payer (actor) assignment + filters.
+// ============================================================
+const incomeDash = { rows: [], events: [], actors: [], q: '', event: '', category: '' };
+async function loadIncome() {
+  $('incomeBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading income…</div>';
+  const [inc, ev, ac] = await Promise.all([
+    sb.from('income').select('id, date, amount, category, description, event_id, actor_id').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+  ]);
+  if (inc.error) { $('incomeBody').innerHTML = `<div class="panel-state err">${escapeHtml(inc.error.message)}</div>`; return; }
+  incomeDash.events = ev.data || []; incomeDash.actors = ac.data || []; incomeDash.rows = inc.data || [];
+  renderIncome();
+}
+function incomeFiltered() {
+  const s = incomeDash, ql = s.q.toLowerCase();
+  return s.rows.filter(x =>
+    (s.event === '' || (s.event === '__none' ? !x.event_id : x.event_id === s.event)) &&
+    (!s.category || (x.category || '') === s.category) &&
+    (!ql || [x.category, x.description].join(' ').toLowerCase().includes(ql)));
+}
+function renderIncome() {
+  const s = incomeDash;
+  const cats = [...new Set(s.rows.map(x => x.category).filter(Boolean))].sort();
+  $('incomeBody').innerHTML = `
+    <div id="incomeAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-incq placeholder="Search category / note…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-incevfilter><option value="">All events</option><option value="__none"${s.event === '__none' ? ' selected' : ''}>— No event —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-inccatfilter><option value="">All categories</option>${cats.map(c => `<option value="${escapeHtml(c)}"${s.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>
+      <button class="hub-mini" data-incclear>clear</button>
+    </div>
+    <div id="incomeTable"></div>
+    <div class="kpi-hint" style="margin-top:8px;">Click Amount / Category / Description to edit inline. Assign a Payer + Event from the dropdowns. Income is where bar / vendor / merch &amp; <strong>service fees</strong> land.</div>`;
+  renderIncomeBody();
+}
+function renderIncomeBody() {
+  const s = incomeDash, list = incomeFiltered();
+  const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
+  const byCat = {}; list.forEach(x => { const c = x.category || '—'; byCat[c] = (byCat[c] || 0) + Number(x.amount || 0); });
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  $('incomeAgg').innerHTML = `<div class="hub-cards">${card('Rows', fmtNum(list.length))}${card('Total income', money(total), total > 0 ? 'pos' : '')}${Object.entries(byCat).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([c, v]) => card(c, money(v))).join('')}</div>`;
+  const ed = (x, field, num) => `<td contenteditable="true" data-incedit="${field}" data-id="${escapeHtml(x.id)}" data-orig="${escapeHtml(x[field] ?? '')}"${num ? ' class="num"' : ''} style="cursor:text;">${field === 'amount' ? money(x.amount) : (escapeHtml(x[field] || '') || '')}</td>`;
+  const evSel = (x) => `<select class="hub-status-sel" data-incev="${escapeHtml(x.id)}"><option value="">— none —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>`;
+  const acSel = (x) => `<select class="hub-status-sel" data-incactor="${escapeHtml(x.id)}"><option value="">— none —</option>${s.actors.map(a => `<option value="${escapeHtml(a.id)}"${x.actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
+  const rows = list.map(x => `<tr>
+    <td>${escapeHtml(fmtDate(x.date))}</td>
+    ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'description')}
+    <td>${acSel(x)}</td><td>${evSel(x)}</td>
+    <td><button class="row-btn" data-inc-del="${escapeHtml(x.id)}">Delete</button></td>
+  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No income matches.</td></tr>`;
+  $('incomeTable').innerHTML = `<table class="data-table"><thead><tr><th>Date</th><th class="num">Amount</th><th>Category</th><th>Description</th><th>Payer</th><th>Event</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function saveIncomeField(td) {
+  const id = td.dataset.id, field = td.dataset.incedit;
+  let val = td.textContent.trim();
+  const x = incomeDash.rows.find(r => r.id === id); if (!x) return;
+  let patchVal = val;
+  if (field === 'amount') { patchVal = Number(val.replace(/[^0-9.\-]/g, '')); if (!Number.isFinite(patchVal)) { td.textContent = money(x.amount); toast('Bad amount', 'err'); return; } if (patchVal === Number(x.amount)) return; }
+  else { if (val === (td.dataset.orig || '')) return; patchVal = val || null; }
+  const { error } = await sb.from('income').update({ [field]: patchVal }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  x[field] = patchVal; td.dataset.orig = field === 'amount' ? patchVal : (patchVal || '');
+  if (field === 'amount') { td.textContent = money(patchVal); renderIncomeBody(); }
+  toast('Saved', 'ok');
+}
+async function setIncomeLink(id, col, val) {
+  const { error } = await sb.from('income').update({ [col]: val || null }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = incomeDash.rows.find(r => r.id === id); if (x) x[col] = val || null;
+  toast('Updated', 'ok'); if (col === 'event_id') renderIncomeBody();
+}
+$('panel-income').addEventListener('input', (e) => { const q = e.target.closest('[data-incq]'); if (q) { incomeDash.q = q.value; renderIncomeBody(); } });
+$('panel-income').addEventListener('change', (e) => {
+  const ef = e.target.closest('[data-incevfilter]'); if (ef) { incomeDash.event = ef.value; renderIncomeBody(); return; }
+  const cf = e.target.closest('[data-inccatfilter]'); if (cf) { incomeDash.category = cf.value; renderIncomeBody(); return; }
+  const ev = e.target.closest('[data-incev]'); if (ev) { setIncomeLink(ev.dataset.incev, 'event_id', ev.value); return; }
+  const ac = e.target.closest('[data-incactor]'); if (ac) { setIncomeLink(ac.dataset.incactor, 'actor_id', ac.value); return; }
+});
+$('panel-income').addEventListener('focusout', (e) => { const td = e.target.closest('[data-incedit]'); if (td) saveIncomeField(td); });
+$('panel-income').addEventListener('keydown', (e) => { const td = e.target.closest('[data-incedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
+$('panel-income').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-incclear]')) { incomeDash.q = incomeDash.event = incomeDash.category = ''; renderIncome(); return; }
+  const del = e.target.closest('[data-inc-del]'); if (del) {
+    if (!confirm('Delete this income row? (soft delete, reversible)')) return;
+    const { error } = await sb.from('income').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.incDel);
+    if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+    incomeDash.rows = incomeDash.rows.filter(r => r.id !== del.dataset.incDel); toast('Deleted', 'ok'); renderIncomeBody();
+  }
+});
+
+// ============================================================
+// ARTISTS — talent roster from actors (artist/dj roles) + booking history.
+// ============================================================
+const artistState = { rows: [], q: '', sortKey: 'gigs', sortDir: -1 };
+async function loadArtists() {
+  $('artistsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
+  const [roles, parts] = await Promise.all([
+    sb.from('actor_roles').select('role, actor:actors(id, display_name, email, phone, instagram)').in('role', ['artist', 'dj']),
+    sb.from('event_participants').select('actor_id, role, fee, event:events(name, event_date)').in('role', ['dj', 'artist', 'performer', 'headliner', 'opener']),
+  ]);
+  if (roles.error) { $('artistsBody').innerHTML = `<div class="panel-state err">${escapeHtml(roles.error.message)}</div>`; return; }
+  const byActor = new Map();
+  for (const r of (roles.data || [])) { const a = r.actor; if (!a) continue; if (!byActor.has(a.id)) byActor.set(a.id, { ...a, roles: new Set(), gigs: 0, fees: 0, events: [] }); byActor.get(a.id).roles.add(r.role); }
+  for (const p of (parts.data || [])) { const o = byActor.get(p.actor_id); if (!o) continue; o.gigs++; o.fees += Number(p.fee || 0); if (p.event) o.events.push(p.event); }
+  artistState.rows = [...byActor.values()].map(o => ({ ...o, roles: [...o.roles].sort(), lastGig: o.events.map(e => e.event_date).sort().slice(-1)[0] || null }));
+  renderArtists();
+}
+const ARTIST_COLS = [['display_name', 'Artist'], ['roles', 'Roles'], ['gigs', 'Gigs'], ['fees', 'Fees paid'], ['lastGig', 'Last gig'], ['contact', 'Contact']];
+function renderArtists() {
+  const s = artistState, ql = s.q.toLowerCase();
+  let list = s.rows.filter(a => !ql || (a.display_name || '').toLowerCase().includes(ql) || a.roles.join(' ').includes(ql));
+  const k = s.sortKey;
+  list.sort((a, b) => { let av = a[k], bv = b[k]; if (k === 'roles') { av = a.roles.join(); bv = b.roles.join(); } if (typeof av === 'number') return (av - bv) * s.sortDir; av = (av == null ? '' : String(av)).toLowerCase(); bv = (bv == null ? '' : String(bv)).toLowerCase(); return av < bv ? -s.sortDir : av > bv ? s.sortDir : 0; });
+  const totFees = s.rows.reduce((t, a) => t + a.fees, 0), totGigs = s.rows.reduce((t, a) => t + a.gigs, 0);
+  const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+  const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
+  const th = ARTIST_COLS.map(([key, lbl]) => `<th data-asort2="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
+  const chip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
+  const rows = list.map(a => `<tr data-artist="${escapeHtml(a.id)}" style="cursor:pointer;">
+    <td><strong>${escapeHtml(a.display_name)}</strong></td>
+    <td>${a.roles.map(chip).join(' ')}</td>
+    <td class="num">${fmtNum(a.gigs)}</td>
+    <td class="num">${a.fees ? money(a.fees) : muted}</td>
+    <td>${a.lastGig ? escapeHtml(fmtDate(a.lastGig)) : muted}</td>
+    <td class="truncate">${escapeHtml(a.email || a.instagram || a.phone || '') || muted}</td>
+  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
+  $('artistsBody').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
+    <div style="margin-bottom:12px;"><input class="modal-input" data-artistq placeholder="Search artist / role…" style="max-width:240px;" value="${escapeHtml(s.q)}"></div>
+    <table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Roster of everyone with a <strong>dj/artist</strong> role (from Actors). Click a row for booking history. Add / edit people in the <strong>Actors</strong> tab.</div>`;
+}
+function openArtistBookings(id) {
+  const a = artistState.rows.find(x => x.id === id); if (!a) return;
+  const evs = [...a.events].sort((x, y) => (y.event_date || '').localeCompare(x.event_date || ''));
+  openKpi('Bookings — ' + a.display_name, `${a.gigs} gigs · ${money(a.fees)} fees · ${a.roles.join(' / ')}`, `
+    <div class="hub-list">${evs.length ? evs.map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name || '—')}</strong><div class="li-sub">${escapeHtml(fmtDate(e.event_date))}</div></div></div>`).join('') : '<div class="hub-empty">No bookings yet.</div>'}</div>`,
+    () => closeKpi(), 'Close');
+}
+$('panel-artists').addEventListener('input', (e) => { const q = e.target.closest('[data-artistq]'); if (q) { artistState.q = q.value; renderArtists(); } });
+$('panel-artists').addEventListener('click', (e) => {
+  const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
+  const row = e.target.closest('[data-artist]'); if (row) openArtistBookings(row.dataset.artist);
 });
 
 async function loadGuests() {
