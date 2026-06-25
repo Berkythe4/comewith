@@ -200,9 +200,58 @@ preview — no build step required.
 
 ---
 
-## Current state — reconciled 2026-06-23 (Staff access + Social Calendar close)
+## Current state — reconciled 2026-06-24 (Operations + CRM build-out)
 
 > **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
+
+### ✅ Done / LIVE on prod — operations + CRM build-out (2026-06-24)
+Migrations **045–051 all APPLIED to prod**; `dashboard.html` pushed (Netlify live); `send-campaign` redeployed.
+
+**Actor model is now the single source of truth.**
+- **047 — legacy person/org tables RETIRED**: dropped `clients`, `sponsors`, `artists`, `contractors`,
+  `artist_bookings`, `artist_notes` (+ orphaned `v_sponsor_history`/`v_artist_history`/`mv_repeat_sponsors`/
+  `mv_top_artists`; trimmed the MV refresh cron). `inquiries`/`agreements`/`income`/`mileage` actorized
+  (`actor_id`; customer-self RLS repointed). Entire dashboard reads `actors` — Sponsors/Sponsorships/
+  Clients/Artists tabs + every picker. **No legacy-table references remain.**
+- **Actors management tab** (048 `actors.status`; 049 `actors.org_id` + widened role vocab): one
+  inline-editable, sortable table — add / on-hold / archive, role chips, multi-select role + kind filters,
+  person→org affiliation, org→venue assignment. (Closes the "Sponsor/Artist/Vendor tab repoint" backlog items.)
+
+**Event hub.**
+- **Files tab** (045 `document_types` + `files.vendor_actor_id`): replaced Contracts; doc-type buckets
+  (+ add custom), per-bucket upload, vendor = vendor-role actors only, surfaces contract-attached files
+  (recovered the "lost" Signal contract).
+- **Customers tab**: deduped union of participants/attendees/donors/sponsors with ticket counts + reconciliation block.
+- **Overview**: type-aware (Come With Production = service framing); **Engagement & marketing** section
+  (per-event IG snapshots back-dated via Log-IG; marketing spend); checklist moved to bottom.
+- **Equipment** (046 `equipment_components` + `wishlist` status): inventory reconciled to the Financial
+  master — serials, 6 buckets (DJ/Sound/Camera/Misc/Wire/Accessories), prices; fixed 3 wrong "retired";
+  edit modal + usage history; **gear bundling** (parent↔child, auto-included on event assignment);
+  wishlist; category filter on the assign popup. (Closes "Full Equipment module".)
+- Venue event-history; richer Edit-core (venue **auto-fills capacity**, doors/end/description);
+  new series **Come With Production** + **Content Creation** (+ `seriesToType()` keeps `events.type` in sync).
+
+**Money / KPIs.**
+- **DI#1 + DI#2 fully itemized & tied to the audit** (tickets→`ticketing`, donors→`third_party_donations`,
+  per-buyer→`guest_event_attendance`); historical events backfilled (Maxwell→production, showcases→content,
+  DJs incl. SPF 50). DI#1 net = $1,140-to-MS exactly.
+- **Events page rebuilt as the command center**: aggregates in **three separate money models**
+  (Come With Parties / Production & content ≈net-$0 / Dance Infusion charity), type-adaptive per-event
+  "Result", filters (series/status/year/search/**completed-only**), split marketing cards.
+- **Expenses → events** (050 `event_na`): inline event dropdown, N/A-overhead flag (Software/Equipment
+  auto-N/A), clean "needs an event" list; **Simplifi import** (Category='Work Expenses', deduped, 63 added,
+  5 auto-assigned, tagged `[simplifi 0624]`).
+- **Strategy KPI fix** (051 `v_kpi_computed`): event-derived cards (di.*/parties.*) compute **LIVE**
+  (completed-only) instead of null; +4 cards (To MS total, Net P&L total, Mailing list, Repeat attendees);
+  "last updated" on cards; **audience + attendance trend sparklines**.
+
+**Email / campaigns** (stack already deployed): fresh `RESEND_API_KEY` set; `send-campaign` gains
+**test-send** + per-campaign **stats**; Campaigns tab segment picker + preview + audience confirm.
+**External TODO before first blast: verify comewith.org as a sending domain in Resend.**
+
+**Open / offered (not built):** YouTube/Instagram auto-pull API (need YT API key + channel ID / Meta app +
+IG Business token); in-app Simplifi importer; ~12 small "needs an event" expenses (Elements) for Keith to N/A;
+optional sortable Events headers + follower-growth-vs-prior-event delta.
 
 ### ✅ Done / LIVE on prod — staff access + social calendar (2026-06-23)
 - **Migration 041 — staff access model** (APPLIED to prod): data-driven, grouped nav
@@ -306,13 +355,14 @@ built (024/026) but **no non-admin login is provisioned**.
 ### 🟦 Queued (dashboard backlog — order owned in planning chat)
 1. **Audit cleanup follow-up** — approve the 6 same-human guest↔actor links + review the 8 variant pairs
    in `GUEST_ACTOR_AUDIT.md` (Keith's manual call; includes family records like Francis/Theresa Berkman).
-2. **Artist module** — repoint the stale Artists tab → actors + `actor_artist_details` (follow the
-   `docs/ACTOR_DETAILS_PATTERN.md` convention); Kristen London / 32LVS waiting to surface.
-3. **Vendor module** — same pattern, fast follow (vendor actors + `actor_vendor_details`; `vendor_contacts` exists).
-4. **Sponsor tab repoint** — sponsors → actors (sponsor role) like the artist/vendor repoint.
-5. **Full Equipment module** — CRUD + ROI view + rental-vs-own-use split (`equipment_usage` write path now exists).
+2. ~~Artist module~~ / ~~Vendor module~~ / ~~Sponsor tab repoint~~ / ~~Full Equipment module~~ — **DONE 2026-06-24**:
+   legacy tables retired (047), unified **Actors** tab (roles incl. artist/vendor/sponsor + org/venue links),
+   and the full equipment module (buckets, edit, usage history, bundling, wishlist) all shipped.
+   Remaining slivers: per-role detail tables (`actor_artist_details`/`actor_vendor_details`) if richer
+   per-role fields are wanted; equipment **rental ROI / rental-vs-own-use** view.
 - Carryover smaller items: actor-inspector "Events" section; Tools nav in the dashboard;
-  DI#2 thank-you/survey send; `third_party_donations` actor FK (donations still text `donor_name`).
+  DI#2 thank-you/survey send; `third_party_donations` actor FK (donations still text `donor_name`);
+  YouTube/Instagram auto-pull API; in-app Simplifi importer.
 
 ### ❓ Decisions waiting on Keith (block nothing)
 - **Cold subscriptions** — keep or drop the ~20 attendees who never ticked RA marketing opt-in.
