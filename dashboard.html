@@ -3193,9 +3193,16 @@ function renderStratTrends() {
          <span class="li-sub">${att.length} events · latest ${fmtNum(att[att.length - 1].total_attendance)} (${escapeHtml(att[att.length - 1].name || '')})</span></div>
        ${sparkline(att.map(e => e.total_attendance), { color: attColor })}</div>`
     : '<div class="li-sub">No event attendance logged yet.</div>';
+  const vids = strat.ytVideos || [];
+  const ytRows = vids.length
+    ? vids.map(v => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(v.title || 'untitled')}</strong>
+        <div class="li-sub">${fmtNum(v.likes)} likes · ${fmtNum(v.comments)} comments${v.published_at ? ' · ' + escapeHtml(fmtDate(v.published_at)) : ''}</div></div>
+        <div class="li-amt">${fmtNum(v.views)} views</div></div>`).join('')
+    : '<div class="li-sub">No YouTube videos pulled yet — hit “↻ YouTube”.</div>';
   $('strat-trends').innerHTML = `
     <div class="section-sub">Audience — IG followers over time</div>${igRows}
-    <div class="section-sub" style="margin-top:12px;">Attendance over time</div>${attRow}`;
+    <div class="section-sub" style="margin-top:12px;">Attendance over time</div>${attRow}
+    <div class="section-sub" style="margin-top:12px;">Top YouTube videos</div><div class="hub-list">${ytRows}</div>`;
 }
 
 function renderStrategy() {
@@ -3242,13 +3249,14 @@ async function loadStrategy() {
   setStratState('loading', 'Loading strategy…');
   $('refreshBtn').disabled = true;
   try {
-    const [dash, parties, di, prefs, igHist, att] = await Promise.all([
+    const [dash, parties, di, prefs, igHist, att, ytVids] = await Promise.all([
       sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
       sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
       sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, net_pl, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
       sb.from('dashboard_prefs').select('hidden_metric_keys').eq('singleton', true).maybeSingle(),
       sb.from('metric_snapshots').select('metric_key, value, captured_on').in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null).order('captured_on'),
       sb.from('events').select('name, event_date, total_attendance').is('deleted_at', null).not('total_attendance', 'is', null).order('event_date'),
+      sb.from('youtube_videos').select('title, views, likes, comments, published_at').order('views', { ascending: false }).limit(6),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
     if (err) {
@@ -3262,6 +3270,7 @@ async function loadStrategy() {
     strat.hidden = new Set(prefs.data?.hidden_metric_keys || []);
     strat.igHistory = {}; (igHist.data || []).forEach(s => { (strat.igHistory[s.metric_key] = strat.igHistory[s.metric_key] || []).push(s); });
     strat.attendance = att.data || [];
+    strat.ytVideos = ytVids.data || [];
     renderStrategy();
     setStratState('hidden');
     setLastRefreshed();
