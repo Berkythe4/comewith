@@ -2178,7 +2178,7 @@ const renderers = {
   sponsors(rows) {
     const tbody = $('table-sponsors').querySelector('tbody');
     tbody.innerHTML = rows.map(r => `<tr>
-      <td><input type="checkbox" data-spick data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.display_name || '')}" data-email="${escapeHtml(r.email || '')}" style="width:auto;margin:0;" title="${r.email ? 'select to email' : 'no email on file'}"${r.email ? '' : ' disabled'}></td>
+      <td><input type="checkbox" data-spick data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.display_name || '')}" data-email="${escapeHtml(r.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${r.email ? 'select to email' : 'no email on file — add one to email'}"></td>
       <td>${escapeHtml(r.display_name || '')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</td>
       <td class="truncate">${escapeHtml(r.email || r.phone || '') || muted}</td>
       <td class="num">${r.cash ? money(r.cash) : muted}${r.inkind ? ` <span class="li-sub">+${money(r.inkind)} in-kind</span>` : ''}</td>
@@ -4300,7 +4300,7 @@ async function hubSecPeople() {
     const chips = rolesOf(p).map(r => `<span class="role-chip">${escapeHtml(r)}</span>`).join(' ') || muted;
     return `<div class="hub-li">
       <div class="li-main" style="display:flex;align-items:center;gap:9px;">
-        <input type="checkbox" data-hub-psel="${escapeHtml(p.actor?.id || '')}" data-name="${escapeHtml(p.actor?.display_name || '')}" data-email="${escapeHtml(p.actor?.email || '')}" style="width:auto;margin:0;" title="${p.actor?.email ? 'select to email' : 'no email on file'}"${p.actor?.email ? '' : ' disabled'}>
+        <input type="checkbox" data-hub-psel="${escapeHtml(p.actor?.id || '')}" data-name="${escapeHtml(p.actor?.display_name || '')}" data-email="${escapeHtml(p.actor?.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${p.actor?.email ? 'select to email' : 'no email on file — add one to email'}">
         <div><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
           <div class="li-sub"><span class="hub-roles">${chips}</span>${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div></div>
       </div>
@@ -4321,10 +4321,13 @@ async function hubSecPeople() {
 }
 
 function hubEmailPeople(oneActorId) {
-  let recips = [];
-  if (oneActorId) { const p = (hub.people || []).find(x => x.actor?.id === oneActorId); if (p?.actor?.email) recips = [{ actor_id: p.actor.id, name: p.actor.display_name, email: p.actor.email }]; }
-  else recips = [...$('hubSecBody').querySelectorAll('[data-hub-psel]:checked')].map(c => ({ actor_id: c.dataset.hubPsel, name: c.dataset.name, email: c.dataset.email }));
-  if (!recips.length) { toast('Tick people with an email first', 'err'); return; }
+  let all = [];
+  if (oneActorId) { const p = (hub.people || []).find(x => x.actor?.id === oneActorId); if (p?.actor?.email) all = [{ actor_id: p.actor.id, name: p.actor.display_name, email: p.actor.email }]; }
+  else all = [...$('hubSecBody').querySelectorAll('[data-hub-psel]:checked')].map(c => ({ actor_id: c.dataset.hubPsel, name: c.dataset.name, email: c.dataset.email }));
+  const recips = all.filter(r => r.email);
+  const skipped = all.length - recips.length;
+  if (!recips.length) { toast(all.length ? `None of the ${all.length} selected have an email on file — add one in Actors first` : 'Tick someone first', 'err'); return; }
+  if (skipped) toast(`${skipped} skipped (no email on file)`, 'ok');
   openCompose(recips, { source: 'Event: ' + (hub.event?.name || '') + ' · People', source_kind: 'event_people', source_id: hub.eventId, event_id: hub.eventId });
 }
 
@@ -5191,7 +5194,7 @@ async function renderVenueList() {
     const n = (v.venue_contacts || []).length;
     return `<div class="hub-li">
       <div class="li-main" style="display:flex;align-items:center;gap:9px;">
-        <input type="checkbox" data-vpick data-kind="venue" data-id="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.contact_email || '')}" style="width:auto;margin:0;" title="${v.contact_email ? 'select to email' : 'no email on file'}"${v.contact_email ? '' : ' disabled'}>
+        <input type="checkbox" data-vpick data-kind="venue" data-id="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.contact_email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${v.contact_email ? 'select to email' : 'no email on file — add one to email'}">
         <div><strong>${escapeHtml(v.name)}</strong>
         <div class="li-sub">${escapeHtml(loc) || '—'}${v.capacity ? (' · cap ' + v.capacity) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div></div>
       <div class="hub-li-actions">
@@ -5216,7 +5219,7 @@ async function renderVendorList() {
     const n = counts[a.id] || 0;
     return `<div class="hub-li">
       <div class="li-main" style="display:flex;align-items:center;gap:9px;">
-        <input type="checkbox" data-vpick data-kind="vendor" data-id="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name)}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;" title="${a.email ? 'select to email' : 'no email on file'}"${a.email ? '' : ' disabled'}>
+        <input type="checkbox" data-vpick data-kind="vendor" data-id="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name)}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${a.email ? 'select to email' : 'no email on file — add one to email'}">
         <div><strong>${escapeHtml(a.display_name)}</strong><div class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div></div>
       <div class="hub-li-actions">${a.email ? `<button class="hub-mini" data-ven-email="vendor:${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}<button class="hub-mini" data-ven-open="${escapeHtml(a.id)}">Open</button></div></div>`;
   }).join('') : `<div class="hub-empty">No vendors yet (an actor with the “vendor” role). Add one →</div>`;
@@ -5429,10 +5432,13 @@ $('panel-venues').addEventListener('click', (e) => {
   const vem = e.target.closest('[data-ven-email]'); if (vem) { const [k, id] = vem.dataset.venEmail.split(':'); k === 'venue' ? openCompose([{ venue_id: id }], { source: 'Venues', source_kind: 'venue', source_id: id }) : openCompose([{ actor_id: id }], { source: 'Vendors', source_kind: 'actor', source_id: id }); return; }
   if (e.target.closest('[data-ven-email-selected]')) {
     const picks = [...$('venuesBody').querySelectorAll('[data-vpick]:checked')];
-    const recips = picks.map(c => c.dataset.kind === 'venue'
+    const all = picks.map(c => c.dataset.kind === 'venue'
       ? { venue_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email }
-      : { actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email }).filter(r => r.email);
-    if (!recips.length) { toast('Tick someone with an email first', 'err'); return; }
+      : { actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email });
+    const recips = all.filter(r => r.email);
+    const skipped = all.length - recips.length;
+    if (!recips.length) { toast(all.length ? `None of the ${all.length} selected have an email on file — add one first` : 'Tick someone first', 'err'); return; }
+    if (skipped) toast(`${skipped} skipped (no email on file)`, 'ok');
     const isVenue = venuesState.mode === 'venues';
     openCompose(recips, { source: isVenue ? 'Venues' : 'Vendors', source_kind: recips.length === 1 ? (isVenue ? 'venue' : 'actor') : null, source_id: recips.length === 1 ? recips[0].venue_id || recips[0].actor_id : null });
     return;
@@ -6429,12 +6435,15 @@ $('panel-conversations').addEventListener('click', (e) => {
 $('panel-sponsors').addEventListener('click', (e) => {
   const em = e.target.closest('[data-spemail]'); if (em) { openCompose([{ actor_id: em.dataset.id, name: em.dataset.name, email: em.dataset.email }], { source: 'Sponsors', source_kind: 'actor', source_id: em.dataset.id }); return; }
   if (e.target.closest('#emailSponsorsBtn')) {
-    const recips = [...$('panel-sponsors').querySelectorAll('[data-spick]:checked')].map(c => ({ actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email })).filter(r => r.email);
-    if (!recips.length) { toast('Tick a sponsor with an email first', 'err'); return; }
+    const all = [...$('panel-sponsors').querySelectorAll('[data-spick]:checked')].map(c => ({ actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email }));
+    const recips = all.filter(r => r.email);
+    const skipped = all.length - recips.length;
+    if (!recips.length) { toast(all.length ? `None of the ${all.length} selected have an email on file — add one in Actors first` : 'Tick a sponsor first', 'err'); return; }
+    if (skipped) toast(`${skipped} skipped (no email on file)`, 'ok');
     openCompose(recips, { source: 'Sponsors', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null });
     return;
   }
-  const all = e.target.closest('[data-ssel-all]'); if (all) { $('panel-sponsors').querySelectorAll('[data-spick]:not([disabled])').forEach(c => { c.checked = all.checked; }); return; }
+  const sa = e.target.closest('[data-ssel-all]'); if (sa) { $('panel-sponsors').querySelectorAll('[data-spick]').forEach(c => { c.checked = sa.checked; }); return; }
 });
 
 // ============================================================
