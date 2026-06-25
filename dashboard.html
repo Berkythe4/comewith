@@ -983,6 +983,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <button class="strat-btn primary" data-kpi-open="numbers">Log numbers</button>
           <button class="strat-btn primary" data-kpi-open="ig">Log IG</button>
           <button class="strat-btn primary" data-kpi-open="target">Edit target</button>
+          <button class="strat-btn" data-yt-refresh title="Pull live subscriber + avg-views from the YouTube API">↻ YouTube</button>
           <button class="strat-btn" data-strat-toggle>Manage cards</button>
         </div>
         <div id="strat-state"></div>
@@ -3271,9 +3272,18 @@ async function loadStrategy() {
   }
 }
 
-// Manage-cards toggle
+// Pull live YouTube stats (subscribers + avg views) on demand.
+async function refreshYoutube() {
+  toast('Pulling YouTube…', 'ok');
+  const { data, error } = await sb.functions.invoke('pull-youtube-stats', { body: {} });
+  if (error) { toast('YouTube refresh failed: ' + await fnErrorDetail(error), 'err'); return; }
+  toast(`YouTube: ${fmtNum(data.subscribers)} subs · ${fmtNum(data.avg_views)} avg views`, 'ok');
+  refreshStratIfActive();
+}
+// Manage-cards toggle + YouTube refresh
 $('panel-strategy').addEventListener('click', (e) => {
-  if (e.target.closest('[data-strat-toggle]')) $('strat-manage').classList.toggle('show');
+  if (e.target.closest('[data-strat-toggle]')) { $('strat-manage').classList.toggle('show'); return; }
+  if (e.target.closest('[data-yt-refresh]')) { refreshYoutube(); return; }
 });
 // Persist hide/show to the shared dashboard_prefs row
 $('strat-manage-list').addEventListener('change', async (e) => {
