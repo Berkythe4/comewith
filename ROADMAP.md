@@ -295,10 +295,20 @@ All five steps shipped in one session (commit `a668661`):
    money NULL, company `event_id IS NULL` rows invisible); staff PATCH release → guard 400; master
    releases → staff then sees that event's money but **never** company-level finance.
 
-**Residual (the GATED BLOCKER below is now mostly closed):** `v_budget_variance`, `v_data_points`,
-`mv_event_data_points` still need locking (the MV can't use RLS — revoke from `authenticated` +
-expose via a gated view/service-role). income/expenses **writes** are master-only (D1) — loosen to
-`can_use_events_module()` if ops staff should log event expenses pre-audit.
+**GATED BLOCKER now CLOSED (055, 2026-06-25):** `v_budget_variance` / `v_data_points` /
+`mv_event_data_points` revoked from anon + authenticated (none used by the dashboard; master
+reaches financials through the gated event views). income/expenses **writes** stay master-only (D1)
+per Keith — loosen to `can_use_events_module()` later if ops staff should log event expenses.
+
+### ✅ DONE — Email any actor/venue + Conversations (2026-06-25, migration 056, commit 4abe2b1)
+Email from Actors / Vendors / Venues / event-hub People (individual + multi-select) via a shared
+compose modal (subject tagged with source, body deep-links back via `?goto=`). Every send logs a
+**Conversation thread** (056 tables + RLS: team-visible unless 🔒 restricted to master+creator+ACL;
+new signed-off **Conversations** module). `send-actor-email` Edge fn (Resend); `resend-webhook`
+extended to log **delivery/bounce** status into threads. Conversations screen = list → thread (reply,
+internal note, visibility, go-to-source). Verified e2e on prod (delivered + bounced + restricted
+visibility across martin/henry). **Residual:** inbound human-reply auto-capture needs Resend inbound
++ MX (external); replies currently land in berky@comewith.org's inbox (reply_to) — paste as a note.
 
 ### 🔁 Carrying forward
 - **Round-2 module sign-off (ongoing process)** — as Keith reviews each module, flip it
