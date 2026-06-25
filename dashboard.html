@@ -3728,7 +3728,7 @@ async function submitLogNote() {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
@@ -4191,9 +4191,66 @@ async function hubSecOverview() {
     ${venueBlock}
     ${cards}
     ${engagement}
+    ${ME.isMaster ? hubFinVisHTML(e) : ''}
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Money</h3><button class="hub-btn ghost" data-hub-sec="money">Open Money</button></div>
     <p style="font-size:0.78rem;color:var(--mid);max-width:60ch;">${moneyNote}</p>
     ${dayof}`;
+}
+
+// ---- Financial visibility (master-only): audit flag + release-to-team switch ----
+// Staff see an event's money only when financials_released = true. The release
+// switch pops a confirm EVERY time; a loud red warning when the event isn't audited.
+function hubFinVisHTML(e) {
+  const aud = !!e.audited, rel = !!e.financials_released;
+  const stamp = (t) => t ? ` <span class="li-sub">(${escapeHtml(fmtDate(t))})</span>` : '';
+  return `<div class="hub-sec-bar" style="margin-top:18px;"><h3>Financial visibility <span class="li-sub" style="font-weight:400;">— master only</span></h3></div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:stretch;">
+      <div style="flex:1 1 240px;border:1px solid var(--line,#E5DED3);border-radius:12px;padding:12px 14px;">
+        <div style="font-weight:700;margin-bottom:6px;">${aud ? '✅ Audited' : '⬜ Not audited'}${stamp(e.audited_at)}</div>
+        <div class="li-sub" style="margin-bottom:9px;">You've checked these numbers. Recommended before releasing.</div>
+        <button class="hub-btn ghost" data-fin-toggle="audited">${aud ? 'Mark not audited' : 'Mark audited'}</button>
+      </div>
+      <div style="flex:1 1 240px;border:1px solid ${rel ? '#3B6D11' : 'var(--line,#E5DED3)'};border-radius:12px;padding:12px 14px;background:${rel ? '#F1F7EA' : '#fff'};">
+        <div style="font-weight:700;margin-bottom:6px;">${rel ? '👁️ Released to team' : '🔒 Hidden from team'}${stamp(e.financials_released_at)}</div>
+        <div class="li-sub" style="margin-bottom:9px;">${rel ? 'Staff can see this event\'s money.' : 'Only you can see this event\'s money.'}</div>
+        <button class="hub-btn ${rel ? 'ghost' : 'primary'}" data-fin-toggle="released">${rel ? 'Hide from team' : 'Release to team'}</button>
+      </div>
+    </div>
+    <p style="font-size:0.78rem;color:var(--mid);max-width:64ch;margin-top:8px;">Releasing shows the whole team this event's ticket revenue, expenses, net P&amp;L, donations &amp; sponsor amounts. Company-level (non-event) finances are never released. Auditing first is recommended.</p>`;
+}
+async function hubSetAudited() {
+  const e = hub.event, val = !e.audited;
+  const { error } = await sb.from('events').update({ audited: val }).eq('id', hub.eventId);
+  if (error) { toast('Failed: ' + (error.message || 'error'), 'err'); return; }
+  e.audited = val; toast(val ? 'Marked audited' : 'Audit cleared', 'ok'); hubGoSection('overview');
+}
+async function hubDoRelease(val) {
+  const { error } = await sb.from('events').update({ financials_released: val }).eq('id', hub.eventId);
+  if (error) { toast('Failed: ' + (error.message || 'error'), 'err'); closeKpi(); return; }
+  hub.event.financials_released = val; closeKpi();
+  toast(val ? 'Financials released to the team' : 'Financials hidden from the team', 'ok');
+  hubGoSection('overview');
+}
+function hubToggleRelease() {
+  const e = hub.event;
+  if (e.financials_released) {
+    openKpi('Hide financials from the team?', escapeHtml(e.name),
+      `<div style="font-size:0.95rem;">Staff will no longer be able to see this event's money.</div>`,
+      () => hubDoRelease(false), 'Hide from team');
+    return;
+  }
+  // turning release ON — confirm every time; loud + red when not audited
+  if (!e.audited) {
+    openKpi('⚠️ Release UNVERIFIED financials?', 'This event is NOT audited',
+      `<div style="background:#fdecea;border:1px solid #e0b4b0;color:#8a1c13;padding:14px 16px;border-radius:10px;font-size:0.95rem;line-height:1.5;">
+        You're about to show the <strong>entire team</strong> this event's money — ticket revenue, expenses, net P&amp;L, donations and sponsor amounts — <strong>before you've audited it</strong>. These numbers may be incomplete or wrong.
+        <br><br>Audit it first, or release anyway?</div>`,
+      () => hubDoRelease(true), 'Release unaudited anyway');
+  } else {
+    openKpi('Release financials to the team?', escapeHtml(e.name),
+      `<div style="font-size:0.95rem;">This event is audited ✅. Staff will be able to see its final financials. You can hide them again anytime.</div>`,
+      () => hubDoRelease(true), 'Release to team');
+  }
 }
 
 // ---- Section: People (event_participants) ----
@@ -5063,6 +5120,7 @@ $('panel-eventhub').addEventListener('click', (e) => {
   // Inline Money section uses the shared money add/delete markup.
   const moneyEl = e.target.closest('[data-money-add],[data-money-del]');
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
+  const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
