@@ -273,25 +273,32 @@ optional sortable Events headers + follower-growth-vs-prior-event delta.
   new `dashboard.html` to comewith.org. DB migrations **041 + 044 applied to prod**; the nav
   also added a Social Calendar module and a master-only Team module.
 
-### 🔶 STAGED — committed but NOT applied (next deliberate session, in this order)
-Files are on master (`042`/`043` SQL, `invite-user/index.ts`) but inert — Netlify doesn't run
-them. Do these as one focused, rested session:
-1. **Apply 042** (hard per-module RLS) — first resolve the 4 `[VERIFY]` policy-name markers
-   (`task_templates`, `subscribers`, `mailing_campaigns`, `feedback_log`); the Events-hub
-   dependency carve (`can_use_events_module()`) is already built. **Then apply 043**
-   (`events.audited` publish gate: rebuilds the **5 money views** as `security_invoker` and
-   CASE-gates the money columns on `is_master_admin() OR audited`; re-asserts anon-revoke on
-   every rebuilt view). **Smoke-test with a throwaway staff account before trusting either.**
-2. **Deploy `invite-user` Edge Function** (authored, in repo, not deployed) — enables the Team
-   "＋ Add person" button:
-   `SUPABASE_ACCESS_TOKEN=$SBP_PAT supabase functions deploy invite-user --project-ref yaytdosxfhcqatmhctzk`
-3. **Create staff logins** — Martin (operations), Henry (operations), Janelle (marketing).
-   **ONLY after 043** so they never have a window of ungated financial access.
+### ✅ DONE — staff access security APPLIED + staff logins created (2026-06-25)
+All five steps shipped in one session (commit `a668661`):
+1. **042 APPLIED** (per-module RLS) — **rewritten** for the post-047 actor model (the original
+   draft referenced the dropped clients/sponsors/artists). Gates `actors`/`actor_roles`/
+   `event_participants` (+ contracts/files/document_types); `[VERIFY]` policy names resolved
+   against live prod; Events-hub carve (`can_use_events_module()` + new `can_see_people()`) intact.
+2. **043 APPLIED** — **two-flag** financial gate (per Keith): `events.audited` (master-only,
+   informational) + `events.financials_released` (master-only) — staff see an event's money
+   **only when released**. Base-table RLS on income/expenses/mileage/ticketing/sponsorships/
+   donations; money columns CASE-gated in `v_event_summary`; `security_invoker` on all **6** money
+   views via `ALTER VIEW` (reconciled with 051's `v_kpi_computed` — no risky drops); anon-revoke
+   re-asserted. Guard trigger blocks non-master from flipping either flag. Dashboard event hub has
+   a master-only **Financial visibility** block (audit toggle + release switch; release pops a
+   confirm every time, **loud red when not audited**).
+3. **`invite-user` DEPLOYED.**
+4. **Staff logins created** — **martin@comewith.org** + **henry@comewith.org** (both `sub_admin` /
+   `operations`). (Janelle/marketing not created yet.)
+5. **End-to-end gate test PASSED 17/17** (against a full seeded demo event, since cleared): anon →
+   401 on all 6 views; master sees money pre-release; staff blocked (income/expenses 0 rows, view
+   money NULL, company `event_id IS NULL` rows invisible); staff PATCH release → guard 400; master
+   releases → staff then sees that event's money but **never** company-level finance.
 
-**KNOWN GAP until 043 is applied:** any authenticated non-master (today only liz@comewith.org —
-a `sub_admin`, `full` scope, has a password but **never signed in**) can read the financial views
-via direct REST. The new nav only **hides** Finance; it does **not** RLS-gate it. No staff logins
-exist yet, so not currently exploitable — but **043 must precede any staff login creation.**
+**Residual (the GATED BLOCKER below is now mostly closed):** `v_budget_variance`, `v_data_points`,
+`mv_event_data_points` still need locking (the MV can't use RLS — revoke from `authenticated` +
+expose via a gated view/service-role). income/expenses **writes** are master-only (D1) — loosen to
+`can_use_events_module()` if ops staff should log event expenses pre-audit.
 
 ### 🔁 Carrying forward
 - **Round-2 module sign-off (ongoing process)** — as Keith reviews each module, flip it
