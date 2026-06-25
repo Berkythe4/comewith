@@ -6200,7 +6200,7 @@ $('panel-inquiries').addEventListener('click', async (e) => {
   if (e.target.closest('[data-inqclear]')) { inqDash.q = inqDash.status = inqDash.source = ''; renderInquiries(); return; }
   const cv = e.target.closest('[data-inqconv]'); if (cv) { convertInquiry(cv.dataset.inqconv); return; }
   const dl = e.target.closest('[data-inqdel]'); if (dl) { if (!confirm('Delete this inquiry?')) return; await sb.from('inquiries').update({ deleted_at: new Date().toISOString() }).eq('id', dl.dataset.inqdel); inqDash.rows = inqDash.rows.filter(r => r.id !== dl.dataset.inqdel); toast('Deleted', 'ok'); renderInquiriesBody(); return; }
-  const vw = e.target.closest('[data-inqview]'); if (vw) { viewInquiry(vw.dataset.inqview); }
+  const vw = e.target.closest('[data-inqview]'); if (vw && !e.target.closest('select, button, option')) { viewInquiry(vw.dataset.inqview); }
 });
 
 // ============================================================
@@ -6284,7 +6284,7 @@ $('panel-agreements').addEventListener('click', async (e) => {
   if (e.target.closest('[data-agrclear]')) { agrDash.q = agrDash.status = agrDash.type = ''; renderAgreements(); return; }
   const dl = e.target.closest('[data-agrdel]'); if (dl) { if (!confirm('Delete this agreement?')) return; await sb.from('agreements').update({ deleted_at: new Date().toISOString() }).eq('id', dl.dataset.agrdel); agrDash.rows = agrDash.rows.filter(r => r.id !== dl.dataset.agrdel); toast('Deleted', 'ok'); renderAgreementsBody(); return; }
   if (e.target.closest('[data-send-agreement]')) return; // handled by the global send handler
-  const vw = e.target.closest('[data-agrview]'); if (vw) { viewAgreement(vw.dataset.agrview); }
+  const vw = e.target.closest('[data-agrview]'); if (vw && !e.target.closest('select, button, option')) { viewAgreement(vw.dataset.agrview); }
 });
 
 // ============================================================
@@ -6304,7 +6304,7 @@ async function loadClients() {
   const actorById = {}; (acts.data || []).forEach(a => actorById[a.id] = a);
   const ids = new Set([...(roleRows.data || []).map(r => r.actor_id), ...(inq.data || []).map(r => r.actor_id), ...(agr.data || []).map(r => r.actor_id)]);
   const m = new Map();
-  const get = (id) => { if (!id || !actorById[id]) return null; let o = m.get(id); if (!o) { o = { ...actorById[id], inquiries: 0, agreements: 0, contracted: 0, paid: 0, last: actorById[id].created_at }; m.set(id, o); } return o; };
+  const get = (id) => { if (!id || !actorById[id]) return null; let o = m.get(id); if (!o) { const a = actorById[id]; o = { ...a, inquiries: 0, agreements: 0, contracted: 0, paid: 0, last: a.created_at, contact: a.email || a.phone || a.instagram || '' }; m.set(id, o); } return o; };
   ids.forEach(get);
   (inq.data || []).forEach(r => { const o = get(r.actor_id); if (o) { o.inquiries++; if (r.created_at > o.last) o.last = r.created_at; } });
   (agr.data || []).forEach(r => { const o = get(r.actor_id); if (o) { o.agreements++; o.contracted += Number(r.total_amount || 0); if (r.created_at > o.last) o.last = r.created_at; } });
