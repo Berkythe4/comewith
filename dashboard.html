@@ -1073,14 +1073,17 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
       <div class="panel" id="panel-sponsors">
         <button class="add-btn" id="addSponsorBtn">+ Add sponsor</button>
+        <button class="hub-mini" id="emailSponsorsBtn" style="margin-bottom:8px;">✉ Email selected</button>
         <div class="row-count" id="count-sponsors">—</div>
         <div id="state-sponsors"></div>
         <table class="data-table" id="table-sponsors" style="display:none;">
           <thead><tr>
+            <th style="width:24px;"><input type="checkbox" data-ssel-all title="select all" style="width:auto;margin:0;"></th>
             <th>Name</th>
             <th>Contact</th>
             <th class="num">Cash sponsored</th>
             <th>Events</th>
+            <th></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -2175,10 +2178,12 @@ const renderers = {
   sponsors(rows) {
     const tbody = $('table-sponsors').querySelector('tbody');
     tbody.innerHTML = rows.map(r => `<tr>
+      <td><input type="checkbox" data-spick data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.display_name || '')}" data-email="${escapeHtml(r.email || '')}" style="width:auto;margin:0;" title="${r.email ? 'select to email' : 'no email on file'}"${r.email ? '' : ' disabled'}></td>
       <td>${escapeHtml(r.display_name || '')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</td>
       <td class="truncate">${escapeHtml(r.email || r.phone || '') || muted}</td>
       <td class="num">${r.cash ? money(r.cash) : muted}${r.inkind ? ` <span class="li-sub">+${money(r.inkind)} in-kind</span>` : ''}</td>
       <td class="truncate">${r.events.length ? escapeHtml([...new Set(r.events)].join(', ')) : muted}</td>
+      <td>${r.email ? `<button class="hub-mini" data-spemail data-id="${escapeHtml(r.id)}" data-name="${escapeHtml(r.display_name || '')}" data-email="${escapeHtml(r.email)}" title="Email ${escapeHtml(r.display_name || '')}">✉</button>` : ''}</td>
     </tr>`).join('');
   },
 
@@ -4295,7 +4300,7 @@ async function hubSecPeople() {
     const chips = rolesOf(p).map(r => `<span class="role-chip">${escapeHtml(r)}</span>`).join(' ') || muted;
     return `<div class="hub-li">
       <div class="li-main" style="display:flex;align-items:center;gap:9px;">
-        ${p.actor?.email ? `<input type="checkbox" data-hub-psel="${escapeHtml(p.actor.id)}" data-name="${escapeHtml(p.actor.display_name || '')}" data-email="${escapeHtml(p.actor.email)}" style="width:auto;margin:0;" title="select to email">` : '<span style="width:13px;display:inline-block;"></span>'}
+        <input type="checkbox" data-hub-psel="${escapeHtml(p.actor?.id || '')}" data-name="${escapeHtml(p.actor?.display_name || '')}" data-email="${escapeHtml(p.actor?.email || '')}" style="width:auto;margin:0;" title="${p.actor?.email ? 'select to email' : 'no email on file'}"${p.actor?.email ? '' : ' disabled'}>
         <div><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
           <div class="li-sub"><span class="hub-roles">${chips}</span>${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div></div>
       </div>
@@ -5172,7 +5177,7 @@ async function renderVenues() {
       <button data-ven-mode="vendors" class="${m === 'vendors' ? 'active' : ''}">Vendors</button>
     </div>
     <div class="hub-sec-bar"><h3>${m === 'venues' ? 'Venues' : 'Vendors'}</h3>
-      <span>${m === 'vendors' ? '<button class="hub-mini" data-ven-email-vendors title="Email ticked vendors">✉ Email selected</button> ' : ''}<button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></span></div>
+      <span><button class="hub-mini" data-ven-email-selected title="Email everyone you've ticked">✉ Email selected</button> <button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></span></div>
     <div id="venList"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
   if (m === 'venues') await renderVenueList(); else await renderVendorList();
 }
@@ -5185,8 +5190,10 @@ async function renderVenueList() {
     const loc = [v.city, v.state].filter(Boolean).join(', ');
     const n = (v.venue_contacts || []).length;
     return `<div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(v.name)}</strong>
-        <div class="li-sub">${escapeHtml(loc) || '—'}${v.capacity ? (' · cap ' + v.capacity) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div>
+      <div class="li-main" style="display:flex;align-items:center;gap:9px;">
+        <input type="checkbox" data-vpick data-kind="venue" data-id="${escapeHtml(v.id)}" data-name="${escapeHtml(v.name)}" data-email="${escapeHtml(v.contact_email || '')}" style="width:auto;margin:0;" title="${v.contact_email ? 'select to email' : 'no email on file'}"${v.contact_email ? '' : ' disabled'}>
+        <div><strong>${escapeHtml(v.name)}</strong>
+        <div class="li-sub">${escapeHtml(loc) || '—'}${v.capacity ? (' · cap ' + v.capacity) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div></div>
       <div class="hub-li-actions">
         ${v.contact_email ? `<button class="hub-mini" data-ven-email="venue:${escapeHtml(v.id)}" title="Email ${escapeHtml(v.name)}">✉</button>` : ''}
         <button class="hub-mini" data-ven-open="${escapeHtml(v.id)}">Open</button>
@@ -5209,7 +5216,7 @@ async function renderVendorList() {
     const n = counts[a.id] || 0;
     return `<div class="hub-li">
       <div class="li-main" style="display:flex;align-items:center;gap:9px;">
-        ${a.email ? `<input type="checkbox" data-ven-vsel="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name)}" data-email="${escapeHtml(a.email)}" style="width:auto;margin:0;">` : '<span style="width:13px;display:inline-block;"></span>'}
+        <input type="checkbox" data-vpick data-kind="vendor" data-id="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name)}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;" title="${a.email ? 'select to email' : 'no email on file'}"${a.email ? '' : ' disabled'}>
         <div><strong>${escapeHtml(a.display_name)}</strong><div class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div></div>
       <div class="hub-li-actions">${a.email ? `<button class="hub-mini" data-ven-email="vendor:${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}<button class="hub-mini" data-ven-open="${escapeHtml(a.id)}">Open</button></div></div>`;
   }).join('') : `<div class="hub-empty">No vendors yet (an actor with the “vendor” role). Add one →</div>`;
@@ -5420,7 +5427,16 @@ $('panel-venues').addEventListener('click', (e) => {
   const evOpen = e.target.closest('[data-ven-event]'); if (evOpen) { openEventHub(evOpen.dataset.venEvent); return; }
   const open = e.target.closest('[data-ven-open]'); if (open) { openOwnerDetail(open.dataset.venOpen); return; }
   const vem = e.target.closest('[data-ven-email]'); if (vem) { const [k, id] = vem.dataset.venEmail.split(':'); k === 'venue' ? openCompose([{ venue_id: id }], { source: 'Venues', source_kind: 'venue', source_id: id }) : openCompose([{ actor_id: id }], { source: 'Vendors', source_kind: 'actor', source_id: id }); return; }
-  if (e.target.closest('[data-ven-email-vendors]')) { const recips = [...$('venuesBody').querySelectorAll('[data-ven-vsel]:checked')].map(c => ({ actor_id: c.dataset.venVsel, name: c.dataset.name, email: c.dataset.email })); if (!recips.length) { toast('Tick vendors with an email first', 'err'); return; } openCompose(recips, { source: 'Vendors', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null }); return; }
+  if (e.target.closest('[data-ven-email-selected]')) {
+    const picks = [...$('venuesBody').querySelectorAll('[data-vpick]:checked')];
+    const recips = picks.map(c => c.dataset.kind === 'venue'
+      ? { venue_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email }
+      : { actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email }).filter(r => r.email);
+    if (!recips.length) { toast('Tick someone with an email first', 'err'); return; }
+    const isVenue = venuesState.mode === 'venues';
+    openCompose(recips, { source: isVenue ? 'Venues' : 'Vendors', source_kind: recips.length === 1 ? (isVenue ? 'venue' : 'actor') : null, source_id: recips.length === 1 ? recips[0].venue_id || recips[0].actor_id : null });
+    return;
+  }
   const cdel = e.target.closest('[data-ven-cdel]'); if (cdel) { venContactRemove(cdel.dataset.venCdel); return; }
   const act = e.target.closest('[data-ven-action]'); if (act) {
     const id = act.dataset.id;
@@ -6408,6 +6424,17 @@ $('panel-conversations').addEventListener('click', (e) => {
   if (e.target.closest('[data-conv-note]')) { convAddNote(); return; }
   if (e.target.closest('[data-conv-acl]')) { convManageAcl(); return; }
   const row = e.target.closest('[data-conv-open]'); if (row) openThread(row.dataset.convOpen);
+});
+// Sponsors tab — email a sponsor / multi-select (generic table; additive listener).
+$('panel-sponsors').addEventListener('click', (e) => {
+  const em = e.target.closest('[data-spemail]'); if (em) { openCompose([{ actor_id: em.dataset.id, name: em.dataset.name, email: em.dataset.email }], { source: 'Sponsors', source_kind: 'actor', source_id: em.dataset.id }); return; }
+  if (e.target.closest('#emailSponsorsBtn')) {
+    const recips = [...$('panel-sponsors').querySelectorAll('[data-spick]:checked')].map(c => ({ actor_id: c.dataset.id, name: c.dataset.name, email: c.dataset.email })).filter(r => r.email);
+    if (!recips.length) { toast('Tick a sponsor with an email first', 'err'); return; }
+    openCompose(recips, { source: 'Sponsors', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null });
+    return;
+  }
+  const all = e.target.closest('[data-ssel-all]'); if (all) { $('panel-sponsors').querySelectorAll('[data-spick]:not([disabled])').forEach(c => { c.checked = all.checked; }); return; }
 });
 
 // ============================================================
