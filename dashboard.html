@@ -1002,6 +1002,10 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <div id="strat-di" style="margin-top:14px;"></div>
           </div>
           <div>
+            <div class="section-label">Trends</div>
+            <div id="strat-trends"></div>
+          </div>
+          <div>
             <div class="section-label">The flywheel</div>
             <div class="section-sub">How the workstreams feed each other.</div>
             <div class="flywheel">
@@ -3147,7 +3151,50 @@ function kpiCardHtml(c) {
       <span class="kpi-trend ${t.cls}">${t.arrow} ${escapeHtml(t.text)}</span>
       <span class="kpi-target">target ${fmtMetric(c.target_value, c.unit)}</span>
     </div>
+    ${c.as_of ? `<div class="kpi-asof" style="font-size:0.64rem;color:var(--mid);margin-top:3px;">updated ${escapeHtml(fmtDate(c.as_of))}</div>` : ''}
   </div>`;
+}
+
+// Inline SVG sparkline — no chart library. `points` = array of numbers in time order.
+function sparkline(points, { w = 260, h = 46, color = '#2E8E72' } = {}) {
+  const pts = (points || []).filter(v => v != null).map(Number);
+  if (!pts.length) return '<div class="li-sub">no data yet</div>';
+  const data = pts.length === 1 ? [pts[0], pts[0]] : pts;
+  const min = Math.min(...data), max = Math.max(...data), range = (max - min) || 1, pad = 5;
+  const X = (i) => pad + (i / (data.length - 1)) * (w - 2 * pad);
+  const Y = (v) => h - pad - ((v - min) / range) * (h - 2 * pad);
+  const poly = data.map((v, i) => `${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const lastX = X(data.length - 1).toFixed(1), lastY = Y(data[data.length - 1]).toFixed(1);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="display:block;max-width:100%;">
+    <polygon points="${X(0).toFixed(1)},${h - pad} ${poly} ${lastX},${h - pad}" fill="${color}" opacity="0.12"/>
+    <polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    <circle cx="${lastX}" cy="${lastY}" r="2.8" fill="${color}"/></svg>`;
+}
+function renderStratTrends() {
+  const igColor = WORKSTREAM.audience.color;
+  const igRows = IG_ACCOUNTS.map(a => {
+    const ser = strat.igHistory?.[a.key] || [];
+    const last = ser[ser.length - 1], first = ser[0];
+    const delta = (last && first && ser.length > 1) ? Number(last.value) - Number(first.value) : null;
+    return `<div style="margin-bottom:10px;">
+      <div class="kpi-label" style="display:flex;justify-content:space-between;gap:8px;">
+        <span>IG · ${escapeHtml(a.label)}</span>
+        <span class="li-sub">${last ? fmtNum(last.value) + ' · ' + fmtDate(last.captured_on) : 'no readings'}${delta != null ? ` · ${delta >= 0 ? '+' : ''}${fmtNum(delta)} since ${fmtDate(first.captured_on)}` : ''}</span>
+      </div>
+      ${sparkline(ser.map(s => s.value), { color: igColor })}
+    </div>`;
+  }).join('');
+  const att = strat.attendance || [];
+  const attColor = WORKSTREAM.parties.color;
+  const attRow = att.length
+    ? `<div><div class="kpi-label" style="display:flex;justify-content:space-between;gap:8px;">
+         <span>Attendance / event</span>
+         <span class="li-sub">${att.length} events · latest ${fmtNum(att[att.length - 1].total_attendance)} (${escapeHtml(att[att.length - 1].name || '')})</span></div>
+       ${sparkline(att.map(e => e.total_attendance), { color: attColor })}</div>`
+    : '<div class="li-sub">No event attendance logged yet.</div>';
+  $('strat-trends').innerHTML = `
+    <div class="section-sub">Audience — IG followers over time</div>${igRows}
+    <div class="section-sub" style="margin-top:12px;">Attendance over time</div>${attRow}`;
 }
 
 function renderStrategy() {
@@ -3187,17 +3234,20 @@ function renderStrategy() {
       `<label><input type="checkbox" data-metric="${escapeHtml(c.metric_key)}"${strat.hidden.has(c.metric_key) ? '' : ' checked'}> ${escapeHtml(WORKSTREAM[ws].label)} · ${escapeHtml(c.label)}</label>`
     )
   ).join('');
+  renderStratTrends();
 }
 
 async function loadStrategy() {
   setStratState('loading', 'Loading strategy…');
   $('refreshBtn').disabled = true;
   try {
-    const [dash, parties, di, prefs] = await Promise.all([
+    const [dash, parties, di, prefs, igHist, att] = await Promise.all([
       sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
       sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
       sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, net_pl, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
       sb.from('dashboard_prefs').select('hidden_metric_keys').eq('singleton', true).maybeSingle(),
+      sb.from('metric_snapshots').select('metric_key, value, captured_on').in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null).order('captured_on'),
+      sb.from('events').select('name, event_date, total_attendance').is('deleted_at', null).not('total_attendance', 'is', null).order('event_date'),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
     if (err) {
@@ -3209,6 +3259,8 @@ async function loadStrategy() {
     strat.parties = parties.data?.[0] || null;
     strat.di = di.data?.[0] || null;
     strat.hidden = new Set(prefs.data?.hidden_metric_keys || []);
+    strat.igHistory = {}; (igHist.data || []).forEach(s => { (strat.igHistory[s.metric_key] = strat.igHistory[s.metric_key] || []).push(s); });
+    strat.attendance = att.data || [];
     renderStrategy();
     setStratState('hidden');
     setLastRefreshed();
