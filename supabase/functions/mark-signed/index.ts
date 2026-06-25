@@ -61,7 +61,7 @@ Deno.serve(async (req) => {
     const { data: agreement, error: agErr } = await admin
       .from("agreements")
       .select(
-        "id, agreement_type, event_date, venue_name, total_amount, status, client:clients(full_name, email)",
+        "id, agreement_type, event_date, venue_name, total_amount, status, event_id, actor:actors(display_name, email)",
       )
       .eq("id", link.agreement_id)
       .single();
@@ -86,6 +86,22 @@ Deno.serve(async (req) => {
       .update({ used_at: now })
       .eq("token", token);
 
+    // ---- Auto-file the signed snapshot into the linked event's Files (non-fatal) ----
+    let filed = false;
+    if (agreement.event_id) {
+      try {
+        const fr = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/file-agreement`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+          },
+          body: JSON.stringify({ agreement_id: link.agreement_id }),
+        });
+        filed = fr.ok && !!(await fr.json().catch(() => ({})))?.filed;
+      } catch (_) { /* signing must succeed even if filing fails */ }
+    }
+
     // ---- Notify all master_admins ----
     const { data: admins } = await admin
       .from("profiles")
@@ -101,7 +117,7 @@ Deno.serve(async (req) => {
       const resendKey = Deno.env.get("RESEND_API_KEY");
       if (resendKey) {
         const resend = new Resend(resendKey);
-        const clientName = agreement.client?.full_name || "the client";
+        const clientName = agreement.actor?.display_name || "the client";
         const eventLine = agreement.event_date ? `<p>Event: ${agreement.event_date}</p>` : "";
         const venueLine = agreement.venue_name ? `<p>Venue: ${agreement.venue_name}</p>` : "";
         const totalLine = agreement.total_amount
@@ -135,6 +151,7 @@ Deno.serve(async (req) => {
         success: true,
         signed_at: now,
         signed_as: signature_name,
+        filed_to_event: filed,
         admin_notify: notifyResult,
       }),
       { headers: JSON_HEADERS },

@@ -2622,9 +2622,18 @@ async function loadCachedAgreements() {
   dataCache.agreements = data || [];
   return dataCache.agreements;
 }
+async function loadCachedEvents() {
+  if (dataCache.events) return dataCache.events;
+  const { data, error } = await sb.from('events').select('id, name, series, event_date')
+    .is('deleted_at', null).order('event_date', { ascending: false });
+  if (error) { toast('Loading events failed: ' + error.message, 'err'); return []; }
+  dataCache.events = data || [];
+  return dataCache.events;
+}
 function invalidateCacheFor(table) {
   if (table === 'clients') dataCache.clients = null;
   if (table === 'agreements') dataCache.agreements = null;
+  if (table === 'events') dataCache.events = null;
 }
 
 // Mailing segments (with live subscribed counts) for the campaign "Send to" picker.
@@ -2678,6 +2687,7 @@ const FORM_DEFS = {
       { name: 'agreement_type', type: 'select-static', label: 'Type', required: true, options: ['events', 'rental'], half: 'left' },
       { name: 'event_date',     type: 'date',         label: 'Event date',                                          half: 'right' },
       { name: 'actor_id',       type: 'select-clients', label: 'Client', required: true },
+      { name: 'event_id',       type: 'select-events', label: 'Event (signed copy auto-files into its Files tab)' },
       { name: 'venue_name',     type: 'text',         label: 'Venue name' },
       { name: 'venue_address',  type: 'text',         label: 'Venue address' },
       { name: 'subtotal',       type: 'number',       label: 'Subtotal',  step: '0.01', min: 0, half: 'left' },
@@ -2727,6 +2737,10 @@ async function buildField(f) {
     const [segs, total] = await Promise.all([loadCachedSegments(), subscribedTotal()]);
     const opts = segs.map(s => `<option value="${escapeHtml(s.segment)}">${escapeHtml(s.segment)} — ${s.count} subscribed</option>`).join('');
     input = `<select class="modal-select" name="${f.name}"><option value="">All subscribers — ${total}</option>${opts}</select>`;
+  } else if (f.type === 'select-events') {
+    const opts = (await loadCachedEvents()).map(ev =>
+      `<option value="${escapeHtml(ev.id)}">${escapeHtml(ev.name || '(untitled)')}${ev.event_date ? ' · ' + fmtDate(ev.event_date) : ''}</option>`).join('');
+    input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
   } else if (f.type === 'select-static') {
     const opts = f.options.map(o => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join('');
     input = `<select class="modal-select" name="${f.name}"${f.required ? ' required' : ''}>${opts}</select>`;
@@ -6207,14 +6221,18 @@ $('panel-inquiries').addEventListener('click', async (e) => {
 // AGREEMENTS — contracts: inline status, totals, send, view.
 // ============================================================
 const AGR_STATUS = ['draft', 'sent', 'signed', 'cancelled', 'completed'];
-const agrDash = { rows: [], q: '', status: '', type: '' };
+const agrDash = { rows: [], events: [], q: '', status: '', type: '' };
 async function loadAgreements() {
   $('agreementsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading agreements…</div>';
-  const { data, error } = await sb.from('agreements')
-    .select('id, agreement_type, status, event_date, subtotal, deposit_amount, total_amount, venue_name, payment_method, notes, created_at, actor:actors(display_name, email)')
-    .is('deleted_at', null).order('created_at', { ascending: false }).limit(1000);
+  const [{ data, error }, evs] = await Promise.all([
+    sb.from('agreements')
+      .select('id, agreement_type, status, event_date, subtotal, deposit_amount, total_amount, venue_name, payment_method, notes, created_at, event_id, actor:actors(display_name, email), event:events(name)')
+      .is('deleted_at', null).order('created_at', { ascending: false }).limit(1000),
+    loadCachedEvents(),
+  ]);
   if (error) { $('agreementsBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
   agrDash.rows = data || [];
+  agrDash.events = evs || [];
   renderAgreements();
 }
 function agrFiltered() {
@@ -6247,27 +6265,47 @@ function renderAgreementsBody() {
     ${card('Agreements', fmtNum(list.length))}${card('Contracted', money(sum(list)))}${card('Signed value', money(sum(signed)), 'pos')}${card('Awaiting sig', fmtNum(list.filter(x => x.status === 'sent').length))}${card('Drafts', fmtNum(list.filter(x => x.status === 'draft').length))}
   </div>`;
   const statSel = (x) => `<select class="hub-status-sel" data-agrset="${escapeHtml(x.id)}">${AGR_STATUS.map(o => `<option value="${o}"${x.status === o ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
+  const evSel = (x) => `<select class="hub-status-sel" data-agrevent="${escapeHtml(x.id)}"><option value="">— no event —</option>${(s.events || []).map(ev => `<option value="${escapeHtml(ev.id)}"${x.event_id === ev.id ? ' selected' : ''}>${escapeHtml(ev.name || '(untitled)')}</option>`).join('')}</select>`;
   const sendable = (x) => (x.status === 'draft' || x.status === 'sent') && x.actor?.email;
   const rows = list.map(x => `<tr data-agrview="${escapeHtml(x.id)}" style="cursor:pointer;">
     <td>${escapeHtml(fmtDate(x.created_at))}</td>
     <td>${escapeHtml(x.actor?.display_name || '—')}</td>
     <td><span class="role-chip" style="cursor:default;">${escapeHtml(x.agreement_type || '')}</span></td>
+    <td>${evSel(x)}</td>
     <td>${escapeHtml(fmtDate(x.event_date)) || muted}</td>
     <td class="num">${money(x.total_amount)}</td>
     <td>${statSel(x)}</td>
     <td>${sendable(x) ? `<button class="row-btn" data-send-agreement="${escapeHtml(x.id)}">${x.status === 'sent' ? 'Resend' : 'Send'}</button>` : (x.status === 'draft' ? '<span class="muted">no email</span>' : '')}
       <button class="hub-mini danger" data-agrdel="${escapeHtml(x.id)}">✕</button></td>
-  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No agreements yet — use “+ Add agreement”.</td></tr>`;
-  $('agrTable').innerHTML = `<table class="data-table"><thead><tr><th>Created</th><th>Client</th><th>Type</th><th>Event date</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No agreements yet — use “+ Add agreement”.</td></tr>`;
+  $('agrTable').innerHTML = `<table class="data-table"><thead><tr><th>Created</th><th>Client</th><th>Type</th><th>Event</th><th>Event date</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function setAgreementStatus(id, val) {
   const { error } = await sb.from('agreements').update({ status: val }).eq('id', id);
   if (error) { toast('Failed: ' + error.message, 'err'); return; }
-  const x = agrDash.rows.find(r => r.id === id); if (x) x.status = val; toast('Status → ' + val, 'ok'); renderAgreementsBody();
+  const x = agrDash.rows.find(r => r.id === id); if (x) x.status = val;
+  toast('Status → ' + val, 'ok'); renderAgreementsBody();
+  // Auto-file a signed copy into the linked event's Files tab.
+  if (['signed', 'completed'].includes(val) && x?.event_id) fileAgreementToEvent(id);
+}
+async function setAgreementEvent(id, val) {
+  const { error } = await sb.from('agreements').update({ event_id: val || null }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = agrDash.rows.find(r => r.id === id);
+  if (x) { x.event_id = val || null; x.event = val ? { name: (agrDash.events.find(e => e.id === val) || {}).name } : null; }
+  toast(val ? 'Event linked' : 'Event cleared', 'ok'); renderAgreementsBody();
+  // If it's already signed, file (or re-file) the snapshot into the newly linked event.
+  if (val && ['signed', 'completed'].includes(x?.status)) fileAgreementToEvent(id);
+}
+async function fileAgreementToEvent(id) {
+  const { data, error } = await sb.functions.invoke('file-agreement', { body: { agreement_id: id } });
+  if (error) { toast('Auto-file to event failed: ' + (error.message || 'error'), 'err'); return; }
+  if (data?.filed) toast('Signed copy filed in event Files → Contract', 'ok');
 }
 function viewAgreement(id) {
   const x = agrDash.rows.find(r => r.id === id); if (!x) return;
   openKpi('Agreement — ' + (x.actor?.display_name || ''), `${escapeHtml(x.agreement_type || '')} · ${escapeHtml(x.status)}`, `
+    <div class="modal-form-row"><label class="modal-label">Linked event</label><div>${x.event?.name ? escapeHtml(x.event.name) + (['signed', 'completed'].includes(x.status) ? ' · <span class="muted">signed copy auto-files into its Files → Contract bucket</span>' : '') : '<span class="muted">none — link one in the Event column to auto-file the signed copy</span>'}</div></div>
     <div class="modal-form-row half-row"><div><label class="modal-label">Event date</label><div>${escapeHtml(fmtDate(x.event_date) || '—')}</div></div><div><label class="modal-label">Venue</label><div>${escapeHtml(x.venue_name || '—')}</div></div></div>
     <div class="modal-form-row"><label class="modal-label">Financials</label><div>Subtotal ${money(x.subtotal)} · Deposit ${money(x.deposit_amount)} · <strong>Total ${money(x.total_amount)}</strong></div></div>
     <div class="modal-form-row"><label class="modal-label">Payment</label><div>${escapeHtml(x.payment_method || '—')}</div></div>
@@ -6279,6 +6317,7 @@ $('panel-agreements').addEventListener('change', (e) => {
   const st = e.target.closest('[data-agrstatus]'); if (st) { agrDash.status = st.value; renderAgreementsBody(); return; }
   const ty = e.target.closest('[data-agrtype]'); if (ty) { agrDash.type = ty.value; renderAgreementsBody(); return; }
   const set = e.target.closest('[data-agrset]'); if (set) { setAgreementStatus(set.dataset.agrset, set.value); return; }
+  const ev = e.target.closest('[data-agrevent]'); if (ev) { setAgreementEvent(ev.dataset.agrevent, ev.value); return; }
 });
 $('panel-agreements').addEventListener('click', async (e) => {
   if (e.target.closest('[data-agrclear]')) { agrDash.q = agrDash.status = agrDash.type = ''; renderAgreements(); return; }
