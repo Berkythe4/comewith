@@ -1036,6 +1036,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <button class="add-btn" id="addClientBtn">+ Add client</button>
         <div id="clientsBody"></div>
       </div>
+      <div class="panel" id="panel-conversations"><div id="conversationsBody"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -2388,6 +2389,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
   if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
+  if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -4284,7 +4286,7 @@ $('kpiModalBody').addEventListener('click', (e) => {
 
 async function hubSecPeople() {
   const { data, error } = await sb.from('event_participants')
-    .select('id, role, roles, fee, is_contractor, bill_order, set_start, set_end, actor:actors(id, display_name, kind)')
+    .select('id, role, roles, fee, is_contractor, bill_order, set_start, set_end, actor:actors(id, display_name, kind, email)')
     .eq('event_id', hub.eventId).order('bill_order', { ascending: true, nullsFirst: false }).order('role');
   if (error) throw error;
   hub.people = data || [];
@@ -4292,11 +4294,14 @@ async function hubSecPeople() {
   const rows = hub.people.length ? hub.people.map(p => {
     const chips = rolesOf(p).map(r => `<span class="role-chip">${escapeHtml(r)}</span>`).join(' ') || muted;
     return `<div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
-        <div class="li-sub"><span class="hub-roles">${chips}</span>${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div>
+      <div class="li-main" style="display:flex;align-items:center;gap:9px;">
+        ${p.actor?.email ? `<input type="checkbox" data-hub-psel="${escapeHtml(p.actor.id)}" data-name="${escapeHtml(p.actor.display_name || '')}" data-email="${escapeHtml(p.actor.email)}" style="width:auto;margin:0;" title="select to email">` : '<span style="width:13px;display:inline-block;"></span>'}
+        <div><strong>${escapeHtml(p.actor?.display_name || '—')}</strong>
+          <div class="li-sub"><span class="hub-roles">${chips}</span>${p.is_contractor ? ' · contractor' : ''}${p.bill_order != null ? (' · bill #' + p.bill_order) : ''}</div></div>
       </div>
       <div class="li-amt">${p.fee != null ? money(p.fee) : muted}</div>
       <div class="hub-li-actions">
+        ${p.actor?.email ? `<button class="hub-mini" data-hub-email-person="${escapeHtml(p.actor.id)}" title="Email ${escapeHtml(p.actor.display_name || '')}">✉</button>` : ''}
         <button class="hub-mini" data-hub-action="edit-participant" data-id="${escapeHtml(p.id)}">Edit</button>
         ${p.fee != null && Number(p.fee) > 0 ? `<button class="hub-mini" data-hub-fee2exp="${escapeHtml(p.id)}" title="Create a one-time expense from this fee">Fee → expense</button>` : ''}
         <button class="hub-mini danger" data-hub-del="event_participants:${escapeHtml(p.id)}" title="Remove from event">Remove</button>
@@ -4304,8 +4309,18 @@ async function hubSecPeople() {
     </div>`;
   }).join('') : `<div class="hub-empty">No people yet. Add several at once →</div>`;
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>People</h3><button class="hub-btn" data-hub-action="add-people">+ Add people</button></div>
+    <div class="hub-sec-bar"><h3>People</h3>
+      <span><button class="hub-mini" data-hub-email-people title="Email everyone ticked">✉ Email selected</button>
+      <button class="hub-btn" data-hub-action="add-people">+ Add people</button></span></div>
     <div class="hub-list">${rows}</div>`;
+}
+
+function hubEmailPeople(oneActorId) {
+  let recips = [];
+  if (oneActorId) { const p = (hub.people || []).find(x => x.actor?.id === oneActorId); if (p?.actor?.email) recips = [{ actor_id: p.actor.id, name: p.actor.display_name, email: p.actor.email }]; }
+  else recips = [...$('hubSecBody').querySelectorAll('[data-hub-psel]:checked')].map(c => ({ actor_id: c.dataset.hubPsel, name: c.dataset.name, email: c.dataset.email }));
+  if (!recips.length) { toast('Tick people with an email first', 'err'); return; }
+  openCompose(recips, { source: 'Event: ' + (hub.event?.name || '') + ' · People', source_kind: 'event_people', source_id: hub.eventId, event_id: hub.eventId });
 }
 
 // ---- Section: Tasks (tasks + task_assignments) ----
@@ -5121,6 +5136,8 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const moneyEl = e.target.closest('[data-money-add],[data-money-del]');
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
+  const ep = e.target.closest('[data-hub-email-person]'); if (ep) { hubEmailPeople(ep.dataset.hubEmailPerson); return; }
+  if (e.target.closest('[data-hub-email-people]')) { hubEmailPeople(); return; }
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
@@ -5155,14 +5172,14 @@ async function renderVenues() {
       <button data-ven-mode="vendors" class="${m === 'vendors' ? 'active' : ''}">Vendors</button>
     </div>
     <div class="hub-sec-bar"><h3>${m === 'venues' ? 'Venues' : 'Vendors'}</h3>
-      <button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></div>
+      <span>${m === 'vendors' ? '<button class="hub-mini" data-ven-email-vendors title="Email ticked vendors">✉ Email selected</button> ' : ''}<button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></span></div>
     <div id="venList"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
   if (m === 'venues') await renderVenueList(); else await renderVendorList();
 }
 
 async function renderVenueList() {
   const { data, error } = await sb.from('venues')
-    .select('id, name, city, state, capacity, venue_contacts(id)').is('deleted_at', null).order('name');
+    .select('id, name, city, state, capacity, contact_email, venue_contacts(id)').is('deleted_at', null).order('name');
   if (error) { $('venList').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
   const rows = (data || []).length ? data.map(v => {
     const loc = [v.city, v.state].filter(Boolean).join(', ');
@@ -5171,6 +5188,7 @@ async function renderVenueList() {
       <div class="li-main"><strong>${escapeHtml(v.name)}</strong>
         <div class="li-sub">${escapeHtml(loc) || '—'}${v.capacity ? (' · cap ' + v.capacity) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div>
       <div class="hub-li-actions">
+        ${v.contact_email ? `<button class="hub-mini" data-ven-email="venue:${escapeHtml(v.id)}" title="Email ${escapeHtml(v.name)}">✉</button>` : ''}
         <button class="hub-mini" data-ven-open="${escapeHtml(v.id)}">Open</button>
         <button class="hub-mini" data-ven-action="edit-venue" data-id="${escapeHtml(v.id)}">Edit</button>
         <button class="hub-mini danger" data-ven-action="archive-venue" data-id="${escapeHtml(v.id)}">Archive</button>
@@ -5181,7 +5199,7 @@ async function renderVenueList() {
 
 async function renderVendorList() {
   const [{ data: roleRows }, { data: vc }] = await Promise.all([
-    sb.from('actor_roles').select('actor:actors(id, display_name, kind, deleted_at)').eq('role', 'vendor').eq('active', true),
+    sb.from('actor_roles').select('actor:actors(id, display_name, kind, email, deleted_at)').eq('role', 'vendor').eq('active', true),
     sb.from('vendor_contacts').select('vendor_actor_id'),
   ]);
   const counts = {}; (vc || []).forEach(r => { counts[r.vendor_actor_id] = (counts[r.vendor_actor_id] || 0) + 1; });
@@ -5190,8 +5208,10 @@ async function renderVendorList() {
   const rows = vendors.length ? vendors.map(a => {
     const n = counts[a.id] || 0;
     return `<div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(a.display_name)}</strong><div class="li-sub">${escapeHtml(a.kind)} · ${n} contact${n === 1 ? '' : 's'}</div></div>
-      <div class="hub-li-actions"><button class="hub-mini" data-ven-open="${escapeHtml(a.id)}">Open</button></div></div>`;
+      <div class="li-main" style="display:flex;align-items:center;gap:9px;">
+        ${a.email ? `<input type="checkbox" data-ven-vsel="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name)}" data-email="${escapeHtml(a.email)}" style="width:auto;margin:0;">` : '<span style="width:13px;display:inline-block;"></span>'}
+        <div><strong>${escapeHtml(a.display_name)}</strong><div class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''} · ${n} contact${n === 1 ? '' : 's'}</div></div></div>
+      <div class="hub-li-actions">${a.email ? `<button class="hub-mini" data-ven-email="vendor:${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}<button class="hub-mini" data-ven-open="${escapeHtml(a.id)}">Open</button></div></div>`;
   }).join('') : `<div class="hub-empty">No vendors yet (an actor with the “vendor” role). Add one →</div>`;
   $('venList').innerHTML = `<div class="hub-list">${rows}</div>`;
 }
@@ -5235,7 +5255,7 @@ async function renderOwnerDetail() {
         <div><span class="lbl">Events here</span>${(evs || []).length}</div>
         <div><span class="lbl">Last event here</span>${last}</div>
       </div>
-      <div class="hub-head-actions"><button class="hub-btn ghost" data-ven-action="edit-venue" data-id="${escapeHtml(id)}">Edit venue</button></div>
+      <div class="hub-head-actions">${v?.contact_email ? `<button class="hub-btn ghost" data-ven-email="venue:${escapeHtml(id)}">✉ Email venue</button>` : ''}<button class="hub-btn ghost" data-ven-action="edit-venue" data-id="${escapeHtml(id)}">Edit venue</button></div>
     </div>`;
     const evRows = (evs || []).length ? evs.map(e => `<div class="hub-li" data-ven-event="${escapeHtml(e.id)}" style="cursor:pointer;">
       <div class="li-main"><strong>${escapeHtml(e.name)}</strong>
@@ -5250,6 +5270,7 @@ async function renderOwnerDetail() {
     $('venDetailHead').innerHTML = `<div class="hub-head">
       <div class="hub-title">${escapeHtml(a?.display_name || '')}</div>
       <div class="hub-facts"><div><span class="lbl">Vendor</span>${escapeHtml(a?.kind || '')}</div>${a?.email ? `<div><span class="lbl">Email</span>${escapeHtml(a.email)}</div>` : ''}</div>
+      ${a?.email ? `<div class="hub-head-actions"><button class="hub-btn ghost" data-ven-email="vendor:${escapeHtml(id)}">✉ Email vendor</button></div>` : ''}
     </div>`;
     const { data: contacts } = await sb.from('v_vendor_contacts').select('*').eq('vendor_actor_id', id);
     renderContactList(orderContacts(contacts || []), 'vendor');
@@ -5398,6 +5419,8 @@ $('panel-venues').addEventListener('click', (e) => {
   const back = e.target.closest('[data-ven-back]'); if (back) { venuesState.view = 'list'; renderVenues(); return; }
   const evOpen = e.target.closest('[data-ven-event]'); if (evOpen) { openEventHub(evOpen.dataset.venEvent); return; }
   const open = e.target.closest('[data-ven-open]'); if (open) { openOwnerDetail(open.dataset.venOpen); return; }
+  const vem = e.target.closest('[data-ven-email]'); if (vem) { const [k, id] = vem.dataset.venEmail.split(':'); k === 'venue' ? openCompose([{ venue_id: id }], { source: 'Venues', source_kind: 'venue', source_id: id }) : openCompose([{ actor_id: id }], { source: 'Vendors', source_kind: 'actor', source_id: id }); return; }
+  if (e.target.closest('[data-ven-email-vendors]')) { const recips = [...$('venuesBody').querySelectorAll('[data-ven-vsel]:checked')].map(c => ({ actor_id: c.dataset.venVsel, name: c.dataset.name, email: c.dataset.email })); if (!recips.length) { toast('Tick vendors with an email first', 'err'); return; } openCompose(recips, { source: 'Vendors', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null }); return; }
   const cdel = e.target.closest('[data-ven-cdel]'); if (cdel) { venContactRemove(cdel.dataset.venCdel); return; }
   const act = e.target.closest('[data-ven-action]'); if (act) {
     const id = act.dataset.id;
@@ -5536,7 +5559,16 @@ const guestState = { rows: [], filter: { q: '', event: '', subscribed: false, re
 // ============================================================
 const ACTOR_ROLE_VOCAB = ['artist', 'dj', 'contractor', 'customer', 'sponsor', 'team', 'staff', 'performer', 'painter', 'dancer', 'vendor', 'venue_contact', 'host', 'crew', 'donor', 'photographer', 'videographer', 'producer', 'organizer', 'volunteer', 'partner', 'designer'];
 const ACTOR_COLS = [['display_name', 'Name'], ['kind', 'Kind'], ['roles', 'Roles'], ['org', 'Org / members'], ['email', 'Email'], ['phone', 'Phone'], ['instagram', 'Instagram'], ['events', 'Events'], ['derivedStatus', 'Status'], ['created_at', 'Added']];
-const actorState = { rows: [], orgs: [], venues: [], sortKey: 'display_name', sortDir: 1, q: '', status: 'active+hold', roleFilter: new Set(), kind: 'all' };
+const actorState = { rows: [], orgs: [], venues: [], sortKey: 'display_name', sortDir: 1, q: '', status: 'active+hold', roleFilter: new Set(), kind: 'all', selected: new Set() };
+// Collect checked actors that have an email -> compose. `extra` lets a single-row email pass one id.
+function actorsEmailSelected(oneId) {
+  const ids = oneId ? [oneId] : [...actorState.selected];
+  const recips = ids.map(id => actorState.rows.find(a => a.id === id)).filter(a => a && a.email).map(a => ({ actor_id: a.id, name: a.display_name, email: a.email }));
+  const skipped = ids.length - recips.length;
+  if (!recips.length) { toast('None of the selected have an email on file', 'err'); return; }
+  if (skipped > 0) toast(`${skipped} skipped (no email)`, 'ok');
+  openCompose(recips, { source: 'Actors', source_kind: 'actor', source_id: recips.length === 1 ? recips[0].actor_id : null });
+}
 
 async function loadActors() {
   $('actorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading actors…</div>';
@@ -5589,6 +5621,7 @@ function renderActors() {
   $('actorsBody').innerHTML = `
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
       <button class="add-btn" data-aadd style="position:static;">+ Add actor</button>
+      <button class="hub-mini" data-aemail-sel title="Email everyone you've ticked">✉ Email selected (${s.selected.size})</button>
       <input class="modal-input" data-aq placeholder="Search name / email / role / org…" style="max-width:240px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-akindfilter>
         ${[['all', 'People + orgs'], ['person', 'People only'], ['org', 'Orgs only']].map(([v, l]) => `<option value="${v}"${s.kind === v ? ' selected' : ''}>${l}</option>`).join('')}
@@ -5610,7 +5643,7 @@ function renderActors() {
 function renderActorsTable() {
   const s = actorState, list = actorFiltered();
   const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
-  const th = ACTOR_COLS.map(([key, lbl]) => `<th data-asort="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
+  const th = `<th style="width:24px;"><input type="checkbox" data-asel-all title="select all shown" style="width:auto;margin:0;"></th>` + ACTOR_COLS.map(([key, lbl]) => `<th data-asort="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('') + '<th></th>';
   const ed = (a, field) => `<td contenteditable="true" data-aedit="${field}" data-id="${escapeHtml(a.id)}" data-orig="${escapeHtml(a[field] || '')}" style="cursor:text;">${escapeHtml(a[field] || '')}</td>`;
   const statusSel = (a) => `<select class="hub-status-sel" data-astatus="${escapeHtml(a.id)}">${['active', 'on_hold', 'archived'].map(v => `<option value="${v}"${a.derivedStatus === v ? ' selected' : ''}>${v.replace('_', ' ')}</option>`).join('')}</select>`;
   const roleChips = (a) => (a.roles || []).map(r => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`).join(' ') || `<span class="muted">—</span>`;
@@ -5626,6 +5659,7 @@ function renderActorsTable() {
     return `<select class="hub-status-sel" data-aorg="${escapeHtml(a.id)}"><option value="">— none —</option>${opts}</select>`;
   };
   const rows = list.map(a => `<tr${a.derivedStatus === 'on_hold' ? ' style="opacity:.6;"' : ''}>
+    <td><input type="checkbox" data-asel="${escapeHtml(a.id)}" style="width:auto;margin:0;"${s.selected.has(a.id) ? ' checked' : ''}></td>
     ${ed(a, 'display_name')}
     <td><select class="hub-status-sel" data-akind="${escapeHtml(a.id)}"><option value="person"${a.kind === 'person' ? ' selected' : ''}>person</option><option value="org"${a.kind === 'org' ? ' selected' : ''}>org</option></select></td>
     <td>${roleChips(a)} <button class="hub-mini" data-aroles="${escapeHtml(a.id)}">edit</button></td>
@@ -5634,7 +5668,8 @@ function renderActorsTable() {
     <td class="num">${a.events || 0}</td>
     <td>${statusSel(a)}</td>
     <td class="li-sub">${escapeHtml(fmtDate(a.created_at))}</td>
-  </tr>`).join('') || `<tr><td colspan="${ACTOR_COLS.length}" class="muted" style="padding:14px;">No actors match.</td></tr>`;
+    <td>${a.email ? `<button class="hub-mini" data-aemail="${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="${ACTOR_COLS.length + 2}" class="muted" style="padding:14px;">No actors match.</td></tr>`;
   $('actorsTable').innerHTML = `<table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
   const cnt = $('actorsBody').querySelector('[data-acount]'); if (cnt) cnt.textContent = `${list.length} of ${s.rows.length}`;
 }
@@ -5742,6 +5777,8 @@ $('panel-actors').addEventListener('click', (e) => {
   const sort = e.target.closest('[data-asort]'); if (sort) { const k = sort.dataset.asort; if (actorState.sortKey === k) actorState.sortDir *= -1; else { actorState.sortKey = k; actorState.sortDir = 1; } renderActorsTable(); return; }
   const roles = e.target.closest('[data-aroles]'); if (roles) { openActorRoles(roles.dataset.aroles); return; }
   const ov = e.target.closest('[data-aorgvenues]'); if (ov) { openOrgVenues(ov.dataset.aorgvenues); return; }
+  const em = e.target.closest('[data-aemail]'); if (em) { actorsEmailSelected(em.dataset.aemail); return; }
+  if (e.target.closest('[data-aemail-sel]')) { actorsEmailSelected(); return; }
 });
 $('panel-actors').addEventListener('input', (e) => {
   const q = e.target.closest('[data-aq]'); if (q) { actorState.q = q.value; renderActorsTable(); }
@@ -5752,6 +5789,8 @@ $('panel-actors').addEventListener('change', (e) => {
   const st = e.target.closest('[data-astatus]'); if (st) { setActorStatus(st.dataset.astatus, st.value); return; }
   const kd = e.target.closest('[data-akind]'); if (kd) { setActorKind(kd.dataset.akind, kd.value); return; }
   const org = e.target.closest('[data-aorg]'); if (org) { setActorOrg(org.dataset.aorg, org.value); return; }
+  const sel = e.target.closest('[data-asel]'); if (sel) { sel.checked ? actorState.selected.add(sel.dataset.asel) : actorState.selected.delete(sel.dataset.asel); const b = $('panel-actors').querySelector('[data-aemail-sel]'); if (b) b.textContent = `✉ Email selected (${actorState.selected.size})`; return; }
+  const all = e.target.closest('[data-asel-all]'); if (all) { actorFiltered().forEach(a => all.checked ? actorState.selected.add(a.id) : actorState.selected.delete(a.id)); renderActorsTable(); return; }
 });
 $('panel-actors').addEventListener('focusout', (e) => { const td = e.target.closest('[data-aedit]'); if (td) saveActorField(td); });
 $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.closest('[data-aedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
@@ -6175,6 +6214,200 @@ $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest
 $('panel-artists').addEventListener('click', (e) => {
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
   const row = e.target.closest('[data-artist]'); if (row) openArtistBookings(row.dataset.artist);
+});
+
+// ============================================================
+// EMAIL COMPOSE + CONVERSATIONS — email any actor/venue, log every thread.
+// ============================================================
+let _staffCache = null;
+async function loadStaff() {
+  if (_staffCache) return _staffCache;
+  const { data } = await sb.from('profiles').select('id, full_name, email').in('role', ['master_admin', 'sub_admin']).order('email');
+  _staffCache = (data || []).filter(p => p.id !== ME.id);
+  return _staffCache;
+}
+// recipients: [{actor_id?, venue_id?, email?, name?}]  ctx: {source, source_kind, source_id, event_id}
+async function openCompose(recipients, ctx) {
+  const valid = (recipients || []).filter(r => r.email || r.actor_id || r.venue_id);
+  if (!valid.length) { toast('No recipients selected', 'err'); return; }
+  const staff = await loadStaff();
+  const chips = valid.map(r => `<span class="role-chip" style="cursor:default;">${escapeHtml(r.name || r.email || 'recipient')}${r.email ? '' : ' <span class="li-sub">(saved email)</span>'}</span>`).join(' ');
+  openKpi('Email ' + (valid.length > 1 ? valid.length + ' recipients' : (valid[0].name || valid[0].email || '')), ctx.source ? ('From: ' + ctx.source) : '',
+    `<div class="modal-form-row"><label class="modal-label">To</label><div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div></div>
+     <div class="modal-form-row"><label class="modal-label">Subject *</label><input class="modal-input" id="cmpSubj" placeholder="Subject"></div>
+     <div class="kpi-hint" style="margin:-4px 0 8px;max-width:60ch;">“[${escapeHtml(ctx.source || 'Come With')}]” is added to the subject so you can tell where it came from, and a link back to this page is added to the email body.</div>
+     <div class="modal-form-row"><label class="modal-label">Message</label><textarea class="modal-textarea" id="cmpBody" rows="7" placeholder="Write your message…"></textarea></div>
+     <div class="modal-form-row"><label class="modal-label">Who can see this thread</label>
+       <select class="modal-select" id="cmpVis"><option value="team">Whole team</option><option value="restricted">Only me + selected people</option></select></div>
+     <div class="modal-form-row" id="cmpAclRow" style="display:none;"><label class="modal-label">…also visible to</label>
+       <div class="hub-list" style="max-height:140px;overflow:auto;">${staff.length ? staff.map(p => `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;"><input type="checkbox" data-cmpacl="${p.id}" style="width:auto;margin:0;"> ${escapeHtml(p.full_name || p.email)}</label>`).join('') : '<div class="hub-empty">No other staff.</div>'}</div></div>`,
+    async () => {
+      const subject = $('cmpSubj').value.trim(); if (!subject) throw new Error('Subject is required');
+      const body = $('cmpBody').value.trim();
+      const visibility = $('cmpVis').value;
+      const acl = [...$('kpiModalBody').querySelectorAll('[data-cmpacl]:checked')].map(c => c.dataset.cmpacl);
+      const htmlBody = body ? body.split(/\n{2,}/).map(p => '<p>' + escapeHtml(p).replace(/\n/g, '<br>') + '</p>').join('') : '';
+      const { data, error } = await sb.functions.invoke('send-actor-email', { body: {
+        recipients: valid.map(r => ({ actor_id: r.actor_id || null, venue_id: r.venue_id || null, email: r.email || null, name: r.name || null })),
+        subject, body: htmlBody, source: ctx.source, source_kind: ctx.source_kind, source_id: ctx.source_id, event_id: ctx.event_id, visibility, acl_user_ids: acl } });
+      if (error) throw new Error(error.message || 'send failed');
+      closeKpi();
+      const sent = data?.sent || 0, total = data?.total || valid.length;
+      const failed = (data?.results || []).filter(r => !r.ok);
+      toast(`Emailed ${sent}/${total}` + (failed.length ? ` · ${failed.length} couldn't send (${failed.map(f => f.error).join('; ')})` : ''), failed.length ? 'err' : 'ok');
+    }, 'Send email');
+  setTimeout(() => { const v = $('cmpSubj') && document.getElementById('cmpVis'); if (v) v.addEventListener('change', () => { $('cmpAclRow').style.display = v.value === 'restricted' ? '' : 'none'; }); }, 40);
+}
+
+// ---- Conversations screen ----
+const convState = { threads: [], q: '', filter: 'all', activeId: null };
+async function loadConversations() {
+  $('conversationsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading conversations…</div>';
+  const { data, error } = await sb.from('conversations')
+    .select('id, subject, recipient_email, source, source_kind, source_id, event_id, visibility, last_message_at, created_at, actor:actors(display_name), messages:conversation_messages(direction, status, created_at)')
+    .is('deleted_at', null).order('last_message_at', { ascending: false }).limit(500);
+  if (error) { $('conversationsBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  convState.threads = data || []; convState.activeId = null;
+  renderConvList();
+}
+function convLastStatus(t) {
+  const out = (t.messages || []).filter(m => m.direction === 'outbound');
+  return out.length ? out[out.length - 1].status : null;
+}
+function convStatusBadge(s) {
+  if (!s) return '';
+  const map = { delivered: ['#1f7a1f', '#e6f4e6'], sent: ['#6b6256', '#efeae2'], bounced: ['#b3261e', '#fdecea'], complained: ['#b3261e', '#fdecea'], failed: ['#b3261e', '#fdecea'], opened: ['#1f5c8b', '#e2eef7'] };
+  const [c, b] = map[s] || ['#6b6256', '#efeae2'];
+  return `<span style="font-size:.7rem;padding:2px 7px;border-radius:999px;color:${c};background:${b};">${escapeHtml(s)}</span>`;
+}
+function convFiltered() {
+  const s = convState, ql = s.q.toLowerCase();
+  return s.threads.filter(t => {
+    if (s.filter === 'restricted' && t.visibility !== 'restricted') return false;
+    if (s.filter === 'bounced' && !(t.messages || []).some(m => m.status === 'bounced' || m.status === 'complained')) return false;
+    if (ql && ![t.subject, t.recipient_email, t.actor?.display_name, t.source].join(' ').toLowerCase().includes(ql)) return false;
+    return true;
+  });
+}
+function renderConvList() {
+  const s = convState;
+  const list = convFiltered();
+  const rows = list.map(t => {
+    const bounced = (t.messages || []).some(m => m.status === 'bounced' || m.status === 'complained');
+    return `<tr data-conv-open="${escapeHtml(t.id)}" style="cursor:pointer;">
+      <td><strong>${escapeHtml(t.subject)}</strong>${t.visibility === 'restricted' ? ' <span title="restricted">🔒</span>' : ''}${bounced ? ' <span title="delivery problem">⚠️</span>' : ''}<div class="li-sub">${escapeHtml(t.source || '')}</div></td>
+      <td>${escapeHtml(t.actor?.display_name || t.recipient_email)}</td>
+      <td>${convStatusBadge(convLastStatus(t))}</td>
+      <td class="num">${(t.messages || []).length}</td>
+      <td class="li-sub">${escapeHtml(fmtDate(t.last_message_at))}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="5" class="muted" style="padding:14px;">No conversations yet. Email an actor or venue and the thread shows up here.</td></tr>`;
+  $('conversationsBody').innerHTML = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <input class="modal-input" data-convq placeholder="Search subject / recipient…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-convfilter>
+        ${[['all', 'All threads'], ['bounced', '⚠️ Delivery problems'], ['restricted', '🔒 Restricted']].map(([v, l]) => `<option value="${v}"${s.filter === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <span class="li-sub">${list.length} thread${list.length === 1 ? '' : 's'}</span>
+    </div>
+    <table class="data-table"><thead><tr><th>Subject</th><th>With</th><th>Last status</th><th class="num">Msgs</th><th>Updated</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Every email opens a thread the whole team can read — unless it's marked 🔒 restricted. Delivery + bounce status is logged automatically. Reply or add a note inside a thread.</div>`;
+}
+async function openThread(id) {
+  convState.activeId = id;
+  $('conversationsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading thread…</div>';
+  const [{ data: conv }, { data: msgs }, { data: acl }] = await Promise.all([
+    sb.from('conversations').select('*, actor:actors(display_name)').eq('id', id).single(),
+    sb.from('conversation_messages').select('*').eq('conversation_id', id).order('created_at'),
+    sb.from('conversation_acl').select('user_id').eq('conversation_id', id),
+  ]);
+  if (!conv) { $('conversationsBody').innerHTML = '<div class="panel-state err">Thread not found.</div>'; return; }
+  convState.activeConv = conv; convState.activeAcl = (acl || []).map(a => a.user_id);
+  const canManage = ME.isMaster || conv.created_by === ME.id;
+  const bubble = (m) => {
+    if (m.direction === 'event') return `<div style="text-align:center;margin:10px 0;"><span style="font-size:.8rem;color:#b3261e;background:#fdecea;padding:5px 12px;border-radius:999px;">${escapeHtml(m.body || '')}</span></div>`;
+    const out = m.direction === 'outbound', note = m.direction === 'note';
+    const side = out ? 'margin-left:auto;background:#eef5e6;' : note ? 'margin:0 auto;background:#fbf6e8;' : 'background:#fff;';
+    const who = note ? '📝 internal note' : out ? 'Sent' : 'Received';
+    return `<div style="max-width:80%;${side}border:1px solid var(--line,#E5DED3);border-radius:12px;padding:10px 13px;margin:8px 0;">
+      <div class="li-sub" style="margin-bottom:4px;">${who} · ${escapeHtml(fmtDate(m.created_at))} ${out ? convStatusBadge(m.status) : ''}</div>
+      <div style="font-size:.92rem;white-space:pre-wrap;">${m.body || ''}</div></div>`;
+  };
+  const link = conv.source_kind && conv.source_id ? `<button class="hub-btn ghost" data-conv-goto>↪ Go to ${escapeHtml(conv.source || 'source')}</button>` : '';
+  $('conversationsBody').innerHTML = `
+    <button class="hub-mini" data-conv-back>← all conversations</button>
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3>${escapeHtml(conv.subject)}</h3>${link}</div>
+    <div class="li-sub" style="margin-bottom:4px;">With <strong>${escapeHtml(conv.actor?.display_name || conv.recipient_email)}</strong> &lt;${escapeHtml(conv.recipient_email)}&gt; · from ${escapeHtml(conv.source || '—')}</div>
+    <div style="margin-bottom:10px;">
+      Visibility:
+      <select class="hub-status-sel" data-conv-vis ${canManage ? '' : 'disabled'}>
+        <option value="team"${conv.visibility === 'team' ? ' selected' : ''}>Whole team</option>
+        <option value="restricted"${conv.visibility === 'restricted' ? ' selected' : ''}>Restricted</option>
+      </select>
+      ${conv.visibility === 'restricted' && canManage ? '<button class="hub-mini" data-conv-acl>manage who can see</button>' : ''}
+    </div>
+    <div style="border-top:1px solid var(--line,#E5DED3);padding-top:10px;display:flex;flex-direction:column;">${(msgs || []).map(bubble).join('')}</div>
+    <div style="border:1px solid var(--line,#E5DED3);border-radius:12px;padding:12px;margin-top:12px;">
+      <textarea class="modal-textarea" id="convReplyBody" rows="3" placeholder="Write a reply (emails ${escapeHtml(conv.recipient_email)}) or an internal note…"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="hub-btn primary" data-conv-reply>Send reply email</button>
+        <button class="hub-btn ghost" data-conv-note>Add internal note</button>
+      </div>
+    </div>`;
+}
+async function convReply() {
+  const conv = convState.activeConv, body = $('convReplyBody').value.trim();
+  if (!body) { toast('Write something first', 'err'); return; }
+  const htmlBody = body.split(/\n{2,}/).map(p => '<p>' + escapeHtml(p).replace(/\n/g, '<br>') + '</p>').join('');
+  const { data, error } = await sb.functions.invoke('send-actor-email', { body: { conversation_id: conv.id, subject: 'Re: ' + conv.subject, body: htmlBody } });
+  if (error || !data?.ok) { toast('Reply failed: ' + (error?.message || data?.error || 'unknown'), 'err'); return; }
+  toast('Reply sent', 'ok'); openThread(conv.id);
+}
+async function convAddNote() {
+  const conv = convState.activeConv, body = $('convReplyBody').value.trim();
+  if (!body) { toast('Write something first', 'err'); return; }
+  const { error } = await sb.from('conversation_messages').insert({ conversation_id: conv.id, direction: 'note', body, created_by: ME.id });
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  await sb.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conv.id);
+  toast('Note added', 'ok'); openThread(conv.id);
+}
+async function convSetVisibility(val) {
+  const conv = convState.activeConv;
+  const { error } = await sb.from('conversations').update({ visibility: val }).eq('id', conv.id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  conv.visibility = val; toast('Visibility: ' + val, 'ok'); openThread(conv.id);
+}
+async function convManageAcl() {
+  const conv = convState.activeConv, staff = await loadStaff(), cur = new Set(convState.activeAcl);
+  openKpi('Who can see this thread', escapeHtml(conv.subject),
+    `<div class="kpi-hint" style="margin-bottom:8px;">You + master admins always see it. Tick anyone else who should.</div>
+     <div class="hub-list">${staff.map(p => `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;"><input type="checkbox" data-aclpick="${p.id}" style="width:auto;margin:0;"${cur.has(p.id) ? ' checked' : ''}> ${escapeHtml(p.full_name || p.email)}</label>`).join('') || '<div class="hub-empty">No other staff.</div>'}</div>`,
+    async () => {
+      const want = new Set([...$('kpiModalBody').querySelectorAll('[data-aclpick]:checked')].map(c => c.dataset.aclpick));
+      await sb.from('conversation_acl').delete().eq('conversation_id', conv.id);
+      if (want.size) await sb.from('conversation_acl').insert([...want].map(u => ({ conversation_id: conv.id, user_id: u })));
+      convState.activeAcl = [...want]; closeKpi(); toast('Access updated', 'ok');
+    }, 'Save access');
+}
+function gotoSource(kind, id) {
+  if (!id) return;
+  if (kind === 'actor') activateTab('actors');
+  else if (kind === 'venue') activateTab('venues');
+  else if (kind === 'event_people' || kind === 'event') { activateTab('events'); setTimeout(() => openEventHub(id), 160); }
+  else if (kind === 'conversation') { activateTab('conversations'); setTimeout(() => openThread(id), 160); }
+}
+$('panel-conversations').addEventListener('input', (e) => { const q = e.target.closest('[data-convq]'); if (q) { convState.q = q.value; renderConvList(); } });
+$('panel-conversations').addEventListener('change', (e) => {
+  const f = e.target.closest('[data-convfilter]'); if (f) { convState.filter = f.value; renderConvList(); return; }
+  const v = e.target.closest('[data-conv-vis]'); if (v) { convSetVisibility(v.value); return; }
+});
+$('panel-conversations').addEventListener('click', (e) => {
+  if (e.target.closest('[data-conv-back]')) { renderConvList(); return; }
+  if (e.target.closest('[data-conv-goto]')) { const c = convState.activeConv; gotoSource(c.source_kind, c.source_id); return; }
+  if (e.target.closest('[data-conv-reply]')) { convReply(); return; }
+  if (e.target.closest('[data-conv-note]')) { convAddNote(); return; }
+  if (e.target.closest('[data-conv-acl]')) { convManageAcl(); return; }
+  const row = e.target.closest('[data-conv-open]'); if (row) openThread(row.dataset.convOpen);
 });
 
 // ============================================================
@@ -6682,6 +6915,13 @@ document.addEventListener('keydown', (e) => {
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
 await renderForSession(session);
+
+// Deep-link from email links: ?goto=<actor|venue|event_people|conversation>&id=<id>
+try {
+  const _p = new URLSearchParams(location.search);
+  const _g = _p.get('goto'), _id = _p.get('id');
+  if (_g && _id && session) { history.replaceState({}, '', location.pathname); setTimeout(() => gotoSource(_g, _id), 400); }
+} catch (_) { /* noop */ }
 </script>
 
 <style>

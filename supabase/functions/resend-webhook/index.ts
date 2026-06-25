@@ -106,8 +106,35 @@ Deno.serve(async (req) => {
         .eq("id", originalSent.subscriber_id);
     }
 
+    // --- Also correlate to a Conversation message (resend_id == email_id) so
+    //     delivery + bounce status shows in the thread for the whole team. ---
+    const { data: cmsg } = await admin
+      .from("conversation_messages")
+      .select("id, conversation_id")
+      .eq("resend_id", resendEmailId)
+      .maybeSingle();
+    let conv_attributed = false;
+    if (cmsg) {
+      conv_attributed = true;
+      await admin.from("conversation_messages").update({ status: eventType }).eq("id", cmsg.id);
+      if (eventType === "bounced" || eventType === "complained" || eventType === "delivery_delayed") {
+        const note = eventType === "bounced"
+          ? "⚠ Delivery failed — the email bounced (the address rejected it). They did NOT receive it."
+          : eventType === "complained"
+          ? "⚠ Recipient marked this email as spam."
+          : "⏳ Delivery delayed — still trying to reach the recipient.";
+        await admin.from("conversation_messages").insert({
+          conversation_id: cmsg.conversation_id, direction: "event", body: note,
+          status: eventType, meta: payload.data,
+        });
+        await admin.from("conversations")
+          .update({ last_message_at: new Date().toISOString() })
+          .eq("id", cmsg.conversation_id);
+      }
+    }
+
     return new Response(
-      JSON.stringify({ success: true, event_type: eventType, attributed: !!originalSent }),
+      JSON.stringify({ success: true, event_type: eventType, attributed: !!originalSent, conv_attributed }),
       { headers: JSON_HEADERS },
     );
   } catch (e) {
