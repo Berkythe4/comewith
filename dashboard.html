@@ -1024,52 +1024,16 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <div class="panel" id="panel-inquiries">
-        <div class="row-count" id="count-inquiries">—</div>
-        <div id="state-inquiries"></div>
-        <table class="data-table" id="table-inquiries" style="display:none;">
-          <thead><tr>
-            <th>Submitted</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Event date</th>
-            <th>Services</th>
-            <th>Status</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="inquiriesBody"></div>
       </div>
       <div class="panel" id="panel-agreements">
         <button class="add-btn" data-add="agreement">+ Add agreement</button>
-        <div class="row-count" id="count-agreements">—</div>
-        <div id="state-agreements"></div>
-        <table class="data-table" id="table-agreements" style="display:none;">
-          <thead><tr>
-            <th>Created</th>
-            <th>Type</th>
-            <th>Client</th>
-            <th>Event date</th>
-            <th class="num">Total</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <div id="agreementsBody"></div>
       </div>
 
       <div class="panel" id="panel-clients">
-        <div class="row-count" id="count-clients">—</div>
-        <div id="state-clients"></div>
-        <table class="data-table" id="table-clients" style="display:none;">
-          <thead><tr>
-            <th>Added</th>
-            <th>Name</th>
-            <th>Email</th>
-            <th>Phone</th>
-            <th>Company</th>
-            <th>Notes</th>
-          </tr></thead>
-          <tbody></tbody>
-        </table>
+        <button class="add-btn" id="addClientBtn">+ Add client</button>
+        <div id="clientsBody"></div>
       </div>
 
       <div class="panel" id="panel-income">
@@ -2420,6 +2384,9 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'expenses') { await loadExpenses(); return; } // custom (inline event assignment)
   if (tab === 'income') { await loadIncome(); return; } // custom (inline event + payer assignment)
   if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
+  if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
+  if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
+  if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -6135,6 +6102,255 @@ $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest
 $('panel-artists').addEventListener('click', (e) => {
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
   const row = e.target.closest('[data-artist]'); if (row) openArtistBookings(row.dataset.artist);
+});
+
+// ============================================================
+// INQUIRIES — lead pipeline: inline status, filters, convert-to-client.
+// ============================================================
+const INQ_STATUS = ['new', 'contacted', 'quoted', 'converted', 'lost', 'archived'];
+const inqDash = { rows: [], q: '', status: '', source: '' };
+async function loadInquiries() {
+  $('inquiriesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading inquiries…</div>';
+  const { data, error } = await sb.from('inquiries')
+    .select('id, full_name, email, phone, event_type, event_date, venue, services_selected, message, source, status, actor_id, created_at, actor:actors(display_name)')
+    .is('deleted_at', null).order('created_at', { ascending: false }).limit(1000);
+  if (error) { $('inquiriesBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  inqDash.rows = data || [];
+  renderInquiries();
+}
+function inqFiltered() {
+  const s = inqDash, ql = s.q.toLowerCase();
+  return s.rows.filter(x =>
+    (!s.status || (x.status || '') === s.status) &&
+    (!s.source || (x.source || '') === s.source) &&
+    (!ql || [x.full_name, x.email, x.phone, x.event_type, x.venue].join(' ').toLowerCase().includes(ql)));
+}
+function renderInquiries() {
+  const s = inqDash;
+  const sources = [...new Set(s.rows.map(x => x.source).filter(Boolean))].sort();
+  $('inquiriesBody').innerHTML = `
+    <div id="inqAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-inqq placeholder="Search name / email / type…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-inqstatus><option value="">All statuses</option>${INQ_STATUS.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-inqsource><option value="">All sources</option>${sources.map(o => `<option value="${escapeHtml(o)}"${s.source === o ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('')}</select>
+      <button class="hub-mini" data-inqclear>clear</button>
+    </div>
+    <div id="inqTable"></div>
+    <div class="kpi-hint" style="margin-top:8px;">Leads from the public form land here. Set status inline; <strong>→ Client</strong> creates a customer actor + marks converted. Click a row to read the full inquiry.</div>`;
+  renderInquiriesBody();
+}
+function renderInquiriesBody() {
+  const s = inqDash, list = inqFiltered();
+  const by = {}; INQ_STATUS.forEach(k => by[k] = 0); s.rows.forEach(x => { by[x.status] = (by[x.status] || 0) + 1; });
+  const open = (by.new || 0) + (by.contacted || 0) + (by.quoted || 0);
+  const closed = (by.converted || 0) + (by.lost || 0);
+  const conv = (by.converted + by.lost) > 0 ? Math.round(by.converted / (by.converted + by.lost) * 100) : null;
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  $('inqAgg').innerHTML = `<div class="hub-cards">
+    ${card('Inquiries', fmtNum(s.rows.length))}${card('Open', fmtNum(open))}${card('Converted', fmtNum(by.converted || 0), 'pos')}${card('Lost', fmtNum(by.lost || 0))}${card('Win rate', conv != null ? conv + '%' : '—')}
+  </div>`;
+  const statSel = (x) => `<select class="hub-status-sel" data-inqset="${escapeHtml(x.id)}">${INQ_STATUS.map(o => `<option value="${o}"${x.status === o ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
+  const svc = (x) => Array.isArray(x.services_selected) ? x.services_selected.length : 0;
+  const rows = list.map(x => `<tr data-inqview="${escapeHtml(x.id)}" style="cursor:pointer;">
+    <td>${escapeHtml(fmtDate(x.created_at))}</td>
+    <td><strong>${escapeHtml(x.full_name || '—')}</strong></td>
+    <td class="truncate">${escapeHtml(x.email || x.phone || '') || muted}</td>
+    <td>${escapeHtml(x.event_type || '') || muted}${x.event_date ? ` <span class="li-sub">${escapeHtml(fmtDate(x.event_date))}</span>` : ''}</td>
+    <td class="num">${svc(x) || muted}</td>
+    <td>${escapeHtml(x.source || '') || muted}</td>
+    <td>${statSel(x)}</td>
+    <td>${x.actor?.display_name ? `<span class="li-sub">${escapeHtml(x.actor.display_name)}</span>` : `<button class="hub-mini" data-inqconv="${escapeHtml(x.id)}">→ Client</button>`}
+      <button class="hub-mini danger" data-inqdel="${escapeHtml(x.id)}">✕</button></td>
+  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No inquiries yet — the public form on comewith.org lands them here.</td></tr>`;
+  $('inqTable').innerHTML = `<table class="data-table"><thead><tr><th>Submitted</th><th>Name</th><th>Contact</th><th>Event</th><th class="num">Svcs</th><th>Source</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function setInquiryStatus(id, val) {
+  const { error } = await sb.from('inquiries').update({ status: val }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = inqDash.rows.find(r => r.id === id); if (x) x.status = val; toast('Status → ' + val, 'ok'); renderInquiriesBody();
+}
+function viewInquiry(id) {
+  const x = inqDash.rows.find(r => r.id === id); if (!x) return;
+  const svcs = Array.isArray(x.services_selected) ? x.services_selected : [];
+  openKpi('Inquiry — ' + (x.full_name || ''), `${escapeHtml(x.status)} · ${escapeHtml(fmtDate(x.created_at))}`, `
+    <div class="modal-form-row"><label class="modal-label">Contact</label><div>${escapeHtml(x.email || '—')}${x.phone ? ' · ' + escapeHtml(x.phone) : ''}</div></div>
+    <div class="modal-form-row half-row"><div><label class="modal-label">Event type</label><div>${escapeHtml(x.event_type || '—')}</div></div><div><label class="modal-label">Event date</label><div>${escapeHtml(fmtDate(x.event_date) || '—')}</div></div></div>
+    <div class="modal-form-row"><label class="modal-label">Venue</label><div>${escapeHtml(x.venue || '—')}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Services</label><div>${svcs.length ? svcs.map(escapeHtml).join(', ') : '—'}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Message</label><div style="white-space:pre-wrap;">${escapeHtml(x.message || '—')}</div></div>`,
+    () => closeKpi(), 'Close');
+}
+async function convertInquiry(id) {
+  const x = inqDash.rows.find(r => r.id === id); if (!x) return;
+  if (!confirm(`Create a client (customer actor) from "${x.full_name}" and mark this inquiry converted?`)) return;
+  const { data: a, error } = await sb.from('actors').insert({ display_name: x.full_name || x.email || 'Client', kind: 'person', email: x.email || null, phone: x.phone || null }).select('id').single();
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  await sb.from('actor_roles').insert({ actor_id: a.id, role: 'customer' });
+  await sb.from('inquiries').update({ actor_id: a.id, status: 'converted' }).eq('id', id);
+  toast('Converted to client', 'ok'); loadInquiries();
+}
+$('panel-inquiries').addEventListener('input', (e) => { const q = e.target.closest('[data-inqq]'); if (q) { inqDash.q = q.value; renderInquiriesBody(); } });
+$('panel-inquiries').addEventListener('change', (e) => {
+  const st = e.target.closest('[data-inqstatus]'); if (st) { inqDash.status = st.value; renderInquiriesBody(); return; }
+  const so = e.target.closest('[data-inqsource]'); if (so) { inqDash.source = so.value; renderInquiriesBody(); return; }
+  const set = e.target.closest('[data-inqset]'); if (set) { setInquiryStatus(set.dataset.inqset, set.value); return; }
+});
+$('panel-inquiries').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-inqclear]')) { inqDash.q = inqDash.status = inqDash.source = ''; renderInquiries(); return; }
+  const cv = e.target.closest('[data-inqconv]'); if (cv) { convertInquiry(cv.dataset.inqconv); return; }
+  const dl = e.target.closest('[data-inqdel]'); if (dl) { if (!confirm('Delete this inquiry?')) return; await sb.from('inquiries').update({ deleted_at: new Date().toISOString() }).eq('id', dl.dataset.inqdel); inqDash.rows = inqDash.rows.filter(r => r.id !== dl.dataset.inqdel); toast('Deleted', 'ok'); renderInquiriesBody(); return; }
+  const vw = e.target.closest('[data-inqview]'); if (vw) { viewInquiry(vw.dataset.inqview); }
+});
+
+// ============================================================
+// AGREEMENTS — contracts: inline status, totals, send, view.
+// ============================================================
+const AGR_STATUS = ['draft', 'sent', 'signed', 'cancelled', 'completed'];
+const agrDash = { rows: [], q: '', status: '', type: '' };
+async function loadAgreements() {
+  $('agreementsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading agreements…</div>';
+  const { data, error } = await sb.from('agreements')
+    .select('id, agreement_type, status, event_date, subtotal, deposit_amount, total_amount, venue_name, payment_method, notes, created_at, actor:actors(display_name, email)')
+    .is('deleted_at', null).order('created_at', { ascending: false }).limit(1000);
+  if (error) { $('agreementsBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  agrDash.rows = data || [];
+  renderAgreements();
+}
+function agrFiltered() {
+  const s = agrDash, ql = s.q.toLowerCase();
+  return s.rows.filter(x =>
+    (!s.status || (x.status || '') === s.status) &&
+    (!s.type || (x.agreement_type || '') === s.type) &&
+    (!ql || [x.actor?.display_name, x.venue_name, x.notes].join(' ').toLowerCase().includes(ql)));
+}
+function renderAgreements() {
+  const s = agrDash;
+  $('agreementsBody').innerHTML = `
+    <div id="agrAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-agrq placeholder="Search client / venue / note…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-agrstatus><option value="">All statuses</option>${AGR_STATUS.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-agrtype><option value="">All types</option>${['events', 'rental'].map(o => `<option value="${o}"${s.type === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
+      <button class="hub-mini" data-agrclear>clear</button>
+    </div>
+    <div id="agrTable"></div>
+    <div class="kpi-hint" style="margin-top:8px;">Contracts (events / rentals). Set status inline; <strong>Send</strong> emails the signable link (needs the client's email). Click a row for full details.</div>`;
+  renderAgreementsBody();
+}
+function renderAgreementsBody() {
+  const s = agrDash, list = agrFiltered();
+  const sum = (arr) => arr.reduce((t, x) => t + Number(x.total_amount || 0), 0);
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  const signed = list.filter(x => ['signed', 'completed'].includes(x.status));
+  $('agrAgg').innerHTML = `<div class="hub-cards">
+    ${card('Agreements', fmtNum(list.length))}${card('Contracted', money(sum(list)))}${card('Signed value', money(sum(signed)), 'pos')}${card('Awaiting sig', fmtNum(list.filter(x => x.status === 'sent').length))}${card('Drafts', fmtNum(list.filter(x => x.status === 'draft').length))}
+  </div>`;
+  const statSel = (x) => `<select class="hub-status-sel" data-agrset="${escapeHtml(x.id)}">${AGR_STATUS.map(o => `<option value="${o}"${x.status === o ? ' selected' : ''}>${o}</option>`).join('')}</select>`;
+  const sendable = (x) => (x.status === 'draft' || x.status === 'sent') && x.actor?.email;
+  const rows = list.map(x => `<tr data-agrview="${escapeHtml(x.id)}" style="cursor:pointer;">
+    <td>${escapeHtml(fmtDate(x.created_at))}</td>
+    <td>${escapeHtml(x.actor?.display_name || '—')}</td>
+    <td><span class="role-chip" style="cursor:default;">${escapeHtml(x.agreement_type || '')}</span></td>
+    <td>${escapeHtml(fmtDate(x.event_date)) || muted}</td>
+    <td class="num">${money(x.total_amount)}</td>
+    <td>${statSel(x)}</td>
+    <td>${sendable(x) ? `<button class="row-btn" data-send-agreement="${escapeHtml(x.id)}">${x.status === 'sent' ? 'Resend' : 'Send'}</button>` : (x.status === 'draft' ? '<span class="muted">no email</span>' : '')}
+      <button class="hub-mini danger" data-agrdel="${escapeHtml(x.id)}">✕</button></td>
+  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No agreements yet — use “+ Add agreement”.</td></tr>`;
+  $('agrTable').innerHTML = `<table class="data-table"><thead><tr><th>Created</th><th>Client</th><th>Type</th><th>Event date</th><th class="num">Total</th><th>Status</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function setAgreementStatus(id, val) {
+  const { error } = await sb.from('agreements').update({ status: val }).eq('id', id);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const x = agrDash.rows.find(r => r.id === id); if (x) x.status = val; toast('Status → ' + val, 'ok'); renderAgreementsBody();
+}
+function viewAgreement(id) {
+  const x = agrDash.rows.find(r => r.id === id); if (!x) return;
+  openKpi('Agreement — ' + (x.actor?.display_name || ''), `${escapeHtml(x.agreement_type || '')} · ${escapeHtml(x.status)}`, `
+    <div class="modal-form-row half-row"><div><label class="modal-label">Event date</label><div>${escapeHtml(fmtDate(x.event_date) || '—')}</div></div><div><label class="modal-label">Venue</label><div>${escapeHtml(x.venue_name || '—')}</div></div></div>
+    <div class="modal-form-row"><label class="modal-label">Financials</label><div>Subtotal ${money(x.subtotal)} · Deposit ${money(x.deposit_amount)} · <strong>Total ${money(x.total_amount)}</strong></div></div>
+    <div class="modal-form-row"><label class="modal-label">Payment</label><div>${escapeHtml(x.payment_method || '—')}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Notes</label><div style="white-space:pre-wrap;">${escapeHtml(x.notes || '—')}</div></div>`,
+    () => closeKpi(), 'Close');
+}
+$('panel-agreements').addEventListener('input', (e) => { const q = e.target.closest('[data-agrq]'); if (q) { agrDash.q = q.value; renderAgreementsBody(); } });
+$('panel-agreements').addEventListener('change', (e) => {
+  const st = e.target.closest('[data-agrstatus]'); if (st) { agrDash.status = st.value; renderAgreementsBody(); return; }
+  const ty = e.target.closest('[data-agrtype]'); if (ty) { agrDash.type = ty.value; renderAgreementsBody(); return; }
+  const set = e.target.closest('[data-agrset]'); if (set) { setAgreementStatus(set.dataset.agrset, set.value); return; }
+});
+$('panel-agreements').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-agrclear]')) { agrDash.q = agrDash.status = agrDash.type = ''; renderAgreements(); return; }
+  const dl = e.target.closest('[data-agrdel]'); if (dl) { if (!confirm('Delete this agreement?')) return; await sb.from('agreements').update({ deleted_at: new Date().toISOString() }).eq('id', dl.dataset.agrdel); agrDash.rows = agrDash.rows.filter(r => r.id !== dl.dataset.agrdel); toast('Deleted', 'ok'); renderAgreementsBody(); return; }
+  if (e.target.closest('[data-send-agreement]')) return; // handled by the global send handler
+  const vw = e.target.closest('[data-agrview]'); if (vw) { viewAgreement(vw.dataset.agrview); }
+});
+
+// ============================================================
+// CLIENTS — roster of customer actors + their inquiry / agreement history.
+// ============================================================
+const clientDash = { rows: [], q: '', sortKey: 'last', sortDir: -1 };
+async function loadClients() {
+  $('clientsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading clients…</div>';
+  const [roleRows, inq, agr, inc, acts] = await Promise.all([
+    sb.from('actor_roles').select('actor_id').eq('role', 'customer'),
+    sb.from('inquiries').select('actor_id, created_at').is('deleted_at', null).not('actor_id', 'is', null),
+    sb.from('agreements').select('actor_id, total_amount, status, created_at').is('deleted_at', null).not('actor_id', 'is', null),
+    sb.from('income').select('actor_id, amount').is('deleted_at', null).not('actor_id', 'is', null),
+    sb.from('actors').select('id, display_name, email, phone, instagram, created_at').is('deleted_at', null),
+  ]);
+  if (acts.error) { $('clientsBody').innerHTML = `<div class="panel-state err">${escapeHtml(acts.error.message)}</div>`; return; }
+  const actorById = {}; (acts.data || []).forEach(a => actorById[a.id] = a);
+  const ids = new Set([...(roleRows.data || []).map(r => r.actor_id), ...(inq.data || []).map(r => r.actor_id), ...(agr.data || []).map(r => r.actor_id)]);
+  const m = new Map();
+  const get = (id) => { if (!id || !actorById[id]) return null; let o = m.get(id); if (!o) { o = { ...actorById[id], inquiries: 0, agreements: 0, contracted: 0, paid: 0, last: actorById[id].created_at }; m.set(id, o); } return o; };
+  ids.forEach(get);
+  (inq.data || []).forEach(r => { const o = get(r.actor_id); if (o) { o.inquiries++; if (r.created_at > o.last) o.last = r.created_at; } });
+  (agr.data || []).forEach(r => { const o = get(r.actor_id); if (o) { o.agreements++; o.contracted += Number(r.total_amount || 0); if (r.created_at > o.last) o.last = r.created_at; } });
+  (inc.data || []).forEach(r => { const o = get(r.actor_id); if (o) o.paid += Number(r.amount || 0); });
+  clientDash.rows = [...m.values()];
+  renderClients();
+}
+const CLIENT_COLS = [['display_name', 'Client'], ['inquiries', 'Inquiries'], ['agreements', 'Agreements'], ['contracted', 'Contracted'], ['paid', 'Paid'], ['last', 'Last activity'], ['contact', 'Contact']];
+function renderClients() {
+  const s = clientDash, ql = s.q.toLowerCase();
+  let list = s.rows.filter(a => !ql || (a.display_name || '').toLowerCase().includes(ql) || (a.email || '').toLowerCase().includes(ql));
+  const k = s.sortKey;
+  list.sort((a, b) => { let av = a[k], bv = b[k]; if (typeof av === 'number') return (av - bv) * s.sortDir; av = (av == null ? '' : String(av)).toLowerCase(); bv = (bv == null ? '' : String(bv)).toLowerCase(); return av < bv ? -s.sortDir : av > bv ? s.sortDir : 0; });
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  const totContr = s.rows.reduce((t, a) => t + a.contracted, 0), totPaid = s.rows.reduce((t, a) => t + a.paid, 0);
+  const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
+  const th = CLIENT_COLS.map(([key, lbl]) => `<th data-csort="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
+  const rows = list.map(a => `<tr>
+    <td><strong>${escapeHtml(a.display_name)}</strong></td>
+    <td class="num">${fmtNum(a.inquiries)}</td><td class="num">${fmtNum(a.agreements)}</td>
+    <td class="num">${a.contracted ? money(a.contracted) : muted}</td><td class="num">${a.paid ? money(a.paid) : muted}</td>
+    <td>${a.last ? escapeHtml(fmtDate(a.last)) : muted}</td>
+    <td class="truncate">${escapeHtml(a.email || a.phone || a.instagram || '') || muted}</td>
+  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No clients yet — convert an inquiry, draft an agreement, or use “+ Add client”.</td></tr>`;
+  $('clientsBody').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:12px;">${card('Clients', fmtNum(s.rows.length))}${card('Total contracted', money(totContr))}${card('Total paid', money(totPaid), 'pos')}</div>
+    <div style="margin-bottom:12px;"><input class="modal-input" data-clientq placeholder="Search client…" style="max-width:240px;" value="${escapeHtml(s.q)}"></div>
+    <table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Anyone with a <strong>customer</strong> role, an inquiry, or an agreement. Add / edit contact in the <strong>Actors</strong> tab.</div>`;
+}
+function openAddClient() {
+  openKpi('Add client', 'Creates a customer actor', `
+    <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="display_name" required></div>
+    <div class="modal-form-row half-row"><div><label class="modal-label">Email</label><input class="modal-input" name="email"></div><div><label class="modal-label">Phone</label><input class="modal-input" name="phone"></div></div>`,
+    async () => {
+      const name = kpiVal('display_name'); if (!name) throw new Error('Name is required');
+      const { data, error } = await sb.from('actors').insert({ display_name: name, kind: 'person', email: kpiVal('email') || null, phone: kpiVal('phone') || null }).select('id').single();
+      if (error) throw error;
+      await sb.from('actor_roles').insert({ actor_id: data.id, role: 'customer' });
+      closeKpi(); toast('Client added', 'ok'); loadClients();
+    }, 'Create client');
+}
+$('addClientBtn').addEventListener('click', openAddClient);
+$('panel-clients').addEventListener('input', (e) => { const q = e.target.closest('[data-clientq]'); if (q) { clientDash.q = q.value; renderClients(); } });
+$('panel-clients').addEventListener('click', (e) => {
+  const so = e.target.closest('[data-csort]'); if (so) { const k = so.dataset.csort; if (clientDash.sortKey === k) clientDash.sortDir *= -1; else { clientDash.sortKey = k; clientDash.sortDir = (['inquiries', 'agreements', 'contracted', 'paid', 'last'].includes(k)) ? -1 : 1; } renderClients(); }
 });
 
 async function loadGuests() {
