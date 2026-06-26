@@ -6682,13 +6682,17 @@ $('panel-artists').addEventListener('click', (e) => {
 // ============================================================
 const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
 // ---- Site Editor (public-site CMS over site_content) ----
-const SITE_SECTIONS = { brand: 'Brand & logo', hero: 'Hero', community: 'Daytime community', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page' };
-const SITE_ORDER = ['brand', 'hero', 'community', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch'];
-const SITE_AREAS = new Set(['hero.lede', 'community.body', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
+const SITE_SECTIONS = { brand: 'Brand & logo', strip: 'Ticker strip', hero: 'Hero', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page' };
+const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch'];
+const SITE_AREAS = new Set(['hero.lede', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
+const SITE_BOOLS = new Set(['di.donate_show', 'di.ticket_show']); // rendered as checkboxes
 const SITE_LABELS = {
   'brand.logo': 'Logo image', 'brand.logo_tint': 'Logo color (blends on the dark site)', 'brand.wordmark': 'Wordmark (text shown if no logo)', 'brand.nav_cta': 'Nav button label',
+  'strip.items': 'Ticker words (separate each with " · ")',
   'hero.kicker': 'Kicker (small label)', 'hero.h1': 'Headline', 'hero.h2': 'Sub-headline', 'hero.lede': 'Intro paragraph', 'hero.cta1': 'Primary button', 'hero.cta2': 'Secondary button',
   'di.goal_total': 'Goal amount ($)', 'di.goal_raised': 'Raised so far ($)', 'di.goal_label': 'Goal caption',
+  'di.ticket_show': 'Show "Tickets" button', 'di.ticket_label': 'Tickets button text', 'di.ticket_url': 'Tickets link (URL)',
+  'di.donate_show': 'Show "Donate" button', 'di.donate_label': 'Donate button text', 'di.donate_url': 'Donate link (URL)',
   'contact.email': 'Contact email', 'contact.ig': 'Instagram handle', 'contact.ig_url': 'Instagram URL', 'contact.location': 'Location',
 };
 const siteState = { values: {} };
@@ -6722,6 +6726,9 @@ function renderSiteEditor() {
           <div class="kpi-hint">Upload a transparent PNG or SVG. The brown logo is auto-tinted to the color below so it blends on the dark site — no need to recolor the file itself.</div></div>`;
       } else if (k === 'brand.logo_tint') {
         html += `<div><label class="modal-label">${lbl}</label><select class="modal-select" data-sk="${escapeHtml(k)}">${['cream', 'lime', 'white', 'plum', 'none'].map(t => `<option value="${t}"${v === t ? ' selected' : ''}>${t === 'none' ? 'none (keep original colors)' : t}</option>`).join('')}</select></div>`;
+      } else if (SITE_BOOLS.has(k)) {
+        const on = v === '1' || v === 'true';
+        html += `<div><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:400;"><input type="checkbox" data-sk="${escapeHtml(k)}" data-bool="1"${on ? ' checked' : ''} style="width:auto;margin:0;"> ${lbl}</label></div>`;
       } else if (SITE_AREAS.has(k)) {
         html += `<div style="grid-column:1/-1"><label class="modal-label">${lbl}</label><textarea class="modal-textarea" data-sk="${escapeHtml(k)}" rows="3">${escapeHtml(v)}</textarea></div>`;
       } else {
@@ -6736,7 +6743,7 @@ async function saveSiteContent() {
   const btn = document.querySelector('[data-site-save]'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   try {
     const rows = [];
-    document.querySelectorAll('#panel-site-editor [data-sk]').forEach(el => { rows.push({ key: el.dataset.sk, value: el.value }); });
+    document.querySelectorAll('#panel-site-editor [data-sk]').forEach(el => { rows.push({ key: el.dataset.sk, value: el.dataset.bool ? (el.checked ? '1' : '0') : el.value }); });
     let file = $('siteLogoFile')?.files?.[0];
     if (file && file.size > 0) {
       file = await downscaleImage(file, 1200, 0.92); // logo: keep crisp, smaller cap

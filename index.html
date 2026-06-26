@@ -159,15 +159,6 @@
 
 <div class="strip"><div class="run" id="strip"></div></div>
 
-<section class="community" id="community"><div class="wrap"><div class="grid">
-  <div class="sun">☀️</div>
-  <div>
-    <div class="label" data-cw="community.kicker">Built for daytime</div>
-    <h2 data-cw="community.heading">A dance community in the daylight.</h2>
-    <p data-cw="community.body">We're growing daytime dances so the floor is open to everyone — people managing autoimmune conditions, all ages, anyone who wants to move in the light and be home by dinner. Come as you are.</p>
-  </div>
-</div></div></section>
-
 <section id="what"><div class="wrap">
   <div class="label">What we do — three lanes, one crew</div>
   <div class="lanes">
@@ -212,7 +203,7 @@
       <div class="tier"><div class="amt" data-cw="di.tier2_amt">$50</div><p data-cw="di.tier2_desc">Funds MS support programs</p></div>
       <div class="tier"><div class="amt" data-cw="di.tier3_amt">$150</div><p data-cw="di.tier3_desc">Sponsor a table, bring a crew</p></div>
     </div>
-    <a href="#book" class="btn gold" style="width:100%;justify-content:center;margin-top:16px">Get a ticket or donate</a>
+    <div id="diActions" class="diactions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"></div>
   </div>
 </div></div></section>
 
@@ -281,7 +272,7 @@ async function api(path){try{const r=await fetch(CWURL+'/rest/v1/'+path,{headers
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
 document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>$('#nav').classList.remove('open')));
-$('#strip').innerHTML='House · Disco · Daytime · Dance Infusion · Brooklyn · House · Disco · Daytime · Dance Infusion · Brooklyn · '.split('·').map(s=>s.trim()).filter(Boolean).map(s=>'<span>'+s+'</span>').join('');
+renderStrip();  // default words until loadContent overrides from strip.items
 $('#djs').innerHTML=DJS.map((d,i)=>`<span class="djchip${i<3?' res':''}">${d}</span>`).join('');
 function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
 function openMedia(url){const k=mediaKind(url);const lb=$('#lb');if(!k)return;lb.classList.toggle('audio',k==='soundcloud');$('#lbFrame').src=(k==='youtube')?('https://www.youtube.com/embed/'+ytId(url)+'?autoplay=1&rel=0'):scEmbed(url);lb.classList.add('show');}
@@ -303,6 +294,19 @@ async function loadContent(){
   const total=+(C['di.goal_total']||10000),raised=+(C['di.goal_raised']||4140),pct=Math.min(100,Math.round(raised/total*100));
   animateStat($('#stat1'),raised,'$');animateStat($('#stat2'),+(C['di.stat2']||2),'');animateStat($('#stat3'),+(C['di.stat3']||159),'');
   setTimeout(function(){$('#bar').style.width=pct+'%';},200);$('#barPct').textContent=pct+'%';$('#barAmt').textContent='$'+raised.toLocaleString()+' / $'+total.toLocaleString();
+  renderStrip(C['strip.items']);
+  // Dance Infusion donate / ticket buttons (each show/hide + label + URL editable in the Site Editor)
+  const on=v=>v==='1'||v==='true'||v===true;
+  const btns=[];
+  if(on(C['di.ticket_show'])&&C['di.ticket_url'])btns.push('<a href="'+esc(C['di.ticket_url'])+'" target="_blank" rel="noopener" class="btn gold" style="flex:1;justify-content:center;min-width:140px">'+esc(C['di.ticket_label']||'Get tickets')+'</a>');
+  if(on(C['di.donate_show'])&&C['di.donate_url'])btns.push('<a href="'+esc(C['di.donate_url'])+'" target="_blank" rel="noopener" class="btn'+(btns.length?'':' gold')+'" style="flex:1;justify-content:center;min-width:140px">'+esc(C['di.donate_label']||'Donate')+'</a>');
+  $('#diActions').innerHTML=btns.length?btns.join(''):'<a href="#book" class="btn gold" style="width:100%;justify-content:center">Get a ticket or donate</a>';
+}
+function renderStrip(items){
+  const def='Music · Rave · Community · Daytime · Dance Infusion · Brooklyn';
+  const list=String(items||def).split('·').map(s=>s.trim()).filter(Boolean);
+  const doubled=list.concat(list); // seamless marquee loop
+  $('#strip').innerHTML=doubled.map(s=>'<span>'+esc(s)+'</span>').join('');
 }
 function animateStat(el,tgt,pre){if(!el)return;let s=0,st=tgt/40;const t=setInterval(function(){s+=st;if(s>=tgt){s=tgt;clearInterval(t);}el.textContent=pre+Math.round(s).toLocaleString();},22);}
 function evCard(e){const d=fmtDay(e.event_date);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
