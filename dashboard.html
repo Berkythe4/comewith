@@ -1272,7 +1272,10 @@ const ME = { id: null, role: null, staff_role: null, isMaster: false };
 const NAV_GROUP_ORDER = ['Sales', 'Operations', 'Finance', 'Partners', 'Audience', 'Insights'];
 let MODULES = [];                 // module_registry rows
 let MY_OVERRIDES = {};            // { module_key: 'grant'|'revoke' } for the signed-in user
-const TEAM = { modules: [], people: [], overrides: {} };
+const TEAM = { modules: [], people: [], overrides: {}, tab: 'people', users: [], aliasByUser: {}, gigByUser: {}, actRecent: [], activity: [], actFilter: { from: '', to: '', user: '', table: '' }, activeUser: null, detailActs: [], detailConvCount: 0 };
+const AUDIT_TABLES_LIST = ['actors', 'agreements', 'contracts', 'conversations', 'equipment_inventory', 'event_participants', 'events', 'expenses', 'income', 'inquiries', 'profiles', 'social_posts', 'sponsorships', 'tasks', 'third_party_donations', 'ticketing', 'venues'];
+function fmtDT(s) { if (!s) return ''; const d = new Date(s); if (isNaN(d)) return s; return d.toISOString().slice(0, 16).replace('T', ' '); }
+function actionVerb(a) { return a === 'INSERT' ? 'Created' : a === 'UPDATE' ? 'Updated' : a === 'DELETE' ? 'Deleted' : a; }
 
 // Effective access for the signed-in user. Master sees all.
 function canAccessModule(m) {
@@ -1350,70 +1353,202 @@ const STAFF_ROLE_OPTS = ['operations', 'marketing', 'full'];
 async function loadTeam() {
   const body = $('teamBody');
   if (!ME.isMaster) { body.innerHTML = '<div class="placeholder">Master admin only.</div>'; return; }
-  body.innerHTML = '<div class="placeholder">Loading team…</div>';
-  const [reg, ppl, ov] = await Promise.all([
+  body.innerHTML = '<div class="placeholder">Loading users…</div>';
+  const [reg, ov, members, aliasActors, parts, recent] = await Promise.all([
     sb.from('module_registry').select('*').order('sort_order'),
-    sb.from('profiles').select('id, full_name, email, role, staff_role').in('role', ['master_admin', 'sub_admin']).order('email'),
     sb.from('user_module_access').select('user_id, module_key, access'),
+    sb.from('v_team_members').select('*'),
+    sb.from('actors').select('id, display_name, kind, email, user_id').not('user_id', 'is', null).is('deleted_at', null),
+    sb.from('event_participants').select('actor_id, role, fee, event:events(id, name, event_date, series, deleted_at)'),
+    sb.from('audit_log').select('actor_id, occurred_at').order('occurred_at', { ascending: false }).limit(800),
   ]);
   if (reg.error) { body.innerHTML = '<div class="placeholder">' + escapeHtml(reg.error.message) + '</div>'; return; }
   TEAM.modules = reg.data || [];
-  TEAM.people = ppl.data || [];
+  TEAM.users = (members.data || []).sort((a, b) => (b.role === 'master_admin' ? 1 : 0) - (a.role === 'master_admin' ? 1 : 0) || (a.full_name || a.email).localeCompare(b.full_name || b.email));
+  TEAM.people = TEAM.users; // module/override views read TEAM.people
   TEAM.overrides = {};
   (ov.data || []).forEach(r => { (TEAM.overrides[r.user_id] ||= {})[r.module_key] = r.access; });
+  TEAM.aliasByUser = {}; const actorToUser = {};
+  (aliasActors.data || []).forEach(a => { (TEAM.aliasByUser[a.user_id] ||= []).push(a); actorToUser[a.id] = a.user_id; });
+  TEAM.gigByUser = {};
+  (parts.data || []).forEach(p => {
+    const uid = actorToUser[p.actor_id]; if (!uid || !p.event || p.event.deleted_at) return;
+    const g = TEAM.gigByUser[uid] ||= { gigs: 0, fees: 0, last: null, events: [], roles: new Set() };
+    g.gigs++; g.fees += Number(p.fee || 0); if (p.role) g.roles.add(p.role);
+    if (p.event.event_date && (!g.last || p.event.event_date > g.last)) g.last = p.event.event_date;
+    g.events.push({ ...p.event, prole: p.role, pfee: p.fee });
+  });
+  TEAM.actRecent = recent.data || [];
   renderTeam();
 }
+function teamLastActivity(uid) { const a = TEAM.actRecent.find(x => x.actor_id === uid); return a ? a.occurred_at : null; }
 
 function renderTeam() {
-  const mods = TEAM.modules;
-  // --- Section 1: module sign-off (the release control) ---
-  let s1 = `<div class="section-label">Modules — release control</div>
+  if (!ME.isMaster) { $('teamBody').innerHTML = '<div class="placeholder">Master admin only.</div>'; return; }
+  if (TEAM.activeUser) { renderUserDetail(); return; }
+  const tabs = [['people', 'People'], ['activity', 'Activity log'], ['modules', 'Modules']];
+  const nav = `<div class="ven-toggle" style="margin-bottom:14px;">${tabs.map(([k, l]) => `<button data-team-tab="${k}" class="${TEAM.tab === k ? 'active' : ''}">${l}</button>`).join('')}</div>`;
+  const body = TEAM.tab === 'people' ? renderTeamPeople() : TEAM.tab === 'activity' ? renderTeamActivity() : renderTeamModules();
+  $('teamBody').innerHTML = nav + body;
+}
+function renderTeamPeople() {
+  const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+  const totalGigs = Object.values(TEAM.gigByUser).reduce((t, g) => t + g.gigs, 0);
+  const linkedAliases = Object.values(TEAM.aliasByUser).reduce((t, a) => t + a.length, 0);
+  const agg = `<div class="hub-cards" style="margin-bottom:14px;">${card('Users', TEAM.users.length)}${card('Signed in', TEAM.users.filter(u => u.last_sign_in_at).length)}${card('Linked aliases', linkedAliases)}${card('Alias gigs', totalGigs)}</div>`;
+  const rows = TEAM.users.map(u => {
+    const aliases = TEAM.aliasByUser[u.id] || [], g = TEAM.gigByUser[u.id] || { gigs: 0 }, la = teamLastActivity(u.id);
+    return `<tr data-user-open="${escapeHtml(u.id)}" style="cursor:pointer;">
+      <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${u.role === 'master_admin' ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}<div class="li-sub">${escapeHtml(u.email)}</div></td>
+      <td>${escapeHtml(u.role === 'master_admin' ? 'all' : (u.staff_role || '—'))}</td>
+      <td>${aliases.length ? aliases.map(a => `<span class="role-chip" style="cursor:default;">${escapeHtml(a.display_name)}</span>`).join(' ') : muted}</td>
+      <td class="num">${g.gigs || muted}</td>
+      <td class="li-sub">${u.last_sign_in_at ? escapeHtml(fmtDate(u.last_sign_in_at)) : (u.email_confirmed ? 'never' : '<span class="muted">invite pending</span>')}</td>
+      <td class="li-sub">${la ? escapeHtml(fmtDate(la)) : muted}</td>
+    </tr>`;
+  }).join('');
+  return agg + `<div style="margin-bottom:10px;"><button class="hub-mini" id="addPersonBtn">＋ Add person</button></div>
+    <table class="data-table"><thead><tr><th>User</th><th>Scope</th><th>Aliases</th><th class="num">Gigs</th><th>Last sign-in</th><th>Last activity</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Click a user for their full profile — link their other aliases (e.g. a staffer who's also a DJ), see gig KPIs + history and their activity. Activity log tab shows everyone, filterable by date.</div>`;
+}
+function renderTeamModules() {
+  let s = `<div class="section-label">Modules — release control</div>
     <div class="section-sub">Sign off a module to reveal it to every staff member whose role includes it. Unbuilt modules can't be signed off.</div>
     <table class="data-table"><thead><tr><th>Module</th><th>Group</th><th>Default roles</th><th>Built</th><th>Signed off</th></tr></thead><tbody>`;
-  for (const m of mods) {
+  for (const m of TEAM.modules) {
     const lock = m.master_only ? ' <span class="nav-lock" title="master-only — staff never see this">🔑</span>' : '';
-    s1 += `<tr>
-      <td>${escapeHtml(m.label)}${lock}</td>
-      <td class="muted">${escapeHtml(m.nav_group)}</td>
-      <td class="muted">${m.master_only ? '—' : escapeHtml((m.default_roles || []).join(', ') || 'none')}</td>
+    s += `<tr><td>${escapeHtml(m.label)}${lock}</td><td class="muted">${escapeHtml(m.nav_group)}</td><td class="muted">${m.master_only ? '—' : escapeHtml((m.default_roles || []).join(', ') || 'none')}</td>
       <td><button class="hub-mini" data-mod-toggle="built" data-key="${m.key}">${m.built ? 'built' : 'not built'}</button></td>
-      <td><button class="hub-mini ${m.signed_off ? 'on' : ''}" data-mod-toggle="signed_off" data-key="${m.key}" ${m.built ? '' : 'disabled'}>${m.signed_off ? '✓ signed off' : 'sign off'}</button></td>
-    </tr>`;
+      <td><button class="hub-mini ${m.signed_off ? 'on' : ''}" data-mod-toggle="signed_off" data-key="${m.key}" ${m.built ? '' : 'disabled'}>${m.signed_off ? '✓ signed off' : 'sign off'}</button></td></tr>`;
   }
-  s1 += '</tbody></table>';
-
-  // --- Section 2: people, staff_role + per-module overrides ---
-  const gateMods = mods.filter(m => !m.master_only); // overridable modules
-  let s2 = `<div class="section-label" style="margin-top:24px;">People — roles &amp; access
-      <button class="hub-mini" id="addPersonBtn" style="margin-left:10px;">＋ Add person</button></div>
-    <div class="section-sub">Set each person's workflow scope, then fine-tune individual access. Chips: <b>default</b> (role decides) → click → <b>grant</b> → <b>revoke</b>. A grant still can't reveal a module that isn't signed off.</div>`;
-  for (const p of TEAM.people) {
-    const isMasterRow = p.role === 'master_admin';
-    const ovr = TEAM.overrides[p.id] || {};
-    s2 += `<div class="team-card">
-      <div class="team-card-head">
-        <div><b>${escapeHtml(p.full_name || p.email)}</b> <span class="muted">${escapeHtml(p.email)}</span></div>
-        <div>${escapeHtml(p.role.replace('_', ' '))}</div>
-      </div>`;
-    if (isMasterRow) {
-      s2 += `<div class="muted" style="padding:6px 0;">Master admin — full access to everything, always.</div>`;
-    } else {
-      s2 += `<div class="team-role"><label>Workflow scope:</label>
-        <select class="modal-input" data-staff-role data-user="${p.id}" style="max-width:180px;">
-          <option value="">— none —</option>
-          ${STAFF_ROLE_OPTS.map(r => `<option value="${r}" ${p.staff_role === r ? 'selected' : ''}>${r}</option>`).join('')}
-        </select></div>
-        <div class="team-ovr">`;
-      for (const m of gateMods) {
-        const state = ovr[m.key] || 'default';
-        s2 += `<button class="ovr-chip ovr-${state}" data-ovr="${m.key}" data-user="${p.id}" title="${escapeHtml(m.label)} (${m.signed_off ? 'signed off' : 'not signed off yet'})">${escapeHtml(m.label)}: ${state}</button>`;
-      }
-      s2 += `</div>`;
-    }
-    s2 += `</div>`;
-  }
-  $('teamBody').innerHTML = s1 + s2;
+  return s + '</tbody></table>';
 }
+function renderTeamActivity() {
+  const f = TEAM.actFilter;
+  const userOpts = TEAM.users.map(u => `<option value="${escapeHtml(u.id)}"${f.user === u.id ? ' selected' : ''}>${escapeHtml(u.full_name || u.email)}</option>`).join('');
+  const tableOpts = AUDIT_TABLES_LIST.map(t => `<option value="${t}"${f.table === t ? ' selected' : ''}>${t}</option>`).join('');
+  const rows = (TEAM.activity || []).map(a => `<tr>
+    <td class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</td>
+    <td>${escapeHtml(a.actor_email || (a.actor_id ? a.actor_id.slice(0, 8) : 'system'))}</td>
+    <td>${actionVerb(a.action)}</td>
+    <td>${escapeHtml(a.table_name)}</td>
+  </tr>`).join('') || '<tr><td colspan="4" class="muted" style="padding:14px;">No activity in this range.</td></tr>';
+  return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
+      <label class="li-sub">From <input class="modal-input" type="date" data-act-from value="${f.from || ''}" style="max-width:150px;"></label>
+      <label class="li-sub">To <input class="modal-input" type="date" data-act-to value="${f.to || ''}" style="max-width:150px;"></label>
+      <select class="hub-status-sel" data-act-user><option value="">All users</option>${userOpts}</select>
+      <select class="hub-status-sel" data-act-table><option value="">All tables</option>${tableOpts}</select>
+      <button class="hub-mini" data-act-clear>clear</button>
+    </div>
+    <table class="data-table"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Table</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Every create / update / delete on the audited tables (agreements, contracts, people, tasks, income, expenses). Showing up to 500 in the selected range.</div>`;
+}
+async function loadActivity() {
+  const f = TEAM.actFilter;
+  let qb = sb.from('audit_log').select('id, table_name, row_id, action, actor_id, actor_email, occurred_at').order('occurred_at', { ascending: false }).limit(500);
+  if (f.from) qb = qb.gte('occurred_at', f.from);
+  if (f.to) qb = qb.lte('occurred_at', f.to + 'T23:59:59');
+  if (f.user) qb = qb.eq('actor_id', f.user);
+  if (f.table) qb = qb.eq('table_name', f.table);
+  const { data } = await qb;
+  TEAM.activity = data || [];
+  renderTeam();
+}
+async function openUserDetail(uid) {
+  TEAM.activeUser = uid;
+  $('teamBody').innerHTML = '<div class="placeholder">Loading user…</div>';
+  const [{ data: acts }, conv] = await Promise.all([
+    sb.from('audit_log').select('table_name, action, occurred_at').eq('actor_id', uid).order('occurred_at', { ascending: false }).limit(20),
+    sb.from('conversations').select('id', { count: 'exact', head: true }).eq('created_by', uid),
+  ]);
+  TEAM.detailActs = acts || [];
+  TEAM.detailConvCount = conv.count || 0;
+  renderTeam();
+}
+function renderUserDetail() {
+  const uid = TEAM.activeUser, u = TEAM.users.find(x => x.id === uid);
+  if (!u) { TEAM.activeUser = null; renderTeam(); return; }
+  const aliases = TEAM.aliasByUser[uid] || [], g = TEAM.gigByUser[uid] || { gigs: 0, fees: 0, last: null, events: [], roles: new Set() };
+  const isMaster = u.role === 'master_admin', card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+  const gateMods = TEAM.modules.filter(m => !m.master_only), ovr = TEAM.overrides[uid] || {};
+  const aliasRows = aliases.length ? aliases.map(a => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(a.display_name)}</strong> <span class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''}</span></div><div class="hub-li-actions"><button class="hub-mini danger" data-unlink-alias="${escapeHtml(a.id)}">Unlink</button></div></div>`).join('') : '<div class="hub-empty">No aliases linked. Link the actor records this person also is — e.g. their DJ / performer name.</div>';
+  const gigRows = g.events.length ? [...g.events].sort((a, b) => (b.event_date || '') < (a.event_date || '') ? -1 : 1).map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name)}</strong><div class="li-sub">${escapeHtml(fmtDate(e.event_date))}${e.prole ? ' · ' + escapeHtml(e.prole) : ''}${e.series ? ' · ' + escapeHtml(e.series) : ''}</div></div><div class="li-amt">${e.pfee != null ? money(e.pfee) : ''}</div></div>`).join('') : '<div class="hub-empty">No gigs yet (from linked aliases).</div>';
+  const actRows = (TEAM.detailActs || []).length ? TEAM.detailActs.map(a => `<div class="hub-li"><div class="li-main">${actionVerb(a.action)} <strong>${escapeHtml(a.table_name)}</strong><div class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</div></div></div>`).join('') : '<div class="hub-empty">No logged activity yet.</div>';
+  $('teamBody').innerHTML = `
+    <button class="hub-mini" data-user-back>← all users</button>
+    <div class="hub-head" style="margin-top:10px;">
+      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}</div>
+      <div class="hub-facts">
+        <div><span class="lbl">Email</span>${escapeHtml(u.email)}</div>
+        <div><span class="lbl">Last sign-in</span>${u.last_sign_in_at ? escapeHtml(fmtDT(u.last_sign_in_at)) : 'never'}</div>
+        <div><span class="lbl">Member since</span>${escapeHtml(fmtDate(u.joined_at || u.created_at))}</div>
+        <div><span class="lbl">Password</span>${u.must_change_password ? 'must change' : 'set'}</div>
+        <div><span class="lbl">Invite</span>${u.email_confirmed ? 'accepted' : 'pending'}</div>
+      </div>
+    </div>
+    <div class="hub-cards" style="margin:12px 0;">${card('Aliases', aliases.length)}${card('Gigs', g.gigs)}${card('Fees earned', money(g.fees))}${card('Last gig', g.last ? fmtDate(g.last) : '—')}${card('Conversations', TEAM.detailConvCount)}</div>
+    ${isMaster ? '<div class="kpi-hint">Master admin — full access to everything, always.</div>' : `
+    <div class="hub-sec-bar"><h3>Access</h3></div>
+    <div class="team-role" style="margin-bottom:8px;"><label>Workflow scope: </label>
+      <select class="hub-status-sel" data-detail-scope><option value="">— none —</option>${STAFF_ROLE_OPTS.map(r => `<option value="${r}"${u.staff_role === r ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
+    <div class="team-ovr">${gateMods.map(m => { const st = ovr[m.key] || 'default'; return `<button class="ovr-chip ovr-${st}" data-ovr="${m.key}" data-user="${uid}" title="${escapeHtml(m.label)} (${m.signed_off ? 'signed off' : 'not signed off yet'})">${escapeHtml(m.label)}: ${st}</button>`; }).join('')}</div>`}
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Edit profile</h3></div>
+    <div class="modal-grid2" style="max-width:520px;">
+      <div><label class="modal-label">Full name</label><input class="modal-input" id="udName" value="${escapeHtml(u.full_name || '')}"></div>
+      <div><label class="modal-label">Phone</label><input class="modal-input" id="udPhone" value="${escapeHtml(u.phone || '')}"></div>
+    </div>
+    <button class="hub-btn" data-user-save style="margin-top:8px;">Save profile</button>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Aliases <button class="hub-mini" data-link-alias style="margin-left:8px;">＋ Link alias</button></h3></div>
+    <div class="hub-list">${aliasRows}</div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Gig history (from aliases)</h3></div>
+    <div class="hub-list">${gigRows}</div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Recent activity</h3></div>
+    <div class="hub-list">${actRows}</div>`;
+}
+async function saveUserProfile() {
+  const uid = TEAM.activeUser; if (!uid) return;
+  const { error } = await sb.from('profiles').update({ full_name: $('udName').value.trim() || null, phone: $('udPhone').value.trim() || null }).eq('id', uid);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  const u = TEAM.users.find(x => x.id === uid); if (u) { u.full_name = $('udName').value.trim(); u.phone = $('udPhone').value.trim(); }
+  toast('Profile saved', 'ok');
+}
+async function unlinkAlias(actorId) {
+  const { error } = await sb.from('actors').update({ user_id: null }).eq('id', actorId);
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  toast('Alias unlinked', 'ok'); const uid = TEAM.activeUser; await loadTeam(); openUserDetail(uid);
+}
+async function openLinkAlias() {
+  const uid = TEAM.activeUser, u = TEAM.users.find(x => x.id === uid);
+  const { data } = await sb.from('actors').select('id, display_name, kind, email').is('user_id', null).is('deleted_at', null).order('display_name');
+  openKpi('Link aliases to ' + (u.full_name || u.email), 'Tick the actor records this person also is (DJ name, performer, etc.)',
+    `<input class="modal-input" id="aliasSearch" placeholder="Search actors…" style="margin-bottom:8px;">
+     <div class="hub-list" id="aliasList" style="max-height:320px;overflow:auto;">${(data || []).map(a => `<label class="pick-row" data-aliasrow="${escapeHtml((a.display_name + ' ' + (a.email || '')).toLowerCase())}" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;"><input type="checkbox" data-aliaspick="${escapeHtml(a.id)}" style="width:auto;margin:0;"> ${escapeHtml(a.display_name)} <span class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''}</span></label>`).join('') || '<div class="hub-empty">No unlinked actors left.</div>'}</div>`,
+    async () => {
+      const ids = [...$('kpiModalBody').querySelectorAll('[data-aliaspick]:checked')].map(c => c.dataset.aliaspick);
+      if (!ids.length) { closeKpi(); return; }
+      const { error } = await sb.from('actors').update({ user_id: uid }).in('id', ids);
+      if (error) throw error;
+      closeKpi(); toast(`Linked ${ids.length} alias${ids.length === 1 ? '' : 'es'}`, 'ok'); await loadTeam(); openUserDetail(uid);
+    }, 'Link selected');
+  setTimeout(() => { const s = $('aliasSearch'); if (s) s.addEventListener('input', () => { const q = s.value.toLowerCase(); $('aliasList').querySelectorAll('[data-aliasrow]').forEach(r => { r.style.display = r.dataset.aliasrow.includes(q) ? '' : 'none'; }); }); }, 40);
+}
+// Team panel listeners (additive — module/override/add-person handled by the global ones).
+$('panel-team').addEventListener('click', (e) => {
+  const tb = e.target.closest('[data-team-tab]'); if (tb) { TEAM.tab = tb.dataset.teamTab; if (TEAM.tab === 'activity' && !TEAM.activity.length && !TEAM.actFilter.from) { const d = new Date(); d.setDate(d.getDate() - 30); TEAM.actFilter.from = d.toISOString().slice(0, 10); loadActivity(); } else renderTeam(); return; }
+  const uo = e.target.closest('[data-user-open]'); if (uo) { openUserDetail(uo.dataset.userOpen); return; }
+  if (e.target.closest('[data-user-back]')) { TEAM.activeUser = null; renderTeam(); return; }
+  if (e.target.closest('[data-user-save]')) { saveUserProfile(); return; }
+  if (e.target.closest('[data-link-alias]')) { openLinkAlias(); return; }
+  const ua = e.target.closest('[data-unlink-alias]'); if (ua) { unlinkAlias(ua.dataset.unlinkAlias); return; }
+  if (e.target.closest('[data-act-clear]')) { TEAM.actFilter = { from: '', to: '', user: '', table: '' }; loadActivity(); return; }
+});
+$('panel-team').addEventListener('change', (e) => {
+  const sc = e.target.closest('[data-detail-scope]'); if (sc) { setStaffRole(TEAM.activeUser, sc.value); return; }
+  const af = e.target.closest('[data-act-from]'); if (af) { TEAM.actFilter.from = af.value; loadActivity(); return; }
+  const at = e.target.closest('[data-act-to]'); if (at) { TEAM.actFilter.to = at.value; loadActivity(); return; }
+  const au = e.target.closest('[data-act-user]'); if (au) { TEAM.actFilter.user = au.value; loadActivity(); return; }
+  const atb = e.target.closest('[data-act-table]'); if (atb) { TEAM.actFilter.table = atb.value; loadActivity(); return; }
+});
 
 async function setModuleFlag(key, field, current) {
   const patch = { [field]: !current };
