@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update your profile — Come With</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.55;padding:0 0 60px}
+  .wrap{max-width:640px;margin:0 auto;padding:0 22px}
+  header{padding:40px 0 18px;text-align:center}
+  header .k{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  header h1{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:clamp(1.8rem,6vw,2.6rem);margin:10px 0 4px;line-height:1}
+  header p{color:var(--dim)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin-top:18px}
+  label{display:block;font-family:'DM Mono';font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+  input,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;color:var(--cream);font-family:inherit;font-size:1rem;padding:11px 13px;outline:none}
+  input:focus,textarea:focus{border-color:var(--hot)}
+  textarea{min-height:90px;resize:vertical}
+  .photo{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .pho{width:96px;height:96px;border-radius:14px;background:var(--bg2);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:2rem;border:1px solid var(--line);flex:0 0 auto}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'DM Mono';font-size:.84rem;letter-spacing:.06em;text-transform:uppercase;padding:13px 22px;border-radius:999px;border:1.5px solid var(--cream);color:var(--cream);background:none;cursor:pointer;min-height:48px}
+  .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime);width:100%;margin-top:20px}
+  .btn.sm{padding:9px 14px;min-height:0;font-size:.76rem}
+  .msg{margin-top:14px;font-family:'DM Mono';font-size:.82rem;min-height:1.2em}
+  .msg.ok{color:var(--lime)}.msg.err{color:var(--hot)}
+  .hint{font-size:.8rem;color:var(--dim);margin-top:4px}
+  .state{text-align:center;color:var(--dim);font-family:'DM Mono';padding:40px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="k">Come With · Collective</div><h1 id="hd">Your profile</h1><p id="sub">Update your bio, socials & photo. No login needed.</p></header>
+  <div id="root"><div class="state">Loading…</div></div>
+</div>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const FN=CWURL+'/functions/v1/artist-self';
+const $=s=>document.querySelector(s);
+const TOKEN=new URLSearchParams(location.search).get('token')||'';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+async function call(body){const r=await fetch(FN,{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify(Object.assign({token:TOKEN},body))});const j=await r.json().catch(()=>({error:'Network error'}));if(!r.ok)throw new Error(j.error||('HTTP '+r.status));return j;}
+let _heic=null;
+function ensureHeic(){if(window.heic2any)return Promise.resolve();if(_heic)return _heic;_heic=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';s.onload=res;s.onerror=()=>{_heic=null;rej(new Error('Could not load HEIC converter'))};document.head.appendChild(s);});return _heic;}
+async function fileToDataUrl(file){
+  let f=file;
+  if(/\.(heic|heif)$/i.test(f.name||'')||/heic|heif/i.test(f.type||'')){await ensureHeic();const out=await window.heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f);});
+  const max=900,sc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.round(img.naturalWidth*sc),h=Math.round(img.naturalHeight*sc);
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+  return c.toDataURL('image/jpeg',0.86);
+}
+function render(a){
+  const ph=a.photo_url?('style="background-image:url(\''+esc(a.photo_url)+'\')"'):'';
+  const initial=esc((a.display_name||'·').trim().charAt(0).toUpperCase());
+  $('#hd').textContent=a.display_name||'Your profile';
+  $('#root').innerHTML=`<div class="card">
+    <label>Profile photo</label>
+    <div class="photo"><div class="pho" id="pho" ${ph}>${a.photo_url?'':initial}</div>
+      <div><input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" style="border:none;padding:6px 0">
+      <div class="hint">A clear square-ish photo works best.</div></div></div>
+    <label>Bio</label><textarea id="bio" placeholder="A short bio…">${esc(a.bio||'')}</textarea>
+    <label>Instagram (handle or link)</label><input id="instagram" value="${esc(a.instagram||'')}" placeholder="@yourhandle">
+    <label>SoundCloud link</label><input id="soundcloud" value="${esc(a.soundcloud||'')}" placeholder="https://soundcloud.com/…">
+    <label>TikTok link</label><input id="tiktok" value="${esc(a.tiktok||'')}" placeholder="https://tiktok.com/@…">
+    <label>Website</label><input id="website" value="${esc(a.website||'')}" placeholder="https://…">
+    <button class="btn primary" id="save">Save my profile</button>
+    <div class="msg" id="msg"></div>
+  </div>`;
+  $('#photoFile').addEventListener('change',async()=>{
+    const f=$('#photoFile').files&&$('#photoFile').files[0];if(!f)return;
+    setMsg('Uploading photo…','');
+    try{const dataUrl=await fileToDataUrl(f);const j=await call({action:'photo',dataUrl});if(j.photo_url){$('#pho').style.backgroundImage='url(\''+j.photo_url+'\')';$('#pho').textContent='';}setMsg('Photo updated ✓','ok');}
+    catch(e){setMsg(e.message||'Photo failed','err');}
+  });
+  $('#save').addEventListener('click',async()=>{
+    const btn=$('#save');btn.disabled=true;btn.textContent='Saving…';setMsg('','');
+    try{await call({action:'save',bio:$('#bio').value,instagram:$('#instagram').value,soundcloud:$('#soundcloud').value,tiktok:$('#tiktok').value,website:$('#website').value});setMsg('Saved ✓ Thanks!','ok');}
+    catch(e){setMsg(e.message||'Save failed','err');}
+    btn.disabled=false;btn.textContent='Save my profile';
+  });
+}
+function setMsg(t,k){const m=$('#msg');if(m){m.textContent=t;m.className='msg '+(k||'');}}
+(async function(){
+  if(!TOKEN){$('#root').innerHTML='<div class="state">This link is missing its token. Ask Come With to resend your update link.</div>';return;}
+  try{const j=await call({action:'get'});render(j.artist);}
+  catch(e){$('#root').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has expired.')+'</div>';}
+})();
+</script>
+</body>
+</html>

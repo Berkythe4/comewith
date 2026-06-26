@@ -4086,17 +4086,24 @@ async function submitLogNote() {
 }
 
 // ---- Recap video editor (repeatable label + URL rows) ----
-function recapVidRow(label, url) {
-  return `<div class="recap-vid-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
-    <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 36%;">
-    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;">
+let RECAP_ARTISTS = []; // [{id, display_name}] — set when the edit modal opens
+function recapArtistSelect(sel) {
+  const opts = ['<option value="">— tag artist (optional) —</option>']
+    .concat(RECAP_ARTISTS.map(a => `<option value="${escapeHtml(a.id)}"${a.id === sel ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`));
+  return `<select class="hub-status-sel recap-vid-artist" style="flex:0 0 auto;max-width:150px;">${opts.join('')}</select>`;
+}
+function recapVidRow(label, url, artistId) {
+  return `<div class="recap-vid-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
+    <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 28%;min-width:140px;">
+    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;min-width:180px;">
+    ${recapArtistSelect(artistId || '')}
     <button type="button" class="hub-btn ghost" data-del-recap-vid title="Remove" style="flex:0 0 auto;padding:6px 11px;">✕</button>
   </div>`;
 }
 function recapVidRows(list) {
   let arr = [];
   try { arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []); } catch (_) { arr = []; }
-  return arr.map(v => recapVidRow(v && v.label, v && v.url)).join('');
+  return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id)).join('');
 }
 // Add / remove rows (delegated, attached once).
 document.addEventListener('click', (e) => {
@@ -4113,11 +4120,14 @@ document.addEventListener('click', (e) => {
 // and soft-deletes via deleted_at. Ticket tiers / financial child rows are NOT
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
-  const [{ data: ev, error }, { data: venues }] = await Promise.all([
+  const [{ data: ev, error }, { data: venues }, { data: artistRoles }] = await Promise.all([
     sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
+    sb.from('actor_roles').select('actor:actors(id, display_name)').in('role', ['dj', 'artist']),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  // Artists available to tag recap videos to (deduped by id).
+  { const seen = new Set(); RECAP_ARTISTS = (artistRoles || []).map(r => r.actor).filter(a => a && !seen.has(a.id) && seen.add(a.id)).sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '')); }
   const venueOpts = '<option value="">— no venue —</option>' + (venues || []).map(v =>
     `<option value="${escapeHtml(v.id)}"${v.id === ev.venue_id ? ' selected' : ''}>${escapeHtml(v.name)}${v.city ? ' — ' + escapeHtml(v.city) : ''}</option>`).join('');
   // Locked 2-option series dropdown; keep a legacy value selectable so edits don't silently rewrite it.
@@ -4217,10 +4227,15 @@ async function submitEditEvent(id) {
   patch.recap_blurb = kpiVal('recap_blurb') || null;
   // Recap videos (repeatable label+url rows) → jsonb; keep youtube_url = first url
   // for the card thumbnail + back-compat.
-  const recapVideos = [...document.querySelectorAll('#recapVidList .recap-vid-row')].map(r => ({
-    label: (r.querySelector('.recap-vid-label')?.value || '').trim() || 'Watch the recap',
-    url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
-  })).filter(v => v.url);
+  const recapVideos = [...document.querySelectorAll('#recapVidList .recap-vid-row')].map(r => {
+    const o = {
+      label: (r.querySelector('.recap-vid-label')?.value || '').trim() || 'Watch the recap',
+      url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
+    };
+    const aid = (r.querySelector('.recap-vid-artist')?.value || '').trim();
+    if (aid) o.artist_id = aid;   // tags this content to an artist's profile
+    return o;
+  }).filter(v => v.url);
   patch.recap_videos = recapVideos;
   // Back-compat: youtube_url holds the first YOUTUBE link (SoundCloud links live
   // only in recap_videos). Used for the card thumbnail.
@@ -6629,7 +6644,7 @@ const artistState = { rows: [], q: '', sortKey: 'gigs', sortDir: -1 };
 async function loadArtists() {
   $('artistsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [roles, parts] = await Promise.all([
-    sb.from('actor_roles').select('role, actor:actors(id, display_name, email, phone, instagram)').in('role', ['artist', 'dj']),
+    sb.from('actor_roles').select('role, actor:actors(id, display_name, email, phone, instagram, soundcloud, tiktok, website, bio, photo_path, public_profile, collective_rank, edit_token)').in('role', ['artist', 'dj']),
     sb.from('event_participants').select('actor_id, role, fee, event:events(name, event_date)').in('role', ['dj', 'artist', 'performer', 'headliner', 'opener']),
   ]);
   if (roles.error) { $('artistsBody').innerHTML = `<div class="panel-state err">${escapeHtml(roles.error.message)}</div>`; return; }
@@ -6639,7 +6654,7 @@ async function loadArtists() {
   artistState.rows = [...byActor.values()].map(o => ({ ...o, roles: [...o.roles].sort(), lastGig: o.events.map(e => e.event_date).sort().slice(-1)[0] || null }));
   renderArtists();
 }
-const ARTIST_COLS = [['display_name', 'Artist'], ['roles', 'Roles'], ['gigs', 'Gigs'], ['fees', 'Fees paid'], ['lastGig', 'Last gig'], ['contact', 'Contact']];
+const ARTIST_COLS = [['display_name', 'Artist'], ['public_profile', 'On site'], ['roles', 'Roles'], ['gigs', 'Gigs'], ['fees', 'Fees paid'], ['lastGig', 'Last gig'], ['contact', 'Contact']];
 function renderArtists() {
   const s = artistState, ql = s.q.toLowerCase();
   let list = s.rows.filter(a => !ql || (a.display_name || '').toLowerCase().includes(ql) || a.roles.join(' ').includes(ql));
@@ -6652,29 +6667,102 @@ function renderArtists() {
   const chip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
   const rows = list.map(a => `<tr data-artist="${escapeHtml(a.id)}" style="cursor:pointer;">
     <td><strong>${escapeHtml(a.display_name)}</strong></td>
+    <td>${a.public_profile ? '<span class="badge badge-public">🌐 Live</span>' : '<span class="badge badge-hidden">Hidden</span>'}</td>
     <td>${a.roles.map(chip).join(' ')}</td>
     <td class="num">${fmtNum(a.gigs)}</td>
     <td class="num">${a.fees ? money(a.fees) : muted}</td>
     <td>${a.lastGig ? escapeHtml(fmtDate(a.lastGig)) : muted}</td>
     <td class="truncate">${escapeHtml(a.email || a.instagram || a.phone || '') || muted}</td>
-  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
   $('artistsBody').innerHTML = `
-    <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
+    <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('On collective', fmtNum(s.rows.filter(a => a.public_profile).length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
     <div style="margin-bottom:12px;"><input class="modal-input" data-artistq placeholder="Search artist / role…" style="max-width:240px;" value="${escapeHtml(s.q)}"></div>
     <table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
-    <div class="kpi-hint" style="margin-top:8px;">Roster of everyone with a <strong>dj/artist</strong> role (from Actors). Click a row for booking history. Add / edit people in the <strong>Actors</strong> tab.</div>`;
+    <div class="kpi-hint" style="margin-top:8px;">Roster of everyone with a <strong>dj/artist</strong> role. Click a row to edit their <strong>public profile</strong> (collective visibility, bio, photo, socials) and see bookings.</div>`;
 }
-function openArtistBookings(id) {
+const ARTIST_ORIGIN = location.origin + location.pathname.replace(/[^/]*$/, '');
+function openArtistProfile(id) {
   const a = artistState.rows.find(x => x.id === id); if (!a) return;
   const evs = [...a.events].sort((x, y) => (y.event_date || '').localeCompare(x.event_date || ''));
-  openKpi('Bookings — ' + a.display_name, `${a.gigs} gigs · ${money(a.fees)} fees · ${a.roles.join(' / ')}`, `
+  const pubUrl = ARTIST_ORIGIN + 'artist.html?id=' + encodeURIComponent(a.id);
+  const editUrl = ARTIST_ORIGIN + 'artist-edit.html?token=' + encodeURIComponent(a.edit_token || '');
+  openKpi('Profile — ' + a.display_name, `${a.gigs} gigs · ${money(a.fees)} fees · ${a.roles.join(' / ')}`, `
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="apPublic" style="width:auto;margin:0;"${a.public_profile ? ' checked' : ''}> Show on the public collective</label>
+      <div class="kpi-hint" style="margin-top:4px;">When on, this artist appears on the homepage collective and has a public profile page: <a href="${escapeHtml(pubUrl)}" target="_blank">view ↗</a></div></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Collective order (lower = first)</label><input class="modal-input" type="number" id="apRank" value="${escapeHtml(String(a.collective_rank ?? 100))}"></div>
+      <div><label class="modal-label">Instagram (handle or URL)</label><input class="modal-input" id="apIg" value="${escapeHtml(a.instagram || '')}" placeholder="@name"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">SoundCloud URL</label><input class="modal-input" id="apSc" value="${escapeHtml(a.soundcloud || '')}" placeholder="https://soundcloud.com/…"></div>
+      <div><label class="modal-label">TikTok URL</label><input class="modal-input" id="apTt" value="${escapeHtml(a.tiktok || '')}" placeholder="https://tiktok.com/@…"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Website URL</label><input class="modal-input" id="apWeb" value="${escapeHtml(a.website || '')}" placeholder="https://…"></div>
+    <div class="modal-form-row"><label class="modal-label">Bio</label><textarea class="modal-textarea" id="apBio" rows="3" placeholder="A short bio shown on their profile.">${escapeHtml(a.bio || '')}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Profile photo</label>
+      <div id="apPhotoWrap" style="margin-bottom:8px;">${a.photo_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(a.photo_path)}" alt="photo" style="width:120px;height:120px;object-fit:cover;border:1px solid var(--border-strong);border-radius:12px;display:block;"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-weight:400;"><input type="checkbox" id="apPhotoRemove" style="width:auto;margin:0;"> Remove photo</label>` : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
+      <input class="modal-input" type="file" id="apPhotoFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif"></div>
+    <div class="hub-sec-bar" style="margin-top:14px;"><h3>Self-service update</h3></div>
+    <div class="kpi-hint">Send the artist a private link so they can update their own bio, socials, photo & content — no login needed.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin:8px 0 2px;">
+      <button type="button" class="hub-btn ghost" data-ap-copy="${escapeHtml(editUrl)}">Copy update link</button>
+      <button type="button" class="hub-btn ghost" data-ap-send="${escapeHtml(a.id)}"${a.email ? '' : ' disabled title="No email on file"'}>Email update link${a.email ? '' : ' (no email)'}</button>
+    </div>
+    <div class="hub-sec-bar" style="margin-top:14px;"><h3>Bookings</h3></div>
     <div class="hub-list">${evs.length ? evs.map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name || '—')}</strong><div class="li-sub">${escapeHtml(fmtDate(e.event_date))}</div></div></div>`).join('') : '<div class="hub-empty">No bookings yet.</div>'}</div>`,
-    () => closeKpi(), 'Close');
+    () => submitArtistProfile(id), 'Save profile');
+}
+async function submitArtistProfile(id) {
+  const a = artistState.rows.find(x => x.id === id); if (!a) return;
+  const patch = {
+    public_profile: !!$('apPublic')?.checked,
+    collective_rank: Number($('apRank')?.value || 100) || 100,
+    instagram: ($('apIg')?.value || '').trim() || null,
+    soundcloud: ($('apSc')?.value || '').trim() || null,
+    tiktok: ($('apTt')?.value || '').trim() || null,
+    website: ($('apWeb')?.value || '').trim() || null,
+    bio: ($('apBio')?.value || '').trim() || null,
+  };
+  const file = $('apPhotoFile')?.files?.[0];
+  if (file && file.size > 0) {
+    const f = await downscaleImage(file, 1000, 0.88);
+    const safe = (f.name || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `artist/${id}/${Date.now()}_${safe}`;
+    const { error: upErr } = await sb.storage.from('event-photos').upload(path, f, { contentType: f.type, upsert: false });
+    if (upErr) throw new Error('Photo upload failed: ' + upErr.message);
+    patch.photo_path = path;
+  } else if ($('apPhotoRemove')?.checked) {
+    patch.photo_path = null;
+  }
+  const { error } = await sb.from('actors').update(patch).eq('id', id);
+  if (error) throw error;
+  closeKpi(); toast('Profile saved', 'ok'); loadArtists();
+}
+async function sendArtistEditLink(id) {
+  const a = artistState.rows.find(x => x.id === id); if (!a) return;
+  if (!a.email) { toast('No email on file for this artist', 'err'); return; }
+  const link = ARTIST_ORIGIN + 'artist-edit.html?token=' + encodeURIComponent(a.edit_token || '');
+  const html = `<p>Hi ${escapeHtml((a.display_name || '').split(' ')[0])},</p>
+    <p>You can update your Come With artist profile — bio, socials and photo — using your private link below. No login needed.</p>
+    <p><a href="${link}">${link}</a></p>
+    <p>Whatever you save shows up on your profile page at comewith.org. Thanks!<br>— Come With</p>`;
+  try {
+    const { error } = await sb.functions.invoke('send-notice', { body: { to: a.email, subject: 'Update your Come With artist profile', html } });
+    if (error) throw error;
+    toast('Update link emailed to ' + a.email, 'ok');
+  } catch (e) { toast('Send failed: ' + (e.message || e), 'err'); }
 }
 $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest('[data-artistq]'); if (q) { artistState.q = q.value; renderArtists(); } });
 $('panel-artists').addEventListener('click', (e) => {
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
-  const row = e.target.closest('[data-artist]'); if (row) openArtistBookings(row.dataset.artist);
+  const row = e.target.closest('[data-artist]'); if (row) openArtistProfile(row.dataset.artist);
+});
+// Copy / email the self-service update link (delegated; modal lives in kpiModal).
+document.addEventListener('click', async (e) => {
+  const cp = e.target.closest('[data-ap-copy]');
+  if (cp) { try { await navigator.clipboard.writeText(cp.dataset.apCopy); toast('Update link copied', 'ok'); } catch (_) { toast('Copy failed — link: ' + cp.dataset.apCopy, 'err'); } return; }
+  const sd = e.target.closest('[data-ap-send]');
+  if (sd) { sendArtistEditLink(sd.dataset.apSend); return; }
 });
 
 // ============================================================
