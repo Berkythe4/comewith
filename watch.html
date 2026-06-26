@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Watch — Come With</title>
+<meta name="description" content="Recaps, sets and showcases from recent Come With rooms.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.6}
+  a{color:inherit;text-decoration:none}.wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  .label{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1,h2{font-family:'Archivo';font-weight:900;line-height:.98;letter-spacing:-.02em;text-transform:uppercase}
+  nav{position:sticky;top:0;z-index:50;background:rgba(20,10,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{font-family:'Archivo';font-weight:900;font-size:1.25rem;display:flex;align-items:center}.brand b{color:var(--lime)}
+  .logomask{display:inline-block;height:30px}
+  nav a.link{font-family:'DM Mono';font-size:.78rem;color:var(--dim)}nav a.link:hover{color:var(--cream)}
+  header{padding:56px 0 30px}header h1{font-size:clamp(2.6rem,8vw,5rem);margin:14px 0 14px}
+  header p{color:var(--dim);max-width:54ch;font-size:1.1rem}
+  .vids{padding:30px 0 80px}
+  .vgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:20px}
+  .vid{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);transition:.2s;cursor:pointer}
+  .vid:hover{transform:translateY(-4px);border-color:var(--hot)}
+  .vid .thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;position:relative;display:flex;align-items:center;justify-content:center}
+  .vid .thumb.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
+  .vid .thumb .pl{width:62px;height:62px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.5rem}
+  .vid .bd{padding:16px 18px}.vid h2{font-size:1.2rem;margin-bottom:4px}
+  .vid .meta{font-family:'DM Mono';font-size:.76rem;color:var(--dim)}.vid .blurb{font-size:.9rem;color:var(--cream);margin-top:6px}
+  .empty{border:1px dashed var(--line);border-radius:16px;padding:40px;text-align:center;color:var(--dim)}
+  .chanrow{margin:24px 0 0;display:flex;gap:12px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono';font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;padding:13px 22px;border-radius:999px;border:1.5px solid var(--cream);color:var(--cream);min-height:48px}
+  .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime)}
+  footer{padding:40px 0;border-top:1px solid var(--line)}footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px}footer .dim{color:var(--dim);font-family:'DM Mono';font-size:.82rem}
+  .lb{position:fixed;inset:0;background:rgba(10,5,12,.92);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .lb.show{display:flex}.lb .box{width:100%;max-width:960px;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;position:relative}
+  .lb iframe{width:100%;height:100%;border:0}.lb .x{position:absolute;top:-44px;right:0;color:#fff;font-size:1.8rem;cursor:pointer;background:none;border:none}
+  @media(max-width:700px){header{padding:40px 0 20px}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="index.html" class="brand" data-logo><span data-cw="brand.wordmark">COME·WITH</span></a>
+  <div style="display:flex;gap:20px;align-items:center"><a href="index.html#events" class="link">Events</a><a href="index.html#di" class="link">Dance Infusion</a><a href="index.html#book" class="link">Book us</a></div>
+</div></nav>
+
+<header><div class="wrap">
+  <div class="label">The content</div>
+  <h1 data-cw="watch.heading">Watch</h1>
+  <p data-cw="watch.body">Recaps, sets and showcases from recent Come With rooms.</p>
+  <div class="chanrow"><a class="btn primary" href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener">▶ YouTube channel ↗</a><a class="btn" href="index.html#events">See upcoming events</a></div>
+</div></header>
+
+<section class="vids"><div class="wrap"><div class="vgrid" id="vids"><div style="color:var(--dim);font-family:'DM Mono'">Loading…</div></div></div></section>
+
+<footer><div class="wrap">
+  <a class="brand" href="index.html" data-logo><span data-cw="brand.wordmark">COME·WITH</span></a>
+  <div class="dim">Brooklyn, NY · © 2026 · <a href="dashboard.html" style="color:var(--dim)">Team sign-in</a></div>
+</div></footer>
+
+<div class="lb" id="lb"><div class="box"><button class="x" id="lbX" aria-label="Close">✕</button><iframe id="lbFrame" allow="autoplay; encrypted-media" allowfullscreen></iframe></div></div>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',CWH={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
+const $=s=>document.querySelector(s);const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
+function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
+async function api(p){try{const r=await fetch(CWURL+'/rest/v1/'+p,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
+function openVid(id){$('#lbFrame').src='https://www.youtube.com/embed/'+id+'?autoplay=1&rel=0';$('#lb').classList.add('show');}
+function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
+$('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
+document.addEventListener('click',e=>{const v=e.target.closest('[data-yt]');if(v)openVid(v.dataset.yt);});
+function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
+  document.querySelectorAll('[data-logo]').forEach(slot=>{if(tint==='none'){slot.innerHTML='<img src="'+url+'" style="height:30px">';}
+    else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}});}
+(async function(){
+  const rows=await api('site_content?select=key,value');const C={};rows.forEach(r=>C[r.key]=r.value);
+  document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
+  if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
+  const rec=await api('v_public_recap?select=*');
+  const vids=rec.filter(e=>ytId(e.youtube_url));
+  const g=$('#vids');
+  if(!vids.length){g.innerHTML='<div class="empty">No recap videos yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
+  g.innerHTML=vids.map(function(e){const id=ytId(e.youtube_url);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+    const thumb='https://img.youtube.com/vi/'+id+'/hqdefault.jpg';
+    return '<article class="vid" data-yt="'+id+'"><div class="thumb '+(benefit?'benefit':'')+'" style="background-image:url(\''+thumb+'\')"><div class="pl">▶</div></div><div class="bd"><h2>'+e.name+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div><div class="blurb">'+(e.recap_blurb||'')+'</div></div></article>';}).join('');
+})();
+</script>
+</body>
+</html>

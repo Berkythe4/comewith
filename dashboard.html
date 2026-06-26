@@ -1039,6 +1039,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
       <div class="panel" id="panel-conversations"><div id="conversationsBody"></div></div>
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
+      <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -2569,6 +2570,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
+  if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -6484,6 +6486,80 @@ $('panel-artists').addEventListener('click', (e) => {
 // VENDORS — own tab: categorized, filterable, with spend KPIs + detail.
 // ============================================================
 const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
+// ---- Site Editor (public-site CMS over site_content) ----
+const SITE_SECTIONS = { brand: 'Brand & logo', hero: 'Hero', community: 'Daytime community', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page' };
+const SITE_ORDER = ['brand', 'hero', 'community', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch'];
+const SITE_AREAS = new Set(['hero.lede', 'community.body', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
+const SITE_LABELS = {
+  'brand.logo': 'Logo image', 'brand.logo_tint': 'Logo color (blends on the dark site)', 'brand.wordmark': 'Wordmark (text shown if no logo)', 'brand.nav_cta': 'Nav button label',
+  'hero.kicker': 'Kicker (small label)', 'hero.h1': 'Headline', 'hero.h2': 'Sub-headline', 'hero.lede': 'Intro paragraph', 'hero.cta1': 'Primary button', 'hero.cta2': 'Secondary button',
+  'di.goal_total': 'Goal amount ($)', 'di.goal_raised': 'Raised so far ($)', 'di.goal_label': 'Goal caption',
+  'contact.email': 'Contact email', 'contact.ig': 'Instagram handle', 'contact.ig_url': 'Instagram URL', 'contact.location': 'Location',
+};
+const siteState = { values: {} };
+function siteSecFor(k) { return SITE_SECTIONS[k.split('.')[0]] || 'Other'; }
+function siteLabel(k) { if (SITE_LABELS[k]) return SITE_LABELS[k]; const s = k.split('.').slice(1).join('.').replace(/_/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); }
+async function loadSiteEditor() {
+  $('siteEditorBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading site content…</div>';
+  const { data, error } = await sb.from('site_content').select('key,value').order('key');
+  if (error) { $('siteEditorBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  siteState.values = {}; (data || []).forEach(r => siteState.values[r.key] = r.value ?? '');
+  renderSiteEditor();
+}
+function renderSiteEditor() {
+  const keys = Object.keys(siteState.values);
+  keys.sort((a, b) => { const pa = SITE_ORDER.indexOf(a.split('.')[0]), pb = SITE_ORDER.indexOf(b.split('.')[0]); if (pa !== pb) return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb); return a < b ? -1 : a > b ? 1 : 0; });
+  const groups = []; const idx = {};
+  keys.forEach(k => { const sec = siteSecFor(k); if (idx[sec] == null) { idx[sec] = groups.length; groups.push({ sec, keys: [] }); } groups[idx[sec]].keys.push(k); });
+  let html = `<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:12px;margin-bottom:14px">
+    <div class="kpi-hint" style="max-width:64ch;margin:0">Edit any text on the public site — changes go live on save. Preview: <a href="index.html" target="_blank">home ↗</a> · <a href="watch.html" target="_blank">watch page ↗</a></div>
+    <button class="hub-btn" data-site-save>Save all changes</button></div>`;
+  for (const g of groups) {
+    html += `<div class="hub-sec-bar"><h3>${escapeHtml(g.sec)}</h3></div><div class="modal-grid2" style="max-width:840px;margin-bottom:18px">`;
+    for (const k of g.keys) {
+      const v = siteState.values[k] || ''; const lbl = escapeHtml(siteLabel(k));
+      if (k === 'brand.logo') {
+        html += `<div style="grid-column:1/-1"><label class="modal-label">${lbl}</label>
+          <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+            ${v ? `<span style="display:inline-block;padding:8px 12px;background:#241229;border-radius:8px"><img src="${escapeHtml(v)}" alt="logo" style="height:26px;display:block"></span>` : '<span class="li-sub">No logo uploaded yet</span>'}
+            <input class="modal-input" type="file" id="siteLogoFile" accept="image/png,image/svg+xml,image/webp,image/jpeg" style="max-width:340px">
+          </div>
+          <div class="kpi-hint">Upload a transparent PNG or SVG. The brown logo is auto-tinted to the color below so it blends on the dark site — no need to recolor the file itself.</div></div>`;
+      } else if (k === 'brand.logo_tint') {
+        html += `<div><label class="modal-label">${lbl}</label><select class="modal-select" data-sk="${escapeHtml(k)}">${['cream', 'lime', 'white', 'plum', 'none'].map(t => `<option value="${t}"${v === t ? ' selected' : ''}>${t === 'none' ? 'none (keep original colors)' : t}</option>`).join('')}</select></div>`;
+      } else if (SITE_AREAS.has(k)) {
+        html += `<div style="grid-column:1/-1"><label class="modal-label">${lbl}</label><textarea class="modal-textarea" data-sk="${escapeHtml(k)}" rows="3">${escapeHtml(v)}</textarea></div>`;
+      } else {
+        html += `<div><label class="modal-label">${lbl}</label><input class="modal-input" data-sk="${escapeHtml(k)}" value="${escapeHtml(v)}"></div>`;
+      }
+    }
+    html += `</div>`;
+  }
+  $('siteEditorBody').innerHTML = html;
+}
+async function saveSiteContent() {
+  const btn = document.querySelector('[data-site-save]'); if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const rows = [];
+    document.querySelectorAll('#panel-site-editor [data-sk]').forEach(el => { rows.push({ key: el.dataset.sk, value: el.value }); });
+    const file = $('siteLogoFile')?.files?.[0];
+    if (file && file.size > 0) {
+      const safe = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `site/logo_${Date.now()}_${safe}`;
+      const { error: upErr } = await sb.storage.from('event-photos').upload(path, file, { contentType: file.type, upsert: true });
+      if (upErr) throw new Error('Logo upload failed: ' + upErr.message);
+      const pub = sb.storage.from('event-photos').getPublicUrl(path);
+      rows.push({ key: 'brand.logo', value: pub.data.publicUrl });
+    }
+    const payload = rows.map(r => ({ key: r.key, value: r.value, updated_at: new Date().toISOString(), updated_by: ME.id || null }));
+    const { error } = await sb.from('site_content').upsert(payload, { onConflict: 'key' });
+    if (error) throw error;
+    toast('Site updated — live now', 'ok');
+    await loadSiteEditor();
+  } catch (e) { toast(e.message || String(e), 'err'); if (btn) { btn.disabled = false; btn.textContent = 'Save all changes'; } }
+}
+$('panel-site-editor').addEventListener('click', e => { if (e.target.closest('[data-site-save]')) saveSiteContent(); });
+
 const vendorState = { rows: [], q: '', cat: '', selected: new Set(), sortKey: 'spent', sortDir: -1, activeId: null, detailExpenses: [], detailContacts: [] };
 async function loadVendors() {
   $('vendorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading vendors…</div>';
