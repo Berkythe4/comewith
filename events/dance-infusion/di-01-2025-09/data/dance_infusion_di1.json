@@ -42,7 +42,9 @@
     "cost_to_raise_per_dollar": 1.58,
     "cost_to_raise_note": "INTERNAL ONLY (dashboard, never public): expenses ÷ donated = 1800/1140 ≈ $1.58 to raise $1. Public framing is '% to mission' only.",
     "ra_ticket_gross_revenue": 1142.50,
-    "ra_ticket_gross_revenue_source": "CSV Price-column sum (42 rows) = $1,142.50, matches RA Stats 'Total revenue $1,142.50'. (Subset of total_raised $2,940.)"
+    "ra_ticket_gross_revenue_source": "CSV Price-column sum (42 rows) = $1,142.50, matches RA Stats 'Total revenue $1,142.50'. (Subset of total_raised $2,940.)",
+    "ra_booking_fees": 105.00,
+    "ra_booking_fees_note": "RA booking fee = $2.50/ticket x 42 tickets = $105.00 (corrected 2026-06-26 from an earlier flat $2.50). Logged as a DI#1 'Platform fees' expense."
   },
 
   "attendance": {

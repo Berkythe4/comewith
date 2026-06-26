@@ -1051,6 +1051,10 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-equipment">
         <button class="add-btn" id="addEquipBtn">+ Add equipment</button>
         <button class="add-btn" id="addWishlistBtn" style="margin-left:8px;">+ Wishlist item</button>
+        <div class="ven-toggle" id="equipViewToggle" style="margin-bottom:12px;">
+          <button data-equip-view="inventory" class="active">Inventory</button>
+          <button data-equip-view="usage">Usage</button>
+        </div>
         <div id="equipFilterBar" style="display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;"></div>
         <div class="row-count" id="count-equipment">—</div>
         <div id="state-equipment"></div>
@@ -1066,6 +1070,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           </tr></thead>
           <tbody></tbody>
         </table>
+        <div id="equipUsageView" style="display:none;"></div>
       </div>
 
       <div class="panel" id="panel-events">
@@ -2666,6 +2671,59 @@ $('table-equipment').addEventListener('click', (e) => {
 });
 $('addEquipBtn').addEventListener('click', () => openEditEquipment(null));
 $('addWishlistBtn').addEventListener('click', () => openEditEquipment(null, { wishlist: true }));
+
+// Equipment view toggle: Inventory (table) <-> Usage (utilization KPIs)
+const EQUIP_INV_ELS = ['addEquipBtn', 'addWishlistBtn', 'equipFilterBar', 'count-equipment', 'state-equipment', 'table-equipment'];
+$('equipViewToggle').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-equip-view]'); if (!b) return;
+  const usage = b.dataset.equipView === 'usage';
+  for (const x of $('equipViewToggle').children) x.classList.toggle('active', x === b);
+  EQUIP_INV_ELS.forEach(id => { const el = $(id); if (el) el.style.display = usage ? 'none' : ''; });
+  $('equipUsageView').style.display = usage ? '' : 'none';
+  if (usage) loadEquipmentUsage();
+});
+function usageBar(label, val, max, sub) {
+  const pct = max > 0 ? Math.round(val / max * 100) : 0;
+  return `<div style="margin-bottom:7px;"><div style="display:flex;justify-content:space-between;font-size:.8rem;margin-bottom:2px;"><span>${escapeHtml(label)}</span><span class="li-sub">${escapeHtml(sub != null ? sub : String(val))}</span></div><div style="background:#EFEAE2;border-radius:5px;height:14px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:#3B6D11;"></div></div></div>`;
+}
+async function loadEquipmentUsage() {
+  $('equipUsageView').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading usage…</div>';
+  const [u, inv] = await Promise.all([
+    sb.from('equipment_usage').select('equipment_id, event:events(event_date, deleted_at)'),
+    sb.from('equipment_inventory').select('id, name, category, daily_rate, purchase_price, status').is('deleted_at', null),
+  ]);
+  const useBy = {};
+  (u.data || []).forEach(x => { if (!x.equipment_id || (x.event && x.event.deleted_at)) return; const o = useBy[x.equipment_id] || (useBy[x.equipment_id] = { uses: 0, last: null }); o.uses++; const d = x.event && x.event.event_date; if (d && (!o.last || d > o.last)) o.last = d; });
+  const items = (inv.data || []).filter(i => i.status !== 'retired' && i.status !== 'wishlist').map(i => {
+    const g = useBy[i.id] || { uses: 0, last: null };
+    const value = g.uses * (Number(i.daily_rate) || 0);
+    return { ...i, uses: g.uses, last: g.last, value, roi: (i.purchase_price && Number(i.purchase_price) > 0) ? value / Number(i.purchase_price) * 100 : null };
+  });
+  const totalUses = items.reduce((t, i) => t + i.uses, 0);
+  const used = items.filter(i => i.uses > 0).length, idle = items.length - used;
+  const valueGen = items.reduce((t, i) => t + i.value, 0), invested = items.reduce((t, i) => t + (Number(i.purchase_price) || 0), 0);
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  const maxUses = Math.max(1, ...items.map(i => i.uses));
+  const top = [...items].sort((a, b) => b.uses - a.uses).slice(0, 12).filter(i => i.uses > 0);
+  const byCat = {}; items.forEach(i => { const c = i.category || '—'; byCat[c] = (byCat[c] || 0) + i.uses; });
+  const maxCat = Math.max(1, ...Object.values(byCat));
+  const tableRows = [...items].sort((a, b) => b.uses - a.uses || b.value - a.value).map(i => `<tr>
+    <td>${escapeHtml(i.name)}</td><td>${escapeHtml(i.category || '') || muted}</td>
+    <td class="num">${i.uses || muted}</td><td class="li-sub">${i.last ? escapeHtml(fmtDate(i.last)) : muted}</td>
+    <td class="num">${i.daily_rate != null ? money(i.daily_rate) : muted}</td>
+    <td class="num">${i.value ? money(i.value) : muted}</td>
+    <td class="num">${i.purchase_price != null ? money(i.purchase_price) : muted}</td>
+    <td class="num">${i.roi != null ? Math.round(i.roi) + '%' : muted}</td></tr>`).join('');
+  $('equipUsageView').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:14px;">${card('Items tracked', items.length)}${card('Total uses', totalUses)}${card('Used / idle', used + ' / ' + idle)}${card('Rental-equiv value', money(valueGen), 'pos')}${card('Invested', money(invested))}</div>
+    <div class="hub-sec-bar"><h3>Most-used equipment</h3></div>
+    <div style="max-width:660px;">${top.length ? top.map(i => usageBar(i.name + (i.category ? ' (' + i.category + ')' : ''), i.uses, maxUses, i.uses + ' use' + (i.uses === 1 ? '' : 's'))).join('') : '<div class="hub-empty">No usage logged yet — assign equipment to events from the event hub.</div>'}</div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Usage by category</h3></div>
+    <div style="max-width:660px;">${Object.entries(byCat).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]).map(([c, n]) => usageBar(c, n, maxCat, n + ' use' + (n === 1 ? '' : 's'))).join('') || '<div class="hub-empty">No usage yet.</div>'}</div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Utilization &amp; rental ROI</h3></div>
+    <table class="data-table"><thead><tr><th>Item</th><th>Category</th><th class="num">Uses</th><th>Last used</th><th class="num">Daily rate</th><th class="num">Value gen.</th><th class="num">Purchase</th><th class="num">ROI</th></tr></thead><tbody>${tableRows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">“Value generated” = uses × daily rate (rental-equivalent). ROI = value ÷ purchase price — how much each item has earned back vs its cost. Idle items (0 uses) are candidates to rent out or sell. Spend/value figures are master-gated.</div>`;
+}
 async function openEditEquipment(id, opts = {}) {
   const r = id ? equipmentRows.find(x => x.id === id) : null;
   const defaultStatus = opts.wishlist ? 'wishlist' : (r?.status || 'available');
