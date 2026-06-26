@@ -73,8 +73,12 @@
   .recapgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
   .recap{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);transition:.2s}
   .recap:hover{transform:translateY(-3px);border-color:var(--hot)}
-  .recap .ph{height:180px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:14px}
+  .recap .ph{height:180px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-repeat:no-repeat;background-position:center;position:relative;display:flex;align-items:flex-end;padding:14px}
   .recap .ph.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
+  /* Hero photos: show the WHOLE picture (no crop) on a dark backdrop. Video
+     thumbnails keep cover so the 16:9 frame fills cleanly. */
+  .recap .ph.photo{background-color:#160b1b;background-size:contain}
+  .recap .ph.photo .play{background:rgba(20,10,23,.18)}
   .recap .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,10,23,.25);cursor:pointer;transition:.2s}
   .recap .play:hover{background:rgba(20,10,23,.45)}
   .recap .play span{width:62px;height:62px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.5rem}
@@ -82,7 +86,8 @@
   .recap .bd{padding:18px}.recap h3{font-family:'Archivo';font-weight:700;font-size:1.15rem;text-transform:uppercase;margin-bottom:4px}
   .recap .meta{font-family:'DM Mono';font-size:.76rem;color:var(--dim);margin-bottom:8px}
   .recap .blurb{font-size:.9rem;color:var(--cream)}
-  .recap .watch{margin-top:10px;font-family:'DM Mono';font-size:.74rem;color:var(--lime);text-transform:uppercase;cursor:pointer;display:inline-block}
+  .recap .watch{margin-top:10px;margin-right:16px;font-family:'DM Mono';font-size:.74rem;color:var(--lime);text-transform:uppercase;cursor:pointer;display:inline-block}
+  .recap .watch:hover{text-decoration:underline}
   .di{background:linear-gradient(180deg,#21111d,#160b18);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
   .di .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center}
   .di h2{font-size:clamp(2rem,5vw,3.4rem);margin:12px 0 16px}.di p{color:var(--dim);margin-bottom:14px}
@@ -268,6 +273,8 @@ const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
 function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtDay(s){const d=new Date((s||'')+'T00:00:00');return{mon:d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(),day:d.getDate()};}
 function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function recapVids(e){let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:'Watch the recap'}];return a.filter(v=>v&&ytId(v.url));}
 async function api(path){try{const r=await fetch(CWURL+'/rest/v1/'+path,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
@@ -301,9 +308,15 @@ function evCard(e){const d=fmtDay(e.event_date);const benefit=/infusion|benefit/
   return '<article class="ev"><div class="top"><div class="date"><span class="m">'+d.mon+'</span><span class="d">'+d.day+'</span></div><div class="meta"><div class="n">'+e.name+'</div><div class="sub">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div>'+tag+'</div></div><div class="foot"><span style="font-family:DM Mono;color:var(--dim);font-size:.74rem">Upcoming</span>'+cta+'</div></article>';}
 function recapCard(e){const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
   const hero=e.hero_image_path?(CWURL+'/storage/v1/object/public/event-photos/'+e.hero_image_path):null;
-  const yt=ytId(e.youtube_url);const bg=hero?('style="background-image:url(\''+hero+'\')"'):'';
-  const play=yt?'<div class="play" data-yt="'+yt+'"><span>▶</span></div>':'';const watch=yt?'<span class="watch" data-yt="'+yt+'">▶ Watch the recap</span>':'';
-  return '<article class="recap"><div class="ph '+(benefit?'benefit':'')+'" '+bg+'>'+play+'<span class="t">'+(benefit?'Benefit · MS Society':(e.series||'Party'))+'</span></div><div class="bd"><h3>'+e.name+'</h3><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div><div class="blurb">'+(e.recap_blurb||'')+'</div>'+watch+'</div></article>';}
+  const vids=recapVids(e);const first=vids.length?ytId(vids[0].url):null;
+  // Picture: a hero photo shows whole (contain); otherwise the first video's
+  // thumbnail fills the 16:9 frame (cover crops the baked-in letterbox bars).
+  let phClass='ph'+(benefit?' benefit':''),phStyle='';
+  if(hero){phClass+=' photo';phStyle='style="background-image:url(\''+hero+'\')"';}
+  else if(first){phClass+=' yt';phStyle='style="background-image:url(\'https://img.youtube.com/vi/'+first+'/hqdefault.jpg\')"';}
+  const play=first?'<div class="play" data-yt="'+first+'"><span>▶</span></div>':'';
+  const watch=vids.map(v=>{const id=ytId(v.url);return id?'<span class="watch" data-yt="'+id+'">▶ '+esc(v.label||'Watch the recap')+'</span>':'';}).join('');
+  return '<article class="recap"><div class="'+phClass+'" '+phStyle+'>'+play+'<span class="t">'+(benefit?'Benefit · MS Society':esc(e.series||'Party'))+'</span></div><div class="bd"><h3>'+esc(e.name)+'</h3><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+(e.recap_blurb?'<div class="blurb">'+esc(e.recap_blurb)+'</div>':'')+watch+'</div></article>';}
 async function loadEvents(){
   const evs=await api('v_public_events?select=*&order=event_date.asc');const up=$('#upcoming');
   if(evs.length){up.innerHTML=evs.map(evCard).join('');const e=evs[0],d=fmtDay(e.event_date);

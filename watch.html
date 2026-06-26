@@ -67,6 +67,7 @@ const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_Iki
 const $=s=>document.querySelector(s);const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
 function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(p){try{const r=await fetch(CWURL+'/rest/v1/'+p,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
 function openVid(id){$('#lbFrame').src='https://www.youtube.com/embed/'+id+'?autoplay=1&rel=0';$('#lb').classList.add('show');}
 function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
@@ -81,12 +82,19 @@ function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tin
   document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
   if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
   const rec=await api('v_public_recap?select=*');
-  const vids=rec.filter(e=>ytId(e.youtube_url));
+  // Flatten to one card per video (an event can have several), keeping each
+  // video's own label.
+  const cards=[];
+  rec.forEach(function(e){
+    let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}
+    if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:''}];
+    a.forEach(function(v){const id=ytId(v&&v.url);if(id)cards.push({e:e,id:id,label:(v&&v.label)||''});});
+  });
   const g=$('#vids');
-  if(!vids.length){g.innerHTML='<div class="empty">No recap videos yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
-  g.innerHTML=vids.map(function(e){const id=ytId(e.youtube_url);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
-    const thumb='https://img.youtube.com/vi/'+id+'/hqdefault.jpg';
-    return '<article class="vid" data-yt="'+id+'"><div class="thumb '+(benefit?'benefit':'')+'" style="background-image:url(\''+thumb+'\')"><div class="pl">▶</div></div><div class="bd"><h2>'+e.name+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div><div class="blurb">'+(e.recap_blurb||'')+'</div></div></article>';}).join('');
+  if(!cards.length){g.innerHTML='<div class="empty">No recap videos yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
+  g.innerHTML=cards.map(function(c){const e=c.e;const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+    const thumb='https://img.youtube.com/vi/'+c.id+'/hqdefault.jpg';
+    return '<article class="vid" data-yt="'+c.id+'"><div class="thumb '+(benefit?'benefit':'')+'" style="background-image:url(\''+thumb+'\')"><div class="pl">▶</div></div><div class="bd"><h2>'+esc(e.name)+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div><div class="blurb">'+esc(c.label||e.recap_blurb||'')+'</div></div></article>';}).join('');
 })();
 </script>
 </body>

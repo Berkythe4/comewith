@@ -4006,13 +4006,36 @@ async function submitLogNote() {
   if (document.querySelector('#panel-notes.active')) loadTab('notes');
 }
 
+// ---- Recap video editor (repeatable label + URL rows) ----
+function recapVidRow(label, url) {
+  return `<div class="recap-vid-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
+    <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 36%;">
+    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/…" style="flex:1;">
+    <button type="button" class="hub-btn ghost" data-del-recap-vid title="Remove" style="flex:0 0 auto;padding:6px 11px;">✕</button>
+  </div>`;
+}
+function recapVidRows(list) {
+  let arr = [];
+  try { arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []); } catch (_) { arr = []; }
+  return arr.map(v => recapVidRow(v && v.label, v && v.url)).join('');
+}
+// Add / remove rows (delegated, attached once).
+document.addEventListener('click', (e) => {
+  if (e.target.closest('[data-add-recap-vid]')) {
+    const list = $('recapVidList'); if (list) list.insertAdjacentHTML('beforeend', recapVidRow('Watch the recap', ''));
+    return;
+  }
+  const del = e.target.closest('[data-del-recap-vid]');
+  if (del) { del.closest('.recap-vid-row')?.remove(); }
+});
+
 // ---- Edit + soft-delete events (Phase 13 — Part D) ----
 // Scope: edits the event CORE (name, series, date, capacity, attendance, status)
 // and soft-deletes via deleted_at. Ticket tiers / financial child rows are NOT
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_blurb, hero_image_path').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
@@ -4053,10 +4076,13 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" value="${escapeHtml(ev.ticket_label || '')}" placeholder="Get tickets"></div>
     </div>
     <div class="kpi-section-h">Recent Rooms (site recap)</div>
-    <div class="kpi-hint">Tick "Feature" to show this event in the public "Recent Rooms" section. Add a photo, a one-line blurb, and a YouTube link if you have a recap video (it plays in a pop-up on the site).</div>
+    <div class="kpi-hint">Tick "Feature" to show this event in the public "Recent Rooms" section. Add a photo, a one-line blurb, and one or more YouTube recap videos (each plays in a pop-up on the site).</div>
     <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_featured" style="width:auto;margin:0;"${ev.is_featured ? ' checked' : ''}> Feature in Recent Rooms</label></div>
     <div class="modal-form-row"><label class="modal-label">Recap blurb (1 line shown on the card)</label><input class="modal-input" name="recap_blurb" value="${escapeHtml(ev.recap_blurb || '')}" placeholder="117 on the floor at Signal…"></div>
-    <div class="modal-form-row"><label class="modal-label">YouTube recap URL</label><input class="modal-input" type="url" name="youtube_url" value="${escapeHtml(ev.youtube_url || '')}" placeholder="https://youtu.be/…"></div>
+    <div class="modal-form-row"><label class="modal-label">YouTube recap videos</label>
+      <div class="kpi-hint" style="margin:-2px 0 8px;">The "label" is the text shown on the link (e.g. "Watch the recap", "Kristen's set", "Full livestream"). The first video's thumbnail becomes the card picture when there's no hero photo.</div>
+      <div id="recapVidList">${recapVidRows(ev.recap_videos)}</div>
+      <button type="button" class="hub-btn ghost" data-add-recap-vid style="margin-top:4px;font-size:0.78rem;padding:6px 12px;">+ Add video</button></div>
     <div class="modal-form-row"><label class="modal-label">Hero photo${ev.hero_image_path ? ' — current: ' + escapeHtml(ev.hero_image_path.split('/').pop()) : ''}</label>
       <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp"></div>`,
     () => submitEditEvent(id), 'Save changes');
@@ -4091,8 +4117,15 @@ async function submitEditEvent(id) {
   patch.end_time = kpiVal('end_time') || null;
   patch.description = kpiVal('description') || null;
   patch.is_featured = !!$('kpiModalBody').querySelector('[name="is_featured"]')?.checked;
-  patch.youtube_url = kpiVal('youtube_url') || null;
   patch.recap_blurb = kpiVal('recap_blurb') || null;
+  // Recap videos (repeatable label+url rows) → jsonb; keep youtube_url = first url
+  // for the card thumbnail + back-compat.
+  const recapVideos = [...document.querySelectorAll('#recapVidList .recap-vid-row')].map(r => ({
+    label: (r.querySelector('.recap-vid-label')?.value || '').trim() || 'Watch the recap',
+    url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
+  })).filter(v => v.url);
+  patch.recap_videos = recapVideos;
+  patch.youtube_url = recapVideos.length ? recapVideos[0].url : null;
   // Hero photo → public event-photos bucket (only if a new file was chosen).
   let heroFile = $('evHeroFile')?.files?.[0];
   if (heroFile && heroFile.size > 0) {
