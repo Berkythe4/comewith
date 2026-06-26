@@ -6780,12 +6780,13 @@ const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Mark
 const SITE_SECTIONS = { brand: 'Brand & logo', strip: 'Ticker strip', hero: 'Hero', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page' };
 const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch'];
 const SITE_AREAS = new Set(['hero.lede', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
-const SITE_BOOLS = new Set(['di.donate_show', 'di.ticket_show']); // rendered as checkboxes
+const SITE_BOOLS = new Set(['di.donate_show', 'di.ticket_show', 'di.tiers_show']); // rendered as checkboxes
 const SITE_LABELS = {
   'brand.logo': 'Logo image', 'brand.logo_tint': 'Logo color (blends on the dark site)', 'brand.wordmark': 'Wordmark (text shown if no logo)', 'brand.nav_cta': 'Nav button label',
   'strip.items': 'Ticker words (separate each with " · ")',
   'hero.kicker': 'Kicker (small label)', 'hero.h1': 'Headline', 'hero.h2': 'Sub-headline', 'hero.lede': 'Intro paragraph', 'hero.cta1': 'Primary button', 'hero.cta2': 'Secondary button',
   'di.goal_total': 'Goal amount ($)', 'di.goal_raised': 'Raised so far ($)', 'di.goal_label': 'Goal caption',
+  'di.tiers_show': 'Show the $ donation tiles ($25 / $50 / $150)',
   'di.ticket_show': 'Show "Tickets" button', 'di.ticket_label': 'Tickets button text', 'di.ticket_url': 'Tickets link (URL)',
   'di.donate_show': 'Show "Donate" button', 'di.donate_label': 'Donate button text', 'di.donate_url': 'Donate link (URL)',
   'contact.email': 'Contact email', 'contact.ig': 'Instagram handle', 'contact.ig_url': 'Instagram URL', 'contact.location': 'Location',

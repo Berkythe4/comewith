@@ -103,6 +103,14 @@
   .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:16px}
   .tier{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;background:var(--bg2)}
   .tier .amt{font-family:'Archivo';font-weight:900;font-size:1.3rem;color:var(--hot)}.tier p{font-size:.78rem;color:var(--dim);margin-top:4px}
+  /* When the $ tiers are hidden, give the impact card more room so it doesn't look sparse */
+  .impactcard.notiers{padding:34px 30px}
+  .impactcard.notiers .counters{gap:14px;margin:22px 0 22px}
+  .impactcard.notiers .counter{padding:24px 8px}
+  .impactcard.notiers .counter .big{font-size:2.3rem}
+  .impactcard.notiers .counter .sm{font-size:.78rem}
+  .impactcard.notiers .progress .bar{height:18px}
+  .impactcard.notiers #diActions{margin-top:24px}
   .safer{margin-top:18px;background:rgba(255,92,168,.08);border-radius:14px;padding:16px 18px;font-size:.92rem;color:var(--cream)}
   .djs{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
   .djchip{font-family:'DM Mono';font-size:.82rem;border:1px solid var(--line);border-radius:999px;padding:9px 16px;background:var(--panel);display:inline-flex;align-items:center;gap:8px}
@@ -200,7 +208,7 @@
       <div class="bar"><i id="bar"></i></div>
       <div class="row"><span id="barPct">—</span><span id="barAmt">—</span></div>
     </div>
-    <div class="tiers">
+    <div class="tiers" id="diTiers">
       <div class="tier"><div class="amt" data-cw="di.tier1_amt">$25</div><p data-cw="di.tier1_desc">A ticket + a seat for the cause</p></div>
       <div class="tier"><div class="amt" data-cw="di.tier2_amt">$50</div><p data-cw="di.tier2_desc">Funds MS support programs</p></div>
       <div class="tier"><div class="amt" data-cw="di.tier3_amt">$150</div><p data-cw="di.tier3_desc">Sponsor a table, bring a crew</p></div>
@@ -305,12 +313,19 @@ async function loadContent(){
   animateStat($('#stat1'),raised,'$');animateStat($('#stat2'),+(C['di.stat2']||2),'');animateStat($('#stat3'),+(C['di.stat3']||159),'');
   setTimeout(function(){$('#bar').style.width=pct+'%';},200);$('#barPct').textContent=pct+'%';$('#barAmt').textContent='$'+raised.toLocaleString()+' / $'+total.toLocaleString();
   renderStrip(C['strip.items']);
-  // Dance Infusion donate / ticket buttons (each show/hide + label + URL editable in the Site Editor)
+  // Dance Infusion donate / ticket buttons. A button shows when its toggle is ON;
+  // it links to the URL you set, or to the inquiry form (#book) until you add one.
   const on=v=>v==='1'||v==='true'||v===true;
+  function diBtn(url,label,gold){const ext=url&&/^https?:/i.test(url);const href=ext?url:'#book';const tgt=ext?' target="_blank" rel="noopener"':'';return '<a href="'+esc(href)+'"'+tgt+' class="btn'+(gold?' gold':'')+'" style="flex:1;justify-content:center;min-width:150px">'+esc(label)+'</a>';}
   const btns=[];
-  if(on(C['di.ticket_show'])&&C['di.ticket_url'])btns.push('<a href="'+esc(C['di.ticket_url'])+'" target="_blank" rel="noopener" class="btn gold" style="flex:1;justify-content:center;min-width:140px">'+esc(C['di.ticket_label']||'Get tickets')+'</a>');
-  if(on(C['di.donate_show'])&&C['di.donate_url'])btns.push('<a href="'+esc(C['di.donate_url'])+'" target="_blank" rel="noopener" class="btn'+(btns.length?'':' gold')+'" style="flex:1;justify-content:center;min-width:140px">'+esc(C['di.donate_label']||'Donate')+'</a>');
+  if(on(C['di.ticket_show']))btns.push(diBtn(C['di.ticket_url'],C['di.ticket_label']||'Get tickets',true));
+  if(on(C['di.donate_show']))btns.push(diBtn(C['di.donate_url'],C['di.donate_label']||'Donate',btns.length===0));
   $('#diActions').innerHTML=btns.length?btns.join(''):'<a href="#book" class="btn gold" style="width:100%;justify-content:center">Get a ticket or donate</a>';
+  // $ tiers: show/hide; when hidden, enlarge the impact card so it fills the space.
+  const showTiers=C['di.tiers_show']==null?true:on(C['di.tiers_show']);
+  const tiersEl=$('#diTiers'),card=document.querySelector('.impactcard');
+  if(tiersEl)tiersEl.style.display=showTiers?'':'none';
+  if(card)card.classList.toggle('notiers',!showTiers);
 }
 function renderStrip(items){
   const def='Music · Rave · Community · Daytime · Dance Infusion · Brooklyn';
