@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Artist — Come With</title>
+<meta name="description" content="A Come With collective artist.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.6}
+  a{color:inherit;text-decoration:none}.wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .label{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1,h2{font-family:'Archivo';font-weight:900;line-height:.98;letter-spacing:-.02em;text-transform:uppercase}
+  nav{position:sticky;top:0;z-index:50;background:rgba(20,10,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{font-family:'Archivo';font-weight:900;font-size:1.25rem;display:flex;align-items:center}
+  .logomask{display:inline-block;height:30px}
+  nav a.link{font-family:'DM Mono';font-size:.78rem;color:var(--dim)}nav a.link:hover{color:var(--cream)}
+  .hd{display:grid;grid-template-columns:200px 1fr;gap:28px;align-items:center;padding:48px 0 26px}
+  .pho{width:200px;height:200px;border-radius:20px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:4rem;color:var(--cream);border:1px solid var(--line)}
+  .hd h1{font-size:clamp(2.2rem,6vw,4rem);margin:10px 0 12px}
+  .bio{color:var(--dim);font-size:1.08rem;max-width:60ch}
+  .socials{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+  .soc{display:inline-flex;align-items:center;gap:7px;font-family:'DM Mono';font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:9px 15px;border:1px solid var(--line);border-radius:999px;color:var(--cream)}
+  .soc:hover{border-color:var(--hot);color:var(--cream)}
+  section{padding:24px 0}
+  h2.sec{font-size:1.4rem;margin-bottom:14px}
+  .gigs{display:flex;flex-direction:column;gap:8px}
+  .gig{display:flex;justify-content:space-between;gap:14px;border:1px solid var(--line);border-radius:12px;padding:13px 16px;background:var(--panel)}
+  .gig .n{font-family:'Archivo';font-weight:700;text-transform:uppercase;font-size:1rem}
+  .gig .m{font-family:'DM Mono';font-size:.76rem;color:var(--dim)}
+  .gig .r{font-family:'DM Mono';font-size:.7rem;color:var(--lime);text-transform:uppercase;align-self:center}
+  .cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px}
+  .citem{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);cursor:pointer;transition:.2s}
+  .citem:hover{transform:translateY(-3px);border-color:var(--hot)}
+  .citem .th{aspect-ratio:16/9;background:linear-gradient(135deg,#2a1640,#1f4d52);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center}
+  .citem .th .pl{width:54px;height:54px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.3rem}
+  .citem .cb{padding:13px 15px}.citem .ct{font-weight:700}.citem .cm{font-family:'DM Mono';font-size:.73rem;color:var(--dim);margin-top:3px}
+  .empty{border:1px dashed var(--line);border-radius:14px;padding:26px;text-align:center;color:var(--dim)}
+  footer{padding:40px 0;border-top:1px solid var(--line);margin-top:30px}footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px}footer .dim{color:var(--dim);font-family:'DM Mono';font-size:.82rem}
+  .lb{position:fixed;inset:0;background:rgba(10,5,12,.92);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .lb.show{display:flex}.lb .box{width:100%;max-width:960px;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;position:relative}
+  .lb iframe{width:100%;height:100%;border:0}.lb .x{position:absolute;top:-44px;right:0;color:#fff;font-size:1.8rem;cursor:pointer;background:none;border:none}
+  .back{font-family:'DM Mono';font-size:.78rem;color:var(--dim)}
+  @media(max-width:640px){.hd{grid-template-columns:1fr;text-align:center;justify-items:center}.pho{width:160px;height:160px}.socials{justify-content:center}}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="index.html" class="brand" data-logo><span data-cw="brand.wordmark">COME·WITH</span></a>
+  <div style="display:flex;gap:20px;align-items:center"><a href="index.html#collective" class="link">The collective</a><a href="watch.html" class="link">Watch</a><a href="index.html#book" class="link">Book us</a></div>
+</div></nav>
+
+<div class="wrap"><div style="padding-top:18px"><a href="index.html#collective" class="back">← The collective</a></div></div>
+<header class="wrap"><div class="hd">
+  <div class="pho" id="pho">·</div>
+  <div>
+    <div class="label" id="kicker">Come With · Collective</div>
+    <h1 id="name">…</h1>
+    <p class="bio" id="bio"></p>
+    <div class="socials" id="socials"></div>
+  </div>
+</div></header>
+
+<div class="wrap">
+  <section><h2 class="sec">Content</h2><div id="content"></div></section>
+  <section><h2 class="sec">Gigs</h2><div id="gigs"></div></section>
+</div>
+
+<footer><div class="wrap">
+  <a class="brand" href="index.html" data-logo><span data-cw="brand.wordmark">COME·WITH</span></a>
+  <div class="dim">Brooklyn, NY · © 2026 · <a href="index.html#book" style="color:var(--dim)">Book us</a></div>
+</div></footer>
+
+<div class="lb" id="lb"><div class="box"><button class="x" id="lbX" aria-label="Close">✕</button><iframe id="lbFrame" allow="autoplay; encrypted-media" allowfullscreen></iframe></div></div>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',CWH={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
+const $=s=>document.querySelector(s);const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
+const qs=new URLSearchParams(location.search);const AID=qs.get('id')||'';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
+function mediaKind(u){if(!u)return null;const s=String(u);if(ytId(s))return 'youtube';if(/soundcloud\.com|snd\.sc/i.test(s))return 'soundcloud';return null;}
+function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
+function openMedia(url){const k=mediaKind(url);if(!k)return;$('#lbFrame').src=(k==='youtube')?('https://www.youtube.com/embed/'+ytId(url)+'?autoplay=1&rel=0'):scEmbed(url);$('#lb').classList.add('show');}
+function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
+$('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
+document.addEventListener('click',e=>{const w=e.target.closest('[data-media]');if(w)openMedia(w.dataset.media);});
+async function api(p){try{const r=await fetch(CWURL+'/rest/v1/'+p,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
+function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
+  document.querySelectorAll('[data-logo]').forEach(slot=>{if(tint==='none'){slot.innerHTML='<img src="'+url+'" alt="Come With" style="height:30px">';}
+    else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}});}
+function socLink(label,href){return '<a class="soc" href="'+esc(href)+'" target="_blank" rel="noopener">'+label+' ↗</a>';}
+function igUrl(h){h=String(h||'').trim();if(!h)return '';if(/^https?:/i.test(h))return h;return 'https://instagram.com/'+h.replace(/^@/,'');}
+(async function(){
+  const rows=await api('site_content?select=key,value');const C={};rows.forEach(r=>C[r.key]=r.value);
+  document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
+  if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
+  if(!AID){$('#name').textContent='Artist not found';return;}
+  const a=(await api('v_public_artists?id=eq.'+encodeURIComponent(AID)))[0];
+  if(!a){$('#name').textContent='Artist not found';$('#bio').textContent='This profile isn’t available.';return;}
+  document.title=a.display_name+' — Come With';
+  $('#name').textContent=a.display_name;
+  if(a.bio)$('#bio').textContent=a.bio;
+  if(a.photo_path){$('#pho').style.backgroundImage='url(\''+CWURL+'/storage/v1/object/public/event-photos/'+a.photo_path+'\')';$('#pho').textContent='';}
+  else $('#pho').textContent=(a.display_name||'·').trim().charAt(0).toUpperCase();
+  const soc=[];
+  if(a.instagram)soc.push(socLink('Instagram',igUrl(a.instagram)));
+  if(a.soundcloud)soc.push(socLink('SoundCloud',a.soundcloud));
+  if(a.tiktok)soc.push(socLink('TikTok',a.tiktok));
+  if(a.website)soc.push(socLink('Website',a.website));
+  $('#socials').innerHTML=soc.join('');
+  // Content (tagged recap media)
+  const content=await api('v_artist_content?actor_id=eq.'+encodeURIComponent(AID)+'&order=event_date.desc');
+  $('#content').innerHTML=content.length?('<div class="cgrid">'+content.map(function(c){const id=ytId(c.url);const k=mediaKind(c.url);const thumb=id?('https://img.youtube.com/vi/'+id+'/hqdefault.jpg'):'';
+    return '<article class="citem" data-media="'+esc(c.url)+'"><div class="th"'+(thumb?(' style="background-image:url(\''+thumb+'\')"'):'')+'><div class="pl">'+(k==='soundcloud'?'♪':'▶')+'</div></div><div class="cb"><div class="ct">'+esc(c.label||'Watch')+'</div><div class="cm">'+esc(c.event_name||'')+(c.event_date?(' · '+fmtDate(c.event_date)):'')+'</div></div></article>';}).join('')+'</div>'):'<div class="empty">No content tagged yet.</div>';
+  // Gigs
+  const gigs=await api('v_artist_gigs?actor_id=eq.'+encodeURIComponent(AID)+'&order=event_date.desc');
+  $('#gigs').innerHTML=gigs.length?('<div class="gigs">'+gigs.map(function(g){return '<div class="gig"><div><div class="n">'+esc(g.event_name||'')+'</div><div class="m">'+fmtDate(g.event_date)+(g.venue_name?(' · '+esc(g.venue_name)):'')+'</div></div>'+(g.role?'<div class="r">'+esc(g.role)+'</div>':'')+'</div>';}).join('')+'</div>'):'<div class="empty">No gigs listed yet.</div>';
+})();
+</script>
+</body>
+</html>

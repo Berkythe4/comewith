@@ -105,7 +105,9 @@
   .tier .amt{font-family:'Archivo';font-weight:900;font-size:1.3rem;color:var(--hot)}.tier p{font-size:.78rem;color:var(--dim);margin-top:4px}
   .safer{margin-top:18px;background:rgba(255,92,168,.08);border-radius:14px;padding:16px 18px;font-size:.92rem;color:var(--cream)}
   .djs{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
-  .djchip{font-family:'DM Mono';font-size:.82rem;border:1px solid var(--line);border-radius:999px;padding:9px 16px;background:var(--panel)}
+  .djchip{font-family:'DM Mono';font-size:.82rem;border:1px solid var(--line);border-radius:999px;padding:9px 16px;background:var(--panel);display:inline-flex;align-items:center;gap:8px}
+  a.djchip{cursor:pointer;transition:.18s}a.djchip:hover{border-color:var(--hot);transform:translateY(-2px)}
+  .djchip .pa{width:22px;height:22px;border-radius:50%;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;display:inline-flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:.7rem;flex:0 0 auto}
   .djchip.res{border-color:var(--lime-dk);color:var(--lime)}
   .book{background:var(--bg2);border-top:1px solid var(--line)}
   .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
@@ -259,7 +261,16 @@
 <script>
 const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',CWH={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
 const $=s=>document.querySelector(s);
-const DJS=['Berky','KRNeY','SPF 50','Kristen London','32LVS','Just Martin','Henry','Kloud9'];
+const DJS=['Berky','KRNeY','SPF 50','Kristen London','32LVS','Just Martin','Henry','Kloud9'];  // fallback only
+async function loadCollective(){
+  const list=await api('v_public_artists?select=id,display_name,photo_path');
+  const el=$('#djs');if(!el)return;
+  if(!list.length){el.innerHTML=DJS.map((d,i)=>'<span class="djchip'+(i<3?' res':'')+'">'+esc(d)+'</span>').join('');return;}
+  el.innerHTML=list.map(function(a){
+    const av=a.photo_path?'<span class="pa" style="background-image:url(\''+CWURL+'/storage/v1/object/public/event-photos/'+a.photo_path+'\')"></span>':'<span class="pa">'+esc((a.display_name||'·').trim().charAt(0).toUpperCase())+'</span>';
+    return '<a class="djchip" href="artist.html?id='+encodeURIComponent(a.id)+'">'+av+esc(a.display_name)+' →</a>';
+  }).join('');
+}
 const PAST=[{name:'Dance Infusion #2',event_date:'2026-05-09',venue_name:'Signal',series:'Dance Infusion',recap_blurb:'117 on the floor at Signal — a benefit for the MS Society.'},{name:'Dance Infusion #1',event_date:'2025-09-08',venue_name:'Signal',series:'Dance Infusion',recap_blurb:'42 tickets · $1,140 to the National MS Society.'}];
 const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
 function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
@@ -273,7 +284,6 @@ function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');se
 $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
 document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>$('#nav').classList.remove('open')));
 renderStrip();  // default words until loadContent overrides from strip.items
-$('#djs').innerHTML=DJS.map((d,i)=>`<span class="djchip${i<3?' res':''}">${d}</span>`).join('');
 function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
 function openMedia(url){const k=mediaKind(url);const lb=$('#lb');if(!k)return;lb.classList.toggle('audio',k==='soundcloud');$('#lbFrame').src=(k==='youtube')?('https://www.youtube.com/embed/'+ytId(url)+'?autoplay=1&rel=0'):scEmbed(url);lb.classList.add('show');}
 function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
@@ -348,7 +358,7 @@ $('#subBtn').addEventListener('click',async function(){const e=$('#subEmail').va
   try{const res=await fetch(CWURL+'/functions/v1/subscribe',{method:'POST',headers:Object.assign({},CWH,{'Content-Type':'application/json'}),body:JSON.stringify({email:e,segment:'come_with'})});r=await res.json().catch(function(){return{};});r._ok=res.ok;}catch(_){r._ok=false;}
   btn.disabled=false;btn.textContent='Join list';
   if(r._ok){$('#subEmail').value='';$('#subMsg').textContent='Almost there — check your inbox to confirm. 🎉';toast("You're on the list — confirm via email");}else{$('#subMsg').textContent='Hmm: '+(r.error||'try again');}});
-loadContent();loadEvents();
+loadContent();loadEvents();loadCollective();
 </script>
 </body>
 </html>
