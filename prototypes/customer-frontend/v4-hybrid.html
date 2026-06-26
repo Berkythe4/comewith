@@ -1,0 +1,303 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With — Brooklyn parties that give back</title>
+<meta name="description" content="Come With throws house & disco parties in Brooklyn, produces events end to end, and runs Dance Infusion — benefits for the National MS Society. Come dance. Do good.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;--gold:#e9b949}
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
+  .label{font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1,h2,h3{font-family:'Archivo',sans-serif;font-weight:900;line-height:.98;letter-spacing:-.02em;text-transform:uppercase}
+  section{padding:92px 0;position:relative}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono',monospace;font-size:.82rem;letter-spacing:.08em;text-transform:uppercase;padding:14px 22px;border-radius:999px;border:1.5px solid var(--cream);color:var(--cream);transition:.18s;cursor:pointer;background:none;min-height:48px}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime)}
+  .btn.primary:hover{box-shadow:0 8px 30px -6px rgba(167,224,46,.55)}
+  .btn.gold{background:var(--gold);color:#241229;border-color:var(--gold)}
+  nav{position:sticky;top:0;z-index:50;background:rgba(20,10,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{font-family:'Archivo';font-weight:900;font-size:1.25rem}.brand b{color:var(--lime)}
+  .navlinks{display:flex;gap:24px;align-items:center}
+  .navlinks a{font-family:'DM Mono';font-size:.78rem;letter-spacing:.05em;color:var(--dim);transition:.15s}
+  .navlinks a:hover{color:var(--cream)}
+  .navtoggle{display:none;background:none;border:none;color:var(--cream);font-size:1.5rem;cursor:pointer}
+  .hero{padding:60px 0 64px;background:radial-gradient(900px 500px at 80% -10%,rgba(167,224,46,.16),transparent 60%),radial-gradient(700px 500px at 10% 110%,rgba(255,92,168,.14),transparent 60%)}
+  .hero h1{font-size:clamp(3rem,11vw,8rem);margin:20px 0 18px}
+  .hero h1 .hot{color:var(--hot)}
+  .hero p.lede{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--dim);max-width:48ch;margin-bottom:28px}
+  .hero .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .nextshow{margin-top:40px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,var(--panel),rgba(36,18,41,.4));padding:18px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;max-width:760px}
+  .nextshow .date{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--lime);color:#180c12;border-radius:12px;width:64px;height:64px;flex:0 0 auto}
+  .nextshow .date .m{font-family:'DM Mono';font-size:.7rem}.nextshow .date .d{font-family:'Archivo';font-weight:900;font-size:1.7rem;line-height:1}
+  .nextshow .info{flex:1;min-width:150px}.nextshow .info .n{font-family:'Archivo';font-weight:700;font-size:1.15rem;text-transform:uppercase}
+  .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2);overflow:hidden;white-space:nowrap}
+  .strip .run{display:inline-block;padding:13px 0;animation:scroll 26s linear infinite;font-family:'Archivo';font-weight:900;font-size:1.05rem;text-transform:uppercase}
+  .strip .run span{color:var(--lime-dk);margin:0 24px}
+  @keyframes scroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
+  .lanes{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:38px}
+  .lane{border:1px solid var(--line);border-radius:16px;padding:26px;background:var(--panel);transition:.2s}
+  .lane:hover{border-color:var(--lime-dk);transform:translateY(-3px)}
+  .lane .no{font-family:'DM Mono';font-size:.74rem;color:var(--lime);margin-bottom:14px}
+  .lane h3{font-size:1.4rem;margin-bottom:8px}.lane p{color:var(--dim);font-size:.95rem;margin-bottom:14px}
+  .lane a{font-family:'DM Mono';font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--cream);border-bottom:1px solid var(--lime-dk);padding-bottom:2px}
+  .sechead{display:flex;align-items:flex-end;justify-content:space-between;gap:18px;flex-wrap:wrap;margin-bottom:26px}
+  .sechead h2{font-size:clamp(2rem,5vw,3.2rem)}
+  .evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
+  .ev{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;transition:.2s}
+  .ev:hover{border-color:var(--lime-dk);transform:translateY(-3px)}
+  .ev .top{display:flex;gap:14px;padding:18px}
+  .ev .date{flex:0 0 auto;text-align:center;background:var(--bg2);border:1px solid var(--line);border-radius:12px;width:58px;height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ev .date .m{font-family:'DM Mono';font-size:.66rem;color:var(--lime)}.ev .date .d{font-family:'Archivo';font-weight:900;font-size:1.5rem;line-height:1}
+  .ev .meta .n{font-family:'Archivo';font-weight:700;font-size:1.05rem;text-transform:uppercase;line-height:1.05;margin-bottom:5px}
+  .ev .meta .sub{font-size:.85rem;color:var(--dim)}
+  .tag{display:inline-block;font-family:'DM Mono';font-size:.64rem;letter-spacing:.12em;text-transform:uppercase;padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--dim);margin-top:8px}
+  .tag.benefit{color:var(--hot);border-color:rgba(255,92,168,.4)}.tag.party{color:var(--lime);border-color:var(--lime-dk)}
+  .ev .foot{margin-top:auto;border-top:1px solid var(--line);padding:14px 18px;display:flex;justify-content:space-between;align-items:center}
+  .ev .foot a{font-family:'DM Mono';font-size:.76rem;color:var(--lime);text-transform:uppercase}
+  /* recap cards (photo + youtube) */
+  .recapgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px}
+  .recap{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);transition:.2s;position:relative}
+  .recap:hover{transform:translateY(-3px);border-color:var(--hot)}
+  .recap .ph{height:180px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;position:relative;display:flex;align-items:flex-end;padding:14px}
+  .recap .ph.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
+  .recap .play{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(20,10,23,.25);cursor:pointer;transition:.2s}
+  .recap .play:hover{background:rgba(20,10,23,.45)}
+  .recap .play span{width:62px;height:62px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.5rem;box-shadow:0 8px 30px -6px rgba(167,224,46,.6)}
+  .recap .ph .t{font-family:'DM Mono';font-size:.64rem;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.4);padding:4px 10px;border-radius:999px;position:relative;z-index:1}
+  .recap .bd{padding:18px}.recap h3{font-family:'Archivo';font-weight:700;font-size:1.15rem;text-transform:uppercase;margin-bottom:4px}
+  .recap .meta{font-family:'DM Mono';font-size:.76rem;color:var(--dim);margin-bottom:8px}
+  .recap .blurb{font-size:.9rem;color:var(--cream)}
+  .recap .watch{margin-top:10px;font-family:'DM Mono';font-size:.74rem;color:var(--lime);text-transform:uppercase;cursor:pointer;display:inline-block}
+  /* dance infusion */
+  .di{background:linear-gradient(180deg,#21111d,#160b18);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .di .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:46px;align-items:center}
+  .di h2{font-size:clamp(2rem,5vw,3.4rem);margin:12px 0 16px}.di p{color:var(--dim);margin-bottom:14px}
+  .di .story{border-left:3px solid var(--hot);padding:12px 0 12px 20px;font-style:italic;color:var(--cream);margin:18px 0}
+  .impactcard{background:var(--panel);border:1px solid rgba(255,92,168,.3);border-radius:22px;padding:26px}
+  .counters{display:flex;gap:10px;margin:14px 0 16px}
+  .counter{flex:1;text-align:center;background:var(--bg2);border-radius:14px;padding:16px 6px}
+  .counter .big{font-family:'Archivo';font-weight:900;font-size:1.6rem;color:var(--hot)}.counter .sm{font-size:.7rem;color:var(--dim);font-family:'DM Mono'}
+  .progress .bar{height:14px;background:#2c1830;border-radius:999px;overflow:hidden;margin-top:4px}
+  .progress .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--hot),var(--gold));width:0;transition:width 1.4s ease}
+  .progress .row{display:flex;justify-content:space-between;font-size:.78rem;color:var(--dim);font-family:'DM Mono';margin-top:7px}
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:16px}
+  .tier{border:1px solid var(--line);border-radius:12px;padding:14px;text-align:center;background:var(--bg2)}
+  .tier .amt{font-family:'Archivo';font-weight:900;font-size:1.3rem;color:var(--hot)}.tier p{font-size:.78rem;color:var(--dim);margin-top:4px}
+  .safer{margin-top:18px;background:rgba(255,92,168,.08);border-radius:14px;padding:16px 18px;font-size:.92rem;color:var(--cream)}
+  .djs{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+  .djchip{font-family:'DM Mono';font-size:.82rem;border:1px solid var(--line);border-radius:999px;padding:9px 16px;background:var(--panel)}
+  .djchip.res{border-color:var(--lime-dk);color:var(--lime)}
+  .book{background:var(--bg2);border-top:1px solid var(--line)}
+  .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:start}
+  form .field{margin-bottom:14px;display:flex;flex-direction:column}
+  form label{font-family:'DM Mono';font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  form input,form textarea,form select{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:13px 14px;color:var(--cream);font-family:'DM Sans';font-size:1rem;min-height:48px}
+  form input:focus,form textarea:focus,form select:focus{outline:none;border-color:var(--lime)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .formnote{font-size:.86rem;color:var(--dim)}
+  .contactcard{border:1px solid var(--line);border-radius:18px;padding:28px;background:var(--panel)}
+  .contactcard a.big{font-family:'Archivo';font-weight:700;font-size:1.35rem;display:block;margin:6px 0 18px;color:var(--lime)}
+  footer{padding:46px 0;border-top:1px solid var(--line)}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+  footer .dim{color:var(--dim);font-family:'DM Mono';font-size:.82rem}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(150%);background:var(--lime);color:#180c12;font-family:'DM Mono';padding:14px 22px;border-radius:999px;transition:.3s;z-index:99}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  /* youtube lightbox */
+  .lb{position:fixed;inset:0;background:rgba(10,5,12,.9);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .lb.show{display:flex}
+  .lb .box{width:100%;max-width:920px;aspect-ratio:16/9;background:#000;border-radius:12px;overflow:hidden;position:relative}
+  .lb iframe{width:100%;height:100%;border:0}
+  .lb .x{position:absolute;top:-44px;right:0;color:#fff;font-size:1.8rem;cursor:pointer;background:none;border:none}
+  @media(max-width:860px){
+    .navlinks{display:none;position:absolute;top:64px;left:0;right:0;flex-direction:column;background:var(--bg2);border-bottom:1px solid var(--line);padding:14px 24px;gap:16px}
+    .navlinks.open{display:flex}.navtoggle{display:block}
+    .lanes,.di .grid,.formgrid,.row2{grid-template-columns:1fr;gap:24px}
+    section{padding:62px 0}
+  }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a href="#top" class="brand">COME<b>·</b>WITH</a>
+  <div class="navlinks" id="nav">
+    <a href="#events">Events</a><a href="#what">What we do</a><a href="#rooms">Recent rooms</a><a href="#di">Dance Infusion</a><a href="#book">Book us</a>
+    <a href="#book" class="btn primary" style="padding:9px 16px;min-height:0">Inquire</a>
+  </div>
+  <button class="navtoggle" id="navtoggle" aria-label="Menu">☰</button>
+</div></nav>
+
+<header class="hero" id="top"><div class="wrap">
+  <div class="label">Brooklyn · House · Disco · Benefit</div>
+  <h1>Come dance.<br><span class="hot">Do good.</span></h1>
+  <p class="lede">We throw the parties, build the rooms, and dance for a cause. Underground sound from Brooklyn — and through Dance Infusion, the night gives back to the National MS Society.</p>
+  <div class="cta"><a href="#events" class="btn primary">See upcoming events</a><a href="#book" class="btn">Book us for your event</a></div>
+  <div class="nextshow" id="nextShow" hidden>
+    <div class="date"><span class="m" id="nsM">—</span><span class="d" id="nsD">—</span></div>
+    <div class="info"><div class="label" style="margin-bottom:4px">Next up</div><div class="n" id="nsN">—</div><div class="sub" id="nsV" style="color:var(--dim);font-family:'DM Mono';font-size:.85rem">—</div></div>
+    <a class="btn primary" id="nsBtn" href="#" target="_blank" rel="noopener">Get tickets ↗</a>
+  </div>
+</div></header>
+
+<div class="strip"><div class="run" id="strip"></div></div>
+
+<section id="what"><div class="wrap">
+  <div class="label">What we do — three lanes, one crew</div>
+  <div class="lanes">
+    <div class="lane"><div class="no">01 / Parties</div><h3>We throw them</h3><p>House, disco & melodic nights across Brooklyn & NYC — curated lineup, real sound, real room.</p><a href="#events">See upcoming →</a></div>
+    <div class="lane"><div class="no">02 / Production</div><h3>We build yours</h3><p>DJ, sound, lighting & hosting for your event. We bring and set up the full rig.</p><a href="#book">Request a proposal →</a></div>
+    <div class="lane"><div class="no">03 / Dance Infusion</div><h3>We give back</h3><p>Benefits for the National MS Society — a great night that turns into real support.</p><a href="#di">The cause →</a></div>
+  </div>
+</div></section>
+
+<section id="events" style="padding-top:16px"><div class="wrap">
+  <div class="sechead"><div><div class="label">On the calendar</div><h2>Upcoming</h2></div></div>
+  <div class="evgrid" id="upcoming"><div style="color:var(--dim);font-family:'DM Mono'">Loading events…</div></div>
+</div></section>
+
+<section id="rooms"><div class="wrap">
+  <div class="sechead"><div><div class="label">The archive</div><h2>Recent rooms</h2></div><a href="#book" style="font-family:'DM Mono';color:var(--lime)">Want this energy? →</a></div>
+  <div class="recapgrid" id="recap"></div>
+</div></section>
+
+<section class="di" id="di"><div class="wrap"><div class="grid">
+  <div>
+    <div class="label" style="color:var(--hot)">Dance Infusion · benefiting the National MS Society</div>
+    <h2>We dance.<br>They keep going.</h2>
+    <p>This one's personal — someone we love lives with MS. Dance Infusion turns a great night out into real support, and we publish exactly what reaches the mission.</p>
+    <div class="story">"We don't ask you to donate and walk away. We ask you to come dance — and the night does the rest." — Berky, founder</div>
+    <div class="safer"><strong>Everyone's welcome.</strong> If the cover is ever a barrier, reach out — you deserve a chance to gather and dance.</div>
+  </div>
+  <div class="impactcard">
+    <div class="label" style="color:var(--lime-dk)">Impact so far</div>
+    <div class="counters">
+      <div class="counter"><div class="big" data-count="4140" data-prefix="$">$0</div><div class="sm">to the MS Society</div></div>
+      <div class="counter"><div class="big" data-count="2">0</div><div class="sm">benefits</div></div>
+      <div class="counter"><div class="big" data-count="159">0</div><div class="sm">on the floor</div></div>
+    </div>
+    <div class="progress">
+      <div class="label" style="color:var(--hot);margin-bottom:2px">Goal: $10,000 for the National MS Society</div>
+      <div class="bar"><i id="bar"></i></div>
+      <div class="row"><span id="barPct">41%</span><span>$4,140 / $10,000</span></div>
+    </div>
+    <div class="tiers">
+      <div class="tier"><div class="amt">$25</div><p>A ticket + a seat for the cause</p></div>
+      <div class="tier"><div class="amt">$50</div><p>Funds MS support programs</p></div>
+      <div class="tier"><div class="amt">$150</div><p>Sponsor a table, bring a crew</p></div>
+    </div>
+    <a href="#book" class="btn gold" style="width:100%;justify-content:center;margin-top:16px">Get a ticket or donate</a>
+  </div>
+</div></div></section>
+
+<section id="collective"><div class="wrap">
+  <div class="label">The collective</div>
+  <h2 style="font-size:clamp(1.8rem,4vw,2.6rem);margin-top:10px">Residents & regulars</h2>
+  <div class="djs" id="djs"></div>
+</div></section>
+
+<section class="book" id="book"><div class="wrap"><div class="formgrid">
+  <div>
+    <div class="label">Book us · inquiries</div>
+    <h2 style="font-size:clamp(2rem,5vw,3rem);margin:10px 0 10px">Let's build<br>your night.</h2>
+    <p class="formnote" style="margin-bottom:22px">Parties, private events, productions, Dance Infusion collabs — tell us what you're dreaming up.</p>
+    <form id="inq" autocomplete="on">
+      <div class="row2">
+        <div class="field"><label for="f_name">Your name *</label><input id="f_name" name="full_name" required></div>
+        <div class="field"><label for="f_email">Email *</label><input id="f_email" name="email" type="email" required></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label for="f_type">Type</label><select id="f_type" name="event_type"><option value="">Choose…</option><option>Party / DJ set</option><option>Private event</option><option>Full production (sound/lighting)</option><option>Dance Infusion / benefit</option><option>Content / showcase</option><option>Other</option></select></div>
+        <div class="field"><label for="f_date">Target date</label><input id="f_date" name="event_date" type="date"></div>
+      </div>
+      <div class="field"><label for="f_msg">Tell us about it</label><textarea id="f_msg" name="message" rows="4" placeholder="Venue, vibe, headcount, budget."></textarea></div>
+      <button type="submit" class="btn primary" style="width:100%;justify-content:center">Send inquiry</button>
+      <p class="formnote" id="inqMsg" style="margin-top:10px"></p>
+    </form>
+  </div>
+  <div class="contactcard">
+    <div class="label">Reach us directly</div>
+    <a class="big" href="mailto:berky@comewith.org">berky@comewith.org</a>
+    <div class="label">Follow the floor</div>
+    <a class="big" href="https://instagram.com/comewithnyc" target="_blank" rel="noopener">@comewithnyc</a>
+    <p class="formnote">Brooklyn, NY · DJ bookings · production · content · Dance Infusion.</p>
+    <div style="margin-top:22px;border-top:1px solid var(--line);padding-top:18px">
+      <div class="label" style="margin-bottom:8px">Never miss a drop</div>
+      <div class="row2" style="grid-template-columns:1fr auto;gap:8px">
+        <input id="subEmail" type="email" placeholder="you@email.com" aria-label="Email for newsletter">
+        <button class="btn primary" id="subBtn" style="min-height:48px">Join list</button>
+      </div>
+      <p class="formnote" id="subMsg" style="margin-top:6px">Presale codes + lineup drops. We'll send a quick confirm email.</p>
+    </div>
+  </div>
+</div></div></section>
+
+<footer><div class="wrap">
+  <div class="brand">COME<b style="color:var(--lime)">·</b>WITH</div>
+  <div class="dim">Brooklyn, NY · © 2026 · benefiting the National MS Society · <a href="../../dashboard.html" style="color:var(--dim)">Team sign-in</a></div>
+</div></footer>
+
+<div class="lb" id="lb"><div class="box"><button class="x" id="lbX" aria-label="Close">✕</button><iframe id="lbFrame" allow="autoplay; encrypted-media" allowfullscreen></iframe></div></div>
+<div class="toast" id="toast"></div>
+<script src="_shared.js"></script>
+<script>
+  const $=s=>document.querySelector(s);
+  function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
+  $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
+  document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>$('#nav').classList.remove('open')));
+  $('#strip').innerHTML='House · Disco · Dance Infusion · Brooklyn · Production · House · Disco · Dance Infusion · Brooklyn · Production · '.split('·').map(s=>s.trim()).filter(Boolean).map(s=>'<span>'+s+'</span>').join('');
+  $('#djs').innerHTML=CW.DJS.map((d,i)=>`<span class="djchip${i<3?' res':''}">${d}</span>`).join('');
+  // youtube lightbox
+  function openVid(id){$('#lbFrame').src='https://www.youtube.com/embed/'+id+'?autoplay=1&rel=0';$('#lb').classList.add('show');}
+  function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
+  $('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
+  // impact counters + bar
+  function animate(){document.querySelectorAll('[data-count]').forEach(el=>{const tgt=+el.dataset.count,pre=el.dataset.prefix||'';let s=0,st=tgt/40;const t=setInterval(()=>{s+=st;if(s>=tgt){s=tgt;clearInterval(t);}el.textContent=pre+Math.round(s).toLocaleString();},22);});$('#bar').style.width='41%';}
+  new IntersectionObserver((e,o)=>{if(e[0].isIntersecting){animate();o.disconnect();}}).observe($('.impactcard'));
+  // upcoming events
+  function evCard(e){const d=CW.fmtDay(e.event_date);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+    const tag=benefit?'<span class="tag benefit">Benefit · MS Society</span>':'<span class="tag party">'+(e.series||'Party')+'</span>';
+    const cta=e.ticket_url?`<a href="${e.ticket_url}" target="_blank" rel="noopener">${e.ticket_label||'Get tickets'} ↗</a>`:'<span style="font-family:DM Mono;color:var(--dim)">Details soon</span>';
+    return `<article class="ev"><div class="top"><div class="date"><span class="m">${d.mon}</span><span class="d">${d.day}</span></div>
+      <div class="meta"><div class="n">${e.name}</div><div class="sub">${CW.fmtDate(e.event_date)}${e.venue_name?(' · '+e.venue_name):''}</div>${tag}</div></div>
+      <div class="foot"><span style="font-family:DM Mono;color:var(--dim);font-size:.74rem">Upcoming</span>${cta}</div></article>`;}
+  // recap cards (admin-curated, photo + youtube)
+  function recapCard(e){const d=CW.fmtDay(e.event_date);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+    const bg=e.hero?`style="background-image:url('${e.hero}')"`:'';
+    const play=e.ytid?`<div class="play" data-yt="${e.ytid}"><span>▶</span></div>`:'';
+    const watch=e.ytid?`<span class="watch" data-yt="${e.ytid}">▶ Watch the recap</span>`:'';
+    return `<article class="recap"><div class="ph ${benefit?'benefit':''}" ${bg}>${play}<span class="t">${benefit?'Benefit · MS Society':(e.series||'Party')}</span></div>
+      <div class="bd"><h3>${e.name}</h3><div class="meta">${CW.fmtDate(e.event_date)}${e.venue_name?(' · '+e.venue_name):''}</div>
+      <div class="blurb">${e.recap_blurb||''}</div>${watch}</div></article>`;}
+  (async()=>{
+    const evs=await CW.fetchEvents();const up=$('#upcoming');
+    if(evs.length){up.innerHTML=evs.map(evCard).join('');
+      const e=evs[0],d=CW.fmtDay(e.event_date);$('#nsM').textContent=d.mon;$('#nsD').textContent=d.day;$('#nsN').textContent=e.name;
+      $('#nsV').textContent=CW.fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'');
+      const b=$('#nsBtn');if(e.ticket_url){b.href=e.ticket_url;b.textContent=(e.ticket_label||'Get tickets')+' ↗';}else{b.style.display='none';}$('#nextShow').hidden=false;
+    } else { up.innerHTML='<article class="ev"><div class="top"><div class="meta"><div class="n">More dates dropping soon</div><div class="sub">Join the list below to hear first.</div></div></div></article>'; }
+    const rec=await CW.fetchRecap();
+    $('#recap').innerHTML=(rec.length?rec:CW.PAST.map(p=>({name:p.name,event_date:p.date,venue_name:p.venue,series:p.tag,recap_blurb:p.note}))).map(recapCard).join('');
+  })();
+  // delegate watch clicks
+  document.addEventListener('click',e=>{const w=e.target.closest('[data-yt]');if(w)openVid(w.dataset.yt);});
+  // inquiry
+  $('#inq').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.target,btn=f.querySelector('button[type=submit]');
+    const data={full_name:f.full_name.value.trim(),email:f.email.value.trim(),event_type:f.event_type.value,event_date:f.event_date.value,message:f.message.value.trim()};
+    if(!data.full_name||!data.email){$('#inqMsg').textContent='Name and email are required.';return;}
+    btn.disabled=true;btn.textContent='Sending…';const r=await CW.submitInquiry(data);btn.disabled=false;btn.textContent='Send inquiry';
+    if(r.ok){f.reset();$('#inqMsg').textContent="Got it — we'll be in touch soon. 🖤";toast('Inquiry sent!');}else{$('#inqMsg').textContent='Something went wrong — email berky@comewith.org';}});
+  // newsletter -> real subscribe (double opt-in)
+  $('#subBtn').addEventListener('click',async()=>{const e=$('#subEmail').value.trim();if(!e||!e.includes('@')){$('#subMsg').textContent='Enter a valid email.';return;}
+    const btn=$('#subBtn');btn.disabled=true;btn.textContent='…';const r=await CW.subscribe(e,'come_with');btn.disabled=false;btn.textContent='Join list';
+    if(r.ok){$('#subEmail').value='';$('#subMsg').textContent='Almost there — check your inbox to confirm. 🎉';toast("You're on the list — confirm via email");}else{$('#subMsg').textContent='Hmm: '+r.error;}});
+</script>
+</body>
+</html>

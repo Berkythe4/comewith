@@ -15,6 +15,39 @@ window.CW = (function () {
     } catch (_) { return []; }
   }
 
+  // Admin-curated past events for "Recent Rooms" (v_public_recap, anon). Builds
+  // the public hero-photo URL from the event-photos bucket + parses any YouTube id.
+  async function fetchRecap() {
+    try {
+      const r = await fetch(URL + '/rest/v1/v_public_recap?select=*', { headers: H });
+      if (!r.ok) return [];
+      const rows = await r.json();
+      return rows.map(e => ({
+        ...e,
+        hero: e.hero_image_path ? URL + '/storage/v1/object/public/event-photos/' + e.hero_image_path : null,
+        ytid: ytId(e.youtube_url),
+      }));
+    } catch (_) { return []; }
+  }
+  function ytId(u) {
+    if (!u) return null;
+    const m = String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);
+    return m ? m[1] : (/^[\w-]{11}$/.test(u) ? u : null);
+  }
+
+  // Newsletter subscribe via the double-opt-in Edge Function (adds to subscribers,
+  // sends a confirm email; status -> subscribed on confirm). Returns {ok, error}.
+  async function subscribe(email, segment) {
+    try {
+      const r = await fetch(URL + '/functions/v1/subscribe', {
+        method: 'POST', headers: { ...H, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, segment: segment || 'main' }),
+      });
+      const j = await r.json().catch(() => ({}));
+      return r.ok ? { ok: true } : { ok: false, error: j.error || ('HTTP ' + r.status) };
+    } catch (e) { return { ok: false, error: String(e) }; }
+  }
+
   // Submit a booking/inquiry to the CRM (anon insert allowed). Returns {ok, error}.
   async function submitInquiry(data) {
     try {
@@ -52,5 +85,5 @@ window.CW = (function () {
   const IMPACT = { raised: '$4,140+', beneficiary: 'National MS Society', benefits: 2, pctToMission: '39%+' };
   const DJS = ['Berky', 'KRNeY', 'SPF 50', 'Kristen London', '32LVS', 'Just Martin', 'Henry', 'Kloud9'];
 
-  return { fetchEvents, submitInquiry, fmtDate, fmtDay, PAST, IMPACT, DJS, IG: 'https://instagram.com/comewithnyc', EMAIL: 'berky@comewith.org' };
+  return { fetchEvents, fetchRecap, subscribe, ytId, submitInquiry, fmtDate, fmtDay, PAST, IMPACT, DJS, IG: 'https://instagram.com/comewithnyc', EMAIL: 'berky@comewith.org' };
 })();

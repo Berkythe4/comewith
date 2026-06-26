@@ -3962,7 +3962,7 @@ async function submitLogNote() {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_blurb, hero_image_path').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
@@ -4001,7 +4001,14 @@ async function openEditEvent(id) {
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Ticket / RSVP URL</label><input class="modal-input" type="url" name="ticket_url" value="${escapeHtml(ev.ticket_url || '')}" placeholder="https://…"></div>
       <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" value="${escapeHtml(ev.ticket_label || '')}" placeholder="Get tickets"></div>
-    </div>`,
+    </div>
+    <div class="kpi-section-h">Recent Rooms (site recap)</div>
+    <div class="kpi-hint">Tick "Feature" to show this event in the public "Recent Rooms" section. Add a photo, a one-line blurb, and a YouTube link if you have a recap video (it plays in a pop-up on the site).</div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_featured" style="width:auto;margin:0;"${ev.is_featured ? ' checked' : ''}> Feature in Recent Rooms</label></div>
+    <div class="modal-form-row"><label class="modal-label">Recap blurb (1 line shown on the card)</label><input class="modal-input" name="recap_blurb" value="${escapeHtml(ev.recap_blurb || '')}" placeholder="117 on the floor at Signal…"></div>
+    <div class="modal-form-row"><label class="modal-label">YouTube recap URL</label><input class="modal-input" type="url" name="youtube_url" value="${escapeHtml(ev.youtube_url || '')}" placeholder="https://youtu.be/…"></div>
+    <div class="modal-form-row"><label class="modal-label">Hero photo${ev.hero_image_path ? ' — current: ' + escapeHtml(ev.hero_image_path.split('/').pop()) : ''}</label>
+      <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp"></div>`,
     () => submitEditEvent(id), 'Save changes');
   // Auto-fill capacity from the chosen venue's capacity (only overwrites when the venue has one).
   const venueSel = $('kpiModalBody').querySelector('[name="venue_id"]');
@@ -4033,6 +4040,18 @@ async function submitEditEvent(id) {
   patch.doors_time = kpiVal('doors_time') || null;
   patch.end_time = kpiVal('end_time') || null;
   patch.description = kpiVal('description') || null;
+  patch.is_featured = !!$('kpiModalBody').querySelector('[name="is_featured"]')?.checked;
+  patch.youtube_url = kpiVal('youtube_url') || null;
+  patch.recap_blurb = kpiVal('recap_blurb') || null;
+  // Hero photo → public event-photos bucket (only if a new file was chosen).
+  const heroFile = $('evHeroFile')?.files?.[0];
+  if (heroFile && heroFile.size > 0) {
+    const safe = heroFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `event/${id}/${Date.now()}_${safe}`;
+    const { error: upErr } = await sb.storage.from('event-photos').upload(path, heroFile, { contentType: heroFile.type, upsert: false });
+    if (upErr) throw new Error('Photo upload failed: ' + upErr.message);
+    patch.hero_image_path = path;
+  }
   const { error } = await sb.from('events').update(patch).eq('id', id);
   if (error) throw error;
   closeKpi(); toast('Event updated', 'ok');
