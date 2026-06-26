@@ -60,6 +60,7 @@
   .sechead h2{font-size:clamp(2rem,5vw,3.2rem)}
   .evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:16px}
   .ev{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;transition:.2s}
+  .ev .evhero{height:158px;background:var(--bg2);background-size:cover;background-position:center;border-bottom:1px solid var(--line)}
   .ev:hover{border-color:var(--lime-dk);transform:translateY(-3px)}
   .ev .top{display:flex;gap:14px;padding:18px}
   .ev .date{flex:0 0 auto;text-align:center;background:var(--bg2);border:1px solid var(--line);border-radius:12px;width:58px;height:58px;display:flex;flex-direction:column;align-items:center;justify-content:center}
@@ -305,9 +306,11 @@ async function loadContent(){
 }
 function animateStat(el,tgt,pre){if(!el)return;let s=0,st=tgt/40;const t=setInterval(function(){s+=st;if(s>=tgt){s=tgt;clearInterval(t);}el.textContent=pre+Math.round(s).toLocaleString();},22);}
 function evCard(e){const d=fmtDay(e.event_date);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
-  const tag=benefit?'<span class="tag benefit">Benefit · MS Society</span>':'<span class="tag party">'+(e.series||'Party')+'</span>';
-  const cta=e.ticket_url?'<a href="'+e.ticket_url+'" target="_blank" rel="noopener">'+(e.ticket_label||'Get tickets')+' ↗</a>':'<span style="font-family:DM Mono;color:var(--dim)">Details soon</span>';
-  return '<article class="ev"><div class="top"><div class="date"><span class="m">'+d.mon+'</span><span class="d">'+d.day+'</span></div><div class="meta"><div class="n">'+e.name+'</div><div class="sub">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div>'+tag+'</div></div><div class="foot"><span style="font-family:DM Mono;color:var(--dim);font-size:.74rem">Upcoming</span>'+cta+'</div></article>';}
+  const tag=benefit?'<span class="tag benefit">Benefit · MS Society</span>':'<span class="tag party">'+esc(e.series||'Party')+'</span>';
+  const cta=e.ticket_url?'<a href="'+esc(e.ticket_url)+'" target="_blank" rel="noopener">'+esc(e.ticket_label||'Get tickets')+' ↗</a>':'<span style="font-family:DM Mono;color:var(--dim)">Details soon</span>';
+  const hero=e.hero_image_path?(CWURL+'/storage/v1/object/public/event-photos/'+e.hero_image_path):null;
+  const heroEl=hero?'<div class="evhero" style="background-image:url(\''+hero+'\')"></div>':'';
+  return '<article class="ev">'+heroEl+'<div class="top"><div class="date"><span class="m">'+d.mon+'</span><span class="d">'+d.day+'</span></div><div class="meta"><div class="n">'+esc(e.name)+'</div><div class="sub">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+tag+'</div></div><div class="foot"><span style="font-family:DM Mono;color:var(--dim);font-size:.74rem">Upcoming</span>'+cta+'</div></article>';}
 function recapCard(e){const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
   const hero=e.hero_image_path?(CWURL+'/storage/v1/object/public/event-photos/'+e.hero_image_path):null;
   const vids=recapVids(e);
