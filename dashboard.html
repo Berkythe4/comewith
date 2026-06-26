@@ -972,6 +972,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
           <button class="refresh-btn wf-trigger" id="workflowBtn" title="See how everything connects, end to end">🗺️ Workflow</button>
+          <button class="refresh-btn" id="apiMapBtn" title="See all API / data connections — established, pending, future">🔌 APIs</button>
           <button class="refresh-btn" id="logNoteBtn">＋ Log note</button>
           <span class="last-refreshed" id="lastRefreshed"></span>
           <button class="refresh-btn" id="refreshBtn" disabled>Refresh</button>
@@ -1455,15 +1456,36 @@ async function loadActivity() {
   renderTeam();
 }
 async function openUserDetail(uid) {
-  TEAM.activeUser = uid;
+  TEAM.activeUser = uid; TEAM.gigsExpanded = false;
+  if (TEAM.detailRangeUser !== uid) { const d = new Date(); d.setDate(d.getDate() - 30); TEAM.detailRange = { from: d.toISOString().slice(0, 10), to: '' }; TEAM.detailRangeUser = uid; }
   $('teamBody').innerHTML = '<div class="placeholder">Loading user…</div>';
-  const [{ data: acts }, conv] = await Promise.all([
-    sb.from('audit_log').select('table_name, action, occurred_at').eq('actor_id', uid).order('occurred_at', { ascending: false }).limit(20),
-    sb.from('conversations').select('id', { count: 'exact', head: true }).eq('created_by', uid),
-  ]);
-  TEAM.detailActs = acts || [];
+  const conv = await sb.from('conversations').select('id', { count: 'exact', head: true }).eq('created_by', uid);
   TEAM.detailConvCount = conv.count || 0;
+  await loadUserActivity();   // sets TEAM.detailActs for the range
   renderTeam();
+}
+async function loadUserActivity() {
+  const uid = TEAM.activeUser, f = TEAM.detailRange || {};
+  let qb = sb.from('audit_log').select('id, table_name, row_id, action, occurred_at').eq('actor_id', uid).order('occurred_at', { ascending: false }).limit(500);
+  if (f.from) qb = qb.gte('occurred_at', f.from);
+  if (f.to) qb = qb.lte('occurred_at', f.to + 'T23:59:59');
+  const { data } = await qb;
+  TEAM.detailActs = data || [];
+  const el = $('udActivity'); if (el) el.innerHTML = userActivitySummaryHTML();
+}
+function userActivitySummaryHTML() {
+  const acts = TEAM.detailActs || [];
+  if (!acts.length) return '<div class="hub-empty">No activity in this range.</div>';
+  const by = {};
+  acts.forEach(a => { const o = by[a.table_name] ||= { t: a.table_name, ins: 0, upd: 0, del: 0, total: 0, last: null }; o.total++; if (a.action === 'INSERT') o.ins++; else if (a.action === 'UPDATE') o.upd++; else if (a.action === 'DELETE') o.del++; if (!o.last || a.occurred_at > o.last) o.last = a.occurred_at; });
+  const rows = Object.values(by).sort((a, b) => b.total - a.total).map(o => `<tr data-uact-detail="${escapeHtml(o.t)}" style="cursor:pointer;"><td><strong>${escapeHtml(o.t)}</strong></td><td class="num">${o.total}</td><td class="li-sub">${o.ins} created · ${o.upd} updated · ${o.del} deleted</td><td class="li-sub">${escapeHtml(fmtDT(o.last))}</td></tr>`).join('');
+  return `<div class="li-sub" style="margin-bottom:4px;">${acts.length} action${acts.length === 1 ? '' : 's'} in range — click an area for detail.</div>
+    <table class="data-table"><thead><tr><th>Area</th><th class="num">Actions</th><th>Breakdown</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function openUserActDetail(table) {
+  const list = (TEAM.detailActs || []).filter(a => a.table_name === table);
+  const rows = list.map(a => `<div class="hub-li"><div class="li-main">${actionVerb(a.action)} <span class="li-sub">row ${escapeHtml((a.row_id || '').slice(0, 8))}</span><div class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</div></div></div>`).join('') || '<div class="hub-empty">None.</div>';
+  openKpi('Activity — ' + table, list.length + ' action' + (list.length === 1 ? '' : 's') + ' in range', `<div class="hub-list" style="max-height:420px;overflow:auto;">${rows}</div>`, () => closeKpi(), 'Close');
 }
 function renderUserDetail() {
   const uid = TEAM.activeUser, u = TEAM.users.find(x => x.id === uid);
@@ -1472,8 +1494,9 @@ function renderUserDetail() {
   const isMaster = u.role === 'master_admin', card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
   const gateMods = TEAM.modules.filter(m => !m.master_only), ovr = TEAM.overrides[uid] || {};
   const aliasRows = aliases.length ? aliases.map(a => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(a.display_name)}</strong> <span class="li-sub">${escapeHtml(a.kind)}${a.email ? ' · ' + escapeHtml(a.email) : ''}</span></div><div class="hub-li-actions"><button class="hub-mini danger" data-unlink-alias="${escapeHtml(a.id)}">Unlink</button></div></div>`).join('') : '<div class="hub-empty">No aliases linked. Link the actor records this person also is — e.g. their DJ / performer name.</div>';
-  const gigRows = g.events.length ? [...g.events].sort((a, b) => (b.event_date || '') < (a.event_date || '') ? -1 : 1).map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name)}</strong><div class="li-sub">${escapeHtml(fmtDate(e.event_date))}${e.prole ? ' · ' + escapeHtml(e.prole) : ''}${e.series ? ' · ' + escapeHtml(e.series) : ''}</div></div><div class="li-amt">${e.pfee != null ? money(e.pfee) : ''}</div></div>`).join('') : '<div class="hub-empty">No gigs yet (from linked aliases).</div>';
-  const actRows = (TEAM.detailActs || []).length ? TEAM.detailActs.map(a => `<div class="hub-li"><div class="li-main">${actionVerb(a.action)} <strong>${escapeHtml(a.table_name)}</strong><div class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</div></div></div>`).join('') : '<div class="hub-empty">No logged activity yet.</div>';
+  const sortedGigs = [...g.events].sort((a, b) => (b.event_date || '') < (a.event_date || '') ? -1 : 1);
+  const showGigs = TEAM.gigsExpanded ? sortedGigs : sortedGigs.slice(0, 10);
+  const gigRows = sortedGigs.length ? (showGigs.map(e => `<div class="hub-li" data-gig-event="${escapeHtml(e.id)}" style="cursor:pointer;"><div class="li-main"><strong>${escapeHtml(e.name)}</strong><div class="li-sub">${escapeHtml(fmtDate(e.event_date))}${e.prole ? ' · ' + escapeHtml(e.prole) : ''}${e.series ? ' · ' + escapeHtml(e.series) : ''}</div></div><div class="li-amt">${e.pfee != null ? money(e.pfee) : ''} <span class="li-sub">open →</span></div></div>`).join('') + (sortedGigs.length > 10 && !TEAM.gigsExpanded ? `<button class="hub-mini" data-gigs-more style="margin-top:8px;">Show all ${sortedGigs.length} gigs</button>` : '')) : '<div class="hub-empty">No gigs yet (from linked aliases).</div>';
   $('teamBody').innerHTML = `
     <button class="hub-mini" data-user-back>← all users</button>
     <div class="hub-head" style="margin-top:10px;">
@@ -1502,8 +1525,12 @@ function renderUserDetail() {
     <div class="hub-list">${aliasRows}</div>
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Gig history (from aliases)</h3></div>
     <div class="hub-list">${gigRows}</div>
-    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Recent activity</h3></div>
-    <div class="hub-list">${actRows}</div>`;
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Activity</h3></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <label class="li-sub">From <input class="modal-input" type="date" data-uact-from value="${TEAM.detailRange?.from || ''}" style="max-width:150px;"></label>
+      <label class="li-sub">To <input class="modal-input" type="date" data-uact-to value="${TEAM.detailRange?.to || ''}" style="max-width:150px;"></label>
+    </div>
+    <div id="udActivity">${userActivitySummaryHTML()}</div>`;
 }
 async function saveUserProfile() {
   const uid = TEAM.activeUser; if (!uid) return;
@@ -1540,10 +1567,15 @@ $('panel-team').addEventListener('click', (e) => {
   if (e.target.closest('[data-user-save]')) { saveUserProfile(); return; }
   if (e.target.closest('[data-link-alias]')) { openLinkAlias(); return; }
   const ua = e.target.closest('[data-unlink-alias]'); if (ua) { unlinkAlias(ua.dataset.unlinkAlias); return; }
+  const ge = e.target.closest('[data-gig-event]'); if (ge) { openEventHub(ge.dataset.gigEvent); return; }
+  if (e.target.closest('[data-gigs-more]')) { TEAM.gigsExpanded = true; renderTeam(); return; }
+  const ud = e.target.closest('[data-uact-detail]'); if (ud) { openUserActDetail(ud.dataset.uactDetail); return; }
   if (e.target.closest('[data-act-clear]')) { TEAM.actFilter = { from: '', to: '', user: '', table: '' }; loadActivity(); return; }
 });
 $('panel-team').addEventListener('change', (e) => {
   const sc = e.target.closest('[data-detail-scope]'); if (sc) { setStaffRole(TEAM.activeUser, sc.value); return; }
+  const uf = e.target.closest('[data-uact-from]'); if (uf) { TEAM.detailRange.from = uf.value; loadUserActivity(); return; }
+  const ut = e.target.closest('[data-uact-to]'); if (ut) { TEAM.detailRange.to = ut.value; loadUserActivity(); return; }
   const af = e.target.closest('[data-act-from]'); if (af) { TEAM.actFilter.from = af.value; loadActivity(); return; }
   const at = e.target.closest('[data-act-to]'); if (at) { TEAM.actFilter.to = at.value; loadActivity(); return; }
   const au = e.target.closest('[data-act-user]'); if (au) { TEAM.actFilter.user = au.value; loadActivity(); return; }
@@ -7083,6 +7115,39 @@ document.addEventListener('keydown', (e) => {
   }
 });
 
+// ===== API connections map (established / pending / future) =====
+const API_CONNECTIONS = [
+  { grp: 'established', ico: '▶️', name: 'YouTube Data API', data: 'Subscribers, total views, video count, likes, engagement rate, per-video stats', note: 'LIVE — pull-youtube-stats runs daily (pg_cron) + manual “↻ YouTube” on Strategy. API key + channel set.' },
+  { grp: 'established', ico: '✉️', name: 'Resend (Email)', data: 'Outbound email (agreements, campaigns, actor/venue conversations) + delivery / bounce / open webhooks', note: 'LIVE — comewith.org verified as a sender, webhook wired, conversations + campaigns running.' },
+  { grp: 'established', ico: '🗄️', name: 'Supabase', data: 'Database, auth, storage, edge functions — the whole backend', note: 'LIVE — the platform everything runs on.' },
+  { grp: 'pending', ico: '📸', name: 'Instagram Graph API', data: 'Follower count, reach, impressions, profile views, per-post insights', note: 'NEEDS SETUP (yours): a Meta/Facebook developer app + your IG switched to Business/Creator and linked to a Facebook Page, then a long-lived access token. The pull-instagram-stats function is already built — once you add the IG_USER_ID + IG_ACCESS_TOKEN secrets it goes live like YouTube.' },
+  { grp: 'blocked', ico: '🎟️', name: 'Resident Advisor (RA)', data: 'Ticket sales, attendee counts, event listings', note: 'NO public / official API. Today: RA CSV export → the in-app importer. An unofficial GraphQL endpoint (ra.co/graphql) exists but is undocumented, against their ToS, and can break without notice — not recommended for production.' },
+  { grp: 'blocked', ico: '🎉', name: 'Partiful', data: 'RSVPs, guest lists', note: 'NO public API today. Manual export / entry for now — worth re-checking, they’re growing fast.' },
+  { grp: 'future', ico: '📊', name: 'Google Analytics (GA4)', data: 'Website traffic, sources, funnel — inquiry-form + ticket-link conversions', note: 'GA4 Data API — free, real API. Needs a GA4 property on comewith.org + a service account. Highest-value addition for marketing/funnel performance.' },
+  { grp: 'future', ico: '🎵', name: 'TikTok', data: 'Followers, video views + engagement', note: 'TikTok Display API (read) or Business API — needs a developer app + review. Worth it once TikTok is an active channel.' },
+  { grp: 'future', ico: '🎫', name: 'Eventbrite / DICE', data: 'Ticketing data if you sell there', note: 'Both have proper APIs (unlike RA/Partiful). If you ever move ticketing to one, full sales automation becomes possible.' },
+  { grp: 'future', ico: '🎚️', name: 'Spotify / Bandsintown', data: 'Artist popularity + tour data (for vetting/booking DJs)', note: 'Useful for talent decisions rather than your own performance metrics.' },
+];
+const API_GROUPS = [['established', '✅ Established — live now', '#3B6D11', '#EAF3E0'], ['pending', '🔧 Pending — needs your setup', '#A6531C', '#F7EBE0'], ['blocked', '⛔ No official API (workaround only)', '#b3261e', '#fdecea'], ['future', '🔭 Future opportunities', '#1F5C8B', '#E2EEF7']];
+function renderApiMap() {
+  let html = '';
+  for (const [g, label, c, bg] of API_GROUPS) {
+    const items = API_CONNECTIONS.filter(x => x.grp === g);
+    if (!items.length) continue;
+    html += `<div style="border-radius:14px;padding:13px 15px 6px;margin-bottom:12px;background:${bg};border:1px solid #E5DED3;">
+      <div style="font-size:.76rem;letter-spacing:1px;text-transform:uppercase;font-weight:700;color:${c};margin-bottom:10px;">${label}</div>`;
+    html += items.map(x => `<div style="background:#fff;border:1px solid #E5DED3;border-radius:11px;padding:11px 13px;margin-bottom:8px;">
+      <div style="font-weight:700;"><span style="font-size:1.1rem;">${x.ico}</span> ${escapeHtml(x.name)}</div>
+      <div class="li-sub" style="margin:3px 0;"><strong>Pulls:</strong> ${escapeHtml(x.data)}</div>
+      <div style="font-size:.82rem;color:#5b5347;line-height:1.45;">${escapeHtml(x.note)}</div></div>`).join('');
+    html += '</div>';
+  }
+  $('apiMapBody').innerHTML = html;
+}
+$('apiMapBtn').addEventListener('click', () => { renderApiMap(); $('apiOverlay').classList.add('show'); });
+$('apiOverlay').addEventListener('click', (e) => { if (e.target === $('apiOverlay') || e.target.closest('#apiClose')) $('apiOverlay').classList.remove('show'); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('apiOverlay').classList.contains('show')) $('apiOverlay').classList.remove('show'); });
+
 // ---- Initial session check ----
 const { data: { session } } = await sb.auth.getSession();
 await renderForSession(session);
@@ -7146,6 +7211,15 @@ try {
     </div>
     <div class="wf-body"><div id="wfMap"></div></div>
     <div class="wf-detail" id="wfDetail"></div>
+  </div>
+</div>
+<div class="wf-overlay" id="apiOverlay">
+  <div class="wf-modal">
+    <div class="wf-head">
+      <div><h2>🔌 API &amp; data connections</h2><p>What's pulling data in now, what needs setup, and what's worth wiring next.</p></div>
+      <button class="wf-close" id="apiClose" aria-label="Close">✕</button>
+    </div>
+    <div class="wf-body"><div id="apiMapBody"></div></div>
   </div>
 </div>
 
