@@ -2242,11 +2242,72 @@ function statusSelect(table, rowId, current) {
   return `<select class="status-select" data-table="${table}" data-row="${escapeHtml(rowId)}" data-original="${escapeHtml(current)}">${opts}</select>`;
 }
 
+// ---- HEIC → JPEG (iPhone photos) ----
+// Browsers can't decode HEIC in <img>/canvas, so we convert to JPEG client-side
+// before doing anything else. The converter is loaded lazily on first use.
+let _heicLoad = null;
+function ensureHeic() {
+  if (typeof window.heic2any === 'function') return Promise.resolve();
+  if (_heicLoad) return _heicLoad;
+  _heicLoad = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';
+    s.onload = () => res(); s.onerror = () => { _heicLoad = null; rej(new Error('Could not load the HEIC converter — check your connection and try again.')); };
+    document.head.appendChild(s);
+  });
+  return _heicLoad;
+}
+async function heicToJpeg(file) {
+  const isHeic = /\.(heic|heif)$/i.test(file.name || '') || /^image\/(heic|heif)/i.test(file.type || '');
+  if (!isHeic) return file;
+  await ensureHeic();
+  const out = await window.heic2any({ blob: file, toType: 'image/jpeg', quality: 0.9 });
+  const blob = Array.isArray(out) ? out[0] : out;
+  return new File([blob], (file.name || 'photo').replace(/\.(heic|heif)$/i, '') + '.jpg', { type: 'image/jpeg' });
+}
+
+// ---- Hero image normalize ----
+// Outputs a landscape 16:9 JPEG that always shows the WHOLE photo: the picture is
+// drawn fully (contained) over a blurred, enlarged copy of itself, so portrait or
+// off-size photos auto-fit the card with no awkward crop or plain bars.
+async function processHeroImage(file, targetW = 1600) {
+  file = await heicToJpeg(file);
+  if (!file || !file.type || !file.type.startsWith('image/')) return file;
+  try {
+    let iw, ih, draw;
+    const bmp = await createImageBitmap(file).catch(() => null);
+    if (bmp) { iw = bmp.width; ih = bmp.height; draw = bmp; }
+    else {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = URL.createObjectURL(file); });
+      iw = img.naturalWidth; ih = img.naturalHeight; draw = img;
+    }
+    if (!iw || !ih) return await downscaleImage(file);
+    const W = targetW, H = Math.round(targetW * 9 / 16);
+    const canvas = document.createElement('canvas'); canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d');
+    // blurred cover background (fills the frame)
+    const cov = Math.max(W / iw, H / ih), bw = iw * cov, bh = ih * cov;
+    ctx.filter = 'blur(26px)';
+    ctx.drawImage(draw, (W - bw) / 2, (H - bh) / 2, bw, bh);
+    ctx.filter = 'none';
+    ctx.fillStyle = 'rgba(20,10,23,0.30)'; ctx.fillRect(0, 0, W, H);
+    // sharp, fully-contained foreground (whole photo visible)
+    const fit = Math.min(W / iw, H / ih), fw = iw * fit, fh = ih * fit;
+    ctx.drawImage(draw, (W - fw) / 2, (H - fh) / 2, fw, fh);
+    const blob = await new Promise(r => canvas.toBlob(r, 'image/jpeg', 0.86));
+    if (!blob) return await downscaleImage(file);
+    const base = (file.name || 'photo').replace(/\.[^.]+$/, '');
+    return new File([blob], base + '.jpg', { type: 'image/jpeg' });
+  } catch (_) { return await downscaleImage(file); }
+}
+
 // ---- Image downscale (so big phone photos fit the storage bucket) ----
 // Resizes a raster image to <= maxDim on its long edge and re-encodes as JPEG,
 // which takes a 10–15MB phone photo down to a few hundred KB. SVG/GIF pass
 // through untouched (vector / animated — don't rasterize them).
 async function downscaleImage(file, maxDim = 2200, quality = 0.85) {
+  if (!file) return file;
+  file = await heicToJpeg(file).catch(() => file);
   if (!file || !file.type || !file.type.startsWith('image/') || file.type === 'image/svg+xml' || file.type === 'image/gif') return file;
   try {
     let w, h, draw;
@@ -3587,6 +3648,14 @@ const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy
 $('kpiModalCancel').addEventListener('click', closeKpi);
 $('kpiModalOverlay').addEventListener('click', (e) => { if (e.target === $('kpiModalOverlay')) closeKpi(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
+// Enter in a single-line field should NOT submit the whole modal (it was closing
+// the edit form mid-typing, e.g. while adding recap videos). Textareas keep Enter;
+// the explicit Save button still submits.
+$('kpiModalForm').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'submit' && e.target.type !== 'button') {
+    e.preventDefault();
+  }
+});
 $('kpiModalForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   if (!kpiSubmit) return;
@@ -4083,9 +4152,27 @@ async function openEditEvent(id) {
       <div class="kpi-hint" style="margin:-2px 0 8px;">The "label" is the text shown on the link (e.g. "Watch the recap", "Kristen's set", "Full livestream"). The first video's thumbnail becomes the card picture when there's no hero photo.</div>
       <div id="recapVidList">${recapVidRows(ev.recap_videos)}</div>
       <button type="button" class="hub-btn ghost" data-add-recap-vid style="margin-top:4px;font-size:0.78rem;padding:6px 12px;">+ Add video</button></div>
-    <div class="modal-form-row"><label class="modal-label">Hero photo${ev.hero_image_path ? ' — current: ' + escapeHtml(ev.hero_image_path.split('/').pop()) : ''}</label>
-      <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp"></div>`,
+    <div class="modal-form-row"><label class="modal-label">Hero photo</label>
+      <div id="evHeroPreviewWrap" style="margin-bottom:8px;">${ev.hero_image_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(ev.hero_image_path)}" alt="current hero" style="max-width:260px;width:100%;border:1px solid var(--border-strong);border-radius:8px;display:block;">` : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
+      <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
+      <div class="kpi-hint">JPG, PNG, WebP or HEIC (iPhone). Portrait or off-size photos are auto-fitted to the landscape card.</div></div>`,
     () => submitEditEvent(id), 'Save changes');
+  // Hero photo: process on pick (HEIC→JPEG + landscape fit) and show a preview.
+  const heroInput = $('kpiModalBody').querySelector('#evHeroFile');
+  if (heroInput) heroInput.addEventListener('change', async () => {
+    const f = heroInput.files && heroInput.files[0]; if (!f || !f.size) return;
+    const wrap = $('kpiModalBody').querySelector('#evHeroPreviewWrap');
+    if (wrap) wrap.innerHTML = '<div class="kpi-hint" style="margin:0;">Processing photo…</div>';
+    try {
+      const processed = await processHeroImage(f);
+      heroInput._processed = processed;
+      const url = URL.createObjectURL(processed);
+      if (wrap) wrap.innerHTML = `<img src="${url}" alt="new hero" style="max-width:260px;width:100%;border:1px solid var(--lime);border-radius:8px;display:block;"><div class="kpi-hint" style="margin:4px 0 0;">New photo — saved when you hit Save changes.</div>`;
+    } catch (err) {
+      heroInput._processed = null;
+      if (wrap) wrap.innerHTML = `<div class="kpi-hint" style="margin:0;color:#ff9ec4;">Couldn't read that image: ${escapeHtml(err.message || String(err))}</div>`;
+    }
+  });
   // Auto-fill capacity from the chosen venue's capacity (only overwrites when the venue has one).
   const venueSel = $('kpiModalBody').querySelector('[name="venue_id"]');
   const capInput = $('kpiModalBody').querySelector('[name="capacity"]');
@@ -4127,10 +4214,13 @@ async function submitEditEvent(id) {
   patch.recap_videos = recapVideos;
   patch.youtube_url = recapVideos.length ? recapVideos[0].url : null;
   // Hero photo → public event-photos bucket (only if a new file was chosen).
-  let heroFile = $('evHeroFile')?.files?.[0];
+  const heroInput = $('evHeroFile');
+  let heroFile = heroInput?.files?.[0];
   if (heroFile && heroFile.size > 0) {
-    heroFile = await downscaleImage(heroFile);
-    const safe = heroFile.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    // Reuse the preview-processed file if available; else process now
+    // (HEIC→JPEG + landscape-fit). Falls back to a plain downscale on error.
+    heroFile = heroInput._processed || await processHeroImage(heroFile);
+    const safe = (heroFile.name || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
     const path = `event/${id}/${Date.now()}_${safe}`;
     const { error: upErr } = await sb.storage.from('event-photos').upload(path, heroFile, { contentType: heroFile.type, upsert: false });
     if (upErr) throw new Error('Photo upload failed: ' + upErr.message);
@@ -6604,7 +6694,7 @@ function renderSiteEditor() {
         html += `<div style="grid-column:1/-1"><label class="modal-label">${lbl}</label>
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
             ${v ? `<span style="display:inline-block;padding:8px 12px;background:#241229;border-radius:8px"><img src="${escapeHtml(v)}" alt="logo" style="height:26px;display:block"></span>` : '<span class="li-sub">No logo uploaded yet</span>'}
-            <input class="modal-input" type="file" id="siteLogoFile" accept="image/png,image/svg+xml,image/webp,image/jpeg" style="max-width:340px">
+            <input class="modal-input" type="file" id="siteLogoFile" accept="image/png,image/svg+xml,image/webp,image/jpeg,image/heic,image/heif,.heic,.heif" style="max-width:340px">
           </div>
           <div class="kpi-hint">Upload a transparent PNG or SVG. The brown logo is auto-tinted to the color below so it blends on the dark site — no need to recolor the file itself.</div></div>`;
       } else if (k === 'brand.logo_tint') {
