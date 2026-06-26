@@ -1038,6 +1038,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div id="clientsBody"></div>
       </div>
       <div class="panel" id="panel-conversations"><div id="conversationsBody"></div></div>
+      <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -2562,6 +2563,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
   if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
+  if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5336,20 +5338,16 @@ $('panel-eventhub').addEventListener('change', (e) => {
 const venuesState = { mode: 'venues', view: 'list', ownerId: null, owner: null };
 const CONTACT_FUNCTIONS = ['booking', 'sound', 'day_of', 'gm', 'security', 'other'];
 
-async function loadVenues() { venuesState.view = 'list'; venuesState.ownerId = null; await renderVenues(); }
+async function loadVenues() { venuesState.view = 'list'; venuesState.mode = 'venues'; venuesState.ownerId = null; await renderVenues(); }
 
 async function renderVenues() {
   if (venuesState.view === 'detail') return renderOwnerDetail();
   const m = venuesState.mode;
   $('venuesBody').innerHTML = `
-    <div class="ven-toggle">
-      <button data-ven-mode="venues" class="${m === 'venues' ? 'active' : ''}">Venues</button>
-      <button data-ven-mode="vendors" class="${m === 'vendors' ? 'active' : ''}">Vendors</button>
-    </div>
-    <div class="hub-sec-bar"><h3>${m === 'venues' ? 'Venues' : 'Vendors'}</h3>
-      <span><button class="hub-mini" data-ven-email-selected title="Email everyone you've ticked">✉ Email selected</button> <button class="hub-btn" data-ven-action="${m === 'venues' ? 'add-venue' : 'add-vendor'}">+ Add ${m === 'venues' ? 'venue' : 'vendor'}</button></span></div>
+    <div class="hub-sec-bar"><h3>Venues</h3>
+      <span><button class="hub-mini" data-ven-email-selected title="Email everyone you've ticked">✉ Email selected</button> <button class="hub-btn" data-ven-action="add-venue">+ Add venue</button></span></div>
     <div id="venList"><div class="panel-state"><span class="spinner"></span> Loading…</div></div>`;
-  if (m === 'venues') await renderVenueList(); else await renderVendorList();
+  await renderVenueList();
 }
 
 async function renderVenueList() {
@@ -6403,6 +6401,157 @@ $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest
 $('panel-artists').addEventListener('click', (e) => {
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
   const row = e.target.closest('[data-artist]'); if (row) openArtistBookings(row.dataset.artist);
+});
+
+// ============================================================
+// VENDORS — own tab: categorized, filterable, with spend KPIs + detail.
+// ============================================================
+const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
+const vendorState = { rows: [], q: '', cat: '', selected: new Set(), sortKey: 'spent', sortDir: -1, activeId: null, detailExpenses: [], detailContacts: [] };
+async function loadVendors() {
+  $('vendorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading vendors…</div>';
+  const [roles, details, exp, vc] = await Promise.all([
+    sb.from('actor_roles').select('actor:actors(id, display_name, kind, email, phone, website, notes, status, deleted_at)').eq('role', 'vendor').eq('active', true),
+    sb.from('actor_vendor_details').select('*'),
+    sb.from('expenses').select('vendor_actor_id, amount, date').not('vendor_actor_id', 'is', null).is('deleted_at', null),
+    sb.from('vendor_contacts').select('vendor_actor_id'),
+  ]);
+  if (roles.error) { $('vendorsBody').innerHTML = `<div class="panel-state err">${escapeHtml(roles.error.message)}</div>`; return; }
+  const det = {}; (details.data || []).forEach(d => det[d.actor_id] = d);
+  const agg = {}; (exp.data || []).forEach(e => { const o = agg[e.vendor_actor_id] ||= { spent: 0, txns: 0, last: null }; o.spent += Number(e.amount || 0); o.txns++; if (!o.last || e.date > o.last) o.last = e.date; });
+  const cc = {}; (vc.data || []).forEach(r => cc[r.vendor_actor_id] = (cc[r.vendor_actor_id] || 0) + 1);
+  const seen = new Set();
+  vendorState.rows = (roles.data || []).map(r => r.actor).filter(a => a && !a.deleted_at && a.status !== 'archived' && !seen.has(a.id) && seen.add(a.id)).map(a => {
+    const d = det[a.id] || {}, g = agg[a.id] || { spent: 0, txns: 0, last: null };
+    return { ...a, category: d.category || 'Other', account_ref: d.account_ref || '', default_payment_method: d.default_payment_method || '', typical_use: d.typical_use || '', spent: g.spent, txns: g.txns, last: g.last, contacts: cc[a.id] || 0 };
+  });
+  renderVendors();
+}
+function vendorFiltered() {
+  const s = vendorState, ql = s.q.toLowerCase();
+  let list = s.rows.filter(v => (!s.cat || v.category === s.cat) && (!ql || [v.display_name, v.category, v.typical_use, v.email, v.website].join(' ').toLowerCase().includes(ql)));
+  const k = s.sortKey;
+  list.sort((a, b) => { let av = a[k], bv = b[k]; if (typeof av === 'number') return (av - bv) * s.sortDir; av = (av == null ? '' : String(av)).toLowerCase(); bv = (bv == null ? '' : String(bv)).toLowerCase(); return av < bv ? -s.sortDir : av > bv ? s.sortDir : 0; });
+  return list;
+}
+function renderVendors() {
+  if (vendorState.activeId) { renderVendorDetail(); return; }
+  const s = vendorState, list = vendorFiltered();
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  const totSpent = s.rows.reduce((t, v) => t + v.spent, 0);
+  const catCounts = {}; s.rows.forEach(v => catCounts[v.category] = (catCounts[v.category] || 0) + 1);
+  const chips = ['All', ...VENDOR_CATEGORIES.filter(c => catCounts[c])].map(c => {
+    const on = (c === 'All' && !s.cat) || s.cat === c;
+    const n = c === 'All' ? s.rows.length : catCounts[c];
+    return `<button class="role-opt${on ? ' on' : ''}" data-vcatfilter="${c === 'All' ? '' : escapeHtml(c)}">${escapeHtml(c)} <span class="li-sub">${n}</span></button>`;
+  }).join('');
+  const arrow = (k) => s.sortKey === k ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
+  const catSel = (v) => `<select class="hub-status-sel" data-vcat="${escapeHtml(v.id)}">${VENDOR_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${v.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>`;
+  const rows = list.map(v => `<tr>
+    <td><input type="checkbox" data-vendsel="${escapeHtml(v.id)}" data-name="${escapeHtml(v.display_name)}" data-email="${escapeHtml(v.email || '')}" style="width:auto;margin:0;cursor:pointer;"${s.selected.has(v.id) ? ' checked' : ''}></td>
+    <td data-vopen="${escapeHtml(v.id)}" style="cursor:pointer;"><strong>${escapeHtml(v.display_name)}</strong>${v.website ? ` <a href="${escapeHtml(v.website)}" target="_blank" rel="noopener" class="li-sub" onclick="event.stopPropagation()">↗</a>` : ''}<div class="li-sub">${escapeHtml(v.typical_use || v.email || '')}</div></td>
+    <td>${catSel(v)}</td>
+    <td class="num">${v.spent ? money(v.spent) : muted}</td>
+    <td class="num">${v.txns || muted}</td>
+    <td class="li-sub">${v.last ? escapeHtml(fmtDate(v.last)) : muted}</td>
+    <td class="num">${v.contacts || muted}</td>
+    <td>${v.email ? `<button class="hub-mini" data-vendemail="${escapeHtml(v.id)}" title="Email ${escapeHtml(v.display_name)}">✉</button>` : ''}</td>
+  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No vendors match.</td></tr>`;
+  $('vendorsBody').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:12px;">${card('Vendors', fmtNum(s.rows.length))}${card('Total spend', money(totSpent))}${card('Categories', Object.keys(catCounts).length)}${card('Showing', fmtNum(list.length))}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <input class="modal-input" data-vendq placeholder="Search vendor / use / email…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <button class="hub-mini" data-vendemail-sel>✉ Email selected</button>
+    </div>
+    <div style="margin-bottom:12px;"><span class="role-pick" style="display:inline-flex;flex-wrap:wrap;gap:4px;">${chips}</span></div>
+    <table class="data-table"><thead><tr><th style="width:24px;"></th><th data-vsort="display_name" style="cursor:pointer;">Vendor${arrow('display_name')}</th><th>Category</th><th class="num" data-vsort="spent" style="cursor:pointer;">Spend${arrow('spent')}</th><th class="num">Txns</th><th data-vsort="last" style="cursor:pointer;">Last${arrow('last')}</th><th class="num">Contacts</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Categories auto-assigned from each vendor's spend history — change any inline. Click a vendor for spend history, contacts &amp; details. Spend is master-only (gated for staff).</div>`;
+}
+async function setVendorCategory(id, cat) {
+  const { error } = await sb.from('actor_vendor_details').upsert({ actor_id: id, category: cat || null, updated_at: new Date().toISOString() });
+  if (error) { toast('Failed: ' + error.message, 'err'); return; }
+  const v = vendorState.rows.find(x => x.id === id); if (v) v.category = cat;
+  toast('Category set', 'ok'); renderVendors();
+}
+async function openVendorDetail(id) {
+  vendorState.activeId = id;
+  $('vendorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading vendor…</div>';
+  const [exp, contacts] = await Promise.all([
+    sb.from('expenses').select('id, date, amount, category, description, event:events(name)').eq('vendor_actor_id', id).is('deleted_at', null).order('date', { ascending: false }).limit(100),
+    sb.from('v_vendor_contacts').select('*').eq('vendor_actor_id', id),
+  ]);
+  vendorState.detailExpenses = exp.data || [];
+  vendorState.detailContacts = contacts.data || [];
+  renderVendors();
+}
+function renderVendorDetail() {
+  const v = vendorState.rows.find(x => x.id === vendorState.activeId);
+  if (!v) { vendorState.activeId = null; renderVendors(); return; }
+  const card = (l, val, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${val}</div></div>`;
+  const exRows = vendorState.detailExpenses.length ? vendorState.detailExpenses.map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.category || 'expense')}</strong>${e.event?.name ? ` <span class="li-sub">${escapeHtml(e.event.name)}</span>` : ''}<div class="li-sub">${escapeHtml(fmtDate(e.date))}${e.description ? ' · ' + escapeHtml(truncate(e.description, 50)) : ''}</div></div><div class="li-amt">${money(e.amount)}</div></div>`).join('') : '<div class="hub-empty">No purchases recorded (or gated for your role).</div>';
+  const conRows = vendorState.detailContacts.length ? vendorState.detailContacts.map(c => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(c.display_name || '—')}</strong> <span class="li-sub">${escapeHtml(c.function || '')}</span></div></div>`).join('') : '<div class="hub-empty">No contacts linked.</div>';
+  $('vendorsBody').innerHTML = `
+    <button class="hub-mini" data-vend-back>← all vendors</button>
+    <div class="hub-head" style="margin-top:10px;">
+      <div class="hub-title">${escapeHtml(v.display_name)} <span class="role-chip" style="cursor:default;">${escapeHtml(v.category)}</span></div>
+      <div class="hub-facts">
+        <div><span class="lbl">Type</span>${escapeHtml(v.kind)}</div>
+        ${v.website ? `<div><span class="lbl">Website</span><a href="${escapeHtml(v.website)}" target="_blank" rel="noopener">${escapeHtml(v.website)}</a></div>` : ''}
+        ${v.email ? `<div><span class="lbl">Email</span>${escapeHtml(v.email)}</div>` : ''}
+      </div>
+      <div class="hub-head-actions">${v.email ? `<button class="hub-btn ghost" data-vendemail="${escapeHtml(v.id)}">✉ Email vendor</button>` : ''}</div>
+    </div>
+    <div class="hub-cards" style="margin:12px 0;">${card('Total spend', money(v.spent), v.spent ? 'neg' : '')}${card('Transactions', fmtNum(v.txns))}${card('Last purchase', v.last ? fmtDate(v.last) : '—')}${card('Contacts', fmtNum(v.contacts))}</div>
+    <div class="hub-sec-bar"><h3>Details</h3></div>
+    <div class="modal-grid2" style="max-width:620px;">
+      <div><label class="modal-label">Category</label><select class="modal-select" id="vdCat">${VENDOR_CATEGORIES.map(c => `<option value="${escapeHtml(c)}"${v.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Default payment method</label><input class="modal-input" id="vdPay" value="${escapeHtml(v.default_payment_method || '')}" placeholder="e.g. Amex, Zelle"></div>
+      <div><label class="modal-label">Account / login ref</label><input class="modal-input" id="vdAcct" value="${escapeHtml(v.account_ref || '')}" placeholder="e.g. login email, acct #"></div>
+      <div><label class="modal-label">Website</label><input class="modal-input" id="vdSite" value="${escapeHtml(v.website || '')}"></div>
+      <div><label class="modal-label">Email</label><input class="modal-input" id="vdEmail" value="${escapeHtml(v.email || '')}"></div>
+      <div><label class="modal-label">Phone</label><input class="modal-input" id="vdPhone" value="${escapeHtml(v.phone || '')}"></div>
+    </div>
+    <div class="modal-form-row" style="max-width:620px;"><label class="modal-label">Typical use / notes</label><textarea class="modal-textarea" id="vdUse" rows="2" placeholder="What do we buy / use them for?">${escapeHtml(v.typical_use || '')}</textarea></div>
+    <button class="hub-btn" data-vend-save style="margin-top:8px;">Save details</button>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Purchase history</h3></div>
+    <div class="hub-list">${exRows}</div>
+    <div class="hub-sec-bar" style="margin-top:18px;"><h3>Contacts</h3></div>
+    <div class="hub-list">${conRows}</div>`;
+}
+async function saveVendorDetail() {
+  const id = vendorState.activeId, v = vendorState.rows.find(x => x.id === id); if (!v) return;
+  const cat = $('vdCat').value, pay = $('vdPay').value.trim(), acct = $('vdAcct').value.trim(), use = $('vdUse').value.trim();
+  const site = $('vdSite').value.trim(), email = $('vdEmail').value.trim(), phone = $('vdPhone').value.trim();
+  const [d, a] = await Promise.all([
+    sb.from('actor_vendor_details').upsert({ actor_id: id, category: cat || null, default_payment_method: pay || null, account_ref: acct || null, typical_use: use || null, updated_at: new Date().toISOString() }),
+    sb.from('actors').update({ website: site || null, email: email || null, phone: phone || null }).eq('id', id),
+  ]);
+  if (d.error || a.error) { toast('Save failed: ' + (d.error?.message || a.error?.message), 'err'); return; }
+  Object.assign(v, { category: cat, default_payment_method: pay, account_ref: acct, typical_use: use, website: site, email, phone });
+  toast('Vendor saved', 'ok'); renderVendorDetail();
+}
+function vendorsEmailSelected(oneId) {
+  const ids = oneId ? [oneId] : [...vendorState.selected];
+  const all = ids.map(id => vendorState.rows.find(v => v.id === id)).filter(Boolean);
+  const recips = all.filter(v => v.email).map(v => ({ actor_id: v.id, name: v.display_name, email: v.email }));
+  const skipped = all.length - recips.length;
+  if (!recips.length) { toast(all.length ? `None of the ${all.length} selected have an email on file` : 'Tick a vendor first', 'err'); return; }
+  if (skipped) toast(`${skipped} skipped (no email)`, 'ok');
+  openCompose(recips, { source: 'Vendors', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null });
+}
+$('panel-vendors').addEventListener('input', (e) => { const q = e.target.closest('[data-vendq]'); if (q) { vendorState.q = q.value; renderVendors(); } });
+$('panel-vendors').addEventListener('change', (e) => {
+  const c = e.target.closest('[data-vcat]'); if (c) { setVendorCategory(c.dataset.vcat, c.value); return; }
+  const sel = e.target.closest('[data-vendsel]'); if (sel) { sel.checked ? vendorState.selected.add(sel.dataset.vendsel) : vendorState.selected.delete(sel.dataset.vendsel); return; }
+});
+$('panel-vendors').addEventListener('click', (e) => {
+  const cf = e.target.closest('[data-vcatfilter]'); if (cf) { vendorState.cat = cf.dataset.vcatfilter; renderVendors(); return; }
+  const so = e.target.closest('[data-vsort]'); if (so) { const k = so.dataset.vsort; if (vendorState.sortKey === k) vendorState.sortDir *= -1; else { vendorState.sortKey = k; vendorState.sortDir = (k === 'spent') ? -1 : 1; } renderVendors(); return; }
+  const em = e.target.closest('[data-vendemail]'); if (em) { vendorsEmailSelected(em.dataset.vendemail); return; }
+  if (e.target.closest('[data-vendemail-sel]')) { vendorsEmailSelected(); return; }
+  if (e.target.closest('[data-vend-back]')) { vendorState.activeId = null; renderVendors(); return; }
+  if (e.target.closest('[data-vend-save]')) { saveVendorDetail(); return; }
+  const op = e.target.closest('[data-vopen]'); if (op) { openVendorDetail(op.dataset.vopen); return; }
 });
 
 // ============================================================
