@@ -200,6 +200,59 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-06-26 (Customer site LIVE + artist profiles)
+
+> **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
+> Migrations **061–065 all APPLIED to prod**; edge function **artist-self deployed**; `index.html`,
+> `watch.html`, `artist.html`, `artist-edit.html`, `dashboard.html` all pushed (Netlify live).
+> Backup of the pre-redesign homepage: `backups/index.html.pre-redesign-2026-06-26` + tag
+> `backup/2026-06-26-pre-frontend`.
+
+### ✅ Done / LIVE on prod — public site went live (2026-06-26)
+**The homepage is now the new customer site.** The old 916 KB `index.html` was replaced by a
+content-driven dark "V4 hybrid" (dark Pulse base + Dance Infusion impact block + production lane).
+- **Tiny CMS** (062 `site_content`, anon-read, write gated to `site-editor` module / master): every
+  public text element is `data-cw`-tagged and overridden from the DB. **Site Editor** dashboard module
+  edits all keys grouped into collapsible sections + a **logo system** (one upload, CSS mask auto-tints
+  the brown logo to blend; updates everywhere). Donate/Ticket buttons are grouped "button cards"
+  (show toggle + text + link); `$` donation tiles have a show/hide toggle that enlarges the impact card.
+- **Watch page** (`watch.html`): recap videos as a gallery (YouTube + SoundCloud, lightbox).
+- **Recap content** (061 `events.is_featured/youtube_url/recap_blurb` + `v_public_recap`; 063
+  `events.recap_videos` jsonb): per-event Featured toggle + hero photo + **multiple** recap links
+  (YouTube **and SoundCloud**), each with a custom label and **taggable to an artist**. Powers homepage
+  Recent Rooms + Watch page.
+- **Upcoming events show their hero photo** (064 — `v_public_events` now exposes `hero_image_path` +
+  `series`; homepage event cards render a banner).
+- **Photo pipeline**: HEIC→JPEG in-browser (heic2any), auto landscape-fit (16:9 blurred-fill so nothing
+  crops), in-modal current-photo preview + **Remove photo**; bucket `event-photos` raised 5→15 MB + SVG.
+
+### ✅ Done / LIVE on prod — artist profiles + collective (2026-06-26, migration 065)
+`actors` gained `bio, photo_path, soundcloud, tiktok, public_profile, collective_rank, edit_token`.
+Public anon views: **v_public_artists** (the collective), **v_artist_gigs** (from `event_participants`,
+public/completed only), **v_artist_content** (unnests `recap_videos` tagged with an `artist_id`).
+- **Public profile page** (`artist.html?id=`): photo, bio, socials (IG/SoundCloud/TikTok/web), Content
+  grid (tagged recap media + lightbox), gig history.
+- **Homepage collective** loads from `v_public_artists` — clickable avatar chips → profile. Currently
+  **only Berky + KRNeY** are public (others toggled off but retained).
+- **Dashboard Artists tab → profile editor**: show-on-collective toggle, **DJ name vs. real name**
+  (only DJ name shows), order, bio, socials, photo upload/remove, bookings. Recap videos tag to artists.
+- **Self-service**: `artist-self` edge fn (token-gated get/save/photo, `--no-verify-jwt`) +
+  `artist-edit.html?token=` (no-login page) + dashboard **Copy / Email update link** (via `send-notice`).
+- Homepage content: **removed the daytime "community" section**; **editable ticker** (`strip.items`,
+  now Music · Rave · Community · Daytime · Dance Infusion · Brooklyn).
+
+### ✅ Bug fixes (2026-06-26)
+Dashboard **dark theme** now matches the site. **Active tab persists** across saves/refresh
+(localStorage). **Backspace** outside a field no longer navigates the browser back. **Enter** in the
+edit modal no longer submits/closes it. Events summary table gained a **Public** column, clearer
+status colours (green = completed only; `on_sale` → teal) and `0`-vs-`—` for completed events.
+
+### ▶️ Open / next (this thread)
+- Fill in artist Instagram / SoundCloud / TikTok handles (Keith has them); optionally email artists
+  their self-update links. Set a real **Donate link** (and Tickets when an event is on) in Site Editor.
+- Add a real **DI #3** event (October) when planned; feature it + add recap content afterward.
+- Offered but not built: a "Edit public profile →" shortcut on the **Actors** page for dj/artist rows.
+
 ## Current state — reconciled 2026-06-24 (Operations + CRM build-out)
 
 > **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
