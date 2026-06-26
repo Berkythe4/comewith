@@ -27,6 +27,7 @@
   .vid:hover{transform:translateY(-4px);border-color:var(--hot)}
   .vid .thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;position:relative;display:flex;align-items:center;justify-content:center}
   .vid .thumb.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
+  .vid .thumb.audio{background:linear-gradient(135deg,#2a1640,#1f4d52)}
   .vid .thumb .pl{width:62px;height:62px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.5rem}
   .vid .bd{padding:16px 18px}.vid h2{font-size:1.2rem;margin-bottom:4px}
   .vid .meta{font-family:'DM Mono';font-size:.76rem;color:var(--dim)}.vid .blurb{font-size:.9rem;color:var(--cream);margin-top:6px}
@@ -69,11 +70,13 @@ function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateSt
 function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
 async function api(p){try{const r=await fetch(CWURL+'/rest/v1/'+p,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
-function openVid(id){$('#lbFrame').src='https://www.youtube.com/embed/'+id+'?autoplay=1&rel=0';$('#lb').classList.add('show');}
+function mediaKind(u){if(!u)return null;const s=String(u);if(ytId(s))return 'youtube';if(/soundcloud\.com|snd\.sc/i.test(s))return 'soundcloud';return null;}
+function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
+function openMedia(url){const k=mediaKind(url);if(!k)return;$('#lbFrame').src=(k==='youtube')?('https://www.youtube.com/embed/'+ytId(url)+'?autoplay=1&rel=0'):scEmbed(url);$('#lb').classList.add('show');}
 function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
 $('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
-document.addEventListener('click',e=>{const v=e.target.closest('[data-yt]');if(v)openVid(v.dataset.yt);});
+document.addEventListener('click',e=>{const v=e.target.closest('[data-media]');if(v)openMedia(v.dataset.media);});
 function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
   document.querySelectorAll('[data-logo]').forEach(slot=>{if(tint==='none'){slot.innerHTML='<img src="'+url+'" style="height:30px">';}
     else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}});}
@@ -88,13 +91,14 @@ function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tin
   rec.forEach(function(e){
     let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}
     if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:''}];
-    a.forEach(function(v){const id=ytId(v&&v.url);if(id)cards.push({e:e,id:id,label:(v&&v.label)||''});});
+    a.forEach(function(v){const k=mediaKind(v&&v.url);if(k)cards.push({e:e,url:v.url,kind:k,id:ytId(v.url),label:(v&&v.label)||''});});
   });
   const g=$('#vids');
-  if(!cards.length){g.innerHTML='<div class="empty">No recap videos yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
+  if(!cards.length){g.innerHTML='<div class="empty">No recaps yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
   g.innerHTML=cards.map(function(c){const e=c.e;const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
-    const thumb='https://img.youtube.com/vi/'+c.id+'/hqdefault.jpg';
-    return '<article class="vid" data-yt="'+c.id+'"><div class="thumb '+(benefit?'benefit':'')+'" style="background-image:url(\''+thumb+'\')"><div class="pl">▶</div></div><div class="bd"><h2>'+esc(e.name)+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div><div class="blurb">'+esc(c.label||e.recap_blurb||'')+'</div></div></article>';}).join('');
+    const thumbStyle=(c.kind==='youtube')?(' style="background-image:url(\'https://img.youtube.com/vi/'+c.id+'/hqdefault.jpg\')"'):'';
+    const ico=c.kind==='soundcloud'?'♪':'▶';
+    return '<article class="vid" data-media="'+esc(c.url)+'"><div class="thumb '+(benefit?'benefit':'')+(c.kind==='soundcloud'?' audio':'')+'"'+thumbStyle+'><div class="pl">'+ico+'</div></div><div class="bd"><h2>'+esc(e.name)+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div><div class="blurb">'+esc(c.label||e.recap_blurb||'')+'</div></div></article>';}).join('');
 })();
 </script>
 </body>

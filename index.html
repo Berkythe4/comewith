@@ -274,18 +274,20 @@ function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateSt
 function fmtDay(s){const d=new Date((s||'')+'T00:00:00');return{mon:d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(),day:d.getDate()};}
 function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function recapVids(e){let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:'Watch the recap'}];return a.filter(v=>v&&ytId(v.url));}
+function mediaKind(u){if(!u)return null;const s=String(u);if(ytId(s))return 'youtube';if(/soundcloud\.com|snd\.sc/i.test(s))return 'soundcloud';return null;}
+function recapVids(e){let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:'Watch the recap'}];return a.filter(v=>v&&mediaKind(v.url));}
 async function api(path){try{const r=await fetch(CWURL+'/rest/v1/'+path,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
 $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
 document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>$('#nav').classList.remove('open')));
 $('#strip').innerHTML='House · Disco · Daytime · Dance Infusion · Brooklyn · House · Disco · Daytime · Dance Infusion · Brooklyn · '.split('·').map(s=>s.trim()).filter(Boolean).map(s=>'<span>'+s+'</span>').join('');
 $('#djs').innerHTML=DJS.map((d,i)=>`<span class="djchip${i<3?' res':''}">${d}</span>`).join('');
-function openVid(id){$('#lbFrame').src='https://www.youtube.com/embed/'+id+'?autoplay=1&rel=0';$('#lb').classList.add('show');}
+function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
+function openMedia(url){const k=mediaKind(url);const lb=$('#lb');if(!k)return;lb.classList.toggle('audio',k==='soundcloud');$('#lbFrame').src=(k==='youtube')?('https://www.youtube.com/embed/'+ytId(url)+'?autoplay=1&rel=0'):scEmbed(url);lb.classList.add('show');}
 function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
 $('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
-document.addEventListener('click',e=>{const w=e.target.closest('[data-yt]');if(w)openVid(w.dataset.yt);});
+document.addEventListener('click',e=>{const w=e.target.closest('[data-media]');if(w)openMedia(w.dataset.media);});
 function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
   document.querySelectorAll('[data-logo]').forEach(slot=>{
     if(tint==='none'){slot.innerHTML='<img src="'+url+'" alt="Come With" style="height:30px;width:auto">';}
@@ -308,14 +310,16 @@ function evCard(e){const d=fmtDay(e.event_date);const benefit=/infusion|benefit/
   return '<article class="ev"><div class="top"><div class="date"><span class="m">'+d.mon+'</span><span class="d">'+d.day+'</span></div><div class="meta"><div class="n">'+e.name+'</div><div class="sub">'+fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'')+'</div>'+tag+'</div></div><div class="foot"><span style="font-family:DM Mono;color:var(--dim);font-size:.74rem">Upcoming</span>'+cta+'</div></article>';}
 function recapCard(e){const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
   const hero=e.hero_image_path?(CWURL+'/storage/v1/object/public/event-photos/'+e.hero_image_path):null;
-  const vids=recapVids(e);const first=vids.length?ytId(vids[0].url):null;
-  // Picture: a hero photo shows whole (contain); otherwise the first video's
-  // thumbnail fills the 16:9 frame (cover crops the baked-in letterbox bars).
+  const vids=recapVids(e);
+  const firstUrl=vids.length?vids[0].url:null;
+  const firstYt=vids.map(v=>ytId(v.url)).find(Boolean)||null;  // first YouTube (for the thumbnail)
+  // Picture: a hero photo shows whole (contain); otherwise the first YouTube
+  // thumbnail fills the 16:9 frame (SoundCloud has no thumbnail by URL).
   let phClass='ph'+(benefit?' benefit':''),phStyle='';
   if(hero){phClass+=' photo';phStyle='style="background-image:url(\''+hero+'\')"';}
-  else if(first){phClass+=' yt';phStyle='style="background-image:url(\'https://img.youtube.com/vi/'+first+'/hqdefault.jpg\')"';}
-  const play=first?'<div class="play" data-yt="'+first+'"><span>▶</span></div>':'';
-  const watch=vids.map(v=>{const id=ytId(v.url);return id?'<span class="watch" data-yt="'+id+'">▶ '+esc(v.label||'Watch the recap')+'</span>':'';}).join('');
+  else if(firstYt){phClass+=' yt';phStyle='style="background-image:url(\'https://img.youtube.com/vi/'+firstYt+'/hqdefault.jpg\')"';}
+  const play=firstUrl?'<div class="play" data-media="'+esc(firstUrl)+'"><span>'+(mediaKind(firstUrl)==='soundcloud'?'♪':'▶')+'</span></div>':'';
+  const watch=vids.map(v=>{const k=mediaKind(v.url);if(!k)return '';const ico=k==='soundcloud'?'♪':'▶';const def=k==='soundcloud'?'Listen':'Watch the recap';return '<span class="watch" data-media="'+esc(v.url)+'">'+ico+' '+esc(v.label||def)+'</span>';}).join('');
   return '<article class="recap"><div class="'+phClass+'" '+phStyle+'>'+play+'<span class="t">'+(benefit?'Benefit · MS Society':esc(e.series||'Party'))+'</span></div><div class="bd"><h3>'+esc(e.name)+'</h3><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+(e.recap_blurb?'<div class="blurb">'+esc(e.recap_blurb)+'</div>':'')+watch+'</div></article>';}
 async function loadEvents(){
   const evs=await api('v_public_events?select=*&order=event_date.asc');const up=$('#upcoming');

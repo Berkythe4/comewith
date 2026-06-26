@@ -4079,7 +4079,7 @@ async function submitLogNote() {
 function recapVidRow(label, url) {
   return `<div class="recap-vid-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;">
     <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 36%;">
-    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/…" style="flex:1;">
+    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;">
     <button type="button" class="hub-btn ghost" data-del-recap-vid title="Remove" style="flex:0 0 auto;padding:6px 11px;">✕</button>
   </div>`;
 }
@@ -4145,15 +4145,15 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Button label</label><input class="modal-input" name="ticket_label" value="${escapeHtml(ev.ticket_label || '')}" placeholder="Get tickets"></div>
     </div>
     <div class="kpi-section-h">Recent Rooms (site recap)</div>
-    <div class="kpi-hint">Tick "Feature" to show this event in the public "Recent Rooms" section. Add a photo, a one-line blurb, and one or more YouTube recap videos (each plays in a pop-up on the site).</div>
+    <div class="kpi-hint">Tick "Feature" to show this event in the public "Recent Rooms" section. Add a photo, a one-line blurb, and one or more recap links — YouTube videos or SoundCloud audio (each plays in a pop-up on the site).</div>
     <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" name="is_featured" style="width:auto;margin:0;"${ev.is_featured ? ' checked' : ''}> Feature in Recent Rooms</label></div>
     <div class="modal-form-row"><label class="modal-label">Recap blurb (1 line shown on the card)</label><input class="modal-input" name="recap_blurb" value="${escapeHtml(ev.recap_blurb || '')}" placeholder="117 on the floor at Signal…"></div>
-    <div class="modal-form-row"><label class="modal-label">YouTube recap videos</label>
-      <div class="kpi-hint" style="margin:-2px 0 8px;">The "label" is the text shown on the link (e.g. "Watch the recap", "Kristen's set", "Full livestream"). The first video's thumbnail becomes the card picture when there's no hero photo.</div>
+    <div class="modal-form-row"><label class="modal-label">Recap videos & audio</label>
+      <div class="kpi-hint" style="margin:-2px 0 8px;">Paste a YouTube or SoundCloud link. The "label" is the text shown on the link (e.g. "Watch the recap", "Kristen's set", "Listen on SoundCloud"). The first YouTube video's thumbnail becomes the card picture when there's no hero photo.</div>
       <div id="recapVidList">${recapVidRows(ev.recap_videos)}</div>
       <button type="button" class="hub-btn ghost" data-add-recap-vid style="margin-top:4px;font-size:0.78rem;padding:6px 12px;">+ Add video</button></div>
     <div class="modal-form-row"><label class="modal-label">Hero photo</label>
-      <div id="evHeroPreviewWrap" style="margin-bottom:8px;">${ev.hero_image_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(ev.hero_image_path)}" alt="current hero" style="max-width:260px;width:100%;border:1px solid var(--border-strong);border-radius:8px;display:block;">` : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
+      <div id="evHeroPreviewWrap" style="margin-bottom:8px;">${ev.hero_image_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(ev.hero_image_path)}" alt="current hero" style="max-width:260px;width:100%;border:1px solid var(--border-strong);border-radius:8px;display:block;"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-weight:400;"><input type="checkbox" id="evHeroRemove" style="width:auto;margin:0;"> Remove this photo</label>` : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
       <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
       <div class="kpi-hint">JPG, PNG, WebP or HEIC (iPhone). Portrait or off-size photos are auto-fitted to the landscape card.</div></div>`,
     () => submitEditEvent(id), 'Save changes');
@@ -4212,10 +4212,13 @@ async function submitEditEvent(id) {
     url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
   })).filter(v => v.url);
   patch.recap_videos = recapVideos;
-  patch.youtube_url = recapVideos.length ? recapVideos[0].url : null;
-  // Hero photo → public event-photos bucket (only if a new file was chosen).
+  // Back-compat: youtube_url holds the first YOUTUBE link (SoundCloud links live
+  // only in recap_videos). Used for the card thumbnail.
+  patch.youtube_url = (recapVideos.find(v => /youtu\.?be/i.test(v.url)) || {}).url || null;
+  // Hero photo: upload a new one, OR remove the existing one, OR leave it.
   const heroInput = $('evHeroFile');
   let heroFile = heroInput?.files?.[0];
+  const removeHero = !!$('kpiModalBody').querySelector('#evHeroRemove')?.checked;
   if (heroFile && heroFile.size > 0) {
     // Reuse the preview-processed file if available; else process now
     // (HEIC→JPEG + landscape-fit). Falls back to a plain downscale on error.
@@ -4225,6 +4228,8 @@ async function submitEditEvent(id) {
     const { error: upErr } = await sb.storage.from('event-photos').upload(path, heroFile, { contentType: heroFile.type, upsert: false });
     if (upErr) throw new Error('Photo upload failed: ' + upErr.message);
     patch.hero_image_path = path;
+  } else if (removeHero) {
+    patch.hero_image_path = null;
   }
   const { error } = await sb.from('events').update(patch).eq('id', id);
   if (error) throw error;
