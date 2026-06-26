@@ -434,7 +434,9 @@ body::before {
    reuses already-defined badges where the slug matches; the new ones: ) */
 .badge-planning   { background: var(--off);      color: var(--mid); }
 .badge-announced  { background: var(--blue-bg);  color: var(--blue); }
-.badge-on_sale    { background: var(--green-bg); color: var(--green); }
+.badge-on_sale    { background: rgba(45,212,191,0.16); color: #6ee7d3; }  /* teal — distinct from completed-green */
+.badge-public     { background: rgba(167,224,46,0.16); color: var(--lime); }
+.badge-hidden     { background: var(--off);            color: var(--mid); }
 .badge-sold_out   { background: var(--amber-bg); color: var(--amber); }
 
 /* Numeric / money cell */
@@ -3648,6 +3650,14 @@ const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy
 $('kpiModalCancel').addEventListener('click', closeKpi);
 $('kpiModalOverlay').addEventListener('click', (e) => { if (e.target === $('kpiModalOverlay')) closeKpi(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
+// Backspace outside a text field must NOT navigate the browser "back" (that was
+// closing the dashboard / open modal when the cursor wasn't in an input).
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Backspace') return;
+  const t = e.target;
+  const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  if (!editable) e.preventDefault();
+});
 // Enter in a single-line field should NOT submit the whole modal (it was closing
 // the edit form mid-typing, e.g. while adding recap videos). Textareas keep Enter;
 // the explicit Save button still submits.
@@ -6246,7 +6256,7 @@ const eventsDash = { rows: [], q: '', series: '', status: '', year: '', complete
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
   const [ev, fin, mk, ig] = await Promise.all([
-    sb.from('events').select('id, name, series, type, status, event_date, capacity, total_attendance').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('events').select('id, name, series, type, status, event_date, capacity, total_attendance, is_public').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('v_kpi_event_financials').select('event_id, gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, total_expenses'),
     sb.from('expenses').select('event_id, amount').is('deleted_at', null).ilike('category', '%marketing%'),
     sb.from('metric_snapshots').select('metric_key, value, source').like('source', 'event:%'),
@@ -6336,15 +6346,23 @@ function renderEventsBody() {
   const typeChip = (e) => { const t = e.series || e.type || ''; return t ? `<span class="role-chip" style="cursor:default;">${escapeHtml(t)}</span>` : ''; };
   const rows = list.map(e => {
     const f = e.f, r = eventResult(e);
+    const done = (e.status || '') === 'completed';
+    // For a completed event a blank metric is a real zero (show 0 / $0); for an
+    // event that hasn't happened yet it's "no data" (show —).
+    const numCell = (v, fmt) => (v ? fmt(v) : (done ? fmt(0) : muted));
+    const pub = e.is_public
+      ? '<span class="badge badge-public">🌐 Live</span>'
+      : '<span class="badge badge-hidden">Hidden</span>';
     return `<tr>
       <td>${escapeHtml(fmtDate(e.event_date))}</td>
       <td><strong>${escapeHtml(e.name || '')}</strong><div class="li-sub">${typeChip(e)}</div></td>
       <td><span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span></td>
-      <td class="num">${e.total_attendance != null ? fmtNum(e.total_attendance) : muted}</td>
-      <td class="num">${f.tickets_sold ? fmtNum(f.tickets_sold) : muted}</td>
-      <td class="num">${f.gross_revenue ? money(f.gross_revenue) : muted}</td>
+      <td>${pub}</td>
+      <td class="num">${e.total_attendance != null ? fmtNum(e.total_attendance) : (done ? '0' : muted)}</td>
+      <td class="num">${numCell(f.tickets_sold, fmtNum)}</td>
+      <td class="num">${numCell(f.gross_revenue, money)}</td>
       <td class="num">${r.html} <span class="li-sub">${r.lbl}</span></td>
-      <td class="num">${e.marketing ? money(e.marketing) : muted}</td>
+      <td class="num">${numCell(e.marketing, money)}</td>
       <td style="white-space:nowrap;">
         <button class="row-btn primary" data-event-open="${escapeHtml(e.id)}">Open</button>
         <button class="row-btn" data-event-money="${escapeHtml(e.id)}">Money</button>
@@ -6352,9 +6370,9 @@ function renderEventsBody() {
         <button class="row-btn" data-event-delete="${escapeHtml(e.id)}">Delete</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="9" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
+  }).join('') || `<tr><td colspan="10" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
   $('eventsTable').innerHTML = `<table class="data-table"><thead><tr>
-    <th>Date</th><th>Event</th><th>Status</th><th class="num">Attendance</th><th class="num">Tickets</th>
+    <th>Date</th><th>Event</th><th>Status</th><th>Public</th><th class="num">Attendance</th><th class="num">Tickets</th>
     <th class="num">Revenue</th><th class="num">Result</th><th class="num">Mktg $</th><th>Actions</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
