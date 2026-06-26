@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Come With — End-to-end testing checklist</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8;--mar:#7dd3c0;--hen:#e9b949}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.5}
+  a{color:var(--lime)}
+  header{position:sticky;top:0;z-index:10;background:rgba(20,10,23,.93);backdrop-filter:blur(8px);border-bottom:1px solid var(--line);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:1.05rem;letter-spacing:.02em}
+  .prog{font-family:'DM Mono';font-size:.74rem;color:var(--dim);display:flex;gap:14px;flex-wrap:wrap}
+  .prog b.m{color:var(--mar)}.prog b.h{color:var(--hen)}
+  .wrap{max-width:1000px;margin:0 auto;padding:18px 20px 80px}
+  .intro{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:18px;font-size:.92rem;color:var(--dim)}
+  .intro b{color:var(--cream)}
+  .sec{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:.95rem;letter-spacing:.05em;color:var(--lime);margin:22px 0 10px;border-bottom:1px solid var(--line);padding-bottom:5px}
+  .case{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:13px 15px;margin-bottom:10px}
+  .case .t{font-weight:700;font-size:1rem}
+  .case .how{font-size:.86rem;color:var(--dim);margin-top:2px}
+  .case .exp{font-size:.84rem;color:var(--lime);margin-top:3px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:11px}
+  .rev{border:1px solid var(--line);border-radius:9px;padding:9px 11px;background:var(--bg2)}
+  .rev.m{border-left:3px solid var(--mar)}.rev.h{border-left:3px solid var(--hen)}
+  .rev .who{font-family:'DM Mono';font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+  .rev label{display:inline-flex;align-items:center;gap:7px;cursor:pointer;font-size:.82rem}
+  .rev input[type=checkbox]{width:17px;height:17px}
+  .rev textarea{width:100%;margin-top:7px;background:var(--bg);border:1px solid var(--line);border-radius:7px;color:var(--cream);font:inherit;font-size:.85rem;padding:7px 9px;resize:vertical;min-height:38px}
+  .rev textarea:focus{outline:none;border-color:var(--hot)}
+  .gen{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .gen .rev textarea{min-height:120px}
+  /* login */
+  .login{max-width:380px;margin:60px auto;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:28px}
+  .login h2{font-family:'Archivo';font-weight:900;text-transform:uppercase;margin-bottom:6px}
+  .login p{color:var(--dim);font-size:.9rem;margin-bottom:16px}
+  .login input{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:9px;color:var(--cream);font:inherit;padding:11px 13px;margin-bottom:10px}
+  .login button{width:100%;background:var(--lime);color:#180c12;border:none;border-radius:999px;padding:13px;font-family:'DM Mono';text-transform:uppercase;letter-spacing:.06em;cursor:pointer;font-size:.9rem}
+  .err{color:var(--hot);font-size:.85rem;min-height:1.1em;margin-top:6px}
+  .hidden{display:none}
+  .saved{font-family:'DM Mono';font-size:.66rem;color:var(--lime);opacity:0;transition:opacity .2s}
+  .saved.show{opacity:1}
+  @media(max-width:640px){.cols,.gen{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Come With · E2E testing checklist</h1>
+  <div class="prog" id="prog"></div>
+  <button id="signout" class="hidden" style="background:none;border:1px solid var(--line);color:var(--dim);border-radius:999px;padding:6px 12px;font-family:'DM Mono';font-size:.72rem;cursor:pointer">Sign out</button>
+</header>
+
+<div id="loginView" class="login">
+  <h2>Sign in</h2>
+  <p>Use your Come With staff login (the same email + password as the dashboard).</p>
+  <input id="email" type="email" placeholder="you@comewith.org" autocomplete="username">
+  <input id="pw" type="password" placeholder="Password" autocomplete="current-password">
+  <button id="loginBtn">Sign in</button>
+  <div class="err" id="loginErr"></div>
+</div>
+
+<div id="appView" class="wrap hidden">
+  <div class="intro">
+    Walk through each item on <b>comewith.org</b> (and the dashboard). Tick <b>Reviewed</b> when it works, and
+    <b>use the notes box to log any bug or enhancement idea</b> — that's the main point. Martin and Henry each have
+    their own column; everything saves live and is shared. There's an open <b>Bugs &amp; enhancements</b> box at the
+    bottom for anything not tied to a specific test.
+  </div>
+  <div id="cases"></div>
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+const sb = createClient('https://yaytdosxfhcqatmhctzk.supabase.co', 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi');
+const $=s=>document.querySelector(s);
+const REVIEWERS=[['martin','Martin','m'],['henry','Henry','h']];
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+
+// [section, key, title, how, expect]
+const TESTS=[
+  ['Homepage','home.load','Homepage loads','Open comewith.org','Loads in the dark theme, no broken images, no console errors.'],
+  ['Homepage','home.events','Upcoming events show','Scroll to "Upcoming"','The upcoming event(s) show with date + venue; the ticket/RSVP link opens.'],
+  ['Homepage','home.rooms','Recent Rooms show','Scroll to "Recent Rooms"','Past event cards show; clicking a ▶/♪ plays the video/audio in a pop-up.'],
+  ['Homepage','home.collective','Collective = Berky + KRNeY','Scroll to "The collective"','Two clickable chips (Berky, KRNeY); clicking opens that artist profile.'],
+  ['Homepage','home.ticker','Ticker words correct','Look at the scrolling strip','Reads Music · Rave · Community · Daytime · Dance Infusion · Brooklyn.'],
+  ['Homepage','home.di','Dance Infusion section','Scroll to Dance Infusion','Progress bar to the $10k goal; the Donate button shows and is clickable.'],
+  ['Homepage','home.nav','Nav + mobile menu','Click the nav links; on a phone open the menu','Every link jumps to the right section; mobile menu opens/closes.'],
+  ['Watch page','watch.load','Watch page','Open comewith.org/watch.html','Recap videos are listed; clicking one plays it (YouTube + SoundCloud).'],
+  ['Artist profiles','artist.profile','Profile page','Click Berky or KRNeY on the collective','Photo/name/bio/socials/gigs/content show; tagged content plays.'],
+  ['Artist profiles','artist.selfedit','Self-update link','(Keith) copy an artist update link in the dashboard and open it','Loads their profile editor; editing bio/socials/photo saves.'],
+  ['Customer actions','cust.inquiry','Inquiry form','Fill the "Book us" form on the homepage and submit','Success message; the inquiry appears in the dashboard Inquiries tab.'],
+  ['Customer actions','cust.subscribe','Newsletter sign-up','Subscribe with an email','"Check your inbox" message; confirmation email arrives; confirm link works.'],
+  ['Site Editor','se.text','Edit site text','Site Editor → change a hero line → Save','The change appears on the homepage after refresh.'],
+  ['Site Editor','se.dibtns','Donate / Tickets buttons','Site Editor → Dance Infusion → toggle a button + set a link → Save','The button appears/disappears on the site and points to the link.'],
+  ['Site Editor','se.tiers','$ donation tiles toggle','Toggle "Show the $ donation tiles" off → Save','The 3 price tiles vanish and the impact card grows.'],
+  ['Dashboard · Events','ev.public','Public column + status colours','Open the Events tab','Public 🌐/Hidden column shows; green = completed only; completed rows show 0 not —.'],
+  ['Dashboard · Events','ev.hero','Hero photo (incl. iPhone HEIC)','Edit an event → upload a photo (try a HEIC from your phone)','Preview shows it fitted to landscape; it saves and shows on the site.'],
+  ['Dashboard · Events','ev.removephoto','Remove photo','Edit an event → tick "Remove this photo" → Save','The photo is cleared from the event/site.'],
+  ['Dashboard · Events','ev.recap','Recap videos + artist tag','Edit event → add a YouTube/SoundCloud link + tag an artist → Save','Shows on Watch/Recent Rooms and on that artist profile under Content.'],
+  ['Dashboard · Artists','art.editor','Profile editor','Artists tab → click an artist','DJ name / real name, collective toggle, socials, photo, bookings all edit + save.'],
+  ['Dashboard · Artists','art.link','Update link','Artists → "Copy update link" / "Email update link"','Link copies; the email sends to the artist.'],
+  ['General UX','ux.tab','Tab persists','Switch dashboard tabs, then refresh the page','You stay on the same tab (not bounced to the start).'],
+  ['General UX','ux.backspace','Backspace is safe','Click an empty area (not a field), press Backspace','The page does NOT navigate back / close.'],
+  ['General UX','ux.modal','Modal typing','Open Edit event, type in a field, press Enter','The modal stays open (does not save/close mid-typing).'],
+];
+
+let state={}; // state[key+'|'+reviewer] = {checked,notes}
+function k(key,rev){return key+'|'+rev;}
+
+async function loadState(){
+  const r=await sb.from('e2e_review').select('*');
+  if(r.error){$('#cases').innerHTML='<div class="intro">Could not load — '+esc(r.error.message)+'</div>';return;}
+  state={};(r.data||[]).forEach(x=>state[k(x.test_key,x.reviewer)]={checked:x.checked,notes:x.notes});
+  render();
+}
+function revBlock(key,rev,name,cls){
+  const c=state[k(key,rev)]||{};
+  return '<div class="rev '+cls+'"><div class="who">'+esc(name)+'<span class="saved" data-saved="'+key+'|'+rev+'">saved ✓</span></div>'
+    +'<label><input type="checkbox" data-chk="'+key+'|'+rev+'"'+(c.checked?' checked':'')+'> Reviewed</label>'
+    +'<textarea data-note="'+key+'|'+rev+'" rows="1" placeholder="Bug or enhancement? Note it here…">'+esc(c.notes||'')+'</textarea></div>';
+}
+function render(){
+  const secs=[...new Set(TESTS.map(t=>t[0]))];
+  let html='';
+  for(const s of secs){
+    html+='<div class="sec">'+esc(s)+'</div>';
+    TESTS.filter(t=>t[0]===s).forEach(([sec,key,title,how,exp])=>{
+      html+='<div class="case"><div class="t">'+esc(title)+'</div><div class="how">'+esc(how)+'</div><div class="exp">Expect: '+esc(exp)+'</div>'
+        +'<div class="cols">'+REVIEWERS.map(([rev,name,cls])=>revBlock(key,rev,name,cls)).join('')+'</div></div>';
+    });
+  }
+  html+='<div class="sec">Anything else — bugs &amp; enhancements</div>'
+    +'<div class="case"><div class="how">Free space for ideas, bugs, or follow-ups not tied to a specific test above.</div><div class="gen" style="margin-top:10px">'
+    +REVIEWERS.map(([rev,name,cls])=>revBlock('_general',rev,name,cls).replace('<label>','<label style="display:none">').replace('Reviewed','')).join('')+'</div></div>';
+  $('#cases').innerHTML=html;
+  $('#cases').querySelectorAll('[data-chk]').forEach(cb=>cb.onchange=()=>save(cb.dataset.chk,{checked:cb.checked}));
+  $('#cases').querySelectorAll('[data-note]').forEach(ta=>ta.onchange=()=>save(ta.dataset.note,{notes:ta.value}));
+  progress();
+}
+async function save(id,patch){
+  const [key,rev]=id.split('|');
+  state[id]={...(state[id]||{}),...patch};
+  const flag=document.querySelector('[data-saved="'+id+'"]');
+  const {error}=await sb.from('e2e_review').upsert({test_key:key,reviewer:rev,checked:!!state[id].checked,notes:state[id].notes||null,updated_at:new Date().toISOString()},{onConflict:'test_key,reviewer'});
+  if(error){alert(error.message);return;}
+  if(flag){flag.classList.add('show');setTimeout(()=>flag.classList.remove('show'),1200);}
+  progress();
+}
+function progress(){
+  const total=TESTS.length;
+  const done=rev=>TESTS.filter(t=>state[k(t[1],rev)]&&state[k(t[1],rev)].checked).length;
+  $('#prog').innerHTML='<span><b class="m">Martin</b> '+done('martin')+'/'+total+'</span><span><b class="h">Henry</b> '+done('henry')+'/'+total+'</span>';
+}
+
+// ---- auth ----
+function showApp(on){$('#appView').classList.toggle('hidden',!on);$('#loginView').classList.toggle('hidden',on);$('#signout').classList.toggle('hidden',!on);}
+$('#loginBtn').onclick=async()=>{
+  $('#loginErr').textContent='';
+  const {error}=await sb.auth.signInWithPassword({email:$('#email').value.trim(),password:$('#pw').value});
+  if(error)$('#loginErr').textContent=error.message;
+};
+$('#pw').addEventListener('keydown',e=>{if(e.key==='Enter')$('#loginBtn').click();});
+$('#signout').onclick=async()=>{await sb.auth.signOut();};
+sb.auth.onAuthStateChange((_e,session)=>{ if(session){showApp(true);loadState();} else {showApp(false);} });
+(async()=>{ const {data:{session}}=await sb.auth.getSession(); if(session){showApp(true);loadState();} })();
+</script>
+</body>
+</html>

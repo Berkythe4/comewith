@@ -46,11 +46,13 @@ Deno.serve(async (req) => {
   const b = await req.json().catch(() => ({}));
   const to = b.to, subject = (b.subject || "").toString(), html = (b.html || "").toString();
   if (!to || !subject || !html) return err(400, "to, subject, html required");
+  const payload: Record<string, unknown> = { from: FROM, to, reply_to: REPLY_TO, subject, html };
+  if (b.cc) payload.cc = b.cc;   // optional carbon-copy
 
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ from: FROM, to, reply_to: REPLY_TO, subject, html }),
+    body: JSON.stringify(payload),
   });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) return err(502, "Resend: " + (j.message || res.status));
