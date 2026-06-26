@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With — Parties that give back · Dance Infusion for the National MS Society</title>
+<meta name="description" content="Come With throws Brooklyn dance parties that give back. Our Dance Infusion benefit series has raised for the National MS Society — come dance, bring a crew, or support the cause.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@500;600;700;800&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FBF7EF; --paper:#fffdf9; --ink:#2b1726; --ink2:#3a2230; --dim:#7c6a72; --line:#ecdfd6;
+    --plum:#6a2950; --rose:#c64d7a; --rose-sw:#fbe9f0; --olive:#5d7a1e; --olive-br:#8FB339; --gold:#d99a2b;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--ink2);font-family:'DM Sans',system-ui,sans-serif;line-height:1.65}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1140px;margin:0 auto;padding:0 26px}
+  h1,h2,h3{font-family:'Poppins',sans-serif;font-weight:700;line-height:1.08;letter-spacing:-.02em;color:var(--ink)}
+  .label{font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.18em;text-transform:uppercase;color:var(--rose)}
+  section{padding:92px 0}
+  .btn{display:inline-flex;align-items:center;gap:8px;font-family:'Poppins';font-weight:600;font-size:.92rem;
+    padding:14px 26px;border-radius:999px;border:2px solid var(--plum);color:var(--plum);transition:.18s;background:none;cursor:pointer;min-height:48px}
+  .btn:hover{transform:translateY(-2px)}
+  .btn.primary{background:var(--rose);border-color:var(--rose);color:#fff;box-shadow:0 10px 24px -10px rgba(198,77,122,.6)}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:#3a2230}
+  /* nav */
+  nav{position:sticky;top:0;z-index:50;background:rgba(251,247,239,.92);backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:68px}
+  .brand{font-family:'Poppins';font-weight:800;font-size:1.35rem;color:var(--plum)}
+  .brand .heart{color:var(--rose)}
+  .navlinks{display:flex;gap:26px;align-items:center}
+  .navlinks a{font-family:'DM Sans';font-weight:600;font-size:.92rem;color:var(--dim);transition:.15s}
+  .navlinks a:hover{color:var(--plum)}
+  .navtoggle{display:none;background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--plum)}
+  /* hero */
+  .hero{padding:64px 0 48px;background:radial-gradient(800px 480px at 85% -5%,var(--rose-sw),transparent 65%)}
+  .hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:48px;align-items:center}
+  .hero h1{font-size:clamp(2.6rem,6.5vw,4.6rem);margin-bottom:18px}
+  .hero h1 .hl{color:var(--rose)}
+  .hero .lede{font-size:clamp(1.05rem,1.8vw,1.3rem);color:var(--dim);max-width:46ch;margin-bottom:28px}
+  .hero .cta{display:flex;gap:12px;flex-wrap:wrap}
+  .impactcard{background:var(--paper);border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:0 30px 60px -36px rgba(106,41,80,.4)}
+  .impactcard .label{color:var(--olive)}
+  .counters{display:flex;gap:10px;margin:14px 0 18px}
+  .counter{flex:1;text-align:center;background:var(--bg);border-radius:14px;padding:16px 8px}
+  .counter .big{font-family:'Poppins';font-weight:800;font-size:1.7rem;color:var(--plum)}
+  .counter .sm{font-size:.72rem;color:var(--dim);font-family:'DM Mono';letter-spacing:.04em}
+  .progress{margin-top:6px}
+  .progress .bar{height:14px;background:#efe4dd;border-radius:999px;overflow:hidden}
+  .progress .bar i{display:block;height:100%;background:linear-gradient(90deg,var(--rose),var(--gold));width:0;transition:width 1.4s ease}
+  .progress .row{display:flex;justify-content:space-between;font-size:.8rem;color:var(--dim);font-family:'DM Mono';margin-top:7px}
+  /* story */
+  .story{background:var(--plum);color:#f7ecf1}
+  .story .grid{display:grid;grid-template-columns:1fr 1.1fr;gap:48px;align-items:center}
+  .story .photo{border-radius:24px;height:330px;background:linear-gradient(150deg,#c64d7a,#6a2950 70%);display:flex;align-items:flex-end;padding:22px}
+  .story .photo .cap{font-family:'DM Mono';font-size:.78rem;opacity:.9}
+  .story h2{color:#fff;font-size:clamp(1.9rem,4.5vw,3rem);margin-bottom:16px}
+  .story p{color:#e7d3df;margin-bottom:14px}
+  .story .who{font-family:'DM Mono';font-size:.82rem;color:var(--olive-br);letter-spacing:.04em}
+  /* tiers */
+  .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:36px}
+  .tier{border:1px solid var(--line);border-radius:20px;padding:26px;background:var(--paper);text-align:center;transition:.2s}
+  .tier:hover{transform:translateY(-4px);border-color:var(--rose)}
+  .tier .amt{font-family:'Poppins';font-weight:800;font-size:2rem;color:var(--rose)}
+  .tier p{color:var(--dim);font-size:.95rem;margin-top:6px}
+  /* events */
+  .sechead{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap;margin-bottom:28px}
+  .sechead h2{font-size:clamp(2rem,5vw,3rem)}
+  .evgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px}
+  .ev{border:1px solid var(--line);border-radius:20px;background:var(--paper);overflow:hidden;display:flex;flex-direction:column;transition:.2s}
+  .ev:hover{transform:translateY(-4px);box-shadow:0 20px 40px -26px rgba(106,41,80,.4)}
+  .ev .top{display:flex;gap:14px;padding:20px}
+  .ev .date{flex:0 0 auto;text-align:center;background:var(--rose-sw);border-radius:14px;width:62px;height:62px;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  .ev .date .m{font-family:'DM Mono';font-size:.66rem;letter-spacing:.08em;color:var(--rose)}
+  .ev .date .d{font-family:'Poppins';font-weight:800;font-size:1.6rem;line-height:1;color:var(--plum)}
+  .ev .meta .n{font-family:'Poppins';font-weight:700;font-size:1.1rem;line-height:1.1;margin-bottom:4px;color:var(--ink)}
+  .ev .meta .sub{font-size:.86rem;color:var(--dim)}
+  .chip{display:inline-block;font-family:'DM Mono';font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-top:8px}
+  .chip.benefit{background:var(--rose-sw);color:var(--rose)}
+  .chip.party{background:#eef3df;color:var(--olive)}
+  .ev .foot{margin-top:auto;border-top:1px solid var(--line);padding:14px 20px;display:flex;justify-content:space-between;align-items:center}
+  .ev .foot a{font-family:'Poppins';font-weight:600;font-size:.84rem;color:var(--rose)}
+  /* do more (parties/production) */
+  .more{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:36px}
+  .morecard{border:1px solid var(--line);border-radius:20px;padding:30px;background:var(--paper)}
+  .morecard h3{font-size:1.4rem;margin-bottom:8px}
+  .morecard p{color:var(--dim);margin-bottom:14px}
+  /* involve */
+  .involve{background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .ways{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-top:30px}
+  .way{border:1px solid var(--line);border-radius:20px;padding:26px;background:var(--bg)}
+  .way .ic{font-size:1.8rem;margin-bottom:10px}
+  .way h4{font-size:1.15rem;margin-bottom:6px}
+  .way p{color:var(--dim);font-size:.92rem}
+  .safer{margin-top:30px;background:var(--rose-sw);border-radius:20px;padding:24px 28px;color:var(--plum)}
+  /* form */
+  .formgrid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:start}
+  form .field{margin-bottom:15px;display:flex;flex-direction:column}
+  form label{font-family:'DM Mono';font-size:.74rem;letter-spacing:.05em;text-transform:uppercase;color:var(--dim);margin-bottom:6px}
+  form input,form textarea,form select{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:13px 14px;color:var(--ink2);font-family:'DM Sans';font-size:1rem;min-height:48px}
+  form input:focus,form textarea:focus,form select:focus{outline:none;border-color:var(--rose)}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .formnote{font-size:.88rem;color:var(--dim)}
+  .infocard{border:1px solid var(--line);border-radius:24px;padding:30px;background:var(--paper)}
+  .infocard a.big{font-family:'Poppins';font-weight:700;font-size:1.3rem;color:var(--rose);display:block;margin:4px 0 18px}
+  footer{padding:48px 0;border-top:1px solid var(--line)}
+  footer .wrap{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+  footer .dim{color:var(--dim);font-size:.84rem}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(150%);background:var(--rose);color:#fff;font-family:'Poppins';font-weight:600;padding:14px 24px;border-radius:999px;transition:.3s;z-index:99}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  @media(max-width:860px){
+    .navlinks{display:none;position:absolute;top:68px;left:0;right:0;flex-direction:column;background:var(--paper);border-bottom:1px solid var(--line);padding:16px 26px;gap:16px}
+    .navlinks.open{display:flex} .navtoggle{display:block}
+    .hero .grid,.story .grid,.more,.formgrid,.row2{grid-template-columns:1fr;gap:26px}
+    section{padding:64px 0}
+  }
+</style>
+</head>
+<body>
+<nav>
+  <div class="wrap">
+    <a href="#top" class="brand">Come With <span class="heart">♥</span></a>
+    <div class="navlinks" id="nav">
+      <a href="#di">Dance Infusion</a><a href="#events">Events</a><a href="#more">Parties & production</a><a href="#involve">Get involved</a>
+      <a href="#involve" class="btn primary" style="padding:9px 18px;min-height:0">Donate</a>
+    </div>
+    <button class="navtoggle" id="navtoggle" aria-label="Menu">☰</button>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap"><div class="grid">
+    <div>
+      <div class="label">Brooklyn · dance parties that give back</div>
+      <h1>Come dance.<br>Do <span class="hl">good.</span></h1>
+      <p class="lede">Come With throws the kind of night you'll talk about for weeks — and through <strong>Dance Infusion</strong>, that night helps people living with MS. The floor's open. The cause is real.</p>
+      <div class="cta">
+        <a href="#events" class="btn primary">Get tickets</a>
+        <a href="#involve" class="btn gold">Support the cause</a>
+      </div>
+    </div>
+    <div class="impactcard">
+      <div class="label">Dance Infusion · impact so far</div>
+      <div class="counters">
+        <div class="counter"><div class="big" data-count="4140" data-prefix="$" data-suffix="+">$0</div><div class="sm">to the MS Society</div></div>
+        <div class="counter"><div class="big" data-count="2">0</div><div class="sm">benefits held</div></div>
+        <div class="counter"><div class="big" data-count="159">0</div><div class="sm">on the floor</div></div>
+      </div>
+      <div class="progress">
+        <div class="label" style="color:var(--rose);margin-bottom:6px">Goal: $10,000 for the National MS Society</div>
+        <div class="bar"><i id="bar"></i></div>
+        <div class="row"><span id="barPct">41%</span><span>$4,140 / $10,000</span></div>
+      </div>
+    </div>
+  </div></div>
+</header>
+
+<section class="story" id="di">
+  <div class="wrap"><div class="grid">
+    <div class="photo"><div class="cap">📸 Dance Infusion #2 — Signal, Brooklyn · 117 on the floor</div></div>
+    <div>
+      <div class="label" style="color:var(--olive-br)">Why we do this</div>
+      <h2>This one's personal.</h2>
+      <p>Someone we love lives with multiple sclerosis. MS is unpredictable, exhausting, and isolating — and the community around it is everything. So we built Dance Infusion: a night where showing up <em>is</em> the support.</p>
+      <p>Every Dance Infusion benefits the <strong>National MS Society</strong>, and we publish exactly what we raised and what reached the mission — because trust is how a benefit keeps going.</p>
+      <p class="who">— Berky, founder of Come With</p>
+    </div>
+  </div></div>
+</section>
+
+<section id="give">
+  <div class="wrap">
+    <div class="label">Your support, in real terms</div>
+    <h2 style="font-size:clamp(1.9rem,4.5vw,2.8rem);margin-top:10px;max-width:18ch">A ticket is a good time. It's also a contribution.</h2>
+    <div class="tiers">
+      <div class="tier"><div class="amt">$25</div><p>A ticket to the next Dance Infusion — and a seat on the dancefloor for the cause.</p></div>
+      <div class="tier"><div class="amt">$50</div><p>Helps fund National MS Society support programs for people newly diagnosed.</p></div>
+      <div class="tier"><div class="amt">$150</div><p>Sponsors a table — bring your crew and raise together.</p></div>
+      <div class="tier"><div class="amt">You decide</div><p>Any amount goes straight toward the mission. Every dollar counts.</p></div>
+    </div>
+    <div style="text-align:center;margin-top:30px"><a href="#involve" class="btn primary">Get a ticket or donate</a></div>
+  </div>
+</section>
+
+<section id="events" style="background:var(--paper);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="sechead"><div><div class="label">On the calendar</div><h2>Come to a night</h2></div></div>
+    <div class="evgrid" id="upcoming"><div style="color:var(--dim);font-family:'DM Mono'">Loading events…</div></div>
+    <div class="sechead" style="margin-top:54px"><div><div class="label">Already happened</div><h2>Past nights</h2></div></div>
+    <div class="evgrid" id="past"></div>
+  </div>
+</section>
+
+<section id="more">
+  <div class="wrap">
+    <div class="label">It's not all benefits</div>
+    <h2 style="font-size:clamp(1.9rem,4.5vw,2.8rem);margin-top:10px">We also throw great parties &amp; produce yours.</h2>
+    <div class="more">
+      <div class="morecard"><div style="font-size:1.8rem;margin-bottom:8px">🎧</div><h3>Come With parties</h3><p>House, disco & melodic nights across Brooklyn & NYC. Same crew, same care — pure good time.</p><a href="#events" class="btn">See what's next</a></div>
+      <div class="morecard"><div style="font-size:1.8rem;margin-bottom:8px">🔊</div><h3>Production for your event</h3><p>DJ, sound, lighting & hosting — we bring and run the whole rig so your night just works.</p><a href="#involve" class="btn">Book us</a></div>
+    </div>
+  </div>
+</section>
+
+<section class="involve" id="involve">
+  <div class="wrap">
+    <div class="label">Get involved</div>
+    <h2 style="font-size:clamp(2rem,5vw,3rem);margin-top:10px">Four ways in.</h2>
+    <div class="ways">
+      <div class="way"><div class="ic">🎟️</div><h4>Come dance</h4><p>Grab a ticket to the next event — the easiest way to support is to show up.</p></div>
+      <div class="way"><div class="ic">💜</div><h4>Donate</h4><p>Give directly to the National MS Society through our benefit — any amount.</p></div>
+      <div class="way"><div class="ic">👯</div><h4>Bring a crew</h4><p>Sponsor a table and raise together. The floor's better with your people on it.</p></div>
+      <div class="way"><div class="ic">🤝</div><h4>Book / partner</h4><p>Want Dance Infusion at your space, or production for your event? Let's talk.</p></div>
+    </div>
+    <div class="safer">
+      <strong>Everyone's welcome.</strong> If the cover is ever a barrier for you, reach out — you deserve a chance to gather and dance. This is a community first.
+    </div>
+  </div>
+</section>
+
+<section id="contact">
+  <div class="wrap"><div class="formgrid">
+    <div>
+      <div class="label">Say hello / get involved</div>
+      <h2 style="font-size:clamp(2rem,5vw,3rem);margin:10px 0 12px">Let's make<br>something good.</h2>
+      <p class="formnote" style="margin-bottom:22px">Tickets, donations, partnering on a benefit, or booking us — tell us what you're thinking and we'll get right back.</p>
+      <form id="inq" autocomplete="on">
+        <div class="row2">
+          <div class="field"><label for="f_name">Name *</label><input id="f_name" name="full_name" required></div>
+          <div class="field"><label for="f_email">Email *</label><input id="f_email" name="email" type="email" required></div>
+        </div>
+        <div class="field"><label for="f_type">I'm here to…</label>
+          <select id="f_type" name="event_type"><option value="">Choose…</option><option>Come to / buy tickets for an event</option><option>Donate / support Dance Infusion</option><option>Bring Dance Infusion to my space</option><option>Book Come With (party / production)</option><option>Something else</option></select></div>
+        <div class="field"><label for="f_msg">Your message</label><textarea id="f_msg" name="message" rows="4" placeholder="Tell us a little about it."></textarea></div>
+        <button type="submit" class="btn primary" style="width:100%;justify-content:center">Send message</button>
+        <p class="formnote" id="inqMsg" style="margin-top:10px"></p>
+      </form>
+    </div>
+    <div class="infocard">
+      <div class="label">Email</div><a class="big" href="mailto:berky@comewith.org">berky@comewith.org</a>
+      <div class="label">Instagram</div><a class="big" href="https://instagram.com/comewithnyc" target="_blank" rel="noopener">@comewithnyc</a>
+      <p class="formnote">Brooklyn, NY · Dance Infusion benefits the National MS Society.</p>
+      <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
+      <div class="label" style="margin-bottom:8px;color:var(--olive)">Hear about the next one</div>
+      <div class="row2" style="grid-template-columns:1fr auto;gap:8px">
+        <input id="subEmail" type="email" placeholder="you@email.com" aria-label="Email for newsletter">
+        <button class="btn primary" id="subBtn" style="min-height:48px">Join</button>
+      </div>
+      <p class="formnote" style="margin-top:6px">Event drops & benefit news. No spam, ever.</p>
+    </div>
+  </div></div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div class="brand">Come With <span class="heart">♥</span></div>
+    <div class="dim">Brooklyn, NY · © 2026 Come With · benefiting the National MS Society · <a href="../../dashboard.html" style="color:var(--dim)">Team sign-in</a></div>
+  </div>
+</footer>
+
+<div class="toast" id="toast"></div>
+<script src="_shared.js"></script>
+<script>
+  const $=s=>document.querySelector(s);
+  function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3200);}
+  $('#navtoggle').onclick=()=>$('#nav').classList.toggle('open');
+  document.querySelectorAll('#nav a').forEach(a=>a.addEventListener('click',()=>$('#nav').classList.remove('open')));
+  // animated counters + progress bar (on view)
+  function animate(){
+    document.querySelectorAll('[data-count]').forEach(el=>{const tgt=+el.dataset.count,pre=el.dataset.prefix||'',suf=el.dataset.suffix||'';let s=0;const step=tgt/40;
+      const t=setInterval(()=>{s+=step;if(s>=tgt){s=tgt;clearInterval(t);}el.textContent=pre+Math.round(s).toLocaleString()+suf;},22);});
+    $('#bar').style.width='41%';
+  }
+  const io=new IntersectionObserver((e)=>{if(e[0].isIntersecting){animate();io.disconnect();}});io.observe($('.impactcard'));
+  // events
+  function evCard(e,past){const d=CW.fmtDay(e.event_date);const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||'')+(e.tag||''));
+    const tag=benefit?'<span class="chip benefit">♥ Benefit · MS Society</span>':'<span class="chip party">'+(e.series||'Party')+'</span>';
+    const cta=past?`<span style="font-family:'DM Mono';color:var(--dim);font-size:.76rem">${e.note||''}</span>`
+      :(e.ticket_url?`<a href="${e.ticket_url}" target="_blank" rel="noopener">${e.ticket_label||'Get tickets'} →</a>`:'<span style="font-family:DM Mono;color:var(--dim)">Soon</span>');
+    return `<article class="ev"><div class="top"><div class="date"><span class="m">${d.mon}</span><span class="d">${d.day}</span></div>
+      <div class="meta"><div class="n">${e.name}</div><div class="sub">${CW.fmtDate(e.event_date)}${(e.venue_name||e.venue)?(' · '+(e.venue_name||e.venue)):''}</div>${tag}</div></div>
+      <div class="foot"><span style="font-family:'DM Mono';color:var(--dim);font-size:.72rem">${past?'Past':'Upcoming'}</span>${cta}</div></article>`;}
+  (async()=>{const evs=await CW.fetchEvents();const up=$('#upcoming');
+    up.innerHTML=evs.length?evs.map(e=>evCard(e,false)).join('')
+      :'<article class="ev"><div class="top"><div class="meta"><div class="n">More dates coming soon</div><div class="sub">Join the list to hear first.</div></div></div></article>';
+    $('#past').innerHTML=CW.PAST.map(e=>evCard(e,true)).join('');
+  })();
+  $('#inq').addEventListener('submit',async ev=>{ev.preventDefault();const f=ev.target,btn=f.querySelector('button[type=submit]');
+    const data={full_name:f.full_name.value.trim(),email:f.email.value.trim(),event_type:f.event_type.value,message:f.message.value.trim()};
+    if(!data.full_name||!data.email){$('#inqMsg').textContent='Name and email are required.';return;}
+    btn.disabled=true;btn.textContent='Sending…';const r=await CW.submitInquiry(data);btn.disabled=false;btn.textContent='Send message';
+    if(r.ok){f.reset();$('#inqMsg').textContent="Thank you — we'll be in touch soon. 💜";toast('Message sent — thank you!');}else{$('#inqMsg').textContent='Something went wrong — please email berky@comewith.org';}});
+  $('#subBtn').addEventListener('click',async()=>{const e=$('#subEmail').value.trim();if(!e||!e.includes('@')){toast('Enter a valid email');return;}
+    await CW.submitInquiry({full_name:'Newsletter signup',email:e,event_type:'Newsletter',message:'Newsletter signup'});$('#subEmail').value='';toast("You're in 💜");});
+</script>
+</body>
+</html>
