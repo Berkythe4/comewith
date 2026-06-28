@@ -10,7 +10,9 @@
 //    gear is suggested at ~10% of purchase price (industry "1/10th" rule of thumb).
 //    Multi-day at 50% per extra day (rule-of-thirds style discounting).
 //  • Labor: AV tech ~$65/hr, 10-hr "day" = $600, half-day $350, OT 1.5× after 10.
-//  • Delivery: base + $0.50/mile beyond a free radius; flat setup/strike.
+//  • Travel: mileage (IRS-style ~$0.70/mi, round-trip, beyond a free radius) PLUS
+//    drive time (round-trip hours at ~half the service rate) — both standard for
+//    out-of-area events; optional flat trip fee + flat setup/strike.
 //  • Surcharges: weekend / peak-season / rush; deposit 50%.
 // Every number here is a DEFAULT — the dashboard lets you edit any of them and
 // override per-DJ rates; saved overrides are merged over these at load time.
@@ -34,7 +36,7 @@ export const PRICING_DEFAULTS = {
   dj_overrides: {}, // actorId -> custom per-event rate
   rental: { multi_day_factor: 0.5, suggest_rule: 0.10, damage_waiver_pct: 8 },
   labor: { tech_hourly: 65, day_rate: 600, day_hours: 10, half_day: 350, ot_multiplier: 1.5 },
-  delivery: { base: 75, per_mile: 0.5, free_radius_miles: 15, setup_strike: 150 },
+  travel: { base: 0, per_mile: 0.70, free_radius_miles: 30, time_rate: 50, setup_strike: 150 },
   lighting: {
     tiers: [
       { key: 'none', label: 'None', amount: 0 },
@@ -127,11 +129,15 @@ export function computeQuote(cfg, q) {
   // Lighting (a single chosen tier amount).
   if (num(q.lighting) > 0) lines.push({ group: 'Production', label: q.lightingLabel || 'Lighting', amount: round2(num(q.lighting)) });
 
-  // Delivery + setup/strike.
-  if (q.delivery && q.delivery.include) {
-    const D = cfg.delivery, miles = num(q.delivery.miles);
-    const dAmt = round2(num(D.base) + Math.max(0, miles - num(D.free_radius_miles)) * num(D.per_mile));
-    lines.push({ group: 'Production', label: `Delivery${miles ? ` (${miles} mi)` : ''}`, amount: dAmt });
+  // Travel — mileage (gas + wear, round-trip beyond a free radius) + drive time
+  // (round-trip hours) + optional flat trip fee. Standard for out-of-area events.
+  if (q.travel && q.travel.include) {
+    const T = cfg.travel, miles = num(q.travel.miles), hours = num(q.travel.hours);
+    if (num(T.base) > 0) lines.push({ group: 'Travel', label: 'Travel base fee', amount: round2(num(T.base)) });
+    const billMiles = Math.max(0, miles - num(T.free_radius_miles)) * 2; // round trip
+    if (billMiles > 0) lines.push({ group: 'Travel', label: `Mileage (${billMiles} mi round trip @ $${num(T.per_mile)}/mi)`, amount: round2(billMiles * num(T.per_mile)) });
+    const driveH = round2(hours * 2); // round trip
+    if (driveH > 0) lines.push({ group: 'Travel', label: `Drive time (${driveH}h round trip @ $${num(T.time_rate)}/h)`, amount: round2(driveH * num(T.time_rate)) });
   }
   if (q.setupStrike) lines.push({ group: 'Production', label: 'Setup & strike', amount: round2(num(q.setupStrike)) });
 

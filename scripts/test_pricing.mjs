@@ -37,18 +37,25 @@ const s2 = computeQuote(cfg, {
 check('S2 rental subtotal (660+198+8% waiver)', s2.subtotal, 926.64);
 check('S2 total', s2.total, 926.64);
 
-// --- Scenario 3: Full production ---
+// --- Travel: 56 mi / 1.5 h each way (free radius 30, $0.70/mi, $50/h) ---
+// mileage = (56-30)*2 = 52 mi * 0.70 = 36.40 ; drive time = 3 h * 50 = 150 → 186.40
+const sT = computeQuote(cfg, { travel: { include: true, miles: 56, hours: 1.5 } });
+check('Travel 56mi/1.5h subtotal', sT.subtotal, 36.40 + 150);
+console.log('   travel lines:'); sT.lines.forEach(l => console.log(`     ${l.label}: $${l.amount}`));
+
+// --- Scenario 3: Full production (with travel) ---
+const TRAVEL = 36.40 + 150;
 const s3 = computeQuote(cfg, {
   djs: [{ label: 'Premium DJ', fee: 1500, addons: [{ label: 'Planning', amount: 150 }] }],
   equipment: [{ label: 'CDJ-3000 pair', daily: 440, qty: 1, days: 1 }],
   techs: [{ label: 'AV tech', mode: 'day', count: 2 }],
   lighting: 999, lightingLabel: 'Standard lighting',
-  delivery: { include: true, miles: 25 },
+  travel: { include: true, miles: 56, hours: 1.5 },
   setupStrike: 150,
   weekend: true, peak: true, depositPct: 50,
 });
-check('S3 subtotal', s3.subtotal, 1650 + 440 + 1200 + 999 + 80 + 150);
-check('S3 surcharge (35%)', s3.surcharge, (1650 + 440 + 1200 + 999 + 80 + 150) * 0.35);
+check('S3 subtotal', s3.subtotal, 1650 + 440 + 1200 + 999 + TRAVEL + 150);
+check('S3 surcharge (35%)', s3.surcharge, (1650 + 440 + 1200 + 999 + TRAVEL + 150) * 0.35);
 check('S3 deposit 50%', s3.deposit, s3.total / 2);
 console.log('\nS3 line items:'); s3.lines.forEach(l => console.log(`   [${l.group}] ${l.label}: $${l.amount}`));
 console.log(`   subtotal $${s3.subtotal} + surcharge $${s3.surcharge} = total $${s3.total}, deposit $${s3.deposit}`);

@@ -7122,10 +7122,12 @@ async function loadPricing() {
   if (cfgRes.error) PX.canSave = false;                       // table missing (pre-migration) → defaults only
   else if (cfgRes.data && cfgRes.data.config) saved = cfgRes.data.config;
   PX.cfg = mergeConfig(saved);
-  const [eq, roles] = await Promise.all([
+  const [eq, roles, evs] = await Promise.all([
     sb.from('equipment_inventory').select('id,name,category,purchase_price,daily_rate,status').is('deleted_at', null).order('category').order('name'),
     sb.from('actor_roles').select('actor:actors(id,display_name)').in('role', ['dj', 'artist']).eq('active', true),
+    sb.from('events').select('id,name,event_date,quote').is('deleted_at', null).order('event_date', { ascending: false }),
   ]);
+  PX.events = evs.data || [];
   PX.equip = (eq.data || []).filter(e => (e.status || '') !== 'retired');
   { const seen = new Set(); PX.djs = (roles.data || []).map(r => r.actor).filter(a => a && !seen.has(a.id) && seen.add(a.id)).sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '')); }
   renderPricing();
@@ -7173,6 +7175,7 @@ function renderPricing() {
   <div class="px-bar"><h2>Pricing &amp; Quotes</h2>
     <div class="px-actions">
       <button class="hub-btn ghost" data-px-reset>New quote</button>
+      <button class="hub-btn ghost" data-px-save-event>Save to event</button>
       <button class="hub-btn ghost" data-px-copy>Copy summary</button>
       <button class="hub-btn ghost" data-px-print>Print / PDF</button>
     </div></div>
@@ -7181,9 +7184,12 @@ function renderPricing() {
     <div id="pxBuilder">
       <details class="px-sec" open><summary>Event</summary><div class="px-body">
         <div class="px-grid">
-          <div><label class="modal-label">Event / client</label><input class="px-i" id="pxEventName" style="width:100%" placeholder="e.g. Smith wedding"></div>
+          <div><label class="modal-label">Event / client name</label><input class="px-i" id="pxEventName" style="width:100%" placeholder="e.g. Smith wedding"></div>
+          <div><label class="modal-label">Link to event</label><select class="px-i" id="pxEvent" style="width:100%"><option value="">— none —</option>${PX.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name || '(untitled)')}${e.event_date ? ' · ' + fmtDate(e.event_date) : ''}</option>`).join('')}</select></div>
           <div><label class="modal-label">Distance (miles, one-way)</label><input class="px-i px-num" id="pxMiles" type="number" min="0" step="1" value="0" style="width:100%"></div>
+          <div><label class="modal-label">Drive time (hours, one-way)</label><input class="px-i px-num" id="pxDriveHours" type="number" min="0" step="0.25" value="0" style="width:100%"></div>
         </div>
+        <div id="pxEventNote" class="px-hint" style="margin-top:6px"></div>
         <div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap">
           <label class="px-chk"><input type="checkbox" id="pxWeekend"> Weekend (+${M.weekend_pct}%)</label>
           <label class="px-chk"><input type="checkbox" id="pxPeak"> Peak season (+${M.peak_season_pct}%)</label>
@@ -7212,9 +7218,10 @@ function renderPricing() {
           <div><label class="modal-label">Lighting</label><select class="px-i" id="pxLighting" style="width:100%">${lightOpts}</select></div>
         </div>
         <div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
-          <label class="px-chk"><input type="checkbox" id="pxDelivery"> Delivery (base $${PX.cfg.delivery.base} + $${PX.cfg.delivery.per_mile}/mi past ${PX.cfg.delivery.free_radius_miles})</label>
-          <label class="px-chk"><input type="checkbox" id="pxSetup"> Setup &amp; strike $<input class="px-i px-num" id="pxSetupAmt" type="number" min="0" step="25" value="${PX.cfg.delivery.setup_strike}" style="width:74px"></label>
+          <label class="px-chk"><input type="checkbox" id="pxTravel"> Charge travel (mileage past ${PX.cfg.travel.free_radius_miles}mi @ $${PX.cfg.travel.per_mile}/mi + drive time @ $${PX.cfg.travel.time_rate}/h, round trip)</label>
+          <label class="px-chk"><input type="checkbox" id="pxSetup"> Setup &amp; strike $<input class="px-i px-num" id="pxSetupAmt" type="number" min="0" step="25" value="${PX.cfg.travel.setup_strike}" style="width:74px"></label>
         </div>
+        <div class="px-hint">Travel uses the Distance + Drive time you set in the Event section.</div>
       </div></details>
 
       <details class="px-sec"><summary>Adjustments</summary><div class="px-body">
@@ -7235,6 +7242,7 @@ function renderPricing() {
   </div>`;
   $('pxDjList').insertAdjacentHTML('beforeend', pxDjRow());
   pricingRecompute();
+  pxShowEventNote();
 }
 function pxSettingsHtml() {
   const c = PX.cfg, F = (label, path, val, step = '5') => `<div><label class="modal-label">${escapeHtml(label)}</label><input class="px-i" type="number" step="${step}" data-cfg="${path}" value="${val}" style="width:100%"></div>`;
@@ -7251,8 +7259,8 @@ function pxSettingsHtml() {
     <div class="px-grid">${F('Extra-day factor (0–1)', 'rental.multi_day_factor', c.rental.multi_day_factor, '0.05')}${F('Damage waiver %', 'rental.damage_waiver_pct', c.rental.damage_waiver_pct, '1')}${F('Suggest rule (×cost)', 'rental.suggest_rule', c.rental.suggest_rule, '0.01')}</div>
     <div class="px-sumgrp">Labor</div>
     <div class="px-grid">${F('Tech hourly', 'labor.tech_hourly', c.labor.tech_hourly, '5')}${F('Day rate', 'labor.day_rate', c.labor.day_rate, '25')}${F('Half day', 'labor.half_day', c.labor.half_day, '25')}${F('Day hours', 'labor.day_hours', c.labor.day_hours, '1')}${F('OT multiplier', 'labor.ot_multiplier', c.labor.ot_multiplier, '0.25')}</div>
-    <div class="px-sumgrp">Delivery</div>
-    <div class="px-grid">${F('Base', 'delivery.base', c.delivery.base, '5')}${F('Per mile', 'delivery.per_mile', c.delivery.per_mile, '0.25')}${F('Free radius (mi)', 'delivery.free_radius_miles', c.delivery.free_radius_miles, '1')}${F('Setup & strike', 'delivery.setup_strike', c.delivery.setup_strike, '25')}</div>
+    <div class="px-sumgrp">Travel</div>
+    <div class="px-grid">${F('Per mile ($)', 'travel.per_mile', c.travel.per_mile, '0.05')}${F('Free radius (mi)', 'travel.free_radius_miles', c.travel.free_radius_miles, '5')}${F('Drive-time rate ($/h)', 'travel.time_rate', c.travel.time_rate, '5')}${F('Trip base fee', 'travel.base', c.travel.base, '5')}${F('Setup & strike', 'travel.setup_strike', c.travel.setup_strike, '25')}</div>
     <div class="px-sumgrp">Lighting tiers</div>
     <div class="px-grid">${c.lighting.tiers.map((t, i) => F(t.label, `lighting.tiers.${i}.amount`, t.amount, '25')).join('')}</div>
     <div class="px-sumgrp">Modifiers</div>
@@ -7277,45 +7285,50 @@ function pxReadQuote() {
     damageWaiver: g('#pxWaiver')?.checked,
     techs: all('.px-tech').map(r => ({ label: 'AV technician', mode: r.querySelector('.px-tech-mode').value, count: nv(r.querySelector('.px-tech-count')) || 1, hours: nv(r.querySelector('.px-tech-hours')) })),
     lighting: lightSel ? Number(lightSel.value) : 0, lightingLabel: lightSel?.selectedOptions[0]?.dataset.label || 'Lighting',
-    delivery: { include: g('#pxDelivery')?.checked, miles: nv(g('#pxMiles')) },
+    travel: { include: g('#pxTravel')?.checked, miles: nv(g('#pxMiles')), hours: nv(g('#pxDriveHours')) },
     setupStrike: g('#pxSetup')?.checked ? nv(g('#pxSetupAmt')) : 0,
-    discountPct: nv(g('#pxDiscPct')), discountAmt: nv(g('#pxDiscAmt')), depositPct: nv(g('#pxDeposit')) || PX.cfg.modifiers.deposit_pct,
+    discountPct: nv(g('#pxDiscPct')), discountAmt: nv(g('#pxDiscAmt')),
+    // Respect an explicit 0 (only fall back to the default when the field is blank).
+    depositPct: (g('#pxDeposit') && g('#pxDeposit').value !== '') ? Number(g('#pxDeposit').value) : PX.cfg.modifiers.deposit_pct,
   };
 }
+function pxLinkedEventName() { const s = $('pricingBody')?.querySelector('#pxEvent'); return (s && s.value) ? (s.selectedOptions[0]?.textContent || '') : ''; }
 const pxFmt = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function pricingRecompute() {
   const r = computeQuote(PX.cfg, pxReadQuote()); PX._last = r;
   const grp = {}; r.lines.forEach(l => { (grp[l.group] = grp[l.group] || []).push(l); });
   let h = '';
+  const linked = pxLinkedEventName(); if (linked) h += `<div class="px-sumgrp">For: ${escapeHtml(linked)}</div>`;
   Object.keys(grp).forEach(gn => { h += `<div class="px-sumgrp">${escapeHtml(gn)}</div>`; grp[gn].forEach(l => { h += `<div class="px-sumln"><span>${escapeHtml(l.label)}</span><span>${pxFmt(l.amount)}</span></div>`; }); });
-  if (!r.lines.length) h = '<div class="px-empty">Add DJs, gear, or labor to build a quote.</div>';
+  if (!r.lines.length) h = (linked ? h : '') + '<div class="px-empty">Add DJs, gear, or labor to build a quote.</div>';
   h += `<div class="px-sumsub"><span>Subtotal</span><span>${pxFmt(r.subtotal)}</span></div>`;
   r.surLines.forEach(s => { h += `<div class="px-sumln px-sur"><span>${escapeHtml(s.label)}</span><span>+${pxFmt(s.amount)}</span></div>`; });
   if (r.discount) h += `<div class="px-sumln px-disc"><span>Discount</span><span>−${pxFmt(r.discount)}</span></div>`;
   h += `<div class="px-sumtot"><span>Total</span><span>${pxFmt(r.total)}</span></div>`;
-  h += `<div class="px-sumdep"><span>Deposit (${r.depositPct}%)</span><span>${pxFmt(r.deposit)}</span></div>`;
+  if (r.depositPct > 0) h += `<div class="px-sumdep"><span>Deposit (${r.depositPct}%)</span><span>${pxFmt(r.deposit)}</span></div>`;
   $('pxSummary').innerHTML = h;
 }
 function pxQuoteText() {
   const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
-  const name = $('pxEventName')?.value || 'Event';
+  const name = $('pxEventName')?.value || pxLinkedEventName() || 'Event';
   let t = `COME WITH — Quote\n${name}\n${'-'.repeat(32)}\n`;
   r.lines.forEach(l => { t += `${l.label}: ${pxFmt(l.amount)}\n`; });
   t += `\nSubtotal: ${pxFmt(r.subtotal)}\n`;
   r.surLines.forEach(s => { t += `${s.label}: +${pxFmt(s.amount)}\n`; });
   if (r.discount) t += `Discount: −${pxFmt(r.discount)}\n`;
-  t += `TOTAL: ${pxFmt(r.total)}\nDeposit (${r.depositPct}%): ${pxFmt(r.deposit)}\n`;
+  t += `TOTAL: ${pxFmt(r.total)}\n`;
+  if (r.depositPct > 0) t += `Deposit (${r.depositPct}%): ${pxFmt(r.deposit)}\n`;
   return t;
 }
 function pxCopySummary() { navigator.clipboard?.writeText(pxQuoteText()).then(() => toast('Quote copied', 'ok'), () => toast('Copy failed', 'err')); }
 function pxPrint() {
   const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
-  const name = escapeHtml($('pxEventName')?.value || 'Event');
+  const name = escapeHtml($('pxEventName')?.value || pxLinkedEventName() || 'Event');
   const rows = r.lines.map(l => `<tr><td>${escapeHtml(l.label)}</td><td style="text-align:right">${pxFmt(l.amount)}</td></tr>`).join('')
     + r.surLines.map(s => `<tr><td>${escapeHtml(s.label)}</td><td style="text-align:right">+${pxFmt(s.amount)}</td></tr>`).join('')
     + (r.discount ? `<tr><td>Discount</td><td style="text-align:right">−${pxFmt(r.discount)}</td></tr>` : '');
   const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print', 'err'); return; }
-  w.document.write(`<html><head><title>Quote — ${name}</title><style>body{font-family:Arial,sans-serif;max-width:640px;margin:36px auto;color:#16243f}h1{font-size:22px;margin:0}h2{font-weight:400;color:#555;margin:2px 0 18px;font-size:15px}table{width:100%;border-collapse:collapse}td{padding:7px 0;border-bottom:1px solid #eee}.tot td{border-top:2px solid #16243f;font-weight:700;font-size:18px;padding-top:10px}.dep td{color:#555;border:none}small{color:#888}</style></head><body><h1>Come With</h1><h2>Quote — ${name}</h2><table>${rows}<tr class="tot"><td>Total</td><td style="text-align:right">${pxFmt(r.total)}</td></tr><tr class="dep"><td>Deposit (${r.depositPct}%)</td><td style="text-align:right">${pxFmt(r.deposit)}</td></tr></table><p><small>Estimate — final pricing confirmed in a written agreement. Generated ${new Date().toLocaleDateString()}.</small></p></body></html>`);
+  w.document.write(`<html><head><title>Quote — ${name}</title><style>body{font-family:Arial,sans-serif;max-width:640px;margin:36px auto;color:#16243f}h1{font-size:22px;margin:0}h2{font-weight:400;color:#555;margin:2px 0 18px;font-size:15px}table{width:100%;border-collapse:collapse}td{padding:7px 0;border-bottom:1px solid #eee}.tot td{border-top:2px solid #16243f;font-weight:700;font-size:18px;padding-top:10px}.dep td{color:#555;border:none}small{color:#888}</style></head><body><h1>Come With</h1><h2>Quote — ${name}</h2><table>${rows}<tr class="tot"><td>Total</td><td style="text-align:right">${pxFmt(r.total)}</td></tr>${r.depositPct > 0 ? `<tr class="dep"><td>Deposit (${r.depositPct}%)</td><td style="text-align:right">${pxFmt(r.deposit)}</td></tr>` : ''}</table><p><small>Estimate — final pricing confirmed in a written agreement. Generated ${new Date().toLocaleDateString()}.</small></p></body></html>`);
   w.document.close(); w.focus(); setTimeout(() => w.print(), 250);
 }
 function pxSetPath(o, path, val) { const ks = path.split('.'); let c = o; for (let i = 0; i < ks.length - 1; i++) { const k = ks[i]; if (c[k] == null) c[k] = /^\d+$/.test(ks[i + 1]) ? [] : {}; c = c[k]; } c[ks[ks.length - 1]] = val; }
@@ -7328,12 +7341,31 @@ async function savePricingConfig() {
   if (error) { toast('Save failed: ' + error.message, 'err'); return; }
   PX.cfg = cfg; toast('Pricing defaults saved', 'ok'); renderPricing();
 }
+async function pxSaveToEvent() {
+  const sel = $('pricingBody').querySelector('#pxEvent'); const eid = sel?.value;
+  if (!eid) { toast('Pick an event first (Event → Link to event)', 'err'); return; }
+  const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
+  const payload = { inputs: pxReadQuote(), subtotal: r.subtotal, total: r.total, deposit: r.deposit, name: $('pxEventName')?.value || null, saved_at: new Date().toISOString(), saved_by: ME.id || null };
+  const { error } = await sb.from('events').update({ quote: payload }).eq('id', eid);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  const e = PX.events.find(x => x.id === eid); if (e) e.quote = payload;
+  toast('Quote saved to event', 'ok'); pxShowEventNote();
+}
+function pxShowEventNote() {
+  const note = $('pricingBody')?.querySelector('#pxEventNote'); if (!note) return;
+  const sel = $('pricingBody').querySelector('#pxEvent');
+  const e = PX.events.find(x => x.id === sel?.value);
+  note.innerHTML = (e && e.quote)
+    ? `💾 This event has a saved quote: <strong>${pxFmt(e.quote.total)}</strong>${e.quote.saved_at ? ' · ' + fmtDate(e.quote.saved_at) : ''}`
+    : '';
+}
 $('panel-pricing').addEventListener('input', e => { if (e.target.closest('#pxBuilder')) pricingRecompute(); });
 $('panel-pricing').addEventListener('change', e => {
   const t = e.target;
   if (t.classList?.contains('px-dj-actor')) { const row = t.closest('.px-dj'); const ovr = PX.cfg.dj_overrides[t.value]; if (ovr) row.querySelector('.px-dj-rate').value = ovr; pricingRecompute(); return; }
   if (t.classList?.contains('px-dj-tier')) { const row = t.closest('.px-dj'); const tier = PX.cfg.dj.tiers.find(x => x.key === t.value); if (tier) row.querySelector('.px-dj-rate').value = tier.rate; pricingRecompute(); return; }
   if (t.classList?.contains('px-tech-mode')) { const row = t.closest('.px-tech'); row.querySelector('.px-tech-hours-wrap').style.display = t.value === 'hourly' ? '' : 'none'; pricingRecompute(); return; }
+  if (t.id === 'pxEvent') { pxShowEventNote(); pricingRecompute(); return; }
   if (e.target.closest('#pxBuilder')) pricingRecompute();
 });
 $('panel-pricing').addEventListener('click', e => {
@@ -7343,6 +7375,7 @@ $('panel-pricing').addEventListener('click', e => {
   if (e.target.closest('[data-px-save]')) { savePricingConfig(); return; }
   if (e.target.closest('[data-px-copy]')) { pxCopySummary(); return; }
   if (e.target.closest('[data-px-print]')) { pxPrint(); return; }
+  if (e.target.closest('[data-px-save-event]')) { pxSaveToEvent(); return; }
   if (e.target.closest('[data-px-reset]')) { renderPricing(); return; }
 });
 
