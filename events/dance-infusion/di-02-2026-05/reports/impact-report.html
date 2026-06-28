@@ -68,6 +68,7 @@
   .audit-cta small{display:block;font-weight:400;color:#c4cbda;margin-top:4px;font-size:13px}
   footer{padding:34px 0 60px;text-align:center;color:var(--muted);font-size:13px}
   .quote{font-family:"Bebas Neue";font-size:30px;line-height:1.05;color:var(--navy);text-align:center;padding:8px 0}
+  .quote-by{text-align:center;color:var(--muted);font-size:14px;margin-top:8px;font-style:italic}
   /* PDF button */
   .pdfbar{position:sticky;top:0;z-index:50;background:rgba(250,246,236,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
   .pdfbar .wrap{display:flex;justify-content:space-between;align-items:center;padding:10px 20px}
@@ -180,6 +181,9 @@ function render(d2, content, d1){
   const growthX = (a,b) => (a&&b) ? (b/a).toFixed(1)+'×' : null;
 
   const nar = content.narratives || {};
+  const hm = content.human_moment || {};
+  // Strip any quote marks the editor typed — the template adds its own curly quotes.
+  const hmQuote = (hm.quote || '').trim().replace(/^["“”'']+|["“”'']+$/g, '').trim();
 
   // sponsor tiers (no cash)
   const tiers = (content.sponsor_display||[]).map(t=>`
@@ -216,8 +220,9 @@ function render(d2, content, d1){
     <h2>May 9 at Signal NYC</h2>
     <p class="narr">${esc(nar.the_event||'')}</p>
     ${photoSlot(content.photos && content.photos.inline, 'Inline — mid-tempo dance floor, smiling faces')}
-    ${PH('Human-moment quote','A real attendee/sponsor/MS-community quote to anchor the night. Do not fabricate — source from Keith.')}
-    <div class="quote">“[PLACEHOLDER — human-moment quote]”</div>
+    ${ hmQuote
+      ? `<div class="quote">“${esc(hmQuote)}”</div>${hm.attribution ? `<div class="quote-by">— ${esc(hm.attribution)}</div>` : ''}`
+      : PH('Human-moment quote','A real attendee/sponsor/MS-community quote to anchor the night. Add it in the dashboard → event → Impact report → "Human moment".') }
   </div></section>
 
   <section><div class="wrap">
@@ -253,7 +258,9 @@ function render(d2, content, d1){
   <section><div class="wrap">
     <div class="eyebrow">What's next</div>
     <h2>Dance Infusion #3</h2>
-    ${PH("What's next copy","Confirm the DI #3 framing/date with Keith. (A prior draft exists in impact_report_content.json → narratives.whats_next, but per the build brief this copy is not to be auto-published.)")}
+    ${ nar.whats_next
+      ? `<p class="narr">${esc(nar.whats_next)}</p>`
+      : PH("Dance Infusion #3 copy","Add the DI #3 teaser in the dashboard → event → Impact report → \"What's next (Dance Infusion #3)\".") }
   </div></section>
 
   <section style="border-bottom:0"><div class="wrap">
