@@ -71,7 +71,7 @@ Deno.serve(async (req) => {
     // Load campaign
     const { data: campaign, error: cErr } = await admin
       .from("mailing_campaigns")
-      .select("id, name, subject, preview_text, body_html, body_text, segment_filter, status")
+      .select("id, name, subject, preview_text, body_html, body_text, segment_filter, status, cc")
       .eq("id", campaign_id)
       .single();
     if (cErr || !campaign) return jsonError(404, "campaign not found");
@@ -108,40 +108,37 @@ Deno.serve(async (req) => {
     // Mark sending
     await admin.from("mailing_campaigns").update({ status: "sending" }).eq("id", campaign_id);
 
-    // Pick recipients
-    // segment_filter is a free-text string. Empty = send to all subscribed.
-    // If set, only subscribers in that segment.
-    let recipientQuery = admin
-      .from("subscribers")
-      .select("id, email, full_name, unsubscribe_token")
-      .eq("status", "subscribed");
-
-    if (campaign.segment_filter) {
-      // Filter to subscribers with this segment
-      const { data: segRows } = await admin
-        .from("subscriber_segments")
-        .select("subscriber_id")
-        .eq("segment", campaign.segment_filter);
-      const ids = (segRows || []).map((r) => r.subscriber_id);
-      if (ids.length === 0) {
-        await admin.from("mailing_campaigns").update({
-          status: "sent", recipient_count: 0, sent_at: new Date().toISOString(),
-        }).eq("id", campaign_id);
-        return new Response(JSON.stringify({ success: true, sent: 0, note: "no recipients in segment" }), { headers: JSON_HEADERS });
+    // Pick subscriber recipients. segment_filter empty = all subscribed; else that
+    // segment. An empty segment is NOT an early exit — any CC addresses still send.
+    let recipients: any[] = [];
+    {
+      let recipientQuery = admin
+        .from("subscribers")
+        .select("id, email, full_name, unsubscribe_token")
+        .eq("status", "subscribed");
+      let runIt = true;
+      if (campaign.segment_filter) {
+        const { data: segRows } = await admin
+          .from("subscriber_segments")
+          .select("subscriber_id")
+          .eq("segment", campaign.segment_filter);
+        const ids = (segRows || []).map((r) => r.subscriber_id);
+        if (ids.length === 0) runIt = false;
+        else recipientQuery = recipientQuery.in("id", ids);
       }
-      recipientQuery = recipientQuery.in("id", ids);
+      if (runIt) {
+        const { data, error: rErr } = await recipientQuery;
+        if (rErr) {
+          await admin.from("mailing_campaigns").update({ status: "failed" }).eq("id", campaign_id);
+          return jsonError(500, "couldn't load recipients: " + rErr.message);
+        }
+        recipients = data || [];
+      }
     }
 
-    const { data: recipients, error: rErr } = await recipientQuery;
-    if (rErr) {
-      await admin.from("mailing_campaigns").update({ status: "failed" }).eq("id", campaign_id);
-      return jsonError(500, "couldn't load recipients: " + rErr.message);
-    }
-
-    // Send (resend client already created above)
     let sent = 0;
     let failed = 0;
-    for (const r of recipients || []) {
+    for (const r of recipients) {
       const unsubUrl = `${UNSUB_BASE}?token=${r.unsubscribe_token}`;
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You're getting this because you subscribed to Come With updates. <a href="${unsubUrl}" style="color:#8A7F72;">Unsubscribe</a> anytime.</p>`;
       const html = (campaign.body_html || campaign.body_text || "") + footer;
@@ -172,14 +169,31 @@ Deno.serve(async (req) => {
       }
     }
 
+    // CC / "also send to": extra addresses, each gets their own copy. Not subscribers,
+    // so no unsubscribe token and no mailing_events row. De-duped vs subscriber emails.
+    const subEmails = new Set(recipients.map((r) => (r.email || "").toLowerCase()));
+    const ccList = [...new Set(
+      (campaign.cc || "")
+        .split(/[,;\s]+/)
+        .map((s: string) => s.trim().toLowerCase())
+        .filter((s: string) => s.includes("@") && !subEmails.has(s)),
+    )];
+    let ccSent = 0;
+    for (const email of ccList) {
+      const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You were CC'd on this Come With update.</p>`;
+      const html = (campaign.body_html || campaign.body_text || "") + footer;
+      const res = await resend.emails.send({ from: FROM, to: email, replyTo: REPLY_TO, subject: campaign.subject, html });
+      if (res.error) failed++; else { sent++; ccSent++; }
+    }
+
     await admin.from("mailing_campaigns").update({
-      status: failed === (recipients?.length || 0) ? "failed" : "sent",
+      status: sent > 0 ? "sent" : "failed",
       recipient_count: sent,
       sent_at: new Date().toISOString(),
     }).eq("id", campaign_id);
 
     return new Response(
-      JSON.stringify({ success: true, sent, failed, total: recipients?.length || 0 }),
+      JSON.stringify({ success: true, sent, failed, cc: ccSent, total: recipients.length + ccList.length }),
       { headers: JSON_HEADERS },
     );
   } catch (e) {

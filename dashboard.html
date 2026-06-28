@@ -1047,6 +1047,9 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <button class="add-btn" data-add="agreement">+ Add agreement</button>
         <div id="agreementsBody"></div>
       </div>
+      <div class="panel" id="panel-pricing">
+        <div id="pricingBody"></div>
+      </div>
 
       <div class="panel" id="panel-clients">
         <button class="add-btn" id="addClientBtn">+ Add client</button>
@@ -1246,6 +1249,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import { PRICING_DEFAULTS, computeQuote, mergeConfig, suggestDailyRate } from './assets/pricing-engine.js';
 
 // PUBLIC values — safe to embed in frontend per the env contract.
 const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
@@ -1326,6 +1330,10 @@ async function renderNav() {
       : sb.from('user_module_access').select('module_key, access').eq('user_id', ME.id),
   ]);
   MODULES = reg.data || [];
+  // Client-side fallback so the Pricing tab is visible/previewable before migration
+  // 068 is applied (master only; staff still gated by signed_off). Skipped once the
+  // real module_registry row exists.
+  if (!MODULES.some(m => m.key === 'pricing')) MODULES.push({ key: 'pricing', label: 'Pricing', nav_group: 'Sales', sort_order: 15, built: true, signed_off: false, master_only: false, default_roles: [] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -2532,6 +2540,8 @@ const renderers = {
       const previewBtn = `<button class="row-btn" data-preview-campaign="${id}">Preview</button>`;
       const testBtn = `<button class="row-btn" data-test-campaign="${id}">Test</button>`;
       const statsBtn = `<button class="row-btn" data-stats-campaign="${id}">Stats</button>`;
+      const editBtn = (status !== 'sent' && status !== 'sending')
+        ? `<button class="row-btn" data-edit-campaign="${id}">Edit</button>` : '';
       const sendBtn = status === 'draft'
         ? `<button class="row-btn" data-send-campaign="${id}">Send</button>`
         : (status === 'sending' ? `<span class="muted">sending…</span>` : '');
@@ -2542,7 +2552,7 @@ const renderers = {
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
         <td class="num">${r.recipient_count != null ? r.recipient_count : muted}</td>
         <td>${escapeHtml(fmtDate(r.sent_at)) || muted}</td>
-        <td style="display:flex;gap:6px;flex-wrap:wrap;">${previewBtn}${testBtn}${statsBtn}${sendBtn}</td>
+        <td style="display:flex;gap:6px;flex-wrap:wrap;">${previewBtn}${editBtn}${testBtn}${statsBtn}${sendBtn}</td>
       </tr>`;
     }).join('');
   },
@@ -2678,6 +2688,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
   if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
+  if (tab === 'pricing') { await loadPricing(); return; } // custom (event pricing tool)
   if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
@@ -3024,6 +3035,7 @@ const FORM_DEFS = {
       { name: 'subject',        type: 'text',     label: 'Subject line',      required: true },
       { name: 'preview_text',   type: 'text',     label: 'Preview text', placeholder: 'Shows next to subject in inbox' },
       { name: 'segment_filter', type: 'select-segments', label: 'Send to' },
+      { name: 'cc',             type: 'text',     label: 'CC / also send to (comma-separated emails)', placeholder: 'alex@x.com, sam@y.com' },
       { name: 'body_html',      type: 'textarea', label: 'Body (HTML)',       required: true },
     ],
   },
@@ -3232,7 +3244,40 @@ document.querySelector('main.main').addEventListener('click', (e) => {
   const pv = e.target.closest('[data-preview-campaign]'); if (pv) { previewCampaign(pv.dataset.previewCampaign); return; }
   const ts = e.target.closest('[data-test-campaign]'); if (ts) { testCampaign(ts.dataset.testCampaign); return; }
   const st = e.target.closest('[data-stats-campaign]'); if (st) { campaignStats(st.dataset.statsCampaign); return; }
+  const ed = e.target.closest('[data-edit-campaign]'); if (ed) { openEditCampaign(ed.dataset.editCampaign); return; }
 });
+
+// Edit a not-yet-sent campaign (draft or failed). Sent/sending campaigns are locked.
+async function openEditCampaign(id) {
+  const { data: c, error } = await sb.from('mailing_campaigns')
+    .select('id,name,subject,preview_text,segment_filter,body_html,cc,status').eq('id', id).single();
+  if (error || !c) { toast('Could not load campaign', 'err'); return; }
+  if (['sent', 'sending'].includes((c.status || '').toLowerCase())) { toast('Sent campaigns can\'t be edited', 'err'); return; }
+  const [segs, total] = await Promise.all([loadCachedSegments(), subscribedTotal()]);
+  const segOpts = `<option value="">All subscribers — ${total}</option>` +
+    segs.map(s => `<option value="${escapeHtml(s.segment)}"${s.segment === c.segment_filter ? ' selected' : ''}>${escapeHtml(s.segment)} — ${s.count} subscribed</option>`).join('');
+  openKpi('Edit campaign — ' + (c.name || ''), 'Updates the draft in public.mailing_campaigns', `
+    <div class="modal-form-row"><label class="modal-label">Internal name *</label><input class="modal-input" name="name" value="${escapeHtml(c.name || '')}" required></div>
+    <div class="modal-form-row"><label class="modal-label">Subject line *</label><input class="modal-input" name="subject" value="${escapeHtml(c.subject || '')}" required></div>
+    <div class="modal-form-row"><label class="modal-label">Preview text</label><input class="modal-input" name="preview_text" value="${escapeHtml(c.preview_text || '')}" placeholder="Shows next to subject in inbox"></div>
+    <div class="modal-form-row"><label class="modal-label">Send to</label><select class="modal-select" name="segment_filter">${segOpts}</select></div>
+    <div class="modal-form-row"><label class="modal-label">CC / also send to (comma-separated emails)</label><input class="modal-input" name="cc" value="${escapeHtml(c.cc || '')}" placeholder="alex@x.com, sam@y.com"></div>
+    <div class="modal-form-row"><label class="modal-label">Body (HTML) *</label><textarea class="modal-textarea" name="body_html" rows="8" required>${escapeHtml(c.body_html || '')}</textarea></div>`,
+    () => submitEditCampaign(id), 'Save changes');
+}
+async function submitEditCampaign(id) {
+  const patch = {
+    name: kpiVal('name'), subject: kpiVal('subject'),
+    preview_text: kpiVal('preview_text') || null,
+    segment_filter: kpiVal('segment_filter') || null,
+    cc: kpiVal('cc') || null,
+    body_html: kpiVal('body_html'),
+  };
+  if (!patch.name || !patch.subject || !patch.body_html) throw new Error('Name, subject and body are required');
+  const { error } = await sb.from('mailing_campaigns').update(patch).eq('id', id);
+  if (error) throw error;
+  closeKpi(); toast('Campaign updated', 'ok'); loadTab('campaigns');
+}
 
 // Send-campaign delegation (Phase 9 sprint 3)
 document.querySelector('main.main').addEventListener('click', async (e) => {
@@ -7005,6 +7050,289 @@ async function saveSiteContent() {
   } catch (e) { toast(e.message || String(e), 'err'); if (btn) { btn.disabled = false; btn.textContent = 'Save all changes'; } }
 }
 $('panel-site-editor').addEventListener('click', e => { if (e.target.closest('[data-site-save]')) saveSiteContent(); });
+
+// ===================== PRICING TOOL (Sales) =====================
+// Quote builder for DJ / rental / full-production events. Math lives in the shared
+// pricing-engine module (computeQuote). Defaults come from the engine, deep-merged
+// with the saved pricing_config row; every prefilled rate is editable per-quote,
+// and saved defaults + per-DJ overrides persist to pricing_config.
+const PX = { cfg: null, equip: [], djs: [], canSave: true, _last: null };
+const PX_CSS = `<style>
+  .px-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+  .px-bar h2{margin:0;font-family:'Bebas Neue',sans-serif;letter-spacing:.04em;font-size:1.5rem}
+  .px-actions{display:flex;gap:8px;flex-wrap:wrap}
+  .px-wrap{display:grid;grid-template-columns:1fr 330px;gap:18px;align-items:start}
+  @media(max-width:980px){.px-wrap{grid-template-columns:1fr}}
+  .px-sec{border:1px solid var(--border);border-radius:10px;margin-bottom:12px;background:var(--surface);overflow:hidden}
+  .px-sec>summary{cursor:pointer;padding:11px 14px;font-family:'Bebas Neue',sans-serif;letter-spacing:.05em;font-size:1.05rem;list-style:none;display:flex;align-items:center;gap:8px}
+  .px-sec>summary::-webkit-details-marker{display:none}
+  .px-sec>summary::before{content:'▸';color:var(--mid);font-size:.8rem;transition:transform .15s}
+  .px-sec[open]>summary::before{transform:rotate(90deg)}
+  .px-body{padding:6px 14px 14px}
+  .px-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+  .px-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:7px 0;border-bottom:1px dashed var(--border)}
+  .px-row:last-child{border-bottom:none}
+  .px-i{padding:6px 8px;border:1px solid var(--border-strong);border-radius:7px;background:var(--surface-2);color:inherit;font-size:.85rem}
+  .px-num{width:84px;text-align:right}
+  .px-money{display:inline-flex;align-items:center;gap:2px;color:var(--mid)}
+  .px-addons{display:flex;gap:12px;flex-wrap:wrap}
+  .px-chk{display:inline-flex;align-items:center;gap:6px;font-size:.84rem;cursor:pointer}
+  .px-chk input{width:auto;margin:0}
+  .px-mini{font-size:.76rem;color:var(--mid);display:inline-flex;align-items:center;gap:5px}
+  .px-del{background:none;border:1px solid var(--border-strong);border-radius:7px;color:var(--mid);cursor:pointer;padding:4px 9px;margin-left:auto}
+  .px-add{background:var(--surface-2);border:1px dashed var(--border-strong);border-radius:8px;color:inherit;cursor:pointer;padding:7px 13px;font-size:.82rem;margin-top:8px}
+  .px-cat{border:1px solid var(--border);border-radius:8px;margin:7px 0;background:var(--surface-2)}
+  .px-cat>summary{cursor:pointer;padding:8px 12px;list-style:none;font-weight:600;font-size:.88rem;display:flex;gap:8px;align-items:center}
+  .px-cat>summary::-webkit-details-marker{display:none}
+  .px-cnt{margin-left:auto;font-family:'Inconsolata',monospace;font-size:.66rem;color:var(--mid)}
+  .px-cat-body{padding:4px 12px 10px}
+  .px-gear{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:5px 0}
+  .px-gear .px-chk{flex:1 1 200px}
+  .px-sug{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--amber);border:1px solid var(--amber);border-radius:5px;padding:1px 4px}
+  .px-sum{position:sticky;top:8px;border:1px solid var(--border-strong);border-radius:12px;background:var(--surface-2);padding:15px}
+  .px-sum h3{margin:0 0 10px;font-family:'Bebas Neue',sans-serif;letter-spacing:.05em;font-size:1.15rem}
+  .px-sumgrp{font-family:'Inconsolata',monospace;font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;color:var(--mid);margin:9px 0 3px}
+  .px-sumln{display:flex;justify-content:space-between;gap:10px;font-size:.84rem;padding:2px 0}
+  .px-sur{color:var(--amber)}.px-disc{color:var(--green)}
+  .px-empty{color:var(--mid);font-style:italic;font-size:.84rem;padding:8px 0}
+  .px-sumsub{display:flex;justify-content:space-between;border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:.86rem}
+  .px-sumtot{display:flex;justify-content:space-between;border-top:2px solid var(--border-strong);margin-top:8px;padding-top:8px;font-family:'Bebas Neue',sans-serif;font-size:1.4rem;letter-spacing:.03em}
+  .px-sumdep{display:flex;justify-content:space-between;font-size:.82rem;color:var(--mid);margin-top:4px}
+  .px-hint{font-size:.72rem;color:var(--mid);margin:2px 0 8px}
+  .px-warn{background:rgba(230,160,30,.12);border:1px solid var(--amber);color:var(--amber);border-radius:8px;padding:8px 12px;font-size:.8rem;margin-bottom:12px}
+</style>`;
+
+async function loadPricing() {
+  const body = $('pricingBody');
+  body.innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading pricing…</div>';
+  let saved = {}; PX.canSave = true;
+  const cfgRes = await sb.from('pricing_config').select('config').eq('id', 1).maybeSingle();
+  if (cfgRes.error) PX.canSave = false;                       // table missing (pre-migration) → defaults only
+  else if (cfgRes.data && cfgRes.data.config) saved = cfgRes.data.config;
+  PX.cfg = mergeConfig(saved);
+  const [eq, roles] = await Promise.all([
+    sb.from('equipment_inventory').select('id,name,category,purchase_price,daily_rate,status').is('deleted_at', null).order('category').order('name'),
+    sb.from('actor_roles').select('actor:actors(id,display_name)').in('role', ['dj', 'artist']).eq('active', true),
+  ]);
+  PX.equip = (eq.data || []).filter(e => (e.status || '') !== 'retired');
+  { const seen = new Set(); PX.djs = (roles.data || []).map(r => r.actor).filter(a => a && !seen.has(a.id) && seen.add(a.id)).sort((a, b) => (a.display_name || '').localeCompare(b.display_name || '')); }
+  renderPricing();
+}
+function pxDjOptions() { return '<option value="">— pick a DJ / custom —</option>' + PX.djs.map(d => `<option value="${escapeHtml(d.id)}">${escapeHtml(d.display_name)}</option>`).join(''); }
+function pxTierOptions() { return PX.cfg.dj.tiers.map((t, i) => `<option value="${t.key}"${i === 0 ? ' selected' : ''}>${escapeHtml(t.label)} ($${t.rate})</option>`).join(''); }
+function pxDjRow() {
+  const t0 = PX.cfg.dj.tiers[0];
+  return `<div class="px-row px-dj">
+    <select class="px-i px-dj-actor">${pxDjOptions()}</select>
+    <select class="px-i px-dj-tier">${pxTierOptions()}</select>
+    <span class="px-money">$<input class="px-i px-num px-dj-rate" type="number" min="0" step="25" value="${t0.rate}"></span>
+    <span class="px-addons">${PX.cfg.dj.addons.map(a => `<label class="px-chk"><input type="checkbox" class="px-dj-addon" data-amt="${a.amount}" data-label="${escapeHtml(a.label)}"> ${escapeHtml(a.label)} (+$${a.amount})</label>`).join('')}</span>
+    <button class="px-del" data-px-del title="Remove">✕</button>
+  </div>`;
+}
+function pxTechRow() {
+  const L = PX.cfg.labor;
+  return `<div class="px-row px-tech">
+    <select class="px-i px-tech-mode">
+      <option value="day">Full day (${L.day_hours}h) — $${L.day_rate}</option>
+      <option value="half">Half day — $${L.half_day}</option>
+      <option value="hourly">Hourly — $${L.tech_hourly}/h</option>
+    </select>
+    <label class="px-mini">Count <input class="px-i px-num px-tech-count" type="number" min="1" step="1" value="1" style="width:60px"></label>
+    <label class="px-mini px-tech-hours-wrap" style="display:none">Hours <input class="px-i px-num px-tech-hours" type="number" min="0" step="1" value="8" style="width:60px"></label>
+    <button class="px-del" data-px-del title="Remove">✕</button>
+  </div>`;
+}
+function pxGearGroups() {
+  if (!PX.equip.length) return '<div class="px-hint">No equipment in inventory.</div>';
+  const byCat = {}; PX.equip.forEach(e => { (byCat[e.category || 'Other'] = byCat[e.category || 'Other'] || []).push(e); });
+  return Object.keys(byCat).map(cat => `<details class="px-cat"><summary>${escapeHtml(cat)}<span class="px-cnt">${byCat[cat].length}</span></summary><div class="px-cat-body">${byCat[cat].map(e => {
+    const has = e.daily_rate != null; const rate = has ? Number(e.daily_rate) : suggestDailyRate(e.purchase_price, PX.cfg);
+    return `<div class="px-gear">
+      <label class="px-chk"><input type="checkbox" class="px-gear-on"> ${escapeHtml(e.name)}</label>
+      <label class="px-mini">Qty <input class="px-i px-num px-gear-qty" type="number" min="1" step="1" value="1" style="width:54px"></label>
+      <span class="px-money">$<input class="px-i px-num px-gear-rate" type="number" min="0" step="5" value="${rate}">/day</span>${(!has && rate > 0) ? '<span class="px-sug" title="Suggested at 10% of purchase price — set a real daily rate in Equipment">est</span>' : ''}
+    </div>`; }).join('')}</div></details>`).join('');
+}
+function renderPricing() {
+  const M = PX.cfg.modifiers;
+  const lightOpts = PX.cfg.lighting.tiers.map((t, i) => `<option value="${t.amount}"${i === 0 ? ' selected' : ''} data-label="${escapeHtml(t.label)}">${escapeHtml(t.label)}${t.amount ? ` — $${t.amount}` : ''}</option>`).join('');
+  $('pricingBody').innerHTML = PX_CSS + `
+  <div class="px-bar"><h2>Pricing &amp; Quotes</h2>
+    <div class="px-actions">
+      <button class="hub-btn ghost" data-px-reset>New quote</button>
+      <button class="hub-btn ghost" data-px-copy>Copy summary</button>
+      <button class="hub-btn ghost" data-px-print>Print / PDF</button>
+    </div></div>
+  ${PX.canSave ? '' : '<div class="px-warn">Preview mode — pricing defaults can\'t be saved until migration 068 is applied. The calculator works fully on built-in defaults.</div>'}
+  <div class="px-wrap">
+    <div id="pxBuilder">
+      <details class="px-sec" open><summary>Event</summary><div class="px-body">
+        <div class="px-grid">
+          <div><label class="modal-label">Event / client</label><input class="px-i" id="pxEventName" style="width:100%" placeholder="e.g. Smith wedding"></div>
+          <div><label class="modal-label">Distance (miles, one-way)</label><input class="px-i px-num" id="pxMiles" type="number" min="0" step="1" value="0" style="width:100%"></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap">
+          <label class="px-chk"><input type="checkbox" id="pxWeekend"> Weekend (+${M.weekend_pct}%)</label>
+          <label class="px-chk"><input type="checkbox" id="pxPeak"> Peak season (+${M.peak_season_pct}%)</label>
+          <label class="px-chk"><input type="checkbox" id="pxRush"> Rush (+${M.rush_pct}%)</label>
+        </div>
+      </div></details>
+
+      <details class="px-sec" open><summary>DJ services</summary><div class="px-body">
+        <div class="px-hint">Pick a DJ (uses their custom rate if set) or a tier — every rate is editable per quote.</div>
+        <div id="pxDjList"></div>
+        <button class="px-add" data-px-add-dj>+ Add DJ</button>
+      </div></details>
+
+      <details class="px-sec"><summary>Equipment rental</summary><div class="px-body">
+        <label class="px-mini">Rental days <input class="px-i px-num" id="pxDays" type="number" min="1" step="1" value="1" style="width:64px"></label>
+        <span class="px-hint">Extra days at ${Math.round(PX.cfg.rental.multi_day_factor * 100)}% each. Rates are your inventory daily_rate (or a 10%-of-cost estimate).</span>
+        ${pxGearGroups()}
+        <label class="px-chk" style="margin-top:10px"><input type="checkbox" id="pxWaiver"> Add damage waiver (${PX.cfg.rental.damage_waiver_pct}% of rental)</label>
+      </div></details>
+
+      <details class="px-sec"><summary>Production &amp; labor</summary><div class="px-body">
+        <div class="px-hint">Technicians / engineers, lighting, delivery &amp; setup.</div>
+        <div id="pxTechList"></div>
+        <button class="px-add" data-px-add-tech>+ Add technician</button>
+        <div class="px-grid" style="margin-top:12px">
+          <div><label class="modal-label">Lighting</label><select class="px-i" id="pxLighting" style="width:100%">${lightOpts}</select></div>
+        </div>
+        <div style="margin-top:10px;display:flex;gap:16px;flex-wrap:wrap;align-items:center">
+          <label class="px-chk"><input type="checkbox" id="pxDelivery"> Delivery (base $${PX.cfg.delivery.base} + $${PX.cfg.delivery.per_mile}/mi past ${PX.cfg.delivery.free_radius_miles})</label>
+          <label class="px-chk"><input type="checkbox" id="pxSetup"> Setup &amp; strike $<input class="px-i px-num" id="pxSetupAmt" type="number" min="0" step="25" value="${PX.cfg.delivery.setup_strike}" style="width:74px"></label>
+        </div>
+      </div></details>
+
+      <details class="px-sec"><summary>Adjustments</summary><div class="px-body">
+        <div class="px-grid">
+          <div><label class="modal-label">Discount %</label><input class="px-i px-num" id="pxDiscPct" type="number" min="0" step="1" value="0" style="width:100%"></div>
+          <div><label class="modal-label">Discount $</label><input class="px-i px-num" id="pxDiscAmt" type="number" min="0" step="25" value="0" style="width:100%"></div>
+          <div><label class="modal-label">Deposit %</label><input class="px-i px-num" id="pxDeposit" type="number" min="0" max="100" step="5" value="${M.deposit_pct}" style="width:100%"></div>
+        </div>
+      </div></details>
+
+      <details class="px-sec"><summary>⚙ Edit defaults &amp; per-DJ rates</summary><div class="px-body" id="pxSettings">${pxSettingsHtml()}
+        <button class="hub-btn" data-px-save style="margin-top:12px">Save defaults</button>
+        ${PX.canSave ? '' : '<div class="px-hint" style="color:var(--amber)">Saving needs migration 068.</div>'}
+      </div></details>
+    </div>
+
+    <div class="px-sum"><h3>Quote</h3><div id="pxSummary"></div></div>
+  </div>`;
+  $('pxDjList').insertAdjacentHTML('beforeend', pxDjRow());
+  pricingRecompute();
+}
+function pxSettingsHtml() {
+  const c = PX.cfg, F = (label, path, val, step = '5') => `<div><label class="modal-label">${escapeHtml(label)}</label><input class="px-i" type="number" step="${step}" data-cfg="${path}" value="${val}" style="width:100%"></div>`;
+  const djOvr = PX.djs.map(d => `<div><label class="modal-label">${escapeHtml(d.display_name)}</label><input class="px-i px-ovr" type="number" step="25" data-djid="${escapeHtml(d.id)}" value="${c.dj_overrides[d.id] || ''}" placeholder="default" style="width:100%"></div>`).join('') || '<div class="px-hint">No DJs in the roster yet.</div>';
+  return `
+    <div class="px-hint">These are your saved defaults — edit and Save defaults to persist. Per-quote edits above never change these.</div>
+    <div class="px-sumgrp">DJ tiers (per event)</div>
+    <div class="px-grid">${c.dj.tiers.map((t, i) => F(t.label, `dj.tiers.${i}.rate`, t.rate, '25')).join('')}${F('Hourly rate', 'dj.hourly_rate', c.dj.hourly_rate, '5')}${F('Extra hour', 'dj.extra_hour_rate', c.dj.extra_hour_rate, '5')}</div>
+    <div class="px-sumgrp">DJ add-ons</div>
+    <div class="px-grid">${c.dj.addons.map((a, i) => F(a.label, `dj.addons.${i}.amount`, a.amount, '25')).join('')}</div>
+    <div class="px-sumgrp">Per-DJ custom rates</div>
+    <div class="px-grid">${djOvr}</div>
+    <div class="px-sumgrp">Rental</div>
+    <div class="px-grid">${F('Extra-day factor (0–1)', 'rental.multi_day_factor', c.rental.multi_day_factor, '0.05')}${F('Damage waiver %', 'rental.damage_waiver_pct', c.rental.damage_waiver_pct, '1')}${F('Suggest rule (×cost)', 'rental.suggest_rule', c.rental.suggest_rule, '0.01')}</div>
+    <div class="px-sumgrp">Labor</div>
+    <div class="px-grid">${F('Tech hourly', 'labor.tech_hourly', c.labor.tech_hourly, '5')}${F('Day rate', 'labor.day_rate', c.labor.day_rate, '25')}${F('Half day', 'labor.half_day', c.labor.half_day, '25')}${F('Day hours', 'labor.day_hours', c.labor.day_hours, '1')}${F('OT multiplier', 'labor.ot_multiplier', c.labor.ot_multiplier, '0.25')}</div>
+    <div class="px-sumgrp">Delivery</div>
+    <div class="px-grid">${F('Base', 'delivery.base', c.delivery.base, '5')}${F('Per mile', 'delivery.per_mile', c.delivery.per_mile, '0.25')}${F('Free radius (mi)', 'delivery.free_radius_miles', c.delivery.free_radius_miles, '1')}${F('Setup & strike', 'delivery.setup_strike', c.delivery.setup_strike, '25')}</div>
+    <div class="px-sumgrp">Lighting tiers</div>
+    <div class="px-grid">${c.lighting.tiers.map((t, i) => F(t.label, `lighting.tiers.${i}.amount`, t.amount, '25')).join('')}</div>
+    <div class="px-sumgrp">Modifiers</div>
+    <div class="px-grid">${F('Weekend %', 'modifiers.weekend_pct', c.modifiers.weekend_pct, '1')}${F('Peak %', 'modifiers.peak_season_pct', c.modifiers.peak_season_pct, '1')}${F('Rush %', 'modifiers.rush_pct', c.modifiers.rush_pct, '1')}${F('Deposit %', 'modifiers.deposit_pct', c.modifiers.deposit_pct, '5')}</div>`;
+}
+function pxReadQuote() {
+  const root = $('pricingBody');
+  const g = sel => root.querySelector(sel), all = sel => [...root.querySelectorAll(sel)];
+  const nv = el => el ? (Number(el.value) || 0) : 0;
+  const days = nv(g('#pxDays')) || 1;
+  const lightSel = g('#pxLighting');
+  return {
+    weekend: g('#pxWeekend')?.checked, peak: g('#pxPeak')?.checked, rush: g('#pxRush')?.checked,
+    djs: all('.px-dj').map(r => ({
+      label: (r.querySelector('.px-dj-actor').selectedOptions[0]?.value ? r.querySelector('.px-dj-actor').selectedOptions[0].textContent : (r.querySelector('.px-dj-tier').selectedOptions[0]?.textContent || 'DJ')).replace(/\s*\(\$[\d,]+\)\s*$/, '').trim() || 'DJ',
+      fee: nv(r.querySelector('.px-dj-rate')),
+      addons: [...r.querySelectorAll('.px-dj-addon:checked')].map(c => ({ label: c.dataset.label, amount: Number(c.dataset.amt) })),
+    })),
+    equipment: all('.px-gear').filter(r => r.querySelector('.px-gear-on').checked).map(r => ({
+      label: r.querySelector('.px-chk').textContent.trim(), daily: nv(r.querySelector('.px-gear-rate')), qty: nv(r.querySelector('.px-gear-qty')) || 1, days,
+    })),
+    damageWaiver: g('#pxWaiver')?.checked,
+    techs: all('.px-tech').map(r => ({ label: 'AV technician', mode: r.querySelector('.px-tech-mode').value, count: nv(r.querySelector('.px-tech-count')) || 1, hours: nv(r.querySelector('.px-tech-hours')) })),
+    lighting: lightSel ? Number(lightSel.value) : 0, lightingLabel: lightSel?.selectedOptions[0]?.dataset.label || 'Lighting',
+    delivery: { include: g('#pxDelivery')?.checked, miles: nv(g('#pxMiles')) },
+    setupStrike: g('#pxSetup')?.checked ? nv(g('#pxSetupAmt')) : 0,
+    discountPct: nv(g('#pxDiscPct')), discountAmt: nv(g('#pxDiscAmt')), depositPct: nv(g('#pxDeposit')) || PX.cfg.modifiers.deposit_pct,
+  };
+}
+const pxFmt = n => '$' + Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function pricingRecompute() {
+  const r = computeQuote(PX.cfg, pxReadQuote()); PX._last = r;
+  const grp = {}; r.lines.forEach(l => { (grp[l.group] = grp[l.group] || []).push(l); });
+  let h = '';
+  Object.keys(grp).forEach(gn => { h += `<div class="px-sumgrp">${escapeHtml(gn)}</div>`; grp[gn].forEach(l => { h += `<div class="px-sumln"><span>${escapeHtml(l.label)}</span><span>${pxFmt(l.amount)}</span></div>`; }); });
+  if (!r.lines.length) h = '<div class="px-empty">Add DJs, gear, or labor to build a quote.</div>';
+  h += `<div class="px-sumsub"><span>Subtotal</span><span>${pxFmt(r.subtotal)}</span></div>`;
+  r.surLines.forEach(s => { h += `<div class="px-sumln px-sur"><span>${escapeHtml(s.label)}</span><span>+${pxFmt(s.amount)}</span></div>`; });
+  if (r.discount) h += `<div class="px-sumln px-disc"><span>Discount</span><span>−${pxFmt(r.discount)}</span></div>`;
+  h += `<div class="px-sumtot"><span>Total</span><span>${pxFmt(r.total)}</span></div>`;
+  h += `<div class="px-sumdep"><span>Deposit (${r.depositPct}%)</span><span>${pxFmt(r.deposit)}</span></div>`;
+  $('pxSummary').innerHTML = h;
+}
+function pxQuoteText() {
+  const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
+  const name = $('pxEventName')?.value || 'Event';
+  let t = `COME WITH — Quote\n${name}\n${'-'.repeat(32)}\n`;
+  r.lines.forEach(l => { t += `${l.label}: ${pxFmt(l.amount)}\n`; });
+  t += `\nSubtotal: ${pxFmt(r.subtotal)}\n`;
+  r.surLines.forEach(s => { t += `${s.label}: +${pxFmt(s.amount)}\n`; });
+  if (r.discount) t += `Discount: −${pxFmt(r.discount)}\n`;
+  t += `TOTAL: ${pxFmt(r.total)}\nDeposit (${r.depositPct}%): ${pxFmt(r.deposit)}\n`;
+  return t;
+}
+function pxCopySummary() { navigator.clipboard?.writeText(pxQuoteText()).then(() => toast('Quote copied', 'ok'), () => toast('Copy failed', 'err')); }
+function pxPrint() {
+  const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
+  const name = escapeHtml($('pxEventName')?.value || 'Event');
+  const rows = r.lines.map(l => `<tr><td>${escapeHtml(l.label)}</td><td style="text-align:right">${pxFmt(l.amount)}</td></tr>`).join('')
+    + r.surLines.map(s => `<tr><td>${escapeHtml(s.label)}</td><td style="text-align:right">+${pxFmt(s.amount)}</td></tr>`).join('')
+    + (r.discount ? `<tr><td>Discount</td><td style="text-align:right">−${pxFmt(r.discount)}</td></tr>` : '');
+  const w = window.open('', '_blank'); if (!w) { toast('Allow pop-ups to print', 'err'); return; }
+  w.document.write(`<html><head><title>Quote — ${name}</title><style>body{font-family:Arial,sans-serif;max-width:640px;margin:36px auto;color:#16243f}h1{font-size:22px;margin:0}h2{font-weight:400;color:#555;margin:2px 0 18px;font-size:15px}table{width:100%;border-collapse:collapse}td{padding:7px 0;border-bottom:1px solid #eee}.tot td{border-top:2px solid #16243f;font-weight:700;font-size:18px;padding-top:10px}.dep td{color:#555;border:none}small{color:#888}</style></head><body><h1>Come With</h1><h2>Quote — ${name}</h2><table>${rows}<tr class="tot"><td>Total</td><td style="text-align:right">${pxFmt(r.total)}</td></tr><tr class="dep"><td>Deposit (${r.depositPct}%)</td><td style="text-align:right">${pxFmt(r.deposit)}</td></tr></table><p><small>Estimate — final pricing confirmed in a written agreement. Generated ${new Date().toLocaleDateString()}.</small></p></body></html>`);
+  w.document.close(); w.focus(); setTimeout(() => w.print(), 250);
+}
+function pxSetPath(o, path, val) { const ks = path.split('.'); let c = o; for (let i = 0; i < ks.length - 1; i++) { const k = ks[i]; if (c[k] == null) c[k] = /^\d+$/.test(ks[i + 1]) ? [] : {}; c = c[k]; } c[ks[ks.length - 1]] = val; }
+async function savePricingConfig() {
+  if (!PX.canSave) { toast('Apply migration 068 first to save settings', 'err'); return; }
+  const cfg = JSON.parse(JSON.stringify(PX.cfg));
+  $('pxSettings').querySelectorAll('[data-cfg]').forEach(el => pxSetPath(cfg, el.dataset.cfg, Number(el.value)));
+  const ov = {}; $('pxSettings').querySelectorAll('.px-ovr').forEach(el => { const v = Number(el.value); if (v > 0) ov[el.dataset.djid] = v; }); cfg.dj_overrides = ov;
+  const { error } = await sb.from('pricing_config').upsert({ id: 1, config: cfg, updated_at: new Date().toISOString(), updated_by: ME.id || null });
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  PX.cfg = cfg; toast('Pricing defaults saved', 'ok'); renderPricing();
+}
+$('panel-pricing').addEventListener('input', e => { if (e.target.closest('#pxBuilder')) pricingRecompute(); });
+$('panel-pricing').addEventListener('change', e => {
+  const t = e.target;
+  if (t.classList?.contains('px-dj-actor')) { const row = t.closest('.px-dj'); const ovr = PX.cfg.dj_overrides[t.value]; if (ovr) row.querySelector('.px-dj-rate').value = ovr; pricingRecompute(); return; }
+  if (t.classList?.contains('px-dj-tier')) { const row = t.closest('.px-dj'); const tier = PX.cfg.dj.tiers.find(x => x.key === t.value); if (tier) row.querySelector('.px-dj-rate').value = tier.rate; pricingRecompute(); return; }
+  if (t.classList?.contains('px-tech-mode')) { const row = t.closest('.px-tech'); row.querySelector('.px-tech-hours-wrap').style.display = t.value === 'hourly' ? '' : 'none'; pricingRecompute(); return; }
+  if (e.target.closest('#pxBuilder')) pricingRecompute();
+});
+$('panel-pricing').addEventListener('click', e => {
+  if (e.target.closest('[data-px-add-dj]')) { $('pxDjList').insertAdjacentHTML('beforeend', pxDjRow()); pricingRecompute(); return; }
+  if (e.target.closest('[data-px-add-tech]')) { $('pxTechList').insertAdjacentHTML('beforeend', pxTechRow()); pricingRecompute(); return; }
+  const del = e.target.closest('[data-px-del]'); if (del) { del.closest('.px-row')?.remove(); pricingRecompute(); return; }
+  if (e.target.closest('[data-px-save]')) { savePricingConfig(); return; }
+  if (e.target.closest('[data-px-copy]')) { pxCopySummary(); return; }
+  if (e.target.closest('[data-px-print]')) { pxPrint(); return; }
+  if (e.target.closest('[data-px-reset]')) { renderPricing(); return; }
+});
 
 const vendorState = { rows: [], q: '', cat: '', selected: new Set(), sortKey: 'spent', sortDir: -1, activeId: null, detailExpenses: [], detailContacts: [] };
 async function loadVendors() {
