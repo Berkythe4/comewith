@@ -214,6 +214,7 @@
       <div class="tier"><div class="amt" data-cw="di.tier3_amt">$150</div><p data-cw="di.tier3_desc">Sponsor a table, bring a crew</p></div>
     </div>
     <div id="diActions" class="diactions" style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap"></div>
+    <div id="diReport" style="margin-top:12px"></div>
   </div>
 </div></div></section>
 
@@ -373,7 +374,16 @@ $('#subBtn').addEventListener('click',async function(){const e=$('#subEmail').va
   try{const res=await fetch(CWURL+'/functions/v1/subscribe',{method:'POST',headers:Object.assign({},CWH,{'Content-Type':'application/json'}),body:JSON.stringify({email:e,segment:'come_with'})});r=await res.json().catch(function(){return{};});r._ok=res.ok;}catch(_){r._ok=false;}
   btn.disabled=false;btn.textContent='Join list';
   if(r._ok){$('#subEmail').value='';$('#subMsg').textContent='Almost there — check your inbox to confirm. 🎉';toast("You're on the list — confirm via email");}else{$('#subMsg').textContent='Hmm: '+(r.error||'try again');}});
-loadContent();loadEvents();loadCollective();
+// Dance Infusion impact report — show the button only when a report is published
+// (v_public_impact_report returns a row only while the dashboard toggle is on).
+async function loadImpactReport(){
+  const el=$('#diReport'); if(!el)return;
+  const rows=await api('v_public_impact_report?select=name,event_date&order=event_date.desc&limit=1');
+  el.innerHTML=(rows&&rows.length)
+    ? '<a class="btn gold" href="events/dance-infusion/di-02-2026-05/reports/impact-report.html" style="width:100%;justify-content:center">Read the #2 Impact Report →</a>'
+    : '';
+}
+loadContent();loadEvents();loadCollective();loadImpactReport();
 </script>
 </body>
 </html>

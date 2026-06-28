@@ -5,6 +5,8 @@
     "brunch_ticket_price": 13,
     "event_name": "Dance Infusion #2",
     "event_date": "May 9, 2026",
+    "attendees_confirmed": 117,
+    "attendees_confirmed_note": "Confirmed public attendance = 117 (people on the floor; matches the homepage recap). The reconciled door list holds 97 guest records summing to 116 paid+comp tickets; the 117th is a confirmed walk-in/comp not captured as a door-list row. Public pages state 117. Do NOT fabricate a 117th guest row to force these to reconcile.",
     "bar_tab_locked": 4385,
     "drink_tickets_locked": 330,
     "standard_tickets_locked": 280,

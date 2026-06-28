@@ -4265,6 +4265,106 @@ async function submitEditEvent(id) {
   if (document.querySelector('#panel-eventhub.active') && hub.eventId === id) openEventHub(id);
 }
 
+// ---- Impact report editor (Dance Infusion public one-pager) ----
+// Edits events.impact_report (jsonb) + events.impact_report_public (the publish
+// toggle). Editable here: hero/story text, the human-moment quote, and two photos.
+// Seeded financial/audit/DI#1/sponsor/team data inside the jsonb is PRESERVED on
+// save (we reload + merge), so editing copy never wipes the numbers. Photos use the
+// same HEIC→JPEG pipeline + public 'event-photos' bucket as the hero-photo field.
+function irPhotoField(slot, label, cur) {
+  const url = cur ? (`${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(cur)}`) : null;
+  return `<div class="modal-form-row"><label class="modal-label">${label}</label>
+    <div id="irPrev_${slot}" style="margin-bottom:8px;">${url
+      ? `<img src="${url}" alt="current ${slot}" style="max-width:260px;width:100%;border:1px solid var(--border-strong);border-radius:8px;display:block;"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-weight:400;"><input type="checkbox" id="irRemove_${slot}" style="width:auto;margin:0;"> Remove this photo</label>`
+      : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
+    <input class="modal-input" type="file" id="irFile_${slot}" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
+    <div class="kpi-hint">JPG, PNG, WebP or HEIC (iPhone). Portrait / off-size photos are auto-fitted.</div></div>`;
+}
+async function openImpactReportEditor(id) {
+  const { data: ev, error } = await sb.from('events')
+    .select('id, name, impact_report, impact_report_public, hero_image_path').eq('id', id).single();
+  if (error) { toast('Load failed: ' + error.message, 'err'); return; }
+  const j = ev.impact_report || {};
+  const c = j.content || {};
+  const evc = c.event || {}, nar = c.narratives || {}, hm = c.human_moment || {}, ph = c.photos || {};
+  openKpi('Impact report — ' + (ev.name || ''),
+    'Edit the public Dance Infusion impact report. The seeded numbers (audit, DI #1) are kept — this edits the words, photos, and visibility.', `
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:600;"><input type="checkbox" name="ir_public" style="width:auto;margin:0;"${ev.impact_report_public ? ' checked' : ''}> Show impact report on the public site</label>
+      <div class="kpi-hint">When on: the report + audit pages go public AND a "Read the impact report" button appears in the homepage Dance Infusion section. Off: hidden from the public.</div></div>
+    <div class="kpi-section-h">Hero</div>
+    <div class="modal-form-row"><label class="modal-label">Tagline</label><input class="modal-input" name="ir_tagline" value="${escapeHtml(evc.tagline || '')}" placeholder="Dancing for a Cure, One Beat at a Time"></div>
+    <div class="modal-form-row"><label class="modal-label">Hero subtitle</label><input class="modal-input" name="ir_subtitle" value="${escapeHtml(evc.hero_subtitle || '')}"></div>
+    <div class="kpi-section-h">Story</div>
+    <div class="modal-form-row"><label class="modal-label">Why we dance</label><textarea class="modal-textarea" name="ir_why" rows="4">${escapeHtml(nar.why_we_dance || '')}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">The night</label><textarea class="modal-textarea" name="ir_night" rows="4">${escapeHtml(nar.the_event || '')}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">What's next</label><textarea class="modal-textarea" name="ir_next" rows="3">${escapeHtml(nar.whats_next || '')}</textarea></div>
+    <div class="kpi-section-h">Human moment (pull quote)</div>
+    <div class="modal-form-row"><label class="modal-label">Quote</label><textarea class="modal-textarea" name="ir_quote" rows="2" placeholder="Leave blank to hide the quote until you have consent.">${escapeHtml(hm.quote || '')}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Attribution</label><input class="modal-input" name="ir_quote_by" value="${escapeHtml(hm.attribution || '')}" placeholder="— Name, role"></div>
+    <div class="kpi-section-h">Photos</div>
+    ${irPhotoField('hero', 'Hero photo (top crowd shot)', ph.hero)}
+    ${irPhotoField('inline', 'Inline photo (the night)', ph.inline)}`,
+    () => submitImpactReport(id), 'Save');
+  // Wire per-slot photo processing + preview (HEIC→JPEG + landscape fit on pick).
+  ['hero', 'inline'].forEach(slot => {
+    const inp = $('kpiModalBody').querySelector('#irFile_' + slot);
+    if (!inp) return;
+    inp.addEventListener('change', async () => {
+      const f = inp.files && inp.files[0]; if (!f || !f.size) return;
+      const wrap = $('kpiModalBody').querySelector('#irPrev_' + slot);
+      if (wrap) wrap.innerHTML = '<div class="kpi-hint" style="margin:0;">Processing photo…</div>';
+      try {
+        const processed = await processHeroImage(f);
+        inp._processed = processed;
+        const url = URL.createObjectURL(processed);
+        if (wrap) wrap.innerHTML = `<img src="${url}" alt="new ${slot}" style="max-width:260px;width:100%;border:1px solid var(--lime);border-radius:8px;display:block;"><div class="kpi-hint" style="margin:4px 0 0;">New photo — saved when you hit Save.</div>`;
+      } catch (err) {
+        inp._processed = null;
+        if (wrap) wrap.innerHTML = `<div class="kpi-hint" style="margin:0;color:#ff9ec4;">Couldn't read that image: ${escapeHtml(err.message || String(err))}</div>`;
+      }
+    });
+  });
+}
+async function submitImpactReport(id) {
+  // Reload the current jsonb so seeded keys (config/expenses/audit/di1/sponsor_display/
+  // team/artists) survive a copy edit — we only overwrite the fields edited here.
+  const { data: ev, error: ge } = await sb.from('events').select('impact_report').eq('id', id).single();
+  if (ge) throw ge;
+  const j = ev.impact_report ? JSON.parse(JSON.stringify(ev.impact_report)) : {};
+  const c = j.content || (j.content = {});
+  c.event = c.event || {};
+  c.event.tagline = kpiVal('ir_tagline') || '';
+  c.event.hero_subtitle = kpiVal('ir_subtitle') || '';
+  c.narratives = c.narratives || {};
+  c.narratives.why_we_dance = kpiVal('ir_why') || '';
+  c.narratives.the_event = kpiVal('ir_night') || '';
+  c.narratives.whats_next = kpiVal('ir_next') || '';
+  c.human_moment = c.human_moment || {};
+  c.human_moment.quote = kpiVal('ir_quote') || '';
+  c.human_moment.attribution = kpiVal('ir_quote_by') || '';
+  c.photos = c.photos || {};
+  for (const slot of ['hero', 'inline']) {
+    const inp = $('irFile_' + slot);
+    let f = inp && inp.files && inp.files[0];
+    const remove = !!$('kpiModalBody').querySelector('#irRemove_' + slot)?.checked;
+    if (f && f.size > 0) {
+      f = inp._processed || await processHeroImage(f);
+      const safe = (f.name || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `event/${id}/impact_${slot}_${Date.now()}_${safe}`;
+      const { error: upErr } = await sb.storage.from('event-photos').upload(path, f, { contentType: f.type, upsert: false });
+      if (upErr) throw new Error('Photo upload failed: ' + upErr.message);
+      c.photos[slot] = path;
+    } else if (remove) {
+      c.photos[slot] = null;
+    }
+  }
+  const pub = !!$('kpiModalBody').querySelector('[name="ir_public"]')?.checked;
+  const { error } = await sb.from('events').update({ impact_report: j, impact_report_public: pub }).eq('id', id);
+  if (error) throw error;
+  closeKpi();
+  toast(pub ? 'Impact report saved + published' : 'Impact report saved (hidden)', 'ok');
+}
+
 // Events row actions — edit / soft-delete (delegated)
 document.querySelector('main.main').addEventListener('click', async (e) => {
   const openBtn = e.target.closest('[data-event-open]');
@@ -4555,6 +4655,7 @@ function renderHubHead() {
       <div class="hub-head-actions">
         <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
         <button class="hub-btn ghost" data-hub-action="log-ig" title="Log follower counts — defaults to this event's date so it's back-dated to the event">Log IG followers</button>
+        ${e.series === 'Dance Infusion' ? '<button class="hub-btn ghost" data-hub-action="edit-impact" title="Edit the public impact report — text, photos, and the publish toggle">Impact report</button>' : ''}
       </div>
     </div>`;
 }
@@ -5583,6 +5684,7 @@ const HUB_ACTIONS = {
   'upload-file': hubDoUpload,
   'add-doctype': hubAddDocType,
   'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
+  'edit-impact': () => openImpactReportEditor(hub.eventId),
 };
 
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });

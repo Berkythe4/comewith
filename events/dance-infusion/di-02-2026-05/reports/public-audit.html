@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- staging gate: hide until guard confirms an admin session (remove these 2 lines to publish publicly) -->
-<script>document.documentElement.style.visibility='hidden'</script>
-<script type="module" src="/staging/guard.js"></script>
+<!-- Visibility is gated by the dashboard "Show on public site" toggle
+     (events.impact_report_public), NOT the old /staging/ admin gate. Toggle off →
+     this page shows "not published yet" on the live site; it only renders from
+     local JSON on localhost (dev preview). -->
+
 <title>Dance Infusion #2 — Public Audit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -85,7 +87,7 @@ function render(d2){
   const totalRaised = costs + mission;
   // PUBLIC metric = "% to the mission" (donated / total raised). Forward target begins DI #3.
   const MISSION_PCT = Math.round(mission / totalRaised * 100);   // = 31
-  const TARGET_MISSION_PCT = 60;
+  const TARGET_MISSION_PCT = (d2.audit && d2.audit.target_pct) || 50;  // forward goal (editable from dashboard)
 
   document.getElementById('app').innerHTML = `
   <header class="hero"><div class="wrap">
@@ -129,8 +131,8 @@ function render(d2){
         <span><i style="background:var(--cost)"></i>Event costs (${100-MISSION_PCT}%)</span>
         <span><i style="background:transparent;border-left:3px dashed var(--accent);border-radius:0;width:3px"></i>Goal: ${TARGET_MISSION_PCT}% to mission</span>
       </div>
-      <p class="sentence">Of every dollar raised at Dance Infusion #2, $0.31 reached the mission. Our commitment from Dance Infusion #3 forward: 60%.</p>
-      <p class="note">Dance Infusion #2 was a deliberate scale-up — prime time, full production — so 31% to the mission is our starting baseline. Our commitment from Dance Infusion #3 onward is 60% to the mission. (Dance Infusion #1 was a smaller proof-of-concept at a different scale, so the two aren't compared on this measure.)</p>
+      <p class="sentence">Of every dollar raised at Dance Infusion #2, $0.31 reached the mission. Our commitment from Dance Infusion #3 forward: 50%.</p>
+      <p class="note">Dance Infusion #2 was a deliberate scale-up — prime time, full production — so 31% to the mission is our starting baseline. Our commitment from Dance Infusion #3 onward is 50% to the mission. (Dance Infusion #1 was a smaller proof-of-concept at a different scale, so the two aren't compared on this measure.)</p>
     </div>
   </div></section>
 
@@ -144,9 +146,24 @@ function render(d2){
   </div></footer>`;
 }
 
+// Supabase (public anon) — dashboard-published source of truth.
+const SB_URL='https://yaytdosxfhcqatmhctzk.supabase.co', SB_KEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+async function fromSupabase(){
+  try{
+    const r=await fetch(SB_URL+'/rest/v1/v_public_impact_report?select=impact_report&order=event_date.desc&limit=1',{headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY}});
+    if(!r.ok)return null; const rows=await r.json();
+    const j=rows&&rows[0]&&rows[0].impact_report; if(!j||!Object.keys(j).length)return null;
+    return { config:j.config||{}, expenses:j.expenses||[], audit:j.audit||null };
+  }catch(_){return null;}
+}
 (async function(){
-  try{ render(await getJSON('../data/dance_infusion.json')); }
-  catch(e){ const el=document.getElementById('err'); el.style.display='block';
+  try{
+    const sup=await fromSupabase();
+    if(sup){ render(sup); return; }
+    const isLocal=['localhost','127.0.0.1',''].includes(location.hostname);
+    if(!isLocal){ document.getElementById('app').innerHTML='<div class="err" style="display:block">This audit isn\'t published yet.</div>'; return; }
+    render(await getJSON('../data/dance_infusion.json'));
+  }catch(e){ const el=document.getElementById('err'); el.style.display='block';
     el.innerHTML='Could not build audit: '+esc(e.message)+'<br><br>Serve via a local server (file:// blocks fetch).'; }
 })();
 </script>

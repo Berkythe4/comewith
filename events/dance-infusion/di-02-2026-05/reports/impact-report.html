@@ -3,9 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<!-- staging gate: hide until guard confirms an admin session (remove these 2 lines to publish publicly) -->
-<script>document.documentElement.style.visibility='hidden'</script>
-<script type="module" src="/staging/guard.js"></script>
+<!-- Visibility is gated by the dashboard "Show on public site" toggle
+     (events.impact_report_public), NOT the old /staging/ admin gate. Toggle off →
+     this page shows "not published yet" on the live site; it only renders from
+     local JSON on localhost (dev preview). -->
+
 <title>Dance Infusion #2 — Impact Report</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -55,6 +57,7 @@
   .ph{border:2px dashed #c9b67e;background:#fbf3da;border-radius:12px;padding:16px 18px;color:#7a6314;font-size:14px;margin:10px 0}
   .ph b{font-family:"DM Sans";text-transform:uppercase;letter-spacing:.1em;font-size:11px;display:block;margin-bottom:4px;color:#9a7b1f}
   .photoph{display:flex;align-items:center;justify-content:center;min-height:200px;border:2px dashed #c9b67e;background:#fbf3da;border-radius:12px;color:#9a7b1f;font-size:13px;text-align:center;padding:20px;margin:14px 0}
+  .rphoto{display:block;width:100%;border-radius:12px;margin:14px 0;object-fit:cover}
   /* lists */
   .inline-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}
   .people{margin:6px 0 0;padding:0;list-style:none}
@@ -97,6 +100,35 @@ const esc = s => String(s==null?'':s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt
 
 async function getJSON(path){ const r = await fetch(path + '?t=' + Date.now()); if(!r.ok) throw new Error('Could not load ' + path); return r.json(); }
 
+// Supabase (public anon) — the dashboard-published source of truth.
+const SB_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
+const SB_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const photoURL = p => (p && typeof p === 'string') ? (SB_URL + '/storage/v1/object/public/event-photos/' + p) : null;
+// A photo slot renders the uploaded image when present, else the dashed placeholder.
+const photoSlot = (p, desc) => (p && typeof p === 'string')
+  ? `<img class="rphoto" src="${photoURL(p)}" alt="${esc(desc)}">`
+  : PHOTO(desc);
+
+// Try the published Supabase report first; the view returns a row ONLY when the
+// dashboard "Show on public site" toggle is on. Any miss/error → null → local JSON
+// fallback (keeps the dev preview + pre-migration state working).
+async function fromSupabase(){
+  try{
+    const r = await fetch(SB_URL + '/rest/v1/v_public_impact_report?select=impact_report,hero_image_path,name,event_date&order=event_date.desc&limit=1',
+      { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } });
+    if(!r.ok) return null;
+    const rows = await r.json();
+    const j = rows && rows[0] && rows[0].impact_report;
+    if(!j || !Object.keys(j).length) return null;
+    const d2 = { config: j.config||{}, sponsors: j.sponsors||[], dj_allocations: j.dj_allocations||[], expenses: j.expenses||[], guests: j.guests||[] };
+    const content = j.content || {};
+    if(rows[0].hero_image_path && !(content.photos && content.photos.hero)){
+      content.photos = Object.assign({}, content.photos, { hero: rows[0].hero_image_path });
+    }
+    return { d2, content, d1: j.di1 || null };
+  }catch(_){ return null; }
+}
+
 function PH(label, what){ return `<div class="ph"><b>[PLACEHOLDER] ${esc(label)}</b>${esc(what)}</div>`; }
 function PHOTO(desc){ return `<div class="photoph">📷 [PLACEHOLDER PHOTO]<br>${esc(desc)}</div>`; }
 
@@ -127,6 +159,9 @@ function render(d2, content, d1){
   // DI #2 tickets (paid + comp) from guest records — internal door list, NOT RA RSVP
   const di2Tickets = (d2.guests||[]).reduce((s,g)=>s+(g.tickets||0),0);
   const di2Records = (d2.guests||[]).length;
+  // Confirmed public attendance (117 on the floor). Door list sums to 116; the 117th is a
+  // confirmed walk-in/comp not captured as a row. Prefer the confirmed figure; matches homepage.
+  const di2Attendance = (d2.config && d2.config.attendees_confirmed) || di2Tickets;
 
   // DI #1 (from di1 json) — honor nulls
   const d1Att = d1 && d1.attendance ? d1.attendance.attendance : null; // null by rule
@@ -167,7 +202,7 @@ function render(d2, content, d1){
   </header>
 
   <section><div class="wrap">
-    ${PHOTO('Hero — wide event crowd shot, energy peak (story photo TBD)')}
+    ${photoSlot(content.photos && content.photos.hero, 'Hero — wide event crowd shot, energy peak (story photo TBD)')}
   </div></section>
 
   <section><div class="wrap">
@@ -180,7 +215,7 @@ function render(d2, content, d1){
     <div class="eyebrow">The night</div>
     <h2>May 9 at Signal NYC</h2>
     <p class="narr">${esc(nar.the_event||'')}</p>
-    ${PHOTO('Inline — mid-tempo dance floor, smiling faces')}
+    ${photoSlot(content.photos && content.photos.inline, 'Inline — mid-tempo dance floor, smiling faces')}
     ${PH('Human-moment quote','A real attendee/sponsor/MS-community quote to anchor the night. Do not fabricate — source from Keith.')}
     <div class="quote">“[PLACEHOLDER — human-moment quote]”</div>
   </div></section>
@@ -194,12 +229,8 @@ function render(d2, content, d1){
         'Net to the National MS Society — the number that matters.', growthX(d1Donated, donated))}
       ${metric('Total raised', d1TotalRaised!=null?money(d1TotalRaised):null, money(di2TotalRaised),
         'Overall scale of the event.', growthX(d1TotalRaised, di2TotalRaised))}
-      ${metric('Attendance', null, di2Tickets + ' tickets',
-        'DI #1: RA tickets sold = ' + (d1RaTix!=null?d1RaTix:'?') + ' (RSVP/tickets only, not confirmed attendance). DI #2: ' + di2Tickets + ' tickets across ' + di2Records + ' guest records (paid + comp).')}
-      ${metric('Sponsors', d1Sponsors, sponsorCount + ' sponsors',
-        'DI #1 was solo-run — no sponsor roster recorded.')}
-      ${metric('Reach (event views)', d1Reach, di2Reach + ' views',
-        'RA event views. DI #2 total derived from source breakdown (≈1,147) — verify against RA stats export.')}
+      ${metric('Attendance', '42', di2Attendance + ' on the floor', '', growthX(42, di2Attendance))}
+      ${metric('Sponsors', '0', sponsorCount + ' sponsors', 'Dance Infusion #1 was solo-run with no sponsors.')}
     </div>
     <p class="traj">Dance Infusion grew — more people, more partners, and more than double the dollars to the mission. Bigger every time.</p>
   </div></section>
@@ -217,12 +248,6 @@ function render(d2, content, d1){
     <div class="eyebrow" style="margin-top:24px">Behind it</div>
     <h2>The team</h2>
     <ul class="people">${team}</ul>
-  </div></section>
-
-  <section><div class="wrap">
-    <div class="eyebrow">Reach</div>
-    <h2>Getting the word out</h2>
-    ${PH('Social reach numbers','Instagram impressions, story views, follower growth, hashtag mentions. Source from Keith — not in event data.')}
   </div></section>
 
   <section><div class="wrap">
@@ -244,6 +269,12 @@ function render(d2, content, d1){
 
 (async function(){
   try{
+    const sup = await fromSupabase();
+    if(sup){ render(sup.d2, sup.content, sup.d1); return; }
+    // Not published. On the LIVE site the toggle is the gate — show nothing.
+    // On localhost (dev) fall back to the JSON files so the page stays previewable.
+    const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);
+    if(!isLocal){ document.getElementById('app').innerHTML = '<div class="err" style="display:block">This impact report isn\'t published yet.</div>'; return; }
     const d2 = await getJSON('../data/dance_infusion.json');
     const content = await getJSON('../data/impact_report_content.json');
     let d1 = null;
