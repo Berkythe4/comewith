@@ -8142,6 +8142,10 @@ const WORKFLOW = [
     short: 'A lead lands from the public site.',
     detail: `Anyone who fills out the inquiry form on comewith.org shows up here. Triage the pipeline (new → contacted → quoted → converted / lost) and read the full request: event type, date, services, budget, message.`,
     links: [{ t: 'Open Inquiries', tab: 'inquiries' }] },
+  { lane: 'crm', n: 22, ico: '🧮', t: 'Quote / Pricing', where: 'Pricing',
+    short: 'Price the gig — DJ, rental or full production.',
+    detail: `The Pricing tool builds an itemized quote: DJ fees (with per-DJ custom rates), equipment rental from your inventory, labor, lighting, travel (mileage + drive time) and weekend / peak surcharges — every default editable. Copy or print/PDF it, then Save the quote onto a linked event, or with no event it spins up a new planning-stage event from the quote so the deal enters the pipeline.`,
+    links: [{ t: 'Open Pricing', tab: 'pricing' }] },
   { lane: 'crm', n: 2, ico: '🤝', t: 'Convert → client', where: 'Clients',
     short: 'Turn a hot lead into a client.',
     detail: `One click on an inquiry creates a customer actor and marks the lead converted. The Clients tab is your roster — inquiry & agreement counts, total contracted, total paid, last activity.`,
@@ -8206,6 +8210,10 @@ const WORKFLOW = [
     short: 'Plan, schedule and note posts.',
     detail: `Timeline / board / list of posts per event — channels, pillar, stage (idea → posted) with timestamped threaded notes. Snapshot export for sharing.`,
     links: [{ t: 'Open Social Calendar', tab: 'social-calendar' }] },
+  { lane: 'mkt', n: 23, ico: '✉️', t: 'Email campaign', where: 'Campaigns',
+    short: 'Blast the mailing list.',
+    detail: `Draft an email campaign, pick a segment (or all subscribers), add CC / extra recipients, preview and test-send, then send via Resend. Edit any not-yet-sent draft; per-campaign delivery / open / bounce stats roll up. Subscribers come from the public signup widget and guest opt-ins.`,
+    links: [{ t: 'Open Campaigns', tab: 'campaigns' }] },
   { lane: 'mkt', n: 18, ico: '🎬', t: 'Recap content', where: 'Event · Recent Rooms',
     short: 'Turn the night into shareable content.',
     detail: `In an event's Edit → Recent Rooms: mark it Featured, add a hero photo, and one or more YouTube / SoundCloud recap links (each can be tagged to an artist). These power the homepage "Recent Rooms" cards and the Watch page — and every tagged clip shows in that artist's profile Content section.`,
@@ -8224,12 +8232,20 @@ const WORKFLOW = [
     links: [{ t: 'Open Strategy', tab: 'strategy' }] },
 ];
 const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
+const WF_ORDER = ['crm', 'hub', 'money', 'mkt', 'kpi'];
+// Display numbers are computed by position (lane order, then array order) so steps
+// can be inserted anywhere without renumbering. data-wf keeps the stable s.n id.
+function wfDisplayNo(n) {
+  let i = 0;
+  for (const lane of WF_ORDER) for (const s of WORKFLOW.filter(x => x.lane === lane)) { i++; if (s.n === n) return i; }
+  return n;
+}
 function renderWorkflowMap() {
   let html = '';
-  for (const lane of ['crm', 'hub', 'money', 'mkt', 'kpi']) {
+  for (const lane of WF_ORDER) {
     const steps = WORKFLOW.filter(s => s.lane === lane);
     html += `<div class="wf-band wf-${lane}"><div class="wf-band-h">${WF_LANES[lane]}</div><div class="wf-row">` +
-      steps.map(s => `<button class="wf-step" data-wf="${s.n}">${s.auto ? '<span class="wf-star">⭐</span>' : ''}<span class="wf-n">${s.n}</span><span class="wf-ico">${s.ico}</span><span class="wf-t">${escapeHtml(s.t)}</span><span class="wf-w">${escapeHtml(s.where)}</span></button>`).join('<span class="wf-arrow">→</span>') +
+      steps.map(s => `<button class="wf-step" data-wf="${s.n}">${s.auto ? '<span class="wf-star">⭐</span>' : ''}<span class="wf-n">${wfDisplayNo(s.n)}</span><span class="wf-ico">${s.ico}</span><span class="wf-t">${escapeHtml(s.t)}</span><span class="wf-w">${escapeHtml(s.where)}</span></button>`).join('<span class="wf-arrow">→</span>') +
       `</div></div>`;
   }
   $('wfMap').innerHTML = html;
@@ -8240,7 +8256,7 @@ function showWfDetail(n) {
   $('wfDetail').innerHTML = `<div class="wf-detail-card">
     <button class="wf-detail-close" data-wf-back>← all steps</button>
     <div class="wf-detail-ico">${s.ico}</div>
-    <div class="wf-detail-step">Step ${s.n}${s.auto ? ' · ⭐ automated' : ''} · ${escapeHtml(s.where)}</div>
+    <div class="wf-detail-step">Step ${wfDisplayNo(s.n)}${s.auto ? ' · ⭐ automated' : ''} · ${escapeHtml(s.where)}</div>
     <h3>${escapeHtml(s.t)}</h3>
     <p class="wf-detail-short">${escapeHtml(s.short)}</p>
     <p>${escapeHtml(s.detail)}</p>
