@@ -7175,7 +7175,7 @@ function renderPricing() {
   <div class="px-bar"><h2>Pricing &amp; Quotes</h2>
     <div class="px-actions">
       <button class="hub-btn ghost" data-px-reset>New quote</button>
-      <button class="hub-btn ghost" data-px-save-event>Save to event</button>
+      <button class="hub-btn ghost" data-px-save-event>Save quote</button>
       <button class="hub-btn ghost" data-px-copy>Copy summary</button>
       <button class="hub-btn ghost" data-px-print>Print / PDF</button>
     </div></div>
@@ -7186,6 +7186,7 @@ function renderPricing() {
         <div class="px-grid">
           <div><label class="modal-label">Event / client name</label><input class="px-i" id="pxEventName" style="width:100%" placeholder="e.g. Smith wedding"></div>
           <div><label class="modal-label">Link to event</label><select class="px-i" id="pxEvent" style="width:100%"><option value="">— none —</option>${PX.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name || '(untitled)')}${e.event_date ? ' · ' + fmtDate(e.event_date) : ''}</option>`).join('')}</select></div>
+          <div><label class="modal-label">Target date (optional)</label><input class="px-i" id="pxEventDate" type="date" style="width:100%"></div>
           <div><label class="modal-label">Distance (miles, one-way)</label><input class="px-i px-num" id="pxMiles" type="number" min="0" step="1" value="0" style="width:100%"></div>
           <div><label class="modal-label">Drive time (hours, one-way)</label><input class="px-i px-num" id="pxDriveHours" type="number" min="0" step="0.25" value="0" style="width:100%"></div>
         </div>
@@ -7342,14 +7343,35 @@ async function savePricingConfig() {
   PX.cfg = cfg; toast('Pricing defaults saved', 'ok'); renderPricing();
 }
 async function pxSaveToEvent() {
-  const sel = $('pricingBody').querySelector('#pxEvent'); const eid = sel?.value;
-  if (!eid) { toast('Pick an event first (Event → Link to event)', 'err'); return; }
+  const sel = $('pricingBody').querySelector('#pxEvent');
   const r = PX._last || computeQuote(PX.cfg, pxReadQuote());
   const payload = { inputs: pxReadQuote(), subtotal: r.subtotal, total: r.total, deposit: r.deposit, name: $('pxEventName')?.value || null, saved_at: new Date().toISOString(), saved_by: ME.id || null };
-  const { error } = await sb.from('events').update({ quote: payload }).eq('id', eid);
-  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
-  const e = PX.events.find(x => x.id === eid); if (e) e.quote = payload;
-  toast('Quote saved to event', 'ok'); pxShowEventNote();
+  if (sel && sel.value) {
+    // Linked to an existing event — save onto it.
+    const { error } = await sb.from('events').update({ quote: payload }).eq('id', sel.value);
+    if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+    const e = PX.events.find(x => x.id === sel.value); if (e) e.quote = payload;
+    toast('Quote saved to event', 'ok'); pxShowEventNote(); return;
+  }
+  // No event yet — create a planning-stage event from the quote and attach it.
+  let nm = ($('pxEventName')?.value || '').trim();
+  if (!nm) { nm = (prompt('Name this quote / event:') || '').trim(); if (!nm) return; }
+  const dt = ($('pxEventDate')?.value || '').trim() || new Date().toISOString().slice(0, 10);
+  const slug = (nm.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50) || 'quote') + '-' + Date.now().toString(36);
+  const { data, error } = await sb.from('events')
+    .insert({ name: nm, event_date: dt, slug, status: 'planning', quote: payload })
+    .select('id,name,event_date,quote').single();
+  if (error) { toast('Create failed: ' + error.message, 'err'); return; }
+  PX.events.unshift(data);
+  if (sel) {  // inject + select the new event without wiping the builder
+    const opt = document.createElement('option');
+    opt.value = data.id;
+    opt.textContent = (data.name || '(untitled)') + (data.event_date ? ' · ' + fmtDate(data.event_date) : '');
+    sel.insertBefore(opt, sel.children[1] || null);
+    sel.value = data.id;
+  }
+  toast(`Created event "${nm}" + saved the quote`, 'ok');
+  pxShowEventNote(); pricingRecompute();
 }
 function pxShowEventNote() {
   const note = $('pricingBody')?.querySelector('#pxEventNote'); if (!note) return;
