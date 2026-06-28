@@ -33,6 +33,16 @@ function jsonError(s: number, m: string) {
   return new Response(JSON.stringify({ error: m }), { status: s, headers: JSON_HEADERS });
 }
 
+// Render an email body: leave real HTML alone, but convert plain-text line breaks
+// to <br> so typed paragraphs (e.g. "Hey,\n\n...\n\n— Berky") don't collapse into
+// one block. Mirrors renderEmailBody() in dashboard.html (preview == sent).
+function renderBody(raw: string): string {
+  const s = raw || "";
+  if (/<(p|br|div|table|h[1-6]|ul|ol|li|a|strong|em|span|img)\b/i.test(s)) return s;
+  const esc = s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5">${esc.replace(/\r\n/g, "\n").replace(/\n/g, "<br>")}</div>`;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS_HEADERS });
   if (req.method !== "POST") return jsonError(405, "POST only");
@@ -84,7 +94,7 @@ Deno.serve(async (req) => {
     // no mailing_events logging. Works on any campaign (even an already-sent one).
     if (test_email) {
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">This is a <strong>TEST</strong> send. The real email includes a working personal unsubscribe link.</p>`;
-      const html = (campaign.body_html || campaign.body_text || "") + footer;
+      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
       const testRes = await resend.emails.send({
         from: FROM,
         to: test_email,
@@ -141,7 +151,7 @@ Deno.serve(async (req) => {
     for (const r of recipients) {
       const unsubUrl = `${UNSUB_BASE}?token=${r.unsubscribe_token}`;
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You're getting this because you subscribed to Come With updates. <a href="${unsubUrl}" style="color:#8A7F72;">Unsubscribe</a> anytime.</p>`;
-      const html = (campaign.body_html || campaign.body_text || "") + footer;
+      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
 
       const sendRes = await resend.emails.send({
         from: FROM,
@@ -181,7 +191,7 @@ Deno.serve(async (req) => {
     let ccSent = 0;
     for (const email of ccList) {
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You were CC'd on this Come With update.</p>`;
-      const html = (campaign.body_html || campaign.body_text || "") + footer;
+      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
       const res = await resend.emails.send({ from: FROM, to: email, replyTo: REPLY_TO, subject: campaign.subject, html });
       if (res.error) failed++; else { sent++; ccSent++; }
     }

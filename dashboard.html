@@ -3176,12 +3176,21 @@ document.querySelector('main.main').addEventListener('click', (e) => {
   openModal(btn.dataset.add);
 });
 
+// Render an email body: leave real HTML alone, but convert plain-text line breaks
+// to <br> so typed paragraphs don't collapse into one block. Mirrors the same
+// helper in the send-campaign edge function so preview == what gets sent.
+function renderEmailBody(raw) {
+  const s = raw || '';
+  if (/<(p|br|div|table|h[1-6]|ul|ol|li|a|strong|em|span|img)\b/i.test(s)) return s;
+  const esc = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return '<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5">' + esc.replace(/\r\n/g, '\n').replace(/\n/g, '<br>') + '</div>';
+}
 // Preview a campaign's rendered email (sandboxed) before sending.
 async function previewCampaign(id) {
   const { data, error } = await sb.from('mailing_campaigns')
     .select('subject, preview_text, body_html, body_text, segment_filter').eq('id', id).single();
   if (error || !data) { toast('Could not load campaign', 'err'); return; }
-  const html = data.body_html || data.body_text || '<p style="font-family:sans-serif;color:#999;">(no body content)</p>';
+  const html = renderEmailBody(data.body_html || data.body_text || '') || '<p style="font-family:sans-serif;color:#999;">(no body content)</p>';
   const seg = data.segment_filter ? `Segment: ${data.segment_filter}` : 'All subscribers';
   openKpi('Preview — ' + (data.subject || ''), seg, `
     <div class="li-sub" style="margin-bottom:4px;"><strong>Subject:</strong> ${escapeHtml(data.subject || '')}</div>
@@ -3700,7 +3709,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiMo
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Backspace') return;
   const t = e.target;
-  const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  // NB: a focused <select> is intentionally NOT "editable" here — backspace doesn't
+  // edit it, and allowing the default was navigating the browser back (closing the
+  // modal when the cursor sat on a dropdown).
+  const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
   if (!editable) e.preventDefault();
 });
 // Enter in a single-line field should NOT submit the whole modal (it was closing
