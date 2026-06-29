@@ -2047,17 +2047,41 @@ $('socialAddBtn').addEventListener('click', () => openPostModal(null));
 $('socialSnapshotBtn').addEventListener('click', exportSnapshot);
 $('socialEmailBtn').addEventListener('click', emailSocialCalendar);
 // Email the current social-calendar view as an inline-HTML snapshot (via send-notice).
-function emailSocialCalendar() {
+async function emailSocialCalendar() {
   const posts = socialFiltered();
   if (!posts.length) { toast('No posts in this view to email.', 'err'); return; }
   const filterDesc = [social.filterSeries === '__none' ? 'General' : (social.filterSeries || 'All series'), social.filterStage ? SOCIAL_STAGE_LABEL[social.filterStage] : 'All stages'].join(' · ');
+  // People you can pick: team (profiles) + contacts (person actors) that have an email.
+  const [pf, ac] = await Promise.all([
+    sb.from('profiles').select('full_name,email').not('email', 'is', null),
+    sb.from('actors').select('display_name,email,kind').is('deleted_at', null).not('email', 'is', null),
+  ]);
+  const seen = new Set(); const people = [];
+  (pf.data || []).forEach(x => { const em = (x.email || '').toLowerCase(); if (!em || seen.has(em)) return; seen.add(em); people.push({ name: x.full_name || x.email, email: x.email, tag: 'team' }); });
+  (ac.data || []).forEach(x => { if ((x.kind || '') === 'org') return; const em = (x.email || '').toLowerCase(); if (!em || seen.has(em)) return; seen.add(em); people.push({ name: x.display_name || x.email, email: x.email, tag: 'contact' }); });
+  people.sort((a, b) => a.name.localeCompare(b.name));
+  const row = p => `<div class="gl-pick" data-search="${escapeHtml((p.name + ' ' + p.email).toLowerCase())}" data-email="${escapeHtml(p.email)}">${escapeHtml(p.name)} <span class="li-sub">· ${escapeHtml(p.email)}</span> <span class="role-chip" style="cursor:default">${p.tag}</span></div>`;
   openKpi('Email the social calendar', 'Sends a read-only snapshot of the current view', `
-    <div class="modal-form-row"><label class="modal-label">To (comma-separated emails) *</label><input class="modal-input" id="scTo" placeholder="janelle@example.com"></div>
+    <style>.gl-listbox{max-height:200px;overflow:auto;border:1px solid var(--border-strong);border-radius:8px;padding:2px 4px;background:var(--surface-2)}.gl-pick{padding:7px 8px;border-bottom:1px dashed var(--border);cursor:pointer}.gl-pick:last-child{border-bottom:none}.gl-pick:hover{background:var(--surface)}</style>
+    <div class="modal-form-row"><label class="modal-label">To (comma-separated emails) *</label><input class="modal-input" id="scTo" placeholder="type, or pick people below"></div>
+    <div class="modal-form-row"><label class="modal-label">Pick people (click to add)</label>
+      <input class="modal-input" id="scPickSearch" placeholder="Search team &amp; contacts…" style="margin-bottom:8px">
+      <div class="gl-listbox" id="scPickList">${people.map(row).join('') || '<div class="kpi-hint" style="margin:8px">No saved people with an email yet — type an address above.</div>'}</div></div>
     <div class="modal-form-row"><label class="modal-label">CC</label><input class="modal-input" id="scCc" placeholder="optional"></div>
     <div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" id="scSubj" value="Come With — Social Calendar (${escapeHtml(filterDesc)})"></div>
     <div class="modal-form-row"><label class="modal-label">Add a note (optional)</label><textarea class="modal-textarea" id="scNote" rows="2" placeholder="Hey Janelle — here's the latest plan…"></textarea></div>
     <div class="kpi-hint">Sends ${posts.length} post${posts.length === 1 ? '' : 's'} from the current filter (${escapeHtml(filterDesc)}).</div>`,
     () => sendSocialCalendarEmail(posts), 'Send');
+  const s = $('scPickSearch');
+  if (s) s.addEventListener('input', () => { const ql = s.value.toLowerCase(); document.querySelectorAll('#scPickList .gl-pick').forEach(el => { el.style.display = (el.dataset.search || '').includes(ql) ? '' : 'none'; }); });
+  const list = $('scPickList');
+  if (list) list.addEventListener('click', e => {
+    const r = e.target.closest('.gl-pick'); if (!r || !r.dataset.email) return;
+    const to = $('scTo'); const em = r.dataset.email;
+    const have = to.value.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (!have.includes(em.toLowerCase())) to.value = (to.value.trim() ? to.value.trim().replace(/[,\s]*$/, '') + ', ' : '') + em;
+    r.style.opacity = '0.45';
+  });
 }
 async function sendSocialCalendarEmail(posts) {
   const to = ($('scTo')?.value || '').split(/[,;\s]+/).map(x => x.trim()).filter(x => x.includes('@'));
