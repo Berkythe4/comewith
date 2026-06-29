@@ -3040,7 +3040,7 @@ const FORM_DEFS = {
       { name: 'preview_text',   type: 'text',     label: 'Preview text', placeholder: 'Shows next to subject in inbox' },
       { name: 'segment_filter', type: 'select-segments', label: 'Send to' },
       { name: 'cc',             type: 'text',     label: 'CC / also send to (comma-separated emails)', placeholder: 'alex@x.com, sam@y.com' },
-      { name: 'survey_id',      type: 'select-surveys', label: 'Attach a survey (each recipient gets a personal link)' },
+      { name: 'survey_id',      type: 'select-surveys', label: 'Attach a survey — put {{survey}} in the body to place the link (else it adds at the end)' },
       { name: 'body_html',      type: 'textarea', label: 'Body (HTML)',       required: true },
     ],
   },
@@ -3197,9 +3197,19 @@ function renderEmailBody(raw) {
 // Preview a campaign's rendered email (sandboxed) before sending.
 async function previewCampaign(id) {
   const { data, error } = await sb.from('mailing_campaigns')
-    .select('subject, preview_text, body_html, body_text, segment_filter').eq('id', id).single();
+    .select('subject, preview_text, body_html, body_text, segment_filter, survey_id').eq('id', id).single();
   if (error || !data) { toast('Could not load campaign', 'err'); return; }
-  const html = renderEmailBody(data.body_html || data.body_text || '') || '<p style="font-family:sans-serif;color:#999;">(no body content)</p>';
+  let html = renderEmailBody(data.body_html || data.body_text || '') || '<p style="font-family:sans-serif;color:#999;">(no body content)</p>';
+  if (data.survey_id) {
+    const { data: sv } = await sb.from('surveys').select('public_token,status').eq('id', data.survey_id).maybeSingle();
+    if (sv) {
+      const link = location.origin + '/survey.html?t=' + sv.public_token;
+      const btn = `<p style="text-align:center;margin:22px 0 4px"><a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:700">Share your feedback →</a></p>`;
+      if (/\{\{\s*survey(_button|_link)?\s*\}\}/i.test(html)) html = html.replace(/\{\{\s*survey_link\s*\}\}/ig, link).replace(/\{\{\s*survey(_button)?\s*\}\}/ig, btn);
+      else html = html + btn;
+      if (sv.status !== 'open') html = '<div style="background:#fff3cd;color:#7a6314;padding:8px;font:13px sans-serif;text-align:center">⚠ Survey is ' + escapeHtml(sv.status) + ' — open it for personal links to generate on send.</div>' + html;
+    }
+  }
   const seg = data.segment_filter ? `Segment: ${data.segment_filter}` : 'All subscribers';
   openKpi('Preview — ' + (data.subject || ''), seg, `
     <div class="li-sub" style="margin-bottom:4px;"><strong>Subject:</strong> ${escapeHtml(data.subject || '')}</div>
@@ -3282,7 +3292,8 @@ async function openEditCampaign(id) {
     <div class="modal-form-row"><label class="modal-label">Preview text</label><input class="modal-input" name="preview_text" value="${escapeHtml(c.preview_text || '')}" placeholder="Shows next to subject in inbox"></div>
     <div class="modal-form-row"><label class="modal-label">Send to</label><select class="modal-select" name="segment_filter">${segOpts}</select></div>
     <div class="modal-form-row"><label class="modal-label">CC / also send to (comma-separated emails)</label><input class="modal-input" name="cc" value="${escapeHtml(c.cc || '')}" placeholder="alex@x.com, sam@y.com"></div>
-    <div class="modal-form-row"><label class="modal-label">Attach a survey (each recipient gets a personal link)</label><select class="modal-select" name="survey_id">${svOpts}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Attach a survey (each recipient gets a personal link)</label><select class="modal-select" name="survey_id">${svOpts}</select>
+      <div class="kpi-hint">Placement: put <code>{{survey}}</code> (button) or <code>{{survey_link}}</code> (raw URL) anywhere in the body. No placeholder → the button is added at the bottom.</div></div>
     <div class="modal-form-row"><label class="modal-label">Body (HTML) *</label><textarea class="modal-textarea" name="body_html" rows="8" required>${escapeHtml(c.body_html || '')}</textarea></div>`,
     () => submitEditCampaign(id), 'Save changes');
 }

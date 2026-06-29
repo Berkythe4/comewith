@@ -89,10 +89,18 @@ Deno.serve(async (req) => {
     // An attached OPEN survey → each recipient gets a personal tokenized link.
     let survey: any = null;
     if (campaign.survey_id) {
-      const { data: sv } = await admin.from("surveys").select("id, event_id, status").eq("id", campaign.survey_id).maybeSingle();
+      const { data: sv } = await admin.from("surveys").select("id, event_id, status, public_token").eq("id", campaign.survey_id).maybeSingle();
       if (sv && sv.status === "open") survey = sv;
     }
     const surveyCta = (link: string) => `<p style="text-align:center;margin:22px 0 4px"><a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:700">Share your feedback →</a></p>`;
+    // Placement control: {{survey}} → the button, {{survey_link}} → the raw URL.
+    // No placeholder → the button is appended at the end.
+    const injectSurvey = (html: string, link: string) => {
+      let out = html, used = false;
+      if (/\{\{\s*survey_link\s*\}\}/i.test(out)) { out = out.replace(/\{\{\s*survey_link\s*\}\}/ig, link); used = true; }
+      if (/\{\{\s*survey(_button)?\s*\}\}/i.test(out)) { out = out.replace(/\{\{\s*survey(_button)?\s*\}\}/ig, surveyCta(link)); used = true; }
+      return used ? out : out + surveyCta(link);
+    };
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (!resendKey) return jsonError(500, "RESEND_API_KEY not set");
@@ -102,7 +110,9 @@ Deno.serve(async (req) => {
     // no mailing_events logging. Works on any campaign (even an already-sent one).
     if (test_email) {
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">This is a <strong>TEST</strong> send. The real email includes a working personal unsubscribe link.</p>`;
-      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
+      let bodyHtml = renderBody(campaign.body_html || campaign.body_text || "");
+      if (survey) bodyHtml = injectSurvey(bodyHtml, `${SITE_URL}/survey.html?t=${survey.public_token}`);
+      const html = bodyHtml + footer;
       const testRes = await resend.emails.send({
         from: FROM,
         to: test_email,
@@ -159,12 +169,12 @@ Deno.serve(async (req) => {
     for (const r of recipients) {
       const unsubUrl = `${UNSUB_BASE}?token=${r.unsubscribe_token}`;
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You're getting this because you subscribed to Come With updates. <a href="${unsubUrl}" style="color:#8A7F72;">Unsubscribe</a> anytime.</p>`;
-      let svBlock = "";
+      let bodyHtml = renderBody(campaign.body_html || campaign.body_text || "");
       if (survey) {
         const { data: inv } = await admin.from("survey_invites").insert({ survey_id: survey.id, subscriber_id: r.id, event_id: survey.event_id, email: r.email, label: r.full_name }).select("token").single();
-        if (inv) svBlock = surveyCta(`${SITE_URL}/survey.html?t=${inv.token}`);
+        bodyHtml = injectSurvey(bodyHtml, `${SITE_URL}/survey.html?t=${inv ? inv.token : survey.public_token}`);
       }
-      const html = renderBody(campaign.body_html || campaign.body_text || "") + svBlock + footer;
+      const html = bodyHtml + footer;
 
       const sendRes = await resend.emails.send({
         from: FROM,
@@ -204,12 +214,12 @@ Deno.serve(async (req) => {
     let ccSent = 0;
     for (const email of ccList) {
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You were CC'd on this Come With update.</p>`;
-      let svBlock = "";
+      let bodyHtml = renderBody(campaign.body_html || campaign.body_text || "");
       if (survey) {
         const { data: inv } = await admin.from("survey_invites").insert({ survey_id: survey.id, event_id: survey.event_id, email }).select("token").single();
-        if (inv) svBlock = surveyCta(`${SITE_URL}/survey.html?t=${inv.token}`);
+        bodyHtml = injectSurvey(bodyHtml, `${SITE_URL}/survey.html?t=${inv ? inv.token : survey.public_token}`);
       }
-      const html = renderBody(campaign.body_html || campaign.body_text || "") + svBlock + footer;
+      const html = bodyHtml + footer;
       const res = await resend.emails.send({ from: FROM, to: email, replyTo: REPLY_TO, subject: campaign.subject, html });
       if (res.error) failed++; else { sent++; ccSent++; }
     }
