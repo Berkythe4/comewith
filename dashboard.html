@@ -5065,12 +5065,13 @@ async function hubLoadInSheet() {
 // it surfaces detail that's spread across tables; event financials are unchanged.
 async function hubSecCustomers() {
   const id = hub.eventId;
-  const [pp, spo, don, gea, sum] = await Promise.all([
+  const [pp, spo, don, gea, sum, gl] = await Promise.all([
     sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
     sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, guest:guests(full_name, email)').eq('event_id', id),
     sb.from('v_event_summary').select('ticket_revenue, tickets_sold, third_party_donations, sponsor_cash, sponsor_in_kind, revenue, expenses, net').eq('event_id', id).maybeSingle(),
+    sb.from('guest_event_attendance').select('id, guest:guests(full_name, email)').eq('event_id', id).eq('source', 'guestlist').order('created_at'),
   ]);
   const map = new Map();
   const norm = (n) => (n || '').trim().toLowerCase();
@@ -5137,12 +5138,65 @@ async function hubSecCustomers() {
       ${rrow('Net to MS Society', money(raised - Number(f.expenses || 0)), true)}
     </div>`;
   }
-  $('hubSecBody').innerHTML = `
+  // Guest list — people pre-assigned as expected attendees (source = 'guestlist').
+  const glList = gl.data || [];
+  const glRows = glList.map(r => `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(r.guest?.full_name || '—')}</strong>${r.guest?.email ? ` <span class="li-sub">· ${escapeHtml(r.guest.email)}</span>` : ''} <span class="role-chip" style="cursor:default">expected</span></div>
+      <button class="hub-mini" data-gl-del="${escapeHtml(r.id)}">✕ remove</button>
+    </div>`).join('');
+  const glBlock = `
+    <div class="hub-sec-bar" style="margin-top:2px;"><h3>Guest list — expected <span class="li-sub">(${glList.length})</span></h3>
+      <button class="hub-btn" data-hub-action="add-guestlist">+ Add people</button></div>
+    <div class="kpi-hint" style="margin-bottom:10px;">Pre-assign customers you know will be there. They show as guests below; after the event, mark real attendance or import tickets.</div>
+    ${glRows ? `<div class="hub-list" style="margin-bottom:20px;">${glRows}</div>` : '<div class="hub-empty" style="margin-bottom:20px;">No one on the guest list yet.</div>'}`;
+  $('hubSecBody').innerHTML = glBlock + `
     <div class="hub-sec-bar"><h3>Customers</h3>
       <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · ${nAtt} attended · ${nDon} donors · ${nSpon} sponsors</span></div>
     <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name (🎟 = tickets/entries). Per-person detail above; the reconciliation below ties it to the event's audited financial totals (Money tab).</div>
     ${recon}
     <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Guest list: pre-assign expected customers/attendees to the event ----
+// Stored as guest_event_attendance rows with source='guestlist' (ticket_type 'comp',
+// no spend) so they surface in Customers without inflating ticket revenue.
+async function findOrCreateGuest(name, email) {
+  email = (email || '').trim();
+  if (email) {
+    const { data } = await sb.from('guests').select('id').ilike('email', email).is('deleted_at', null).limit(1);
+    if (data && data.length) return data[0].id;
+  }
+  const { data: ins, error } = await sb.from('guests').insert({ full_name: name, email: email || null, source: 'guestlist' }).select('id').single();
+  if (error) throw error;
+  return ins.id;
+}
+function hubAddGuestList() {
+  openKpi('Add to guest list — ' + (hub.event?.name || ''), 'Pre-assign people you expect to attend', `
+    <div class="kpi-hint">One person per line as <strong>Name, email</strong> (email optional). People are matched to existing guests by email, or created new. They'll show as expected guests on this event.</div>
+    <div class="modal-form-row"><label class="modal-label">People</label><textarea class="modal-textarea" id="glPeople" rows="7" placeholder="Jane Doe, jane@example.com&#10;Alex Smith, alex@example.com&#10;Sam (no email)"></textarea></div>`,
+    () => submitGuestList(), 'Add to guest list');
+}
+async function submitGuestList() {
+  const lines = ($('glPeople')?.value || '').split('\n').map(x => x.trim()).filter(Boolean);
+  if (!lines.length) throw new Error('Add at least one person');
+  let added = 0, skipped = 0;
+  for (const line of lines) {
+    const parts = line.split(',').map(x => (x || '').trim());
+    const name = parts[0]; const email = parts[1] || '';
+    if (!name) continue;
+    const gid = await findOrCreateGuest(name, email);
+    const { data: exists } = await sb.from('guest_event_attendance').select('id').eq('event_id', hub.eventId).eq('guest_id', gid).limit(1);
+    if (exists && exists.length) { skipped++; continue; }
+    const { error } = await sb.from('guest_event_attendance').insert({ event_id: hub.eventId, guest_id: gid, source: 'guestlist', ticket_type: 'comp', quantity: 1, amount_spent: 0 });
+    if (!error) added++;
+  }
+  closeKpi(); toast(`Added ${added}${skipped ? ` · ${skipped} already on the event` : ''}`, 'ok'); hubGoSection('customers');
+}
+async function hubDelGuestList(id) {
+  if (!confirm('Remove this person from the guest list?')) return;
+  const { error } = await sb.from('guest_event_attendance').delete().eq('id', id);
+  if (error) { toast(error.message, 'err'); return; }
+  toast('Removed', 'ok'); hubGoSection('customers');
 }
 
 // ---- Section: Files (unified document hub — doc-type "buckets" + vendor) ----
@@ -5767,6 +5821,7 @@ const HUB_ACTIONS = {
   'add-doctype': hubAddDocType,
   'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
   'edit-impact': () => openImpactReportEditor(hub.eventId),
+  'add-guestlist': hubAddGuestList,
 };
 
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
@@ -5780,6 +5835,7 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
   const ep = e.target.closest('[data-hub-email-person]'); if (ep) { hubEmailPeople(ep.dataset.hubEmailPerson); return; }
   if (e.target.closest('[data-hub-email-people]')) { hubEmailPeople(); return; }
+  const gld = e.target.closest('[data-gl-del]'); if (gld) { hubDelGuestList(gld.dataset.glDel); return; }
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
   const cp = e.target.closest('[data-hub-cpaid]'); if (cp) { hubToggleContractPaid(cp.dataset.hubCpaid); return; }
