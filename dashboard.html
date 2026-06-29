@@ -5108,14 +5108,14 @@ async function hubMoneyMutate(targetEl) {
 // ---- Section: Equipment (equipment_usage — the missing write path) ----
 async function hubSecEquipment() {
   const { data, error } = await sb.from('equipment_usage')
-    .select('id, purpose, start_date, end_date, revenue_attributed, equipment:equipment_inventory(name, category)')
+    .select('id, purpose, start_date, end_date, revenue_attributed, loaded_at, equipment:equipment_inventory(name, category)')
     .eq('event_id', hub.eventId).order('start_date');
   if (error) throw error;
   hub.equipment = data || [];
   const rows = hub.equipment.length ? hub.equipment.map(u => `
     <div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(u.equipment?.name || '—')}</strong>
-        <div class="li-sub">${escapeHtml(u.purpose || '—')}${u.start_date ? (' · ' + escapeHtml(fmtDate(u.start_date))) : ''}${u.end_date ? (' → ' + escapeHtml(fmtDate(u.end_date))) : ''}</div>
+      <div class="li-main"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" data-eq-load="${escapeHtml(u.id)}"${u.loaded_at ? ' checked' : ''} style="width:auto;margin:0;"><strong>${escapeHtml(u.equipment?.name || '—')}</strong>${u.loaded_at ? ' <span class="role-chip" style="cursor:default;background:#e9f3eb;color:#3a8c4a">✓ loaded</span>' : ''}</label>
+        <div class="li-sub" style="margin-left:26px;">${escapeHtml(u.purpose || '—')}${u.start_date ? (' · ' + escapeHtml(fmtDate(u.start_date))) : ''}${u.end_date ? (' → ' + escapeHtml(fmtDate(u.end_date))) : ''}</div>
       </div>
       <div class="li-amt">${u.revenue_attributed != null ? money(u.revenue_attributed) : muted}</div>
       <div class="hub-li-actions">
@@ -5123,14 +5123,31 @@ async function hubSecEquipment() {
         <button class="hub-mini danger" data-hub-del="equipment_usage:${escapeHtml(u.id)}">Remove</button>
       </div>
     </div>`).join('') : `<div class="hub-empty">No equipment assigned yet. Assign several at once →</div>`;
+  const total = hub.equipment.length, loadedN = hub.equipment.filter(u => u.loaded_at).length;
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Equipment</h3>
-      <span style="display:flex;gap:8px;">
-        ${hub.equipment.length ? '<button class="hub-btn ghost" data-hub-action="loadin-sheet">🖨 Load-in sheet</button>' : ''}
+    <div class="hub-sec-bar"><h3>Equipment ${total ? `<span class="li-sub" id="eqLoadedCount">${loadedN}/${total} loaded</span>` : ''}</h3>
+      <span style="display:flex;gap:8px;flex-wrap:wrap;">
+        ${total ? '<button class="hub-btn ghost" data-hub-action="load-all">✓ Mark all loaded</button>' : ''}
+        ${total ? '<button class="hub-btn ghost" data-hub-action="loadin-sheet">🖨 Load-in sheet</button>' : ''}
         <button class="hub-btn" data-hub-action="add-equipment">+ Assign equipment</button>
       </span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">The day-of generator creates ONE “Load / test / setup gear” task that points to this list — the load-in sheet below, not a task per item.</div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Check items off as you load them in — it saves to the event. The 🖨 sheet is a printable copy.</div>
     <div class="hub-list">${rows}</div>`;
+}
+async function hubToggleLoaded(id, checked) {
+  const ts = checked ? new Date().toISOString() : null;
+  const { error } = await sb.from('equipment_usage').update({ loaded_at: ts }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  const u = hub.equipment.find(x => x.id === id); if (u) u.loaded_at = ts;
+  const badge = $('eqLoadedCount');
+  if (badge) badge.textContent = `${hub.equipment.filter(x => x.loaded_at).length}/${hub.equipment.length} loaded`;
+}
+async function hubLoadAll() {
+  const ids = hub.equipment.filter(u => !u.loaded_at).map(u => u.id);
+  if (!ids.length) { toast('Everything is already loaded', 'ok'); return; }
+  const { error } = await sb.from('equipment_usage').update({ loaded_at: new Date().toISOString() }).in('id', ids);
+  if (error) { toast(error.message, 'err'); return; }
+  toast(`Marked ${ids.length} loaded`, 'ok'); hubSecEquipment();
 }
 // The consolidated gear task points here: a printable load-in checklist of the event's gear.
 async function hubLoadInSheet() {
@@ -5943,10 +5960,14 @@ const HUB_ACTIONS = {
   'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
   'edit-impact': () => openImpactReportEditor(hub.eventId),
   'add-guestlist': hubAddGuestList,
+  'load-all': hubLoadAll,
 };
 
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
 
+$('panel-eventhub').addEventListener('change', (e) => {
+  const cb = e.target.closest('[data-eq-load]'); if (cb) hubToggleLoaded(cb.dataset.eqLoad, cb.checked);
+});
 $('panel-eventhub').addEventListener('click', (e) => {
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
   const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
