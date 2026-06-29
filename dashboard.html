@@ -3171,9 +3171,9 @@ function closeModal() {
 }
 
 $('modalCancel').addEventListener('click', closeModal);
-$('modalOverlay').addEventListener('click', (e) => {
-  if (e.target === $('modalOverlay')) closeModal();
-});
+// NB: no click-outside-to-close. Releasing a text drag-select on the dark overlay
+// was registering as an "outside click" and dismissing the form. Close only via
+// Cancel or Escape.
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && $('modalOverlay').classList.contains('show')) closeModal();
 });
@@ -3727,7 +3727,8 @@ const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${
 const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
 
 $('kpiModalCancel').addEventListener('click', closeKpi);
-$('kpiModalOverlay').addEventListener('click', (e) => { if (e.target === $('kpiModalOverlay')) closeKpi(); });
+// No click-outside-to-close (a drag-select ending on the overlay was closing the
+// pop-out). Close only via Cancel / Save or Escape.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
 // Backspace outside a text field must NOT navigate the browser "back" (that closes
 // the dashboard / any open pop-out). CAPTURE phase at the window level so it fires
