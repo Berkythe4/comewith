@@ -4638,7 +4638,7 @@ async function openEventHub(eventId) {
 
 async function hubLoadEvent() {
   const { data, error } = await sb.from('events')
-    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, cw_providing_gear, venue_id')
+    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, cw_providing_gear, venue_id, audited, audited_at, financials_released, financials_released_at')
     .eq('id', hub.eventId).single();
   hub.event = error ? null : data;
   if (hub.event?.owner_actor_id) {
