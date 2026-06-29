@@ -757,6 +757,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .ovr-chip:hover { border-color: var(--ink); color: var(--ink); }
 .ovr-chip.ovr-grant  { background: var(--green-bg, #e6f3ee); color: var(--green, #2E8E72); border-color: var(--green, #2E8E72); }
 .ovr-chip.ovr-revoke { background: rgba(193,59,42,0.08); color: var(--red); border-color: var(--red); }
+.ovr-chip.ovr-defon  { background: rgba(37,99,168,0.10); color: var(--blue, #2563a8); border-color: var(--blue, #2563a8); }
 /* Social calendar */
 .social-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
 .social-board { display: flex; gap: 12px; overflow-x: auto; padding-bottom: 10px; align-items: flex-start; }
@@ -1549,7 +1550,18 @@ function renderUserDetail() {
     <div class="hub-sec-bar"><h3>Access</h3></div>
     <div class="team-role" style="margin-bottom:8px;"><label>Workflow scope: </label>
       <select class="hub-status-sel" data-detail-scope><option value="">— none —</option>${STAFF_ROLE_OPTS.map(r => `<option value="${r}"${u.staff_role === r ? ' selected' : ''}>${r}</option>`).join('')}</select></div>
-    <div class="team-ovr">${gateMods.map(m => { const st = ovr[m.key] || 'default'; return `<button class="ovr-chip ovr-${st}" data-ovr="${m.key}" data-user="${uid}" title="${escapeHtml(m.label)} (${m.signed_off ? 'signed off' : 'not signed off yet'})">${escapeHtml(m.label)}: ${st}</button>`; }).join('')}</div>`}
+    <div class="kpi-hint" style="margin-bottom:8px;">Colours for <strong>${escapeHtml(u.staff_role || 'no scope')}</strong>: <span style="color:var(--blue,#2563a8);font-weight:700">✓ default</span> = visible by default · grey = not in their default · <span style="color:var(--green,#2E8E72);font-weight:700">granted</span> / <span style="color:var(--red);font-weight:700">revoked</span> = your manual override. Click a chip to cycle grant → revoke → reset to default.</div>
+    <div class="team-ovr">${gateMods.map(m => {
+      const st = ovr[m.key];
+      const inDefault = m.signed_off && (m.default_roles || []).includes(u.staff_role);
+      let cls, lbl;
+      if (st === 'grant') { cls = 'ovr-grant'; lbl = '★ granted'; }
+      else if (st === 'revoke') { cls = 'ovr-revoke'; lbl = '✕ revoked'; }
+      else if (inDefault) { cls = 'ovr-defon'; lbl = '✓ default'; }
+      else { cls = 'ovr-default'; lbl = 'default · off'; }
+      const note = m.signed_off ? '' : ' · awaiting sign-off';
+      return `<button class="ovr-chip ${cls}" data-ovr="${m.key}" data-user="${uid}" title="${escapeHtml(m.label)}${note} — click to grant / revoke / reset">${escapeHtml(m.label)}: ${lbl}</button>`;
+    }).join('')}</div>`}
     <div class="hub-sec-bar" style="margin-top:18px;"><h3>Edit profile</h3></div>
     <div class="modal-grid2" style="max-width:520px;">
       <div><label class="modal-label">Full name</label><input class="modal-input" id="udName" value="${escapeHtml(u.full_name || '')}"></div>
