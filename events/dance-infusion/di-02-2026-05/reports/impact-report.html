@@ -104,6 +104,7 @@ async function getJSON(path){ const r = await fetch(path + '?t=' + Date.now()); 
 // Supabase (public anon) — the dashboard-published source of truth.
 const SB_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
 const SB_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+let REPORT_EVENT_ID = null;  // captured from the published report → used to find a survey
 const photoURL = p => (p && typeof p === 'string') ? (SB_URL + '/storage/v1/object/public/event-photos/' + p) : null;
 // A photo slot renders the uploaded image when present, else the dashed placeholder.
 const photoSlot = (p, desc) => (p && typeof p === 'string')
@@ -121,6 +122,7 @@ async function fromSupabase(){
     const rows = await r.json();
     const j = rows && rows[0] && rows[0].impact_report;
     if(!j || !Object.keys(j).length) return null;
+    REPORT_EVENT_ID = rows[0].id || null;
     const d2 = { config: j.config||{}, sponsors: j.sponsors||[], dj_allocations: j.dj_allocations||[], expenses: j.expenses||[], guests: j.guests||[] };
     const content = j.content || {};
     if(rows[0].hero_image_path && !(content.photos && content.photos.hero)){
@@ -128,6 +130,20 @@ async function fromSupabase(){
     }
     return { d2, content, d1: j.di1 || null };
   }catch(_){ return null; }
+}
+
+// If an OPEN, anonymous survey is linked to this event, show a "Tell us about your
+// night" button. Survey lives at the site root; use a root-absolute path.
+async function fillSurveyCta(){
+  if(!REPORT_EVENT_ID) return;
+  try{
+    const r = await fetch(SB_URL + '/rest/v1/v_public_survey?select=public_token&event_id=eq.' + REPORT_EVENT_ID + '&limit=1', { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } });
+    if(!r.ok) return;
+    const rows = await r.json();
+    const el = document.getElementById('surveyCta');
+    if(!el || !rows || !rows.length) return;
+    el.innerHTML = `<a class="audit-cta" href="/survey.html?t=${encodeURIComponent(rows[0].public_token)}" style="background:var(--accent);color:#1a1405">Tell us about your night →<small style="color:#5a4a17">Two minutes — your feedback shapes the next one</small></a>`;
+  }catch(_){}
 }
 
 function PH(label, what){ return `<div class="ph"><b>[PLACEHOLDER] ${esc(label)}</b>${esc(what)}</div>`; }
@@ -264,6 +280,7 @@ function render(d2, content, d1){
   </div></section>
 
   <section style="border-bottom:0"><div class="wrap">
+    <div id="surveyCta"></div>
     <a class="audit-cta" href="public-audit.html">See the full money breakdown →<small>Public transparency audit — where every dollar went</small></a>
   </div></section>
 
@@ -277,7 +294,7 @@ function render(d2, content, d1){
 (async function(){
   try{
     const sup = await fromSupabase();
-    if(sup){ render(sup.d2, sup.content, sup.d1); return; }
+    if(sup){ render(sup.d2, sup.content, sup.d1); fillSurveyCta(); return; }
     // Not published. On the LIVE site the toggle is the gate — show nothing.
     // On localhost (dev) fall back to the JSON files so the page stays previewable.
     const isLocal = ['localhost','127.0.0.1',''].includes(location.hostname);

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With — Survey</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{--navy:#16243f;--cream:#faf6ec;--ink:#1b2335;--muted:#5d6678;--line:#e3dcc8;--accent:#c8a24a;--green:#3a8c4a}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--cream);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:600px;margin:0 auto;padding:0 20px}
+  header{background:var(--navy);color:var(--cream);padding:40px 0 32px;text-align:center}
+  header .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:#c9b67e;font-weight:700}
+  header h1{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.03em;font-size:clamp(34px,9vw,52px);margin:8px 0 6px}
+  header p{color:#c4cbda;margin:0;font-size:15px}
+  main{padding:28px 0 60px}
+  .q{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 18px;margin-bottom:14px}
+  .q .prompt{font-weight:700;font-size:16px;margin-bottom:12px}
+  .q .req{color:#b5462f;font-weight:700}
+  .scale{display:flex;flex-wrap:wrap;gap:8px}
+  .scale button{flex:1;min-width:42px;border:1px solid var(--line);background:#fbf8ef;border-radius:10px;padding:12px 0;font-size:16px;font-weight:700;color:var(--ink);cursor:pointer;transition:.12s}
+  .scale button.sel{background:var(--navy);color:var(--cream);border-color:var(--navy)}
+  .opts{display:flex;flex-direction:column;gap:8px}
+  .opt{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:#fbf8ef;border-radius:10px;padding:11px 14px;cursor:pointer;font-size:15px}
+  .opt.sel{border-color:var(--accent);background:#fcf4dd}
+  .opt input{accent-color:var(--navy)}
+  textarea,input[type=text]{width:100%;border:1px solid var(--line);border-radius:10px;padding:11px 12px;font:inherit;background:#fbf8ef;color:var(--ink)}
+  textarea{min-height:96px;resize:vertical}
+  .submit{display:block;width:100%;background:var(--accent);color:#1a1405;border:0;border-radius:999px;padding:15px;font-weight:700;font-size:16px;cursor:pointer;margin-top:8px}
+  .submit:disabled{opacity:.6;cursor:progress}
+  .msg{text-align:center;color:var(--muted);padding:60px 20px}
+  .msg h2{font-family:"Bebas Neue";font-size:34px;color:var(--navy);margin:0 0 8px}
+  .err{max-width:560px;margin:0 auto;color:#8a2a2a;background:#fbeaea;border:1px solid #e7c3c3;border-radius:12px;padding:16px;font-size:14px}
+  .ferr{color:#b5462f;font-size:13px;margin-top:8px;display:none}
+  footer{text-align:center;color:var(--muted);font-size:12px;padding:0 0 40px}
+</style>
+</head>
+<body>
+<div id="app"><div class="msg"><p>Loading…</p></div></div>
+<footer>A Come With production · benefiting the National MS Society</footer>
+<script>
+const SB_URL='https://yaytdosxfhcqatmhctzk.supabase.co';
+const SB_KEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const token=new URLSearchParams(location.search).get('t')||new URLSearchParams(location.search).get('token')||'';
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+async function fn(name,payload){
+  const r=await fetch(SB_URL+'/functions/v1/'+name,{method:'POST',headers:{apikey:SB_KEY,Authorization:'Bearer '+SB_KEY,'Content-Type':'application/json'},body:JSON.stringify(payload)});
+  let j={}; try{j=await r.json();}catch(_){}
+  return {ok:r.ok,status:r.status,body:j};
+}
+let QUESTIONS=[];
+function qHtml(q,i){
+  const req=q.required?' <span class="req">*</span>':'';
+  let body='';
+  if(q.qtype==='rating'){ body='<div class="scale" data-scale>'+[1,2,3,4,5].map(n=>`<button type="button" data-val="${n}">${n}</button>`).join('')+'</div>'; }
+  else if(q.qtype==='nps'){ body='<div class="scale" data-scale>'+[0,1,2,3,4,5,6,7,8,9,10].map(n=>`<button type="button" data-val="${n}">${n}</button>`).join('')+'</div>'; }
+  else if(q.qtype==='yesno'){ body='<div class="opts" data-opts>'+['Yes','No'].map(o=>`<label class="opt"><input type="radio" name="q${i}" value="${o}"> ${o}</label>`).join('')+'</div>'; }
+  else if(q.qtype==='choice'){ const opts=Array.isArray(q.options)?q.options:[]; body='<div class="opts" data-opts>'+opts.map(o=>`<label class="opt"><input type="radio" name="q${i}" value="${esc(o)}"> ${esc(o)}</label>`).join('')+'</div>'; }
+  else if(q.qtype==='short_text'){ body='<input type="text" data-text>'; }
+  else { body='<textarea data-text></textarea>'; }
+  return `<div class="q" data-q="${i}" data-qid="${esc(q.id)}" data-type="${esc(q.qtype)}" data-req="${q.required?1:0}"><div class="prompt">${esc(q.prompt)}${req}</div>${body}<div class="ferr">This one's required.</div></div>`;
+}
+function wire(){
+  // scale buttons (rating/nps)
+  document.querySelectorAll('[data-scale]').forEach(s=>{
+    s.addEventListener('click',e=>{const b=e.target.closest('button[data-val]');if(!b)return;
+      s.querySelectorAll('button').forEach(x=>x.classList.remove('sel'));b.classList.add('sel');s.dataset.value=b.dataset.val;});
+  });
+  // option highlight
+  document.querySelectorAll('[data-opts]').forEach(o=>{
+    o.addEventListener('change',()=>{o.querySelectorAll('.opt').forEach(l=>l.classList.toggle('sel',l.querySelector('input').checked));});
+  });
+}
+function collect(){
+  const answers=[]; let firstBad=null;
+  document.querySelectorAll('.q').forEach(el=>{
+    const qid=el.dataset.qid, type=el.dataset.type, req=el.dataset.req==='1';
+    let val=null;
+    if(type==='rating'||type==='nps'){ const s=el.querySelector('[data-scale]'); val=s&&s.dataset.value!=null?Number(s.dataset.value):null; }
+    else if(type==='choice'||type==='yesno'){ const c=el.querySelector('input:checked'); val=c?c.value:null; }
+    else { const t=el.querySelector('[data-text]'); val=t&&t.value.trim()?t.value.trim():null; }
+    el.querySelector('.ferr').style.display='none';
+    if(req&&(val==null||val==='')){ if(!firstBad)firstBad=el; el.querySelector('.ferr').style.display='block'; }
+    if(val!=null&&val!=='') answers.push({question_id:qid,value:val});
+  });
+  return {answers,firstBad};
+}
+async function submit(btn){
+  const {answers,firstBad}=collect();
+  if(firstBad){ firstBad.scrollIntoView({behavior:'smooth',block:'center'}); return; }
+  btn.disabled=true;btn.textContent='Sending…';
+  const {ok,body}=await fn('survey-submit',{token,answers});
+  if(ok&&body.success){ document.getElementById('app').innerHTML='<div class="msg"><h2>Thank you 🖤</h2><p>Your feedback is in — it helps us make the next one better.</p></div>'; }
+  else { btn.disabled=false;btn.textContent='Submit'; alert((body&&body.error)||'Something went wrong — please try again.'); }
+}
+(async function(){
+  const app=document.getElementById('app');
+  if(!token){ app.innerHTML='<div class="msg"><div class="err">This survey link is missing its code. Please use the link from your email.</div></div>'; return; }
+  const {ok,body}=await fn('survey-get',{token});
+  if(!ok){ app.innerHTML=`<div class="msg"><div class="err">${esc((body&&body.error)||'This survey is not available.')}</div></div>`; return; }
+  QUESTIONS=body.questions||[];
+  const ev=body.survey.event_name?` · ${esc(body.survey.event_name)}`:'';
+  const who=body.context&&body.context.who?`<p>Hi ${esc(body.context.who)} — thanks for being there.</p>`:'';
+  app.innerHTML=`
+    <header><div class="wrap">
+      <div class="eyebrow">Come With${ev}</div>
+      <h1>${esc(body.survey.title||'Your feedback')}</h1>
+      ${body.survey.intro?`<p>${esc(body.survey.intro)}</p>`:''}
+    </div></header>
+    <main><div class="wrap">
+      ${who}
+      <form id="sform">${QUESTIONS.map(qHtml).join('')||'<p class="msg">This survey has no questions yet.</p>'}
+        ${QUESTIONS.length?'<button type="submit" class="submit">Submit</button>':''}
+      </form>
+    </div></main>`;
+  wire();
+  const f=document.getElementById('sform');
+  if(f) f.addEventListener('submit',e=>{e.preventDefault();submit(f.querySelector('.submit'));});
+})();
+</script>
+</body>
+</html>

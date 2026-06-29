@@ -1050,6 +1050,9 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-pricing">
         <div id="pricingBody"></div>
       </div>
+      <div class="panel" id="panel-surveys">
+        <div id="surveysBody"></div>
+      </div>
 
       <div class="panel" id="panel-clients">
         <button class="add-btn" id="addClientBtn">+ Add client</button>
@@ -2689,6 +2692,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
   if (tab === 'pricing') { await loadPricing(); return; } // custom (event pricing tool)
+  if (tab === 'surveys') { await loadSurveys(); return; } // custom (survey builder + results)
   if (tab === 'clients') { await loadClients(); return; } // custom (client roster)
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
@@ -7403,6 +7407,226 @@ $('panel-pricing').addEventListener('click', e => {
   if (e.target.closest('[data-px-print]')) { pxPrint(); return; }
   if (e.target.closest('[data-px-save-event]')) { pxSaveToEvent(); return; }
   if (e.target.closest('[data-px-reset]')) { renderPricing(); return; }
+});
+
+// ===================== SURVEYS (Audience) =====================
+// Build surveys + questions, open/close, share a public (anonymous) link or send
+// tokenized per-recipient links, and read results filterable by event / person.
+const SV = { surveys: [], events: [], active: null, q: [], resp: [], ans: [], actorNames: {}, guestNames: {}, fEvent: '', fActor: '' };
+const SV_CSS = `<style>
+  .sv-detail-bar{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .sv-detail-bar h2{margin:0;font-family:'Bebas Neue',sans-serif;letter-spacing:.04em;font-size:1.4rem}
+  .sv-sec{border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:12px;padding:12px 14px}
+  .sv-sec h3{margin:0 0 8px;font-size:.95rem}
+  .sv-qrow{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:8px 0;border-bottom:1px dashed var(--border)}
+  .sv-qrow:last-child{border-bottom:none}
+  .sv-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+  .sv-qagg{border:1px solid var(--border);border-radius:9px;padding:10px 12px;margin-bottom:8px;background:var(--surface-2)}
+  .sv-qh{font-weight:700;font-size:.9rem;margin-bottom:6px}
+  .sv-big{font-family:'Bebas Neue',sans-serif;font-size:2rem;color:var(--text)}
+  .sv-bar{display:grid;grid-template-columns:130px 1fr 34px;align-items:center;gap:8px;font-size:.82rem;margin:3px 0}
+  .sv-bar .fill{height:10px;border-radius:5px;background:var(--lime,#a7e02e)}
+  .sv-texts{margin:4px 0 0;padding-left:18px;font-size:.85rem;color:var(--text)}
+  .sv-texts li{margin:2px 0}
+  .sv-link{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .sv-link input{flex:1;min-width:220px}
+</style>`;
+async function loadSurveys() {
+  $('surveysBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading surveys…</div>';
+  const [sv, ev] = await Promise.all([
+    sb.from('surveys').select('id,title,intro,status,event_id,allow_anonymous,public_token,created_at').order('created_at', { ascending: false }),
+    sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+  ]);
+  if (sv.error) { $('surveysBody').innerHTML = `<div class="panel-state err">${escapeHtml(sv.error.message)}</div>`; return; }
+  SV.surveys = sv.data || []; SV.events = ev.data || [];
+  const ids = SV.surveys.map(s => s.id);
+  if (ids.length) {
+    const [qc, rc] = await Promise.all([
+      sb.from('survey_questions').select('survey_id').in('survey_id', ids),
+      sb.from('survey_responses').select('survey_id').in('survey_id', ids),
+    ]);
+    const qBy = {}, rBy = {}; (qc.data || []).forEach(r => qBy[r.survey_id] = (qBy[r.survey_id] || 0) + 1); (rc.data || []).forEach(r => rBy[r.survey_id] = (rBy[r.survey_id] || 0) + 1);
+    SV.surveys.forEach(s => { s._q = qBy[s.id] || 0; s._r = rBy[s.id] || 0; });
+  }
+  SV.active = null; renderSurveys();
+}
+function svEvName(id) { const e = SV.events.find(x => x.id === id); return e ? e.name : ''; }
+function renderSurveys() {
+  if (SV.active) { renderSurveyDetail(); return; }
+  const rows = SV.surveys.map(s => `<tr>
+    <td><strong>${escapeHtml(s.title)}</strong></td>
+    <td>${escapeHtml(svEvName(s.event_id)) || muted}</td>
+    <td><span class="badge badge-${s.status === 'open' ? 'on_sale' : (s.status === 'closed' ? 'cancelled' : 'draft')}">${s.status}</span></td>
+    <td class="num">${s._q || 0}</td>
+    <td class="num">${s._r || 0}</td>
+    <td style="white-space:nowrap"><button class="row-btn primary" data-sv-open="${escapeHtml(s.id)}">Open</button> <button class="row-btn" data-sv-del="${escapeHtml(s.id)}">Delete</button></td>
+  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px">No surveys yet. Create one to gather post-event feedback.</td></tr>`;
+  $('surveysBody').innerHTML = SV_CSS + `<button class="add-btn" data-sv-new>+ New survey</button>
+    <table class="data-table"><thead><tr><th>Survey</th><th>Event</th><th>Status</th><th class="num">Qs</th><th class="num">Responses</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function loadSurveyDetail() {
+  const id = SV.active;
+  const [q, r] = await Promise.all([
+    sb.from('survey_questions').select('*').eq('survey_id', id).order('sort_order'),
+    sb.from('survey_responses').select('id,event_id,actor_id,guest_id,subscriber_id,anonymous,submitted_at, invite:survey_invites(label,email)').eq('survey_id', id).order('submitted_at', { ascending: false }),
+  ]);
+  SV.q = q.data || []; SV.resp = r.data || [];
+  const rids = SV.resp.map(x => x.id);
+  SV.ans = rids.length ? ((await sb.from('survey_answers').select('response_id,question_id,value').in('response_id', rids)).data || []) : [];
+  const aids = [...new Set(SV.resp.map(x => x.actor_id).filter(Boolean))];
+  const gids = [...new Set(SV.resp.map(x => x.guest_id).filter(Boolean))];
+  SV.actorNames = {}; SV.guestNames = {};
+  if (aids.length) ((await sb.from('actors').select('id,display_name').in('id', aids)).data || []).forEach(x => SV.actorNames[x.id] = x.display_name);
+  if (gids.length) ((await sb.from('guests').select('id,full_name').in('id', gids)).data || []).forEach(x => SV.guestNames[x.id] = x.full_name);
+  renderSurveys();
+}
+function renderSurveyDetail() {
+  const s = SV.surveys.find(x => x.id === SV.active); if (!s) { renderSurveys(); return; }
+  const pub = location.origin + '/survey.html?t=' + s.public_token;
+  const qList = SV.q.map((q, i) => `<div class="sv-qrow"><div><strong>${escapeHtml(q.prompt)}</strong> <span class="li-sub">${q.qtype}${q.required ? ' · required' : ''}</span></div>
+    <div style="white-space:nowrap"><button class="hub-mini" data-sv-up="${escapeHtml(q.id)}"${i === 0 ? ' disabled' : ''}>↑</button> <button class="hub-mini" data-sv-down="${escapeHtml(q.id)}"${i === SV.q.length - 1 ? ' disabled' : ''}>↓</button> <button class="hub-mini" data-sv-editq="${escapeHtml(q.id)}">Edit</button> <button class="hub-mini" data-sv-delq="${escapeHtml(q.id)}">✕</button></div></div>`).join('') || '<div class="li-sub">No questions yet — add one below.</div>';
+  // Filters from the tags present in responses.
+  const evIds = [...new Set(SV.resp.map(r => r.event_id).filter(Boolean))];
+  const acIds = [...new Set(SV.resp.map(r => r.actor_id).filter(Boolean))];
+  const evFilter = evIds.length ? `<select class="hub-status-sel" data-sv-fevent><option value="">All events</option>${evIds.map(id => `<option value="${escapeHtml(id)}"${SV.fEvent === id ? ' selected' : ''}>${escapeHtml(svEvName(id) || id)}</option>`).join('')}</select>` : '';
+  const acFilter = acIds.length ? `<select class="hub-status-sel" data-sv-factor><option value="">All people (tagged)</option>${acIds.map(id => `<option value="${escapeHtml(id)}"${SV.fActor === id ? ' selected' : ''}>${escapeHtml(SV.actorNames[id] || id)}</option>`).join('')}</select>` : '';
+  // Apply filters.
+  const resp = SV.resp.filter(r => (!SV.fEvent || r.event_id === SV.fEvent) && (!SV.fActor || r.actor_id === SV.fActor));
+  const rids = new Set(resp.map(r => r.id));
+  const ans = SV.ans.filter(a => rids.has(a.response_id));
+  const ansByQ = {}; ans.forEach(a => { (ansByQ[a.question_id] = ansByQ[a.question_id] || []).push(a.value); });
+  const agg = SV.q.map(q => {
+    const vals = ansByQ[q.id] || [];
+    let body = '';
+    if (q.qtype === 'rating' || q.qtype === 'nps') {
+      const nums = vals.map(Number).filter(n => !isNaN(n)); const avg = nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : 0;
+      body = `<div class="sv-big">${nums.length ? avg.toFixed(1) : '—'}</div><span class="li-sub">average · ${nums.length} answer${nums.length === 1 ? '' : 's'}</span>`;
+    } else if (q.qtype === 'choice' || q.qtype === 'yesno') {
+      const counts = {}; vals.forEach(v => counts[v] = (counts[v] || 0) + 1); const tot = vals.length || 1;
+      body = Object.keys(counts).map(k => `<div class="sv-bar"><span>${escapeHtml(k)}</span><span class="fill" style="width:${Math.round(counts[k] / tot * 100)}%"></span><span class="num">${counts[k]}</span></div>`).join('') || muted;
+    } else {
+      body = vals.length ? '<ul class="sv-texts">' + vals.map(v => `<li>${escapeHtml(String(v))}</li>`).join('') + '</ul>' : muted;
+    }
+    return `<div class="sv-qagg"><div class="sv-qh">${escapeHtml(q.prompt)} <span class="li-sub">${q.qtype}</span></div>${body}</div>`;
+  }).join('');
+  const who = r => r.anonymous ? 'Anonymous' : (SV.actorNames[r.actor_id] || SV.guestNames[r.guest_id] || (r.invite && (r.invite.label || r.invite.email)) || '—');
+  const respRows = resp.map(r => `<tr><td>${escapeHtml(who(r))}</td><td>${escapeHtml(svEvName(r.event_id))}</td><td>${escapeHtml(fmtDT(r.submitted_at))}</td></tr>`).join('') || `<tr><td colspan="3" class="muted" style="padding:10px">No responses${(SV.fEvent || SV.fActor) ? ' match the filter' : ' yet'}.</td></tr>`;
+  $('surveysBody').innerHTML = SV_CSS + `
+    <div class="sv-detail-bar">
+      <h2>${escapeHtml(s.title)} <span class="badge badge-${s.status === 'open' ? 'on_sale' : (s.status === 'closed' ? 'cancelled' : 'draft')}">${s.status}</span></h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="hub-btn ghost" data-sv-back>← all surveys</button>
+        <button class="hub-btn ghost" data-sv-toggle>${s.status === 'open' ? 'Close survey' : 'Open survey'}</button>
+        <button class="hub-btn" data-sv-share>Share / send</button>
+      </div>
+    </div>
+    <div class="sv-sec"><h3>Questions</h3>${qList}
+      <button class="px-add" data-sv-addq style="margin-top:8px">+ Add question</button></div>
+    <div class="sv-sec"><h3>Public link</h3>
+      <div class="sv-link"><input class="modal-input" value="${escapeHtml(pub)}" readonly data-sv-publink><button class="hub-btn ghost" data-sv-copylink>Copy</button></div>
+      <div class="kpi-hint">Anonymous, tagged to ${s.event_id ? escapeHtml(svEvName(s.event_id)) : 'no event'}. Put it on the impact report or anywhere public.${s.status !== 'open' ? ' <strong>Open the survey</strong> for it to accept responses.' : ''}</div></div>
+    <div class="sv-sec"><h3>Results — ${resp.length} response${resp.length === 1 ? '' : 's'}</h3>
+      ${(evFilter || acFilter) ? `<div class="sv-filters">${evFilter}${acFilter}</div>` : ''}
+      ${SV.q.length ? agg : '<div class="li-sub">Add questions to see results.</div>'}
+      <h3 style="margin-top:12px">Who responded</h3>
+      <table class="data-table"><thead><tr><th>Person</th><th>Event</th><th>When</th></tr></thead><tbody>${respRows}</tbody></table></div>`;
+}
+function openNewSurvey() {
+  const evOpts = '<option value="">— none —</option>' + SV.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}${e.event_date ? ' · ' + fmtDate(e.event_date) : ''}</option>`).join('');
+  openKpi('New survey', 'Saves to public.surveys (status = draft)', `
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required placeholder="Dance Infusion #2 — your feedback"></div>
+    <div class="modal-form-row"><label class="modal-label">Intro (shown at the top of the survey)</label><textarea class="modal-textarea" name="intro" rows="2"></textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Link to event</label><select class="modal-select" name="event_id">${evOpts}</select></div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="anon" checked style="width:auto;margin:0"> Allow anonymous responses (public link)</label></div>`,
+    async () => {
+      const t = kpiVal('title'); if (!t) throw new Error('Title is required');
+      const { data, error } = await sb.from('surveys').insert({ title: t, intro: kpiVal('intro') || null, event_id: kpiVal('event_id') || null, allow_anonymous: !!$('kpiModalBody').querySelector('[name=anon]').checked, created_by: ME.id || null }).select('id').single();
+      if (error) throw error;
+      closeKpi(); toast('Survey created — add questions', 'ok'); await loadSurveys(); SV.active = data.id; await loadSurveyDetail();
+    }, 'Create');
+}
+function openSurveyQuestion(qid) {
+  const q = qid ? SV.q.find(x => x.id === qid) : null;
+  const types = [['rating', 'Rating 1–5'], ['nps', 'NPS 0–10'], ['choice', 'Multiple choice'], ['yesno', 'Yes / No'], ['short_text', 'Short text'], ['long_text', 'Long text']];
+  openKpi(q ? 'Edit question' : 'Add question', '', `
+    <div class="modal-form-row"><label class="modal-label">Prompt *</label><input class="modal-input" name="prompt" value="${q ? escapeHtml(q.prompt) : ''}" required></div>
+    <div class="modal-form-row"><label class="modal-label">Type</label><select class="modal-select" name="qtype">${types.map(t => `<option value="${t[0]}"${q && q.qtype === t[0] ? ' selected' : ''}>${t[1]}</option>`).join('')}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Choices (for multiple choice — one per line)</label><textarea class="modal-textarea" name="options" rows="3">${q && Array.isArray(q.options) ? q.options.map(escapeHtml).join('\n') : ''}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label" style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" name="required"${q && q.required ? ' checked' : ''} style="width:auto;margin:0"> Required</label></div>`,
+    async () => {
+      const prompt = kpiVal('prompt'); if (!prompt) throw new Error('Prompt is required');
+      const opts = (kpiVal('options') || '').split('\n').map(x => x.trim()).filter(Boolean);
+      const rec = { survey_id: SV.active, prompt, qtype: kpiVal('qtype'), options: opts, required: !!$('kpiModalBody').querySelector('[name=required]').checked };
+      if (q) { const { error } = await sb.from('survey_questions').update(rec).eq('id', q.id); if (error) throw error; }
+      else { rec.sort_order = SV.q.length ? Math.max(...SV.q.map(x => x.sort_order)) + 1 : 1; const { error } = await sb.from('survey_questions').insert(rec); if (error) throw error; }
+      closeKpi(); toast('Saved', 'ok'); loadSurveyDetail();
+    }, 'Save');
+}
+async function svReorder(qid, dir) {
+  const i = SV.q.findIndex(x => x.id === qid); const j = i + dir;
+  if (i < 0 || j < 0 || j >= SV.q.length) return;
+  const a = SV.q[i], b = SV.q[j];
+  await Promise.all([
+    sb.from('survey_questions').update({ sort_order: b.sort_order }).eq('id', a.id),
+    sb.from('survey_questions').update({ sort_order: a.sort_order }).eq('id', b.id),
+  ]);
+  loadSurveyDetail();
+}
+async function svToggleStatus() {
+  const s = SV.surveys.find(x => x.id === SV.active); const next = s.status === 'open' ? 'closed' : 'open';
+  const { error } = await sb.from('surveys').update({ status: next }).eq('id', s.id);
+  if (error) { toast(error.message, 'err'); return; }
+  s.status = next; toast(next === 'open' ? 'Survey is now open' : 'Survey closed', 'ok'); renderSurveys();
+}
+function openSurveyShare() {
+  const s = SV.surveys.find(x => x.id === SV.active);
+  const pub = location.origin + '/survey.html?t=' + s.public_token;
+  openKpi('Share / send — ' + s.title, 'Personal links tag each response to the person', `
+    <div class="modal-form-row"><label class="modal-label">Public link (anonymous, tagged to the event)</label>
+      <div class="sv-link"><input class="modal-input" id="svPubLink" value="${escapeHtml(pub)}" readonly><button class="hub-btn ghost" type="button" data-sv-copylink>Copy</button></div></div>
+    <div class="kpi-section-h">Email personal links</div>
+    <div class="kpi-hint">Each recipient gets a unique link, so their response is tagged to them.</div>
+    ${s.event_id ? `<div class="modal-form-row"><label class="modal-label" style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="svGuests" style="width:auto;margin:0"> Include this event's guests (those with an email)</label></div>` : ''}
+    <div class="modal-form-row"><label class="modal-label">Extra emails (one per line)</label><textarea class="modal-textarea" id="svEmails" rows="4" placeholder="alex@example.com&#10;sam@example.com"></textarea></div>`,
+    () => sendSurvey(s), 'Create + email links');
+}
+async function sendSurvey(s) {
+  const recips = [];
+  ($('svEmails')?.value || '').split(/[\n,;]+/).map(x => x.trim()).filter(x => x.includes('@')).forEach(e => recips.push({ email: e, event_id: s.event_id || null }));
+  if ($('svGuests')?.checked && s.event_id) {
+    const { data: ga } = await sb.from('guest_event_attendance').select('guest_id').eq('event_id', s.event_id);
+    const gids = [...new Set((ga || []).map(x => x.guest_id).filter(Boolean))];
+    if (gids.length) {
+      const { data: gs } = await sb.from('guests').select('id,full_name,email').in('id', gids);
+      (gs || []).forEach(g => { if (g.email) recips.push({ email: g.email, label: g.full_name, guest_id: g.id, event_id: s.event_id }); });
+    }
+  }
+  if (!recips.length) throw new Error('Add at least one email (or tick the event guests)');
+  const { data, error } = await sb.functions.invoke('survey-send', { body: { survey_id: s.id, recipients: recips, send_email: true } });
+  if (error) throw new Error(await fnErrorDetail(error));
+  closeKpi(); toast(`Created ${data.created} link${data.created === 1 ? '' : 's'} · emailed ${data.sent}`, 'ok'); loadSurveyDetail();
+}
+function svCopyLink() {
+  const s = SV.surveys.find(x => x.id === SV.active); if (!s) return;
+  navigator.clipboard?.writeText(location.origin + '/survey.html?t=' + s.public_token).then(() => toast('Link copied', 'ok'), () => toast('Copy failed', 'err'));
+}
+$('panel-surveys').addEventListener('change', e => {
+  const fe = e.target.closest('[data-sv-fevent]'); if (fe) { SV.fEvent = fe.value; renderSurveys(); return; }
+  const fa = e.target.closest('[data-sv-factor]'); if (fa) { SV.fActor = fa.value; renderSurveys(); return; }
+});
+$('panel-surveys').addEventListener('click', async e => {
+  if (e.target.closest('[data-sv-new]')) { openNewSurvey(); return; }
+  const op = e.target.closest('[data-sv-open]'); if (op) { SV.active = op.dataset.svOpen; SV.fEvent = ''; SV.fActor = ''; await loadSurveyDetail(); return; }
+  const dl = e.target.closest('[data-sv-del]'); if (dl) { if (!confirm('Delete this survey and all its responses?')) return; await sb.from('surveys').delete().eq('id', dl.dataset.svDel); toast('Deleted', 'ok'); loadSurveys(); return; }
+  if (e.target.closest('[data-sv-back]')) { SV.active = null; renderSurveys(); return; }
+  if (e.target.closest('[data-sv-toggle]')) { svToggleStatus(); return; }
+  if (e.target.closest('[data-sv-share]')) { openSurveyShare(); return; }
+  if (e.target.closest('[data-sv-addq]')) { openSurveyQuestion(null); return; }
+  const eq = e.target.closest('[data-sv-editq]'); if (eq) { openSurveyQuestion(eq.dataset.svEditq); return; }
+  const dq = e.target.closest('[data-sv-delq]'); if (dq) { if (!confirm('Delete this question?')) return; await sb.from('survey_questions').delete().eq('id', dq.dataset.svDelq); loadSurveyDetail(); return; }
+  const up = e.target.closest('[data-sv-up]'); if (up) { svReorder(up.dataset.svUp, -1); return; }
+  const dn = e.target.closest('[data-sv-down]'); if (dn) { svReorder(dn.dataset.svDown, 1); return; }
+  if (e.target.closest('[data-sv-copylink]')) { svCopyLink(); return; }
 });
 
 const vendorState = { rows: [], q: '', cat: '', selected: new Set(), sortKey: 'spent', sortDir: -1, activeId: null, detailExpenses: [], detailContacts: [] };
