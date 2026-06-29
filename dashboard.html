@@ -6460,7 +6460,11 @@ function eventResult(e) {
   const content = e.type === 'showcase' || e.series === 'Content Creation';
   if (di) return { lbl: 'to MS', html: `<span class="${cls}">${money(net)}</span>` };
   if (prod) return { lbl: 'net to CW', html: `<span class="${cls}">${money(net)}</span>` };
-  if (content) return { lbl: 'IG reach', html: e.ig ? fmtNum(e.ig) : muted };
+  // Content/showcase: lead with net P&L when there's real money (e.g. a costed
+  // showcase that ran at a loss); fall back to IG reach only when it nets to zero.
+  if (content) return net !== 0
+    ? { lbl: 'net P&L', html: `<span class="${cls}">${money(net)}</span>` }
+    : { lbl: 'IG reach', html: e.ig ? fmtNum(e.ig) : muted };
   return { lbl: 'net P&L', html: `<span class="${cls}">${money(net)}</span>` };
 }
 function renderEventsDash() {
