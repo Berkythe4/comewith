@@ -81,10 +81,18 @@ Deno.serve(async (req) => {
     // Load campaign
     const { data: campaign, error: cErr } = await admin
       .from("mailing_campaigns")
-      .select("id, name, subject, preview_text, body_html, body_text, segment_filter, status, cc")
+      .select("id, name, subject, preview_text, body_html, body_text, segment_filter, status, cc, survey_id")
       .eq("id", campaign_id)
       .single();
     if (cErr || !campaign) return jsonError(404, "campaign not found");
+
+    // An attached OPEN survey → each recipient gets a personal tokenized link.
+    let survey: any = null;
+    if (campaign.survey_id) {
+      const { data: sv } = await admin.from("surveys").select("id, event_id, status").eq("id", campaign.survey_id).maybeSingle();
+      if (sv && sv.status === "open") survey = sv;
+    }
+    const surveyCta = (link: string) => `<p style="text-align:center;margin:22px 0 4px"><a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:700">Share your feedback →</a></p>`;
 
     const resendKey = Deno.env.get("RESEND_API_KEY");
     if (!resendKey) return jsonError(500, "RESEND_API_KEY not set");
@@ -151,7 +159,12 @@ Deno.serve(async (req) => {
     for (const r of recipients) {
       const unsubUrl = `${UNSUB_BASE}?token=${r.unsubscribe_token}`;
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You're getting this because you subscribed to Come With updates. <a href="${unsubUrl}" style="color:#8A7F72;">Unsubscribe</a> anytime.</p>`;
-      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
+      let svBlock = "";
+      if (survey) {
+        const { data: inv } = await admin.from("survey_invites").insert({ survey_id: survey.id, subscriber_id: r.id, event_id: survey.event_id, email: r.email, label: r.full_name }).select("token").single();
+        if (inv) svBlock = surveyCta(`${SITE_URL}/survey.html?t=${inv.token}`);
+      }
+      const html = renderBody(campaign.body_html || campaign.body_text || "") + svBlock + footer;
 
       const sendRes = await resend.emails.send({
         from: FROM,
@@ -191,7 +204,12 @@ Deno.serve(async (req) => {
     let ccSent = 0;
     for (const email of ccList) {
       const footer = `<hr style="border:none;border-top:1px solid #ddd;margin:32px 0 12px;"><p style="font-size:0.75rem;color:#8A7F72;text-align:center;">You were CC'd on this Come With update.</p>`;
-      const html = renderBody(campaign.body_html || campaign.body_text || "") + footer;
+      let svBlock = "";
+      if (survey) {
+        const { data: inv } = await admin.from("survey_invites").insert({ survey_id: survey.id, event_id: survey.event_id, email }).select("token").single();
+        if (inv) svBlock = surveyCta(`${SITE_URL}/survey.html?t=${inv.token}`);
+      }
+      const html = renderBody(campaign.body_html || campaign.body_text || "") + svBlock + footer;
       const res = await resend.emails.send({ from: FROM, to: email, replyTo: REPLY_TO, subject: campaign.subject, html });
       if (res.error) failed++; else { sent++; ccSent++; }
     }

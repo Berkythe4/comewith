@@ -2549,7 +2549,7 @@ const renderers = {
         ? `<button class="row-btn" data-send-campaign="${id}">Send</button>`
         : (status === 'sending' ? `<span class="muted">sending…</span>` : '');
       return `<tr>
-        <td>${escapeHtml(r.name || '')}</td>
+        <td>${escapeHtml(r.name || '')}${r.survey_id ? `<div class="li-sub">📋 Survey: ${escapeHtml(r.survey?.title || 'attached')}</div>` : ''}</td>
         <td class="truncate">${escapeHtml(r.subject || '')}</td>
         <td>${escapeHtml(r.segment_filter || '') || '<span class="muted">all</span>'}</td>
         <td><span class="badge badge-${escapeHtml(status)}">${escapeHtml(status)}</span></td>
@@ -2652,7 +2652,7 @@ const queries = {
   },
 
   campaigns: () => sb.from('mailing_campaigns')
-    .select('id, name, subject, segment_filter, status, recipient_count, sent_at, created_at')
+    .select('id, name, subject, segment_filter, status, recipient_count, sent_at, created_at, survey_id, survey:surveys(title)')
     .order('created_at', { ascending: false })
     .limit(500),
 };
@@ -3040,6 +3040,7 @@ const FORM_DEFS = {
       { name: 'preview_text',   type: 'text',     label: 'Preview text', placeholder: 'Shows next to subject in inbox' },
       { name: 'segment_filter', type: 'select-segments', label: 'Send to' },
       { name: 'cc',             type: 'text',     label: 'CC / also send to (comma-separated emails)', placeholder: 'alex@x.com, sam@y.com' },
+      { name: 'survey_id',      type: 'select-surveys', label: 'Attach a survey (each recipient gets a personal link)' },
       { name: 'body_html',      type: 'textarea', label: 'Body (HTML)',       required: true },
     ],
   },
@@ -3101,6 +3102,10 @@ async function buildField(f) {
     const [segs, total] = await Promise.all([loadCachedSegments(), subscribedTotal()]);
     const opts = segs.map(s => `<option value="${escapeHtml(s.segment)}">${escapeHtml(s.segment)} — ${s.count} subscribed</option>`).join('');
     input = `<select class="modal-select" name="${f.name}"><option value="">All subscribers — ${total}</option>${opts}</select>`;
+  } else if (f.type === 'select-surveys') {
+    const { data } = await sb.from('surveys').select('id,title,status').order('created_at', { ascending: false });
+    const opts = (data || []).map(s => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.title)}${s.status !== 'open' ? ` (${s.status})` : ''}</option>`).join('');
+    input = `<select class="modal-select" name="${f.name}"><option value="">— none —</option>${opts}</select>`;
   } else if (f.type === 'select-events') {
     const opts = (await loadCachedEvents()).map(ev =>
       `<option value="${escapeHtml(ev.id)}">${escapeHtml(ev.name || '(untitled)')}${ev.event_date ? ' · ' + fmtDate(ev.event_date) : ''}</option>`).join('');
@@ -3263,18 +3268,21 @@ document.querySelector('main.main').addEventListener('click', (e) => {
 // Edit a not-yet-sent campaign (draft or failed). Sent/sending campaigns are locked.
 async function openEditCampaign(id) {
   const { data: c, error } = await sb.from('mailing_campaigns')
-    .select('id,name,subject,preview_text,segment_filter,body_html,cc,status').eq('id', id).single();
+    .select('id,name,subject,preview_text,segment_filter,body_html,cc,status,survey_id').eq('id', id).single();
   if (error || !c) { toast('Could not load campaign', 'err'); return; }
   if (['sent', 'sending'].includes((c.status || '').toLowerCase())) { toast('Sent campaigns can\'t be edited', 'err'); return; }
-  const [segs, total] = await Promise.all([loadCachedSegments(), subscribedTotal()]);
+  const [segs, total, svRes] = await Promise.all([loadCachedSegments(), subscribedTotal(), sb.from('surveys').select('id,title,status').order('created_at', { ascending: false })]);
   const segOpts = `<option value="">All subscribers — ${total}</option>` +
     segs.map(s => `<option value="${escapeHtml(s.segment)}"${s.segment === c.segment_filter ? ' selected' : ''}>${escapeHtml(s.segment)} — ${s.count} subscribed</option>`).join('');
+  const svOpts = `<option value="">— none —</option>` +
+    (svRes.data || []).map(s => `<option value="${escapeHtml(s.id)}"${s.id === c.survey_id ? ' selected' : ''}>${escapeHtml(s.title)}${s.status !== 'open' ? ` (${s.status})` : ''}</option>`).join('');
   openKpi('Edit campaign — ' + (c.name || ''), 'Updates the draft in public.mailing_campaigns', `
     <div class="modal-form-row"><label class="modal-label">Internal name *</label><input class="modal-input" name="name" value="${escapeHtml(c.name || '')}" required></div>
     <div class="modal-form-row"><label class="modal-label">Subject line *</label><input class="modal-input" name="subject" value="${escapeHtml(c.subject || '')}" required></div>
     <div class="modal-form-row"><label class="modal-label">Preview text</label><input class="modal-input" name="preview_text" value="${escapeHtml(c.preview_text || '')}" placeholder="Shows next to subject in inbox"></div>
     <div class="modal-form-row"><label class="modal-label">Send to</label><select class="modal-select" name="segment_filter">${segOpts}</select></div>
     <div class="modal-form-row"><label class="modal-label">CC / also send to (comma-separated emails)</label><input class="modal-input" name="cc" value="${escapeHtml(c.cc || '')}" placeholder="alex@x.com, sam@y.com"></div>
+    <div class="modal-form-row"><label class="modal-label">Attach a survey (each recipient gets a personal link)</label><select class="modal-select" name="survey_id">${svOpts}</select></div>
     <div class="modal-form-row"><label class="modal-label">Body (HTML) *</label><textarea class="modal-textarea" name="body_html" rows="8" required>${escapeHtml(c.body_html || '')}</textarea></div>`,
     () => submitEditCampaign(id), 'Save changes');
 }
@@ -3284,6 +3292,7 @@ async function submitEditCampaign(id) {
     preview_text: kpiVal('preview_text') || null,
     segment_filter: kpiVal('segment_filter') || null,
     cc: kpiVal('cc') || null,
+    survey_id: kpiVal('survey_id') || null,
     body_html: kpiVal('body_html'),
   };
   if (!patch.name || !patch.subject || !patch.body_html) throw new Error('Name, subject and body are required');
@@ -3699,7 +3708,8 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   $('kpiModalSubmit').disabled = false;
   kpiSubmit = submitFn;
   $('kpiModalOverlay').classList.add('show');
-  setTimeout(() => { const f = $('kpiModalBody').querySelector('input,select,textarea'); if (f) f.focus(); }, 60);
+  // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
+  setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
 function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; }
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
@@ -3708,17 +3718,16 @@ const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy
 $('kpiModalCancel').addEventListener('click', closeKpi);
 $('kpiModalOverlay').addEventListener('click', (e) => { if (e.target === $('kpiModalOverlay')) closeKpi(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
-// Backspace outside a text field must NOT navigate the browser "back" (that was
-// closing the dashboard / open modal when the cursor wasn't in an input).
-document.addEventListener('keydown', (e) => {
+// Backspace outside a text field must NOT navigate the browser "back" (that closes
+// the dashboard / any open pop-out). CAPTURE phase at the window level so it fires
+// before everything and reliably cancels the default on every browser (Firefox still
+// maps Backspace → history-back). A focused <select> counts as non-editable here.
+window.addEventListener('keydown', (e) => {
   if (e.key !== 'Backspace') return;
   const t = e.target;
-  // NB: a focused <select> is intentionally NOT "editable" here — backspace doesn't
-  // edit it, and allowing the default was navigating the browser back (closing the
-  // modal when the cursor sat on a dropdown).
   const editable = t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable);
   if (!editable) e.preventDefault();
-});
+}, true);
 // Enter in a single-line field should NOT submit the whole modal (it was closing
 // the edit form mid-typing, e.g. while adding recap videos). Textareas keep Enter;
 // the explicit Save button still submits.
