@@ -200,6 +200,60 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-06-29 (Impact report public + Pricing + Surveys)
+
+> Migrations **067–074 all APPLIED to prod**; edge functions **survey-get / survey-submit /
+> survey-send deployed** + **send-campaign redeployed**; `dashboard.html`, `index.html`,
+> `survey.html`, and the DI#2 `impact-report.html` / `public-audit.html` pushed (Netlify live).
+
+### ✅ Impact report → public, Supabase-backed (067)
+- `events.impact_report` (jsonb) + `events.impact_report_public` (publish toggle) + anon `v_public_impact_report`.
+- Event-hub **"Impact report" editor** (text, hero + inline photos, toggle). DI#2 report + public audit
+  rewritten to read Supabase (localhost JSON fallback); `/staging` gate retired — the toggle is the gate.
+- Homepage `#di` **"Read the #2 Impact Report"** button when published.
+- Content locked: attendance **117**, DI#1 sponsors **0**, reach removed, audit goal **50%**, Yankees donor =
+  New York Yankees; human-moment quote + DI#3 copy render from saved content. **DI#2 report is published.**
+
+### ✅ Pricing tool (068, 070) — Sales, between Inquiries & Agreements
+- `pricing_config` (admin single-row) + `module_registry` 'pricing'; pure engine `assets/pricing-engine.js`
+  (+ `scripts/test_pricing.mjs`, 14 passing tests).
+- Quote builder: DJ / rental (live from `equipment_inventory.daily_rate`) / labor / lighting / **travel
+  (mileage + drive time)** / surcharges; editable defaults + per-DJ overrides; copy + print/PDF.
+- **Link a quote to an event** (`events.quote` jsonb, 070), or save with no event → creates a planning event.
+
+### ✅ Survey system (071, 072, 073)
+- `surveys / survey_questions / survey_invites / survey_responses / survey_answers` (admin RLS) + anon `v_public_survey`.
+- Edge fns: `survey-get` / `survey-submit` (public; token = invite or public; tags response to
+  event/actor/guest/subscriber) + `survey-send` (admin; tokenized invites + Resend).
+- Public `survey.html`; dashboard **Surveys** module (Audience) — builder + results filterable by event/person.
+- Wired to the **impact report** (button) and to **campaigns** (073 `mailing_campaigns.survey_id`; per-recipient
+  tokenized link in send-campaign; `{{survey}}` / `{{survey_link}}` placement). First DI#2 feedback survey is open.
+
+### ✅ Campaigns
+- Edit any not-yet-sent campaign; **CC** (069 `mailing_campaigns.cc`); attach a survey; rows show a 📋 survey
+  badge; plain-text line-breaks render as `<br>`; survey shows in test send + preview.
+
+### ✅ Event hub + ops
+- **Guest list (expected customers)** on the Customers tab — searchable picker of existing guests/contacts +
+  add-new + remove; the Customers list itself is searchable.
+- **Equipment load-in checkoff** (074 `equipment_usage.loaded_at`) — persistent checkboxes, "X/Y loaded", Mark all.
+- Fix: event hub reloads `audited` / `financials_released` (toggles saved but weren't re-read on refresh).
+- Fix: content/showcase events show **net P&L** in the Events "Result" column (Crossroads −$1,400 was hidden).
+
+### ✅ Other
+- **Social calendar email** (✉️) — inline-HTML snapshot via `send-notice` + recipient picker (team + contacts).
+- **Users** access chips colour-coded: blue = role default, green/red = grant/revoke override.
+- **Homepage collective** = portrait **photo cards** (artist profile photo) instead of chips.
+- **Pop-out fix:** removed click-outside-to-close (a drag-select ending off the box was dismissing forms) —
+  close via Cancel / Esc only.
+- **Workflow map** gained Quote/Pricing, Email campaign, and Survey/feedback steps (auto-numbered by position).
+
+### ▶️ Open / next
+- **Release to staff** (flip `signed_off` in Team → Modules): **Pricing, Surveys, Templates** are built-but-not-
+  signed-off (master-only today).
+- Add artist **photos** for the new collective cards; flip more artists onto the collective.
+- External TODO still open: verify comewith.org as a sending domain in Resend before the first real blast.
+
 ## Current state — reconciled 2026-06-26 (Customer site LIVE + artist profiles)
 
 > **Priorities/sequencing owned in the planning chat; this file = dashboard execution backlog.**
