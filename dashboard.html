@@ -3343,23 +3343,52 @@ async function campaignStats(id) {
   if (error) { $('kpiModalBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
   $('kpiModalTitle').textContent = 'Campaign stats — ' + (camp?.name || '');
   const rows = ev || [];
+  // Names for the drill-down: map subscriber_id → {name, email}.
+  const subIds = [...new Set(rows.map(e => e.subscriber_id).filter(Boolean))];
+  const subMap = {};
+  if (subIds.length) {
+    const { data: subs } = await sb.from('subscribers').select('id, email, full_name').in('id', subIds);
+    (subs || []).forEach(s => { subMap[s.id] = s; });
+  }
   const cnt = (t) => rows.filter(e => e.event_type === t).length;
   // Identity for uniqueness: subscribers key by id; CC / non-subscriber rows (subscriber_id
   // null) key by their email — stored as metadata.email (our send) or metadata.to (Resend webhook).
-  let unkSeq = 0;
-  const keyOf = (e) => {
+  const keyOf = (e, i) => {
     if (e.subscriber_id) return 's:' + e.subscriber_id;
     const m = e.metadata || {};
     const em = m.email || (Array.isArray(m.to) ? m.to[0] : m.to);
-    return em ? 'e:' + String(em).toLowerCase() : 'x:' + (unkSeq++);
+    return em ? 'e:' + String(em).toLowerCase() : 'x:' + i;
   };
-  const uniq = (t) => new Set(rows.filter(e => e.event_type === t).map(keyOf)).size;
+  const uniq = (t) => new Set(rows.filter(e => e.event_type === t).map((e, i) => keyOf(e, i))).size;
+  // Deduped, named recipient list for one event type (powers the drill-down).
+  const recipientsFor = (t) => {
+    const seen = new Map();
+    rows.filter(e => e.event_type === t).forEach((e, i) => {
+      const k = keyOf(e, i);
+      if (seen.has(k)) return;
+      let name = '', email = '';
+      if (e.subscriber_id && subMap[e.subscriber_id]) {
+        email = subMap[e.subscriber_id].email || ''; name = subMap[e.subscriber_id].full_name || '';
+      } else {
+        const m = e.metadata || {};
+        email = m.email || (Array.isArray(m.to) ? m.to[0] : m.to) || '';
+      }
+      seen.set(k, { name, email: email || '(unknown)' });
+    });
+    return [...seen.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
+  };
   const sent = cnt('sent') || camp?.recipient_count || 0;
   const delivered = uniq('delivered'), opened = uniq('opened'), clicked = uniq('clicked');
   const bounced = uniq('bounced'), complained = uniq('complained'), failed = cnt('failed_to_send');
   const base = delivered || sent;
   const pct = (n, d) => d > 0 ? (Math.round(n / d * 1000) / 10) + '%' : '—';
-  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${fmtNum(v)}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  // Card. If `type` has per-recipient rows, make it a drill target (click → named list).
+  const card = (l, v, sub, type) => {
+    const drill = type && v > 0 && rows.some(e => e.event_type === type);
+    const attrs = drill ? ` data-drill="${type}" data-drill-label="${l}" style="cursor:pointer" title="Click to see who"` : '';
+    const cue = drill ? '<div class="li-sub" style="color:#5b7fb3">view names →</div>' : '';
+    return `<div class="hub-card"${attrs}><div class="lbl">${l}</div><div class="val">${fmtNum(v)}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}${cue}</div>`;
+  };
   // Data-aware hint. Delivered/bounced arriving but opens+clicks flat = Resend open/click
   // TRACKING is off (opt-in per domain), NOT a broken webhook. Nothing arriving = webhook down.
   // noEngage = delivered but zero opens AND zero clicks — the only genuinely ambiguous case
@@ -3371,20 +3400,41 @@ async function campaignStats(id) {
   } else if (noEngage) {
     hint = `⚠️ Delivered${bounced ? ' / bounced' : ''} events are arriving, but <strong>Opened and Clicked are 0 because open &amp; click tracking is turned OFF in Resend</strong> (it's opt-in per sending domain, and off by default). This is NOT missing data on our end — Resend never recorded the opens. Fix: Resend → Settings → Domains → <em>comewith.org</em> → enable <strong>Open Tracking</strong> + <strong>Click Tracking</strong>, and make sure the webhook subscribes to <code>email.opened</code> + <code>email.clicked</code>. Tracking is forward-only — already-sent campaigns can't be backfilled.`;
   } else {
-    hint = `Counts are unique people. Delivered / opened / clicked / bounced come from the Resend webhook.`;
+    hint = `Counts are unique people. <strong>Click any card</strong> to see exactly who — no more cross-checking a Resend export.`;
   }
-  $('kpiModalBody').innerHTML = (rows.length || sent) ? `
+  const statsBody = (rows.length || sent) ? `
     <div class="hub-cards">
-      ${card('Sent', sent, camp?.sent_at ? fmtDate(camp.sent_at) : '')}
-      ${card('Delivered', delivered, pct(delivered, sent) + ' of sent')}
-      ${card('Opened', opened, noEngage ? 'tracking off in Resend' : pct(opened, base) + ' open rate')}
-      ${card('Clicked', clicked, noEngage ? 'tracking off in Resend' : pct(clicked, base) + ' click rate')}
-      ${card('Bounced', bounced, pct(bounced, sent))}
-      ${card('Complained', complained, 'spam reports')}
-      ${failed ? card('Failed to send', failed) : ''}
+      ${card('Sent', sent, camp?.sent_at ? fmtDate(camp.sent_at) : '', 'sent')}
+      ${card('Delivered', delivered, pct(delivered, sent) + ' of sent', 'delivered')}
+      ${card('Opened', opened, noEngage ? 'tracking off in Resend' : pct(opened, base) + ' open rate', 'opened')}
+      ${card('Clicked', clicked, noEngage ? 'tracking off in Resend' : pct(clicked, base) + ' click rate', 'clicked')}
+      ${card('Bounced', bounced, pct(bounced, sent), 'bounced')}
+      ${card('Complained', complained, 'spam reports', 'complained')}
+      ${failed ? card('Failed to send', failed, '', 'failed_to_send') : ''}
     </div>
     <div class="kpi-hint" style="margin-top:10px;">${hint}</div>`
     : `<div class="hub-empty">No send events yet — this campaign hasn't been sent.</div>`;
+
+  const drawStats = () => {
+    $('kpiModalBody').innerHTML = statsBody;
+    $('kpiModalBody').querySelectorAll('[data-drill]').forEach(el =>
+      el.addEventListener('click', () => drawList(el.dataset.drill, el.dataset.drillLabel)));
+  };
+  const drawList = (type, label) => {
+    const people = recipientsFor(type);
+    const items = people.map(p => `<tr>
+      <td style="padding:7px 12px;border-bottom:1px solid var(--border,#eee);">${escapeHtml(p.name || '—')}</td>
+      <td style="padding:7px 12px;border-bottom:1px solid var(--border,#eee);color:#6b7280;">${escapeHtml(p.email)}</td></tr>`).join('');
+    $('kpiModalBody').innerHTML = `
+      <div style="margin-bottom:12px;"><a href="#" data-back style="color:#5b7fb3;text-decoration:none;font-weight:600;">← Back to stats</a></div>
+      <div style="font-weight:700;margin-bottom:10px;">${escapeHtml(label)} — ${people.length} ${people.length === 1 ? 'person' : 'people'}</div>
+      <div style="max-height:52vh;overflow:auto;border:1px solid var(--border,#eee);border-radius:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+          <tbody>${items || '<tr><td style="padding:12px;color:#888;">No named recipients recorded.</td></tr>'}</tbody>
+        </table></div>`;
+    $('kpiModalBody').querySelector('[data-back]')?.addEventListener('click', (e) => { e.preventDefault(); drawStats(); });
+  };
+  drawStats();
 }
 
 document.querySelector('main.main').addEventListener('click', (e) => {
