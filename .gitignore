@@ -5,6 +5,9 @@
 .env.*.local
 *.secret
 
+# Resend / recipient exports contain email addresses (PII) — keep local, never commit
+emails-sent-*.csv
+
 # Python
 __pycache__/
 *.pyc
