@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Join the collective — Come With</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.55;padding:0 0 60px}
+  .wrap{max-width:640px;margin:0 auto;padding:0 22px}
+  header{padding:40px 0 18px;text-align:center}
+  header .k{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  header h1{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:clamp(1.8rem,6vw,2.6rem);margin:10px 0 4px;line-height:1}
+  header p{color:var(--dim)}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:22px;margin-top:18px}
+  label{display:block;font-family:'DM Mono';font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);margin:14px 0 6px}
+  label .req{color:var(--hot)}
+  input,textarea{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;color:var(--cream);font-family:inherit;font-size:1rem;padding:11px 13px;outline:none}
+  input:focus,textarea:focus{border-color:var(--hot)}
+  textarea{min-height:90px;resize:vertical}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+  @media(max-width:520px){.row2{grid-template-columns:1fr}}
+  .photo{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+  .pho{width:96px;height:96px;border-radius:14px;background:var(--bg2);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center;font-family:'Archivo';font-weight:900;font-size:2rem;border:1px solid var(--line);flex:0 0 auto;color:var(--dim)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'DM Mono';font-size:.84rem;letter-spacing:.06em;text-transform:uppercase;padding:13px 22px;border-radius:999px;border:1.5px solid var(--cream);color:var(--cream);background:none;cursor:pointer;min-height:48px}
+  .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime);width:100%;margin-top:22px}
+  .btn.primary:disabled{opacity:.6;cursor:default}
+  .msg{margin-top:14px;font-family:'DM Mono';font-size:.82rem;min-height:1.2em}
+  .msg.ok{color:var(--lime)}.msg.err{color:var(--hot)}
+  .hint{font-size:.8rem;color:var(--dim);margin-top:4px}
+  .state{text-align:center;color:var(--dim);font-family:'DM Mono';padding:40px 0}
+  /* honeypot — visually hidden but present for bots */
+  .hp{position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden}
+  a{color:var(--lime)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="k">Come With · Collective</div>
+    <h1>Join the collective</h1>
+    <p>Tell us who you are. We'll set up your artist profile and get you on the site.</p>
+  </header>
+  <div id="root">
+    <div class="card">
+      <div class="row2">
+        <div><label>Artist / DJ name <span class="req">*</span></label><input id="display_name" placeholder="How you're billed, e.g. KRNeY"></div>
+        <div><label>Real name <span class="hint" style="text-transform:none;letter-spacing:0;">(internal only)</span></label><input id="legal_name" placeholder="Not shown on the site"></div>
+      </div>
+      <div class="row2">
+        <div><label>Email</label><input id="email" type="email" placeholder="name@email.com"></div>
+        <div><label>Phone</label><input id="phone" placeholder="Optional"></div>
+      </div>
+      <label>Profile photo</label>
+      <div class="photo"><div class="pho" id="pho">◎</div>
+        <div><input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif" style="border:none;padding:6px 0">
+        <div class="hint">A clear, square-ish photo works best.</div></div></div>
+      <label>Bio</label><textarea id="bio" placeholder="A few sentences about you and your sound."></textarea>
+      <div class="row2">
+        <div><label>Instagram (handle or link)</label><input id="instagram" placeholder="@yourhandle"></div>
+        <div><label>SoundCloud link</label><input id="soundcloud" placeholder="https://soundcloud.com/…"></div>
+      </div>
+      <div class="row2">
+        <div><label>TikTok link</label><input id="tiktok" placeholder="https://tiktok.com/@…"></div>
+        <div><label>Website</label><input id="website" placeholder="https://…"></div>
+      </div>
+      <!-- honeypot -->
+      <div class="hp" aria-hidden="true"><label>Company</label><input id="company" tabindex="-1" autocomplete="off"></div>
+      <button class="btn primary" id="submit">Join the collective</button>
+      <div class="msg" id="msg"></div>
+    </div>
+  </div>
+</div>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const FN=CWURL+'/functions/v1/artist-intake';
+const $=s=>document.querySelector(s);
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+let PHOTO=null; // data URL, attached on submit
+async function call(body){
+  const r=await fetch(FN,{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify(body)});
+  const j=await r.json().catch(()=>({error:'Network error'}));
+  if(!r.ok)throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+let _heic=null;
+function ensureHeic(){if(window.heic2any)return Promise.resolve();if(_heic)return _heic;_heic=new Promise((res,rej)=>{const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';s.onload=res;s.onerror=()=>{_heic=null;rej(new Error('Could not load HEIC converter'))};document.head.appendChild(s);});return _heic;}
+async function fileToDataUrl(file){
+  let f=file;
+  if(/\.(heic|heif)$/i.test(f.name||'')||/heic|heif/i.test(f.type||'')){await ensureHeic();const out=await window.heic2any({blob:f,toType:'image/jpeg',quality:0.9});f=Array.isArray(out)?out[0]:out;}
+  const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(f);});
+  const max=900,sc=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+  const w=Math.round(img.naturalWidth*sc),h=Math.round(img.naturalHeight*sc);
+  const c=document.createElement('canvas');c.width=w;c.height=h;c.getContext('2d').drawImage(img,0,0,w,h);
+  return c.toDataURL('image/jpeg',0.86);
+}
+function setMsg(t,k){const m=$('#msg');if(m){m.textContent=t;m.className='msg '+(k||'');}}
+$('#photoFile').addEventListener('change',async()=>{
+  const f=$('#photoFile').files&&$('#photoFile').files[0];if(!f)return;
+  setMsg('Processing photo…','');
+  try{PHOTO=await fileToDataUrl(f);$('#pho').style.backgroundImage='url(\''+PHOTO+'\')';$('#pho').textContent='';setMsg('Photo ready ✓','ok');}
+  catch(e){PHOTO=null;setMsg(e.message||'Could not read that image','err');}
+});
+$('#submit').addEventListener('click',async()=>{
+  const display_name=($('#display_name').value||'').trim();
+  if(!display_name){setMsg('Please enter your artist / DJ name.','err');$('#display_name').focus();return;}
+  const btn=$('#submit');btn.disabled=true;btn.textContent='Submitting…';setMsg('','');
+  const body={display_name,company:$('#company').value};
+  ['legal_name','email','phone','bio','instagram','soundcloud','tiktok','website'].forEach(k=>{body[k]=($('#'+k).value||'').trim();});
+  if(PHOTO)body.photo=PHOTO;
+  try{
+    const j=await call(body);
+    const editLine=j.edit_url?`<p class="hint" style="margin-top:14px">Bookmark this private link to edit your profile anytime:<br><a href="${esc(j.edit_url)}">${esc(j.edit_url)}</a></p>`:'';
+    $('#root').innerHTML=`<div class="card"><h2 style="font-family:'Archivo';font-weight:900;text-transform:uppercase;color:var(--lime);font-size:1.4rem">${j.already?'You\'re already listed 🎧':'You\'re in 🎧'}</h2>
+      <p style="margin-top:8px">${j.already?'We found your existing profile.':'Thanks '+esc(display_name)+'! We\'ll review and add you to the collective.'}</p>${editLine}</div>`;
+  }catch(e){setMsg(e.message||'Something went wrong — please try again.','err');btn.disabled=false;btn.textContent='Join the collective';}
+});
+</script>
+</body>
+</html>

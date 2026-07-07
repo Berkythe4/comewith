@@ -7146,7 +7146,10 @@ function renderArtists() {
   </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
   $('artistsBody').innerHTML = `
     <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('On collective', fmtNum(s.rows.filter(a => a.public_profile).length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
-    <div style="margin-bottom:12px;"><input class="modal-input" data-artistq placeholder="Search artist / role…" style="max-width:240px;" value="${escapeHtml(s.q)}"></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+      <input class="modal-input" data-artistq placeholder="Search artist / role…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <button type="button" class="hub-btn" data-new-artist>＋ New artist</button>
+    </div>
     <table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
     <div class="kpi-hint" style="margin-top:8px;">Roster of everyone with a <strong>dj/artist</strong> role. Click a row to edit their <strong>public profile</strong> (collective visibility, bio, photo, socials) and see bookings.</div>`;
 }
@@ -7215,6 +7218,70 @@ async function submitArtistProfile(id) {
   if (error) throw error;
   closeKpi(); toast('Profile saved', 'ok'); loadArtists();
 }
+// ── NEW ARTIST intake (create) — parallel to the update-link flow ─────────────
+function openNewArtist() {
+  const intakeUrl = ARTIST_ORIGIN + 'artist-intake.html';
+  openKpi('New artist', 'Adds them as an actor with the artist role', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">DJ / stage name (shown publicly) *</label><input class="modal-input" id="naDj" placeholder="e.g. KRNeY"></div>
+      <div><label class="modal-label">Real name (internal only)</label><input class="modal-input" id="naReal" placeholder="Not shown on the site"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Email</label><input class="modal-input" id="naEmail" type="email" placeholder="name@email.com"></div>
+      <div><label class="modal-label">Phone</label><input class="modal-input" id="naPhone" placeholder="Optional"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Instagram (handle or URL)</label><input class="modal-input" id="naIg" placeholder="@name"></div>
+      <div><label class="modal-label">SoundCloud URL</label><input class="modal-input" id="naSc" placeholder="https://soundcloud.com/…"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">TikTok URL</label><input class="modal-input" id="naTt" placeholder="https://tiktok.com/@…"></div>
+      <div><label class="modal-label">Website URL</label><input class="modal-input" id="naWeb" placeholder="https://…"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Bio</label><textarea class="modal-textarea" id="naBio" rows="3" placeholder="A short bio."></textarea></div>
+    <div class="kpi-hint">Created <strong>hidden</strong> from the public collective — you'll land in their profile editor next, to add a photo and toggle them live.</div>
+    <div class="hub-sec-bar" style="margin-top:14px;"><h3>Or have them fill it in</h3></div>
+    <div class="kpi-hint">Send a prospective artist the public intake form — whatever they submit creates their profile (hidden) for you to review.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:8px 0 2px;">
+      <button type="button" class="hub-btn ghost" data-intake-copy="${escapeHtml(intakeUrl)}">Copy intake link</button>
+      <input class="modal-input" id="naInviteEmail" type="email" placeholder="email to send it to" style="max-width:220px;">
+      <button type="button" class="hub-btn ghost" data-intake-send>Email intake link</button>
+    </div>`,
+    () => createArtist(), 'Create artist');
+}
+async function createArtist() {
+  const dj = ($('naDj')?.value || '').trim();
+  if (!dj) throw new Error('DJ / stage name is required');
+  const email = ($('naEmail')?.value || '').trim().toLowerCase();
+  if (email) {
+    const { data: dupe } = await sb.from('actors').select('id, display_name').ilike('email', email).is('deleted_at', null).maybeSingle();
+    if (dupe) throw new Error(`An actor with that email already exists (${dupe.display_name}). Open them from the Actors tab instead.`);
+  }
+  const row = { display_name: dj, kind: 'person' };
+  const map = { naReal: 'legal_name', naEmail: 'email', naPhone: 'phone', naIg: 'instagram', naSc: 'soundcloud', naTt: 'tiktok', naWeb: 'website', naBio: 'bio' };
+  for (const [id, col] of Object.entries(map)) { const v = ($(id)?.value || '').trim(); if (v) row[col] = col === 'email' ? v.toLowerCase() : v; }
+  const { data: actor, error } = await sb.from('actors').insert(row).select('id, edit_token').single();
+  if (error) throw error;
+  const { error: rErr } = await sb.from('actor_roles').insert({ actor_id: actor.id, role: 'artist' });
+  if (rErr) throw rErr;
+  closeKpi(); toast('Artist created — opening their profile', 'ok');
+  await loadArtists();
+  openArtistProfile(actor.id);
+}
+async function sendIntakeLink() {
+  const to = ($('naInviteEmail')?.value || '').trim();
+  if (!to) { toast('Enter an email to send the intake link to', 'err'); return; }
+  const link = ARTIST_ORIGIN + 'artist-intake.html';
+  const html = `<p>Hi,</p>
+    <p>We'd love to add you to the Come With collective. Fill out this quick intake form — bio, socials and a photo — and you'll be set up. No login needed.</p>
+    <p><a href="${link}">${link}</a></p>
+    <p>Thanks!<br>— Come With</p>`;
+  try {
+    const { error } = await sb.functions.invoke('send-notice', { body: { to, subject: 'Join the Come With collective', html } });
+    if (error) throw error;
+    toast('Intake link emailed to ' + to, 'ok');
+  } catch (e) { toast('Send failed: ' + (e.message || e), 'err'); }
+}
 async function sendArtistEditLink(id) {
   const a = artistState.rows.find(x => x.id === id); if (!a) return;
   if (!a.email) { toast('No email on file for this artist', 'err'); return; }
@@ -7231,15 +7298,20 @@ async function sendArtistEditLink(id) {
 }
 $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest('[data-artistq]'); if (q) { artistState.q = q.value; renderArtists(); } });
 $('panel-artists').addEventListener('click', (e) => {
+  if (e.target.closest('[data-new-artist]')) { openNewArtist(); return; }
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
   const row = e.target.closest('[data-artist]'); if (row) openArtistProfile(row.dataset.artist);
 });
-// Copy / email the self-service update link (delegated; modal lives in kpiModal).
+// Copy / email the self-service update + intake links (delegated; modal lives in kpiModal).
 document.addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-ap-copy]');
   if (cp) { try { await navigator.clipboard.writeText(cp.dataset.apCopy); toast('Update link copied', 'ok'); } catch (_) { toast('Copy failed — link: ' + cp.dataset.apCopy, 'err'); } return; }
   const sd = e.target.closest('[data-ap-send]');
   if (sd) { sendArtistEditLink(sd.dataset.apSend); return; }
+  const ic = e.target.closest('[data-intake-copy]');
+  if (ic) { try { await navigator.clipboard.writeText(ic.dataset.intakeCopy); toast('Intake link copied', 'ok'); } catch (_) { toast('Copy failed — link: ' + ic.dataset.intakeCopy, 'err'); } return; }
+  const is = e.target.closest('[data-intake-send]');
+  if (is) { sendIntakeLink(); return; }
 });
 
 // ============================================================
