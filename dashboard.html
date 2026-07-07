@@ -3337,31 +3337,53 @@ async function testCampaign(id) {
 async function campaignStats(id) {
   openKpi('Campaign stats', '', '<div class="panel-state"><span class="spinner"></span> Loading…</div>', () => closeKpi(), 'Close');
   const [{ data: ev, error }, { data: camp }] = await Promise.all([
-    sb.from('mailing_events').select('event_type, subscriber_id').eq('campaign_id', id),
+    sb.from('mailing_events').select('event_type, subscriber_id, metadata').eq('campaign_id', id),
     sb.from('mailing_campaigns').select('name, recipient_count, sent_at').eq('id', id).single(),
   ]);
   if (error) { $('kpiModalBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
   $('kpiModalTitle').textContent = 'Campaign stats — ' + (camp?.name || '');
   const rows = ev || [];
   const cnt = (t) => rows.filter(e => e.event_type === t).length;
-  const uniq = (t) => new Set(rows.filter(e => e.event_type === t).map(e => e.subscriber_id)).size;
+  // Identity for uniqueness: subscribers key by id; CC / non-subscriber rows (subscriber_id
+  // null) key by their email — stored as metadata.email (our send) or metadata.to (Resend webhook).
+  let unkSeq = 0;
+  const keyOf = (e) => {
+    if (e.subscriber_id) return 's:' + e.subscriber_id;
+    const m = e.metadata || {};
+    const em = m.email || (Array.isArray(m.to) ? m.to[0] : m.to);
+    return em ? 'e:' + String(em).toLowerCase() : 'x:' + (unkSeq++);
+  };
+  const uniq = (t) => new Set(rows.filter(e => e.event_type === t).map(keyOf)).size;
   const sent = cnt('sent') || camp?.recipient_count || 0;
   const delivered = uniq('delivered'), opened = uniq('opened'), clicked = uniq('clicked');
   const bounced = uniq('bounced'), complained = uniq('complained'), failed = cnt('failed_to_send');
   const base = delivered || sent;
   const pct = (n, d) => d > 0 ? (Math.round(n / d * 1000) / 10) + '%' : '—';
   const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${fmtNum(v)}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  // Data-aware hint. Delivered/bounced arriving but opens+clicks flat = Resend open/click
+  // TRACKING is off (opt-in per domain), NOT a broken webhook. Nothing arriving = webhook down.
+  // noEngage = delivered but zero opens AND zero clicks — the only genuinely ambiguous case
+  // (once ANY open is recorded, tracking is proven on, so 0 clicks just means nobody clicked).
+  const noEngage = delivered && !opened && !clicked;
+  let hint;
+  if (!delivered && !bounced) {
+    hint = `Counts are unique people. Delivered / opened / clicked / bounced are populated by the Resend webhook — none have arrived, so the webhook isn't wired yet (Resend → Webhooks → add this project's <code>resend-webhook</code> endpoint).`;
+  } else if (noEngage) {
+    hint = `⚠️ Delivered${bounced ? ' / bounced' : ''} events are arriving, but <strong>Opened and Clicked are 0 because open &amp; click tracking is turned OFF in Resend</strong> (it's opt-in per sending domain, and off by default). This is NOT missing data on our end — Resend never recorded the opens. Fix: Resend → Settings → Domains → <em>comewith.org</em> → enable <strong>Open Tracking</strong> + <strong>Click Tracking</strong>, and make sure the webhook subscribes to <code>email.opened</code> + <code>email.clicked</code>. Tracking is forward-only — already-sent campaigns can't be backfilled.`;
+  } else {
+    hint = `Counts are unique people. Delivered / opened / clicked / bounced come from the Resend webhook.`;
+  }
   $('kpiModalBody').innerHTML = (rows.length || sent) ? `
     <div class="hub-cards">
       ${card('Sent', sent, camp?.sent_at ? fmtDate(camp.sent_at) : '')}
       ${card('Delivered', delivered, pct(delivered, sent) + ' of sent')}
-      ${card('Opened', opened, pct(opened, base) + ' open rate')}
-      ${card('Clicked', clicked, pct(clicked, base) + ' click rate')}
+      ${card('Opened', opened, noEngage ? 'tracking off in Resend' : pct(opened, base) + ' open rate')}
+      ${card('Clicked', clicked, noEngage ? 'tracking off in Resend' : pct(clicked, base) + ' click rate')}
       ${card('Bounced', bounced, pct(bounced, sent))}
       ${card('Complained', complained, 'spam reports')}
       ${failed ? card('Failed to send', failed) : ''}
     </div>
-    <div class="kpi-hint" style="margin-top:10px;">Counts are unique people. Delivered / opened / clicked / bounced are populated by the Resend webhook — if they read 0 after a send, the webhook isn't wired yet.</div>`
+    <div class="kpi-hint" style="margin-top:10px;">${hint}</div>`
     : `<div class="hub-empty">No send events yet — this campaign hasn't been sent.</div>`;
 }
 

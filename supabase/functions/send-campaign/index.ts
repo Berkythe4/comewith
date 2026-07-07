@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
       const { data: sv } = await admin.from("surveys").select("id, event_id, status, public_token").eq("id", campaign.survey_id).maybeSingle();
       if (sv && sv.status === "open") survey = sv;
     }
-    const surveyCta = (link: string) => `<p style="text-align:center;margin:22px 0 4px"><a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 22px;border-radius:8px;text-decoration:none;font-weight:700">Share your feedback →</a></p>`;
+    const surveyCta = (link: string) => `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:30px 0 10px"><tr><td align="center"><p style="margin:0 0 12px;font-size:15px;line-height:1.5;color:#333;">💬 Got two minutes? Tell us how your night was — your feedback shapes the next Dance Infusion and helps us raise more for the MS Society.</p><a href="${link}" style="display:inline-block;background:#16243f;color:#ffffff;padding:16px 38px;border-radius:10px;text-decoration:none;font-weight:800;font-size:17px;letter-spacing:.3px;">Share your feedback →</a></td></tr></table>`;
     // Placement control: {{survey}} → the button, {{survey_link}} → the raw URL.
     // No placeholder → the button is appended at the end.
     const injectSurvey = (html: string, link: string) => {
@@ -221,7 +221,17 @@ Deno.serve(async (req) => {
       }
       const html = bodyHtml + footer;
       const res = await resend.emails.send({ from: FROM, to: email, replyTo: REPLY_TO, subject: campaign.subject, html });
-      if (res.error) failed++; else { sent++; ccSent++; }
+      if (res.error) { failed++; } else {
+        sent++; ccSent++;
+        // Log CC sends too (subscriber_id null, email in metadata) so the webhook can
+        // attribute their delivered/opened/clicked events and campaign stats count them.
+        await admin.from("mailing_events").insert({
+          campaign_id, subscriber_id: null,
+          event_type: "sent",
+          resend_event_id: res.data?.id || null,
+          metadata: { cc: true, email },
+        });
+      }
     }
 
     await admin.from("mailing_campaigns").update({
