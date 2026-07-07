@@ -5374,17 +5374,51 @@ async function hubAddGuestList() {
   (a.data || []).forEach(x => { if ((x.kind || '') === 'org') return; const em = (x.email || '').toLowerCase(); if (em && seenEmail.has(em)) return; people.push({ k: 'a', id: x.id, name: x.display_name || '(no name)', email: x.email || '', tag: 'contact' }); });
   people.sort((p, q) => p.name.localeCompare(q.name));
   const row = p => `<label class="gl-pick" data-search="${escapeHtml((p.name + ' ' + p.email).toLowerCase())}"><input type="checkbox" class="gl-cb" data-k="${p.k}" data-id="${escapeHtml(p.id)}" data-name="${escapeHtml(p.name)}" data-email="${escapeHtml(p.email)}"> <span><strong>${escapeHtml(p.name)}</strong>${p.email ? ` <span class="li-sub">· ${escapeHtml(p.email)}</span>` : ''} <span class="role-chip" style="cursor:default">${p.tag}</span></span></label>`;
-  openKpi('Add to guest list — ' + (hub.event?.name || ''), 'Pick people on file, or add new', `
-    <style>.gl-listbox{max-height:300px;overflow:auto;border:1px solid var(--border-strong);border-radius:8px;padding:2px 4px;background:var(--surface-2)}.gl-pick{display:flex;gap:9px;align-items:center;padding:7px 8px;border-bottom:1px dashed var(--border);cursor:pointer}.gl-pick:last-child{border-bottom:none}.gl-pick input{width:auto;margin:0}</style>
+  glStaged = [];
+  openKpi('Add to guest list — ' + (hub.event?.name || ''), 'Pick people on file, or add someone new', `
+    <style>.gl-listbox{max-height:240px;overflow:auto;border:1px solid var(--border-strong);border-radius:8px;padding:2px 4px;background:var(--surface-2)}.gl-pick{display:flex;gap:9px;align-items:center;padding:7px 8px;border-bottom:1px dashed var(--border);cursor:pointer}.gl-pick:last-child{border-bottom:none}.gl-pick input{width:auto;margin:0}.gl-chip{display:inline-flex;align-items:center;gap:6px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:999px;padding:4px 10px;margin:0 6px 6px 0;font-size:.9em}.gl-chip a{color:var(--danger,#ff5ca8);text-decoration:none;font-weight:700}</style>
     <div class="modal-form-row"><label class="modal-label">Search existing customers &amp; guests</label>
       <input class="modal-input" id="glSearch" placeholder="Type a name or email to filter…" style="margin-bottom:8px">
-      <div class="gl-listbox" id="glList">${people.map(row).join('') || '<div class="kpi-hint" style="margin:8px">No other people on file yet — add new below.</div>'}</div>
+      <div class="gl-listbox" id="glList">${people.map(row).join('') || '<div class="kpi-hint" style="margin:8px">No other people on file yet — add someone new below.</div>'}</div>
+      <div class="kpi-hint" id="glNoMatch" style="display:none;"></div>
       <div class="kpi-hint">Tick everyone who'll be there — no emails to remember.</div></div>
-    <div class="modal-form-row"><label class="modal-label">Or add brand-new people (one per line: Name, email)</label>
-      <textarea class="modal-textarea" id="glPeople" rows="3" placeholder="Jane Doe, jane@example.com"></textarea></div>`,
+    <div class="hub-sec-bar" style="margin-top:6px;"><h3>Add someone new</h3></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+      <div style="flex:2;min-width:150px;"><label class="modal-label">Name</label><input class="modal-input" id="glNewName" placeholder="Full name"></div>
+      <div style="flex:2;min-width:150px;"><label class="modal-label">Email (optional)</label><input class="modal-input" id="glNewEmail" type="email" placeholder="name@email.com"></div>
+      <button type="button" class="hub-btn" id="glNewAdd" style="flex:0 0 auto;">＋ Add to list</button>
+    </div>
+    <div id="glStagedWrap" style="margin-top:10px;"></div>
+    <div class="kpi-hint">New people are created as guests and put on this event when you hit <strong>Add to guest list</strong>.</div>`,
     () => submitGuestList(), 'Add to guest list');
+  // Stage a brand-new person (name required) into the pending list.
+  const stage = (name, email) => {
+    name = (name || '').trim(); email = (email || '').trim();
+    if (!name) { toast('Enter a name first', 'err'); $('glNewName')?.focus(); return false; }
+    glStaged.push({ name, email }); glRenderStaged(); return true;
+  };
+  $('glNewAdd')?.addEventListener('click', () => { if (stage($('glNewName').value, $('glNewEmail').value)) { $('glNewName').value = ''; $('glNewEmail').value = ''; $('glNewName').focus(); } });
+  ['glNewName', 'glNewEmail'].forEach(id => $(id)?.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('glNewAdd').click(); } }));
+  $('glStagedWrap')?.addEventListener('click', e => { const u = e.target.closest('[data-gl-unstage]'); if (u) { e.preventDefault(); glStaged.splice(Number(u.dataset.glUnstage), 1); glRenderStaged(); } });
+  // Search filters existing people; when nothing matches, offer to add the typed name.
   const s = $('glSearch');
-  if (s) s.addEventListener('input', () => { const ql = s.value.toLowerCase(); document.querySelectorAll('#glList .gl-pick').forEach(el => { el.style.display = (el.dataset.search || '').includes(ql) ? '' : 'none'; }); });
+  if (s) {
+    s.addEventListener('input', () => {
+      const raw = s.value.trim(), ql = raw.toLowerCase();
+      let visible = 0;
+      document.querySelectorAll('#glList .gl-pick').forEach(el => { const show = (el.dataset.search || '').includes(ql); el.style.display = show ? '' : 'none'; if (show) visible++; });
+      const nm = $('glNoMatch');
+      if (nm) { if (raw && visible === 0) { nm.style.display = ''; nm.innerHTML = `No match — <a href="#" id="glAddTyped" style="color:var(--accent,#5b7fb3);text-decoration:none;font-weight:600;">＋ add "${escapeHtml(raw)}" as a new person</a>`; } else { nm.style.display = 'none'; nm.innerHTML = ''; } }
+    });
+    s.closest('.modal-form-row')?.addEventListener('click', e => { if (e.target.closest('#glAddTyped')) { e.preventDefault(); if (stage(s.value, '')) { s.value = ''; s.dispatchEvent(new Event('input')); } } });
+  }
+}
+let glStaged = [];
+function glRenderStaged() {
+  const wrap = $('glStagedWrap'); if (!wrap) return;
+  wrap.innerHTML = glStaged.length
+    ? '<label class="modal-label">To add (' + glStaged.length + ')</label>' + glStaged.map((p, i) => `<span class="gl-chip"><strong>${escapeHtml(p.name)}</strong>${p.email ? ` <span class="li-sub">· ${escapeHtml(p.email)}</span>` : ''} <a href="#" data-gl-unstage="${i}" title="remove">✕</a></span>`).join('')
+    : '';
 }
 async function addGuestToEvent(gid) {
   const { data: exists } = await sb.from('guest_event_attendance').select('id').eq('event_id', hub.eventId).eq('guest_id', gid).limit(1);
@@ -5405,13 +5439,14 @@ async function submitGuestList() {
     const gid = cb.dataset.k === 'g' ? cb.dataset.id : await guestIdForActor(cb.dataset.id, cb.dataset.name, cb.dataset.email);
     (await addGuestToEvent(gid)) ? added++ : skipped++;
   }
-  for (const line of ($('glPeople')?.value || '').split('\n').map(x => x.trim()).filter(Boolean)) {
-    const parts = line.split(',').map(x => (x || '').trim());
-    if (!parts[0]) continue;
-    const gid = await findOrCreateGuest(parts[0], parts[1] || '');
+  // Pull anything still typed in the new-person fields but not yet staged.
+  const pendingName = ($('glNewName')?.value || '').trim();
+  if (pendingName) glStaged.push({ name: pendingName, email: ($('glNewEmail')?.value || '').trim() });
+  for (const p of glStaged) {
+    const gid = await findOrCreateGuest(p.name, p.email || '');
     (await addGuestToEvent(gid)) ? added++ : skipped++;
   }
-  if (added === 0 && skipped === 0) throw new Error('Pick someone or add a new name');
+  if (added === 0 && skipped === 0) throw new Error('Pick someone, or add a new person and press “＋ Add to list”.');
   closeKpi(); toast(`Added ${added}${skipped ? ` · ${skipped} already on the event` : ''}`, 'ok'); hubGoSection('customers');
 }
 async function hubDelGuestList(id) {
