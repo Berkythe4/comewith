@@ -240,10 +240,19 @@ preview — no build step required.
   calendar feed** (no keys, ~2 hrs), #4 TikTok (when active), #5 Eventbrite/DICE (if ticketing
   moves), #6 Spotify. RA/Partiful/Simplifi remain no-API with CSV workarounds built in-app.
 
+### ✅ Planned-items sweep executed same day (077, commit 030f788)
+Keith triaged Site Review → 8/8 planned items DONE: subscribe/inquiry-notify **rate limiting**
+(subscribers.confirm_sent_at); public-endpoint **error sanitization** (admin fns keep detail);
+**FROM_EMAIL/REPLY_TO_EMAIL secrets** read by all 9 senders; **email_templates** table + editor on
+the Templates screen (artist update-link / intake invite / subscribe confirm / survey invite,
+{{placeholders}}); **vendor categories** editable (ops.vendor_categories); social series ×4;
+homepage fallback names removed (consent risk); 7 stale pre-Supabase HTML tools pruned to
+archive/old-reports. Data: **Victoriarose→Miss Vee merged** (backup premerge_2026-07-08); Knicks
+G5→Crossroads, Henry Showcase→1163 Putnam. 12 fns redeployed; throttle verified live.
+
 ### ▶️ Open / next
 - Flip **Site Review, Pricing, Surveys, Templates** `signed_off` when ready to release to staff.
-- Site Review "open" items: merge/fix the Victoriarose/Miss Vee dup email; venue-backfill 3 events;
-  decide on rate limiting + email-templates editor.
+- July 4th Weekend still needs a venue; og:image logo-pin item open (explain/decide).
 - API plan step 1: Meta developer app for Instagram (your action; code is waiting).
 
 ## Current state — reconciled 2026-06-29 (Impact report public + Pricing + Surveys)
