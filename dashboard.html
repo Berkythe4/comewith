@@ -1063,6 +1063,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
+      <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -2796,6 +2797,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
+  if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Resident Advisor market intel + radio)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -7637,6 +7639,142 @@ $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
 });
 
+// ================= RA MARKET — Resident Advisor public-data intel + radio =========
+// Reads the ra_events / ra_artists cache (filled by the pull-ra-market edge fn from
+// ra.co's public GraphQL). Two lenses: scheduling intelligence (best days / venues /
+// genres, benchmarked against YOUR events) and a weekly radio station built from the
+// SoundCloud profiles of artists playing NYC in the next few weeks.
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4 };
+async function loadRaMarket() {
+  $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading RA market…</div>';
+  const [ev, ar, mine] = await Promise.all([
+    sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,interested_count,is_ticketed,is_pick,genres,content_url,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
+    sb.from('ra_artists').select('ra_id,name,soundcloud,follower_count,image,content_url,next_event_date,next_event_title,next_venue').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
+    sb.from('events').select('name,event_date,total_attendance,series').not('total_attendance', 'is', null).order('event_date', { ascending: false }),
+  ]);
+  if (ev.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
+  raState.events = ev.data || []; raState.artists = ar.data || []; raState.mine = mine.data || [];
+  renderRaMarket();
+}
+function renderRaMarket() {
+  const evs = raState.events;
+  const lastFetch = evs.length ? evs.reduce((m, e) => e.fetched_at > m ? e.fetched_at : m, evs[0].fetched_at) : null;
+  if (!evs.length) {
+    $('raMarketBody').innerHTML = `<div class="hub-sec-bar"><h3>RA Market</h3><button class="hub-btn" data-ra-refresh>↻ Pull from Resident Advisor</button></div>
+      <div class="hub-empty">No RA data yet. Hit "Pull from Resident Advisor" to load the next few weeks of NYC events (public data only — RSVP counts, venues, lineups). Takes ~15s.</div>`;
+    return;
+  }
+  // ---- Best days: demand (median RSVP) vs competition (event count) ----
+  const byDow = DOW.map((d, i) => ({ d, i, list: evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i) }));
+  const med = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+  const dowStats = byDow.map(o => { const rs = o.list.map(e => e.attending || 0); return { d: o.d, n: o.list.length, avg: rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : 0, med: med(rs), tk: o.list.filter(e => e.is_ticketed).length }; });
+  const maxOpp = Math.max(1, ...dowStats.map(s => s.n ? s.med / Math.sqrt(s.n) : 0)); // demand per unit of competition
+  const mineByDow = DOW.map((d, i) => { const l = raState.mine.filter(m => m.event_date && new Date(m.event_date + 'T00:00:00').getDay() === i); return l.length ? Math.round(l.reduce((a, b) => a + Number(b.total_attendance || 0), 0) / l.length) : null; });
+  const dowRows = dowStats.map((s, i) => {
+    const opp = s.n ? s.med / Math.sqrt(s.n) : 0; const pct = Math.round(opp / maxOpp * 100);
+    const barColor = pct > 66 ? 'var(--green,#1f7a1f)' : pct > 33 ? 'var(--amber,#b58900)' : 'var(--mid,#888)';
+    return `<tr>
+      <td><strong>${s.d}</strong></td>
+      <td class="num">${s.n}</td>
+      <td class="num">${fmtNum(s.med)}</td>
+      <td class="num">${fmtNum(s.avg)}</td>
+      <td><div style="background:var(--surface-2);border-radius:5px;height:16px;width:120px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${barColor};"></div></div></td>
+      <td class="num">${mineByDow[i] != null ? fmtNum(mineByDow[i]) : '<span class="li-sub">—</span>'}</td>
+    </tr>`;
+  }).join('');
+  // best day = highest opportunity with at least a little demand
+  const best = [...dowStats].map((s, i) => ({ ...s, opp: s.n ? s.med / Math.sqrt(s.n) : 0 })).sort((a, b) => b.opp - a.opp)[0];
+  // ---- venues + genres ----
+  const vAgg = {}; evs.forEach(e => { if (!e.venue_name) return; const o = vAgg[e.venue_name] ||= { n: 0, sum: 0 }; o.n++; o.sum += e.attending || 0; });
+  const venues = Object.entries(vAgg).filter(([, o]) => o.n >= 2).map(([v, o]) => ({ v, n: o.n, avg: Math.round(o.sum / o.n) })).sort((a, b) => b.avg - a.avg).slice(0, 10);
+  const gAgg = {}; evs.forEach(e => (e.genres || []).forEach(g => gAgg[g] = (gAgg[g] || 0) + 1));
+  const genres = Object.entries(gAgg).sort((a, b) => b[1] - a[1]).slice(0, 12);
+  const picks = evs.filter(e => e.is_pick).length;
+  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+
+  $('raMarketBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>RA Market — NYC</h3>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <span class="li-sub">${evs.length} events · updated ${lastFetch ? fmtDate(lastFetch) : '—'}</span>
+        <button class="hub-btn" data-ra-refresh>↻ Pull from RA</button>
+      </span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Public Resident Advisor data for upcoming NYC shows — use it to pick dates and benchmark. Your private ticket/revenue data isn't here (that stays in the CSV flow).</div>
+    <div class="hub-cards" style="margin-bottom:14px;">
+      ${card('Upcoming shows', fmtNum(evs.length))}
+      ${card('Best night', best ? best.d : '—', best ? `${fmtNum(best.med)} median RSVP · ${best.n} shows` : '')}
+      ${card('RA picks', fmtNum(picks), 'editor-featured')}
+      ${card('Ticketed', Math.round(evs.filter(e => e.is_ticketed).length / evs.length * 100) + '%', 'of shows')}
+    </div>
+    <div class="hub-sec-bar"><h3>Best nights to throw</h3></div>
+    <div class="kpi-hint" style="margin-bottom:6px;">“Opportunity” = demand (median RSVP) weighed against competition (how many shows that night). Long green bar = strong demand, thinner field. Your own avg attendance by night is the last column.</div>
+    <table class="data-table"><thead><tr><th>Night</th><th class="num">Shows</th><th class="num">Median RSVP</th><th class="num">Avg RSVP</th><th>Opportunity</th><th class="num">Your avg</th></tr></thead><tbody>${dowRows}</tbody></table>
+    <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;">
+      <div><div class="hub-sec-bar"><h3>Top venues</h3></div>
+        <table class="data-table"><thead><tr><th>Venue</th><th class="num">Shows</th><th class="num">Avg RSVP</th></tr></thead>
+        <tbody>${venues.map(v => `<tr><td>${escapeHtml(v.v)}</td><td class="num">${v.n}</td><td class="num">${fmtNum(v.avg)}</td></tr>`).join('')}</tbody></table></div>
+      <div><div class="hub-sec-bar"><h3>Hot genres</h3></div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 0;">${genres.map(([g, n]) => `<span class="role-chip" style="cursor:default;">${escapeHtml(g)} <span class="li-sub">${n}</span></span>`).join('')}</div></div>
+    </div>
+    ${renderRaRadio()}`;
+}
+$('panel-ra-market').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
+  const rw = e.target.closest('[data-ra-weeks]'); if (rw) { raState.radioWeeks = Number(rw.dataset.raWeeks); renderRaMarket(); return; }
+  const pl = e.target.closest('[data-ra-play]'); if (pl) { raPlay(pl.dataset.raPlay, pl.dataset.raName); return; }
+  const cp = e.target.closest('[data-ra-copy]'); if (cp) { raCopyLineup(); return; }
+});
+async function raRefresh(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling… (~15s)'; }
+  try {
+    const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 28 } });
+    if (error) throw error;
+    toast(`Pulled ${data.events_saved} shows · ${data.artists_with_soundcloud} artists w/ tracks`, 'ok');
+    await loadRaMarket();
+  } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull from RA'; } }
+}
+// Radio: dedupe artists by SoundCloud, playing NYC within the chosen window.
+function raRadioList() {
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + raState.radioWeeks * 7);
+  const cut = cutoff.toISOString().slice(0, 10);
+  const seen = new Set(), out = [];
+  for (const a of raState.artists) {
+    if (!a.soundcloud || !a.next_event_date || a.next_event_date > cut) continue;
+    const k = a.soundcloud.toLowerCase().replace(/\/+$/, ''); if (seen.has(k)) continue; seen.add(k);
+    out.push(a);
+  }
+  return out.sort((a, b) => (b.follower_count || 0) - (a.follower_count || 0));
+}
+function renderRaRadio() {
+  const list = raRadioList();
+  const weekBtn = (w) => `<button class="hub-btn ghost${raState.radioWeeks === w ? ' active' : ''}" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w} wk</button>`;
+  const cards = list.slice(0, 60).map((a, i) => `<div class="hub-li">
+      <div class="li-main">
+        <strong>${escapeHtml(a.name)}</strong>${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} RA followers</span>` : ''}
+        <div class="li-sub">Playing ${escapeHtml(a.next_venue || 'NYC')} · ${escapeHtml(fmtDate(a.next_event_date))}${a.next_event_title ? ' · ' + escapeHtml(a.next_event_title) : ''}</div>
+      </div>
+      <button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}">▶ play</button>
+    </div>`).join('');
+  return `
+    <div class="hub-sec-bar" style="margin-top:22px;"><h3>📻 Radio — this week's incoming artists</h3>
+      <span style="display:flex;gap:6px;align-items:center;">${[2, 3, 4].map(weekBtn).join('')}
+        <button class="hub-btn ghost" data-ra-copy>Copy lineup</button></span></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">${list.length} artists with SoundCloud playing NYC in the next ${raState.radioWeeks} weeks (deduped, most-followed first). Hit ▶ to load their SoundCloud into the player — build a weekly station from who's actually coming to town.</div>
+    <div id="raPlayer" style="margin-bottom:12px;"></div>
+    <div class="hub-list">${cards || '<div class="hub-empty">No artists with SoundCloud in this window — try a wider range or pull fresh data.</div>'}</div>`;
+}
+function raPlay(scUrl, name) {
+  const el = $('raPlayer'); if (!el) return;
+  const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=true';
+  el.innerHTML = `<div class="li-sub" style="margin-bottom:4px;">▶ ${escapeHtml(name)}</div><iframe width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe>`;
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function raCopyLineup() {
+  const list = raRadioList();
+  const txt = list.map(a => `${a.name} — ${fmtDate(a.next_event_date)} @ ${a.next_venue || 'NYC'}${a.soundcloud ? ' — ' + a.soundcloud : ''}`).join('\n');
+  navigator.clipboard.writeText(txt).then(() => toast(`Copied ${list.length} artists`, 'ok'), () => toast('Copy failed', 'err'));
+}
+
 // ===================== PRICING TOOL (Sales) =====================
 // Quote builder for DJ / rental / full-production events. Math lives in the shared
 // pricing-engine module (computeQuote). Defaults come from the engine, deep-merged
@@ -9054,6 +9192,10 @@ const WORKFLOW = [
     short: 'The standing audit log — bugs, ideas, hygiene.',
     detail: `Findings from full-site reviews live here as editable rows: bugs (with what was fixed), shipped improvements, data hygiene to decide on, and saved ideas. Flip a status inline or add your own items as you spot them — it's the maintenance backlog for the whole platform.`,
     links: [{ t: 'Open Site Review', tab: 'site-review' }] },
+  { lane: 'mkt', n: 27, ico: '📡', t: 'RA market + radio', where: 'RA Market',
+    short: 'Scout the NYC scene; build a radio station.',
+    detail: `Pulls public Resident Advisor data for upcoming NYC shows: which nights have demand vs competition (best nights to throw), venue + genre benchmarks, RA-picks — with your own attendance alongside. Plus a Radio station: the SoundCloud profiles of artists playing NYC in the next 2–4 weeks, deduped and playable, so you can spin a weekly set from who's actually coming to town. Your private ticket/revenue data stays in the CSV flow.`,
+    links: [{ t: 'Open RA Market', tab: 'ra-market' }] },
 ];
 const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
 const WF_ORDER = ['crm', 'hub', 'money', 'mkt', 'kpi'];
@@ -9117,7 +9259,8 @@ const API_CONNECTIONS = [
   { grp: 'established', ico: '🗄️', name: 'Supabase', data: 'Database, auth, storage, edge functions — the whole backend', note: 'LIVE — the platform everything runs on.' },
   { grp: 'established', ico: '🎬', name: 'YouTube + SoundCloud embeds', data: 'Recap videos / audio play on the site (homepage Recent Rooms, Watch page, artist profiles)', note: 'LIVE — embed-only (no API key / no data pulled in). Paste a YouTube or SoundCloud link on an event’s Recent Rooms and it plays in a pop-up; YouTube also supplies the card thumbnail.' },
   { grp: 'pending', ico: '📸', name: 'Instagram Graph API', data: 'Follower count, reach, impressions, profile views, per-post insights', note: 'PLAN #1 — biggest payoff for least work; the code is DONE. Your part (~1 hr, one-time): 1) switch IG to Business/Creator + link a Facebook Page, 2) create a Meta developer app, 3) generate a long-lived token, 4) add IG_USER_ID + IG_ACCESS_TOKEN secrets. Then pull-instagram-stats goes live like YouTube — nightly follower/reach snapshots feeding Strategy.' },
-  { grp: 'blocked', ico: '🎟️', name: 'Resident Advisor (RA)', data: 'Ticket sales, attendee counts, event listings, guest lists', note: 'NO public / official API. Workarounds BOTH directions are built-in: RA CSV export → in-app ticketing importer (IN), and event guest list → “Export for RA” CSV (OUT). The unofficial ra.co/graphql endpoint is against their ToS and can vanish — not for production.' },
+  { grp: 'established', ico: '📡', name: 'Resident Advisor — public data', data: 'Upcoming NYC events, RSVP/interested counts, venues, genres, RA-picks, artist lineups + SoundCloud', note: 'LIVE (public data only, via ra.co’s undocumented GraphQL). Powers the RA Market screen (best nights, venue/genre benchmarks) + the Radio station (upcoming artists’ SoundCloud). pull-ra-market caches it on demand. Unofficial + could change without notice — a resilient read, not a dependency.' },
+  { grp: 'blocked', ico: '🎟️', name: 'Resident Advisor — YOUR private data', data: 'Ticket sales, revenue, per-buyer orders, guest lists', note: 'Auth-gated behind your RA login with NO official token — confirmed by probing the schema (returns AUTH_NOT_AUTHORIZED). Stays on the CSV flow: RA export → in-app ticketing importer, and event guest list → “Export for RA” CSV.' },
   { grp: 'blocked', ico: '🎉', name: 'Partiful', data: 'RSVPs, guest lists', note: 'NO public API today. Manual export / entry for now — worth re-checking, they’re growing fast.' },
   { grp: 'blocked', ico: '🏦', name: 'Simplifi (Quicken)', data: 'Bank transactions → expenses', note: 'NO public API. The CSV path is built: export Work Expenses from Simplifi → in-app import (deduped, auto-assigns events where it can).' },
   { grp: 'future', ico: '📊', name: 'Google Analytics (GA4)', data: 'Website traffic, sources, funnel — inquiry-form + ticket-link conversions', note: 'PLAN #2 — the missing marketing layer: you can see IG/YouTube audience but not what the WEBSITE does. Your part: create a GA4 property + add the gtag snippet (Site Editor-able later) + a service account key. Build part (~half day): pull-ga4-stats edge fn → metric_snapshots → Strategy cards (sessions, sources, inquiry conversion).' },
