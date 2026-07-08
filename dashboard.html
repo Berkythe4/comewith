@@ -1841,7 +1841,7 @@ async function openPostModal(post) {
   const isNew = !post;
   const chanBoxes = SOCIAL_CHANNELS.map(c => `<label class="chk"><input type="checkbox" data-chan value="${c}" ${(p.channels || []).includes(c) ? 'checked' : ''}> ${SOCIAL_CHAN_LABEL[c]}</label>`).join('');
   const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}" ${p.stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
-  const seriesOpts = ['', 'Come With Parties', 'Dance Infusion'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
+  const seriesOpts = ['', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
   const ownerOpts = ['<option value="">— unassigned —</option>'].concat(socialPeople.map(pe => `<option value="${pe.id}" ${p.owner_id === pe.id ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`)).join('');
   const eventOpts = ['<option value="">— none —</option>'].concat(socialEvents.map(ev => `<option value="${ev.id}" ${p.event_id === ev.id ? 'selected' : ''}>${escapeHtml(ev.name)}</option>`)).join('');
   const assetOpts = ['none', 'requested', 'in_progress', 'ready'].map(a => `<option value="${a}" ${(p.asset_status || 'none') === a ? 'selected' : ''}>${a.replace('_', ' ')}</option>`).join('');
@@ -6450,13 +6450,26 @@ const TARGET_FUNCS = ['', 'venue:booking', 'venue:sound', 'venue:day_of', 'venue
 let templatesCache = [];
 
 async function loadTemplates() { await renderTemplates(); }
+let emailTplCache = [];
 async function renderTemplates() {
-  const { data, error } = await sb.from('task_templates')
-    .select('id, event_type, title, default_offset_days, default_role, phase, gear_applicability, target_function, sort_order')
-    .order('event_type').order('phase').order('sort_order').order('title');
+  const [{ data, error }, etRes] = await Promise.all([
+    sb.from('task_templates')
+      .select('id, event_type, title, default_offset_days, default_role, phase, gear_applicability, target_function, sort_order')
+      .order('event_type').order('phase').order('sort_order').order('title'),
+    sb.from('email_templates').select('key, label, subject, body, placeholders').order('label'),
+  ]);
   if (error) { $('templatesBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
   templatesCache = data || [];
-  let html = `<div class="hub-sec-bar"><h3>Task templates</h3><button class="hub-btn" data-tmpl-action="add">+ Add template</button></div>
+  emailTplCache = etRes.data || [];
+  // Email templates — the copy of system-sent emails, editable here.
+  const etRows = emailTplCache.map(t => `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(t.label)}</strong><div class="li-sub">Subject: ${escapeHtml(t.subject)}</div></div>
+      <button class="hub-mini" data-etpl-edit="${escapeHtml(t.key)}">✎ edit</button>
+    </div>`).join('');
+  let html = `<div class="hub-sec-bar"><h3>Email templates</h3></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">The copy of emails the system sends for you (artist links, subscribe confirmation, survey invites). Edit the words — the <code>{{placeholders}}</code> get filled in automatically at send time.</div>
+    <div class="hub-list" style="margin-bottom:18px;">${etRows || '<div class="hub-empty">No email templates.</div>'}</div>
+    <div class="hub-sec-bar"><h3>Task templates</h3><button class="hub-btn" data-tmpl-action="add">+ Add template</button></div>
     <div class="kpi-hint" style="margin-bottom:14px;">These are your standard checklists — the day-of generator builds from them. Editing here changes <strong>future</strong> generation only; it never rewrites tasks already generated on an event. “Applies when gear is” controls gear / no-gear / both event modes; “auto-assign” routes outreach tasks to that venue/vendor contact.</div>`;
   for (const et of TMPL_EVENT_TYPES) {
     const inType = templatesCache.filter(t => t.event_type === et);
@@ -6543,6 +6556,7 @@ async function templateRemove(id) {
   toast('Template removed', 'ok'); await renderTemplates();
 }
 $('panel-templates').addEventListener('click', (e) => {
+  const et = e.target.closest('[data-etpl-edit]'); if (et) { openEmailTemplateForm(et.dataset.etplEdit); return; }
   const up = e.target.closest('[data-tmpl-up]'); if (up) { templateReorder(up.dataset.tmplUp, 'up'); return; }
   const dn = e.target.closest('[data-tmpl-down]'); if (dn) { templateReorder(dn.dataset.tmplDown, 'down'); return; }
   const del = e.target.closest('[data-tmpl-del]'); if (del) { templateRemove(del.dataset.tmplDel); return; }
@@ -6550,6 +6564,21 @@ $('panel-templates').addEventListener('click', (e) => {
     ({ add: () => openTemplateForm(null), edit: () => openTemplateForm(act.dataset.id) }[act.dataset.tmplAction] || (() => {}))();
   }
 });
+function openEmailTemplateForm(key) {
+  const t = emailTplCache.find(x => x.key === key); if (!t) return;
+  openKpi('Email template — ' + t.label, 'Placeholders are filled in automatically at send time', `
+    <div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" id="etSubject" value="${escapeHtml(t.subject)}"></div>
+    <div class="modal-form-row"><label class="modal-label">Body</label><textarea class="modal-textarea" id="etBody" rows="9">${escapeHtml(t.body)}</textarea></div>
+    ${t.placeholders ? `<div class="kpi-hint">Available placeholders: ${escapeHtml(t.placeholders)}. Keep them in — they become the real name/link/button when the email sends.</div>` : ''}`,
+    async () => {
+      const subject = ($('etSubject')?.value || '').trim();
+      const body = $('etBody')?.value || '';
+      if (!subject || !body.trim()) throw new Error('Subject and body are both required');
+      const { error } = await sb.from('email_templates').update({ subject, body, updated_at: new Date().toISOString() }).eq('key', key);
+      if (error) throw error;
+      closeKpi(); toast('Template saved', 'ok'); renderTemplates();
+    }, 'Save template');
+}
 
 // ============================================================
 // GUEST MODULE — first-class guest list + lifetime stats + filters + repeat KPI.
@@ -7341,26 +7370,41 @@ async function sendIntakeLink() {
   const to = ($('naInviteEmail')?.value || '').trim();
   if (!to) { toast('Enter an email to send the intake link to', 'err'); return; }
   const link = ARTIST_ORIGIN + 'artist-intake.html';
-  const html = `<p>Hi,</p>
-    <p>We'd love to add you to the Come With collective. Fill out this quick intake form — bio, socials and a photo — and you'll be set up. No login needed.</p>
-    <p><a href="${link}">${link}</a></p>
-    <p>Thanks!<br>— Come With</p>`;
+  const { subject, html } = await emailFromTemplate('artist_intake_invite',
+    'Join the Come With collective',
+    "Hi,\n\nWe'd love to add you to the Come With collective. Fill out this quick intake form — bio, socials and a photo — and you'll be set up. No login needed.\n\n{{link}}\n\nThanks!\n— Come With",
+    {},
+    { link: `<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>` });
   try {
-    const { error } = await sb.functions.invoke('send-notice', { body: { to, subject: 'Join the Come With collective', html } });
+    const { error } = await sb.functions.invoke('send-notice', { body: { to, subject, html } });
     if (error) throw error;
     toast('Intake link emailed to ' + to, 'ok');
   } catch (e) { toast('Send failed: ' + (e.message || e), 'err'); }
+}
+// ---- Email templates: senders read owner-edited copy (email_templates, editable
+// on the Templates screen) and fall back to the built-in text if the row is gone.
+const tplFill = (s, vars) => String(s || '').replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (k in vars ? vars[k] : ''));
+async function emailFromTemplate(key, fallbackSubject, fallbackBody, textVars, htmlVars = {}) {
+  let row = null;
+  try { const { data } = await sb.from('email_templates').select('subject, body').eq('key', key).maybeSingle(); row = data; } catch (_) { /* fall back */ }
+  const subject = tplFill(row?.subject || fallbackSubject, textVars);
+  // Escape the template text, then substitute — HTML vars (buttons/links) stay raw.
+  const body = escapeHtml(row?.body || fallbackBody)
+    .replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k) => (k in htmlVars ? htmlVars[k] : escapeHtml(textVars[k] ?? '')));
+  const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.55;color:#1A1410">${body.replace(/\r\n/g, '\n').replace(/\n/g, '<br>')}</div>`;
+  return { subject, html };
 }
 async function sendArtistEditLink(id) {
   const a = artistState.rows.find(x => x.id === id); if (!a) return;
   if (!a.email) { toast('No email on file for this artist', 'err'); return; }
   const link = ARTIST_ORIGIN + 'artist-edit.html?token=' + encodeURIComponent(a.edit_token || '');
-  const html = `<p>Hi ${escapeHtml((a.display_name || '').split(' ')[0])},</p>
-    <p>You can update your Come With artist profile — bio, socials and photo — using your private link below. No login needed.</p>
-    <p><a href="${link}">${link}</a></p>
-    <p>Whatever you save shows up on your profile page at comewith.org. Thanks!<br>— Come With</p>`;
+  const { subject, html } = await emailFromTemplate('artist_update_link',
+    'Update your Come With artist profile',
+    'Hi {{first_name}},\n\nYou can update your Come With artist profile — bio, socials and photo — using your private link below. No login needed.\n\n{{link}}\n\nWhatever you save shows up on your profile page at comewith.org. Thanks!\n— Come With',
+    { first_name: (a.display_name || '').split(' ')[0] },
+    { link: `<a href="${escapeHtml(link)}">${escapeHtml(link)}</a>` });
   try {
-    const { error } = await sb.functions.invoke('send-notice', { body: { to: a.email, subject: 'Update your Come With artist profile', html } });
+    const { error } = await sb.functions.invoke('send-notice', { body: { to: a.email, subject, html } });
     if (error) throw error;
     toast('Update link emailed to ' + a.email, 'ok');
   } catch (e) { toast('Send failed: ' + (e.message || e), 'err'); }
@@ -7386,7 +7430,9 @@ document.addEventListener('click', async (e) => {
 // ============================================================
 // VENDORS — own tab: categorized, filterable, with spend KPIs + detail.
 // ============================================================
-const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
+// Editable in Site Editor → Dashboard settings (ops.vendor_categories, " · "-separated).
+// This array is the fallback if the key is empty.
+let VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
 // ---- Site Editor (public-site CMS over site_content) ----
 const SITE_SECTIONS = { brand: 'Brand & logo', strip: 'Ticker strip', hero: 'Hero', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page', ops: 'Dashboard settings' };
 const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch', 'ops'];
@@ -7402,6 +7448,7 @@ const SITE_LABELS = {
   'di.donate_show': 'Show "Donate" button', 'di.donate_label': 'Donate button text', 'di.donate_url': 'Donate link (URL)',
   'contact.email': 'Contact email', 'contact.ig': 'Instagram handle', 'contact.ig_url': 'Instagram URL', 'contact.location': 'Location',
   'ops.ra_guestlist_type': 'RA guest-list export "Type" (must match a list name on your RA event)',
+  'ops.vendor_categories': 'Vendor categories (separate with " · "; "Other" is always kept)',
 };
 const siteState = { values: {} };
 function siteSecFor(k) { return SITE_SECTIONS[k.split('.')[0]] || 'Other'; }
@@ -8151,13 +8198,17 @@ $('panel-surveys').addEventListener('click', async e => {
 const vendorState = { rows: [], q: '', cat: '', selected: new Set(), sortKey: 'spent', sortDir: -1, activeId: null, detailExpenses: [], detailContacts: [] };
 async function loadVendors() {
   $('vendorsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading vendors…</div>';
-  const [roles, details, exp, vc] = await Promise.all([
+  const [roles, details, exp, vc, catRow] = await Promise.all([
     sb.from('actor_roles').select('actor:actors(id, display_name, kind, email, phone, website, notes, status, deleted_at)').eq('role', 'vendor').eq('active', true),
     sb.from('actor_vendor_details').select('*'),
     sb.from('expenses').select('vendor_actor_id, amount, date').not('vendor_actor_id', 'is', null).is('deleted_at', null),
     sb.from('vendor_contacts').select('vendor_actor_id'),
+    sb.from('site_content').select('value').eq('key', 'ops.vendor_categories').maybeSingle(),
   ]);
   if (roles.error) { $('vendorsBody').innerHTML = `<div class="panel-state err">${escapeHtml(roles.error.message)}</div>`; return; }
+  // Category list is owner-editable (Site Editor → Dashboard settings, " · "-separated).
+  const catStr = (catRow?.data?.value || '').trim();
+  if (catStr) VENDOR_CATEGORIES = [...new Set(catStr.split('·').map(s => s.trim()).filter(Boolean).concat('Other'))];
   const det = {}; (details.data || []).forEach(d => det[d.actor_id] = d);
   const agg = {}; (exp.data || []).forEach(e => { const o = agg[e.vendor_actor_id] ||= { spent: 0, txns: 0, last: null }; o.spent += Number(e.amount || 0); o.txns++; if (!o.last || e.date > o.last) o.last = e.date; });
   const cc = {}; (vc.data || []).forEach(r => cc[r.vendor_actor_id] = (cc[r.vendor_actor_id] || 0) + 1);

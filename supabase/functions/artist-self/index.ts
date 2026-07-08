@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     const patch: Record<string, string | null> = {};
     for (const f of ALLOWED) if (f in b) { const v = (b[f] == null ? "" : String(b[f])).trim(); patch[f] = v || null; }
     const { error } = await admin.from("actors").update(patch).eq("id", a.id);
-    if (error) return err(500, error.message);
+    if (error) { console.error("artist-self save failed:", error.message); return err(500, "Could not save — please try again."); }
     return new Response(JSON.stringify({ ok: true }), { headers: JH });
   }
 
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
     const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
     const path = `artist/${a.id}/${Date.now()}_self.${ext}`;
     const { error: upErr } = await admin.storage.from("event-photos").upload(path, bytes, { contentType: mime, upsert: true });
-    if (upErr) return err(500, upErr.message);
+    if (upErr) { console.error("artist-self photo upload failed:", upErr.message); return err(500, "Photo upload failed — please try again."); }
     await admin.from("actors").update({ photo_path: path }).eq("id", a.id);
     return new Response(JSON.stringify({ ok: true, photo_url: photoUrl(path) }), { headers: JH });
   }

@@ -17,8 +17,8 @@ const CORS_HEADERS = {
 };
 const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 
-const FROM = "Come With <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+const FROM = Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 
 function jsonError(status: number, message: string) {
   return new Response(JSON.stringify({ error: message }), {

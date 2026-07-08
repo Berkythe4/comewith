@@ -28,8 +28,8 @@ const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 const SITE_URL = Deno.env.get("SITE_URL") || "http://localhost:8765";
 const SIGN_BASE_URL = `${SITE_URL}/sign.html`;
 
-const FROM = "Berky <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+const FROM = Deno.env.get("FROM_EMAIL") || "Berky <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 
 function jsonError(status: number, message: string) {
   return new Response(JSON.stringify({ error: message }), {

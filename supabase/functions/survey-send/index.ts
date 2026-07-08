@@ -12,8 +12,8 @@ const CORS = {
 };
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
-const FROM = "Come With <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+const FROM = Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 const SITE_URL = Deno.env.get("SITE_URL") || "https://comewith.org";
 const esc = (s: string) => String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
@@ -43,6 +43,11 @@ Deno.serve(async (req) => {
     const resendKey = Deno.env.get("RESEND_API_KEY");
     const resend = resendKey ? new Resend(resendKey) : null;
 
+    // Invite copy is owner-editable (email_templates key 'survey_invite').
+    const { data: tpl } = await admin.from("email_templates").select("subject, body").eq("key", "survey_invite").maybeSingle();
+    const tplSubject = tpl?.subject || "{{survey_title}}";
+    const tplBody = tpl?.body || "Hi {{name}},\n\n{{intro}}\n\n{{button}}";
+
     let created = 0, sent = 0, failed = 0;
     const links: any[] = [];
     for (const r of recipients) {
@@ -56,12 +61,18 @@ Deno.serve(async (req) => {
       const link = `${SITE_URL}/survey.html?t=${inv.token}`;
       links.push({ email: r.email || null, label: r.label || null, link });
       if (sendEmail && resend && r.email) {
-        const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#16243f">
-          <p>Hi${r.label ? " " + esc(r.label) : ""},</p>
-          <p>${survey.intro ? esc(survey.intro) : "We'd love your quick feedback — it takes a minute."}</p>
-          <p><a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:700">Take the survey →</a></p>
+        const button = `<a href="${link}" style="display:inline-block;background:#16243f;color:#fff;padding:11px 20px;border-radius:8px;text-decoration:none;font-weight:700">Take the survey →</a>`;
+        const vars: Record<string, string> = {
+          name: r.label || "there",
+          intro: survey.intro || "We'd love your quick feedback — it takes a minute.",
+          survey_title: survey.title || "Your feedback",
+        };
+        const filled = esc(tplBody).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) =>
+          k === "button" || k === "link" ? button : esc(vars[k] ?? ""));
+        const html = `<div style="font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:1.5;color:#16243f">${filled.replace(/\r\n/g, "\n").replace(/\n/g, "<br>")}
           <p style="font-size:12px;color:#888">Or paste this link into your browser:<br>${link}</p></div>`;
-        const res = await resend.emails.send({ from: FROM, to: r.email, replyTo: REPLY_TO, subject: survey.title || "Your feedback", html });
+        const subject = tplSubject.replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) => vars[k] ?? "");
+        const res = await resend.emails.send({ from: FROM, to: r.email, replyTo: REPLY_TO, subject: subject || vars.survey_title, html });
         if (res.error) { failed++; } else { sent++; await admin.from("survey_invites").update({ sent_at: new Date().toISOString() }).eq("id", inv.id); }
       }
     }

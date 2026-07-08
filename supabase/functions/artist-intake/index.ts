@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   if (email) row.email = email;
 
   const { data: created, error } = await admin.from("actors").insert(row).select("id, edit_token").single();
-  if (error || !created) return err(500, error?.message || "Could not create the profile.");
+  if (error || !created) { console.error("artist-intake insert failed:", error?.message); return err(500, "Could not create the profile — please try again."); }
   await admin.from("actor_roles").insert({ actor_id: created.id, role: "artist" });
 
   // Optional photo (base64 data URL) → event-photos bucket, like artist-self.
@@ -91,8 +91,9 @@ Deno.serve(async (req) => {
         method: "POST",
         headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
         body: JSON.stringify({
-          from: "Come With <berky@comewith.org>", to: "berky@comewith.org",
-          reply_to: "berky@comewith.org",
+          from: Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>",
+          to: Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org",
+          reply_to: Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org",
           subject: `New artist intake: ${display_name}`,
           html: `<p>A new artist submitted the intake form. They're added as an actor (<b>hidden</b>) — review and toggle them onto the collective in the dashboard Artists tab.</p><table>${info}</table>`,
         }),

@@ -20,8 +20,8 @@ const CORS_HEADERS = {
 };
 const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 
-const FROM = "Come With <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+const FROM = Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 
 function jsonError(status: number, message: string) {
   return new Response(JSON.stringify({ error: message }), {
@@ -57,9 +57,25 @@ Deno.serve(async (req) => {
       .limit(1)
       .maybeSingle();
 
-    if (lookupErr) return jsonError(500, "Lookup failed: " + lookupErr.message);
+    if (lookupErr) { console.error("inquiry-notify lookup failed:", lookupErr.message); return jsonError(500, "Could not process the notification."); }
     if (!inquiry) {
       return jsonError(404, "No matching recent inquiry found");
+    }
+
+    // Rate limit: if this email has filed more than 3 inquiries in the past hour,
+    // save them (already inserted) but skip the admin notification — stops a bot
+    // from turning the public form into an email cannon at the admins.
+    const hourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const { count: recentCount } = await admin
+      .from("inquiries")
+      .select("id", { count: "exact", head: true })
+      .ilike("email", email)
+      .gte("created_at", hourAgo);
+    if ((recentCount || 0) > 3) {
+      return new Response(
+        JSON.stringify({ success: true, inquiry_id: inquiry.id, notified: 0, throttled: true }),
+        { headers: JSON_HEADERS },
+      );
     }
 
     // Look up all master_admin recipients
@@ -118,7 +134,8 @@ Deno.serve(async (req) => {
     });
 
     if (sendRes.error) {
-      return jsonError(500, "Email send failed: " + sendRes.error.message);
+      console.error("inquiry-notify send failed:", sendRes.error.message);
+      return jsonError(500, "Could not send the notification.");
     }
 
     return new Response(
@@ -131,6 +148,7 @@ Deno.serve(async (req) => {
       { headers: JSON_HEADERS },
     );
   } catch (e) {
-    return jsonError(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));
+    console.error("inquiry-notify unexpected:", e instanceof Error ? e.message : String(e));
+    return jsonError(500, "Something went wrong.");
   }
 });

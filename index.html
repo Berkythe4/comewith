@@ -281,19 +281,20 @@
 <script>
 const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',CWH={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
 const $=s=>document.querySelector(s);
-const DJS=['Berky','KRNeY','SPF 50','Kristen London','32LVS','Just Martin','Henry','Kloud9'];  // fallback only
 async function loadCollective(){
   const list=await api('v_public_artists?select=id,display_name,photo_path');
   const el=$('#djs');if(!el)return;
   const initial=n=>esc((n||'·').trim().charAt(0).toUpperCase());
-  if(!list.length){el.innerHTML=DJS.map(d=>'<span class="djcard"><span class="ph noimg">'+initial(d)+'</span><span class="grad"></span><span class="nm">'+esc(d)+'</span></span>').join('');return;}
+  // No hardcoded fallback names — only artists who opted onto the collective ever show.
+  if(!list.length){el.innerHTML='<span class="djcard"><span class="ph noimg">·</span><span class="grad"></span><span class="nm">Lineup coming soon</span></span>';return;}
   el.innerHTML=list.map(function(a){
     const photo=a.photo_path?(CWURL+'/storage/v1/object/public/event-photos/'+a.photo_path):null;
     const ph=photo?'<span class="ph" style="background-image:url(\''+photo+'\')"></span>':'<span class="ph noimg">'+initial(a.display_name)+'</span>';
     return '<a class="djcard" href="artist.html?id='+encodeURIComponent(a.id)+'">'+ph+'<span class="grad"></span><span class="nm">'+esc(a.display_name)+'<span class="ar">→</span></span></a>';
   }).join('');
 }
-const PAST=[{name:'Dance Infusion #2',event_date:'2026-05-09',venue_name:'Signal',series:'Dance Infusion',recap_blurb:'117 on the floor at Signal — a benefit for the MS Society.'},{name:'Dance Infusion #1',event_date:'2025-09-08',venue_name:'Signal',series:'Dance Infusion',recap_blurb:'42 tickets · $1,140 to the National MS Society.'}];
+// Offline-only fallback for Recent Rooms if the API is unreachable (kept minimal so it can't go stale).
+const PAST=[{name:'Dance Infusion #2',event_date:'2026-05-09',venue_name:'Signal',series:'Dance Infusion',recap_blurb:'A benefit for the National MS Society.'}];
 const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
 function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
 function fmtDay(s){const d=new Date((s||'')+'T00:00:00');return{mon:d.toLocaleDateString('en-US',{month:'short'}).toUpperCase(),day:d.getDate()};}

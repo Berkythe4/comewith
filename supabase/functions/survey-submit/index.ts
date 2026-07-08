@@ -47,18 +47,19 @@ Deno.serve(async (req) => {
       survey_id: surveyId, invite_id: ctx.invite_id, event_id: ctx.event_id, actor_id: ctx.actor_id,
       guest_id: ctx.guest_id, subscriber_id: ctx.subscriber_id, anonymous: ctx.anonymous, source: "web",
     }).select("id").single();
-    if (rErr || !resp) return err(500, "Could not save your response: " + (rErr?.message || ""));
+    if (rErr || !resp) { console.error("survey-submit response insert failed:", rErr?.message); return err(500, "Could not save your response — please try again."); }
 
     const rows = answers.filter((a: any) => a && a.question_id)
       .map((a: any) => ({ response_id: resp.id, question_id: a.question_id, value: a.value === undefined ? null : a.value }));
     if (rows.length) {
       const { error: aErr } = await admin.from("survey_answers").insert(rows);
-      if (aErr) return err(500, "Could not save answers: " + aErr.message);
+      if (aErr) { console.error("survey-submit answers insert failed:", aErr.message); return err(500, "Could not save your answers — please try again."); }
     }
     if (invite) await admin.from("survey_invites").update({ responded_at: new Date().toISOString() }).eq("id", invite.id);
 
     return new Response(JSON.stringify({ success: true }), { headers: JH });
   } catch (e) {
-    return err(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));
+    console.error("survey-submit unexpected:", e instanceof Error ? e.message : String(e));
+    return err(500, "Something went wrong — please try again.");
   }
 });

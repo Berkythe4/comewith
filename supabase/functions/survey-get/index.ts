@@ -55,6 +55,7 @@ Deno.serve(async (req) => {
       questions: questions || [], context: ctx,
     }), { headers: JH });
   } catch (e) {
-    return err(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));
+    console.error("survey-get unexpected:", e instanceof Error ? e.message : String(e));
+    return err(500, "Could not load the survey — please try again.");
   }
 });

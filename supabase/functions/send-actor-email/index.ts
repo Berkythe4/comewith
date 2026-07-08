@@ -18,8 +18,8 @@ const CORS = {
 };
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
-const FROM = "Come With <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+const FROM = Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 const SITE = "https://comewith.org";
 const esc = (s: unknown) =>
   String(s ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");

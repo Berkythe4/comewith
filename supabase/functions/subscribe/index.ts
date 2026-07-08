@@ -29,8 +29,9 @@ const CORS_HEADERS = {
 };
 const JSON_HEADERS = { ...CORS_HEADERS, "Content-Type": "application/json" };
 
-const FROM = "Come With <berky@comewith.org>";
-const REPLY_TO = "berky@comewith.org";
+// Sender is centrally configurable via secrets; these are the fallbacks.
+const FROM = Deno.env.get("FROM_EMAIL") || "Come With <berky@comewith.org>";
+const REPLY_TO = Deno.env.get("REPLY_TO_EMAIL") || "berky@comewith.org";
 
 // SITE_URL is set as a secret per project.
 const SITE_URL = Deno.env.get("SITE_URL") || "http://localhost:8765";
@@ -62,7 +63,7 @@ Deno.serve(async (req) => {
     // Look up existing subscriber by lowercased email
     const { data: existing } = await admin
       .from("subscribers")
-      .select("id, email, status, unsubscribe_token, confirmed_at")
+      .select("id, email, status, unsubscribe_token, confirmed_at, confirm_sent_at")
       .ilike("email", email)
       .maybeSingle();
 
@@ -78,7 +79,7 @@ Deno.serve(async (req) => {
         .insert({ email, full_name: fullName, status: "pending", source })
         .select("id, unsubscribe_token")
         .single();
-      if (insErr || !inserted) return jsonError(500, "Could not create subscriber: " + insErr?.message);
+      if (insErr || !inserted) { console.error("subscribe insert failed:", insErr?.message); return jsonError(500, "Could not subscribe right now — please try again."); }
       subscriberId = inserted.id;
       unsubscribeToken = inserted.unsubscribe_token;
       status = "pending";
@@ -109,6 +110,16 @@ Deno.serve(async (req) => {
       .insert({ subscriber_id: subscriberId, segment })
       .select(); // ignore result; conflict is fine
 
+    // Rate limit: if we already sent this address a confirm in the last 10 minutes,
+    // pretend success without re-sending (stops bots spamming someone's inbox).
+    const lastSent = existing?.confirm_sent_at ? new Date(existing.confirm_sent_at).getTime() : 0;
+    if (needsConfirm && lastSent && Date.now() - lastSent < 10 * 60 * 1000) {
+      return new Response(
+        JSON.stringify({ success: true, status, segment, confirm_sent: false, throttled: true }),
+        { headers: JSON_HEADERS },
+      );
+    }
+
     // Send confirm email if needed
     if (needsConfirm) {
       const resendKey = Deno.env.get("RESEND_API_KEY");
@@ -117,25 +128,28 @@ Deno.serve(async (req) => {
       }
       const resend = new Resend(resendKey);
       const confirmUrl = `${CONFIRM_BASE}?token=${unsubscribeToken}`;
-      const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1A1410;line-height:1.55;max-width:520px;margin:24px auto;padding:0 16px;">
-        <h1 style="font-size:1.3rem;letter-spacing:0.02em;">Confirm your subscription</h1>
-        <p>${fullName ? "Hi " + fullName.split(" ")[0] + "," : "Hi,"}</p>
-        <p>You signed up for the Come With mailing list. One click and you're in:</p>
-        <p style="margin:28px 0;">
-          <a href="${confirmUrl}" style="background:#C13B2A;color:white;padding:12px 22px;text-decoration:none;font-weight:600;letter-spacing:0.04em;">Confirm subscription</a>
-        </p>
-        <p style="font-size:0.85rem;color:#8A7F72;">If you didn't sign up, ignore this email and you won't be subscribed.</p>
-      </body></html>`;
+      // Copy is owner-editable (email_templates key 'subscribe_confirm'); fall back
+      // to the built-in text if the row is missing.
+      const { data: tpl } = await admin.from("email_templates").select("subject, body").eq("key", "subscribe_confirm").maybeSingle();
+      const escHtml = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      const greeting = fullName ? "Hi " + fullName.split(" ")[0] + "," : "Hi,";
+      const confirmBtn = `<a href="${confirmUrl}" style="background:#C13B2A;color:white;padding:12px 22px;text-decoration:none;font-weight:600;letter-spacing:0.04em;">Confirm subscription</a>`;
+      const bodyTpl = tpl?.body || "{{greeting}}\n\nYou signed up for the Come With mailing list. One click and you're in:\n\n{{confirm_button}}\n\nIf you didn't sign up, ignore this email and you won't be subscribed.";
+      const filled = escHtml(bodyTpl).replace(/\{\{\s*(\w+)\s*\}\}/g, (_, k: string) =>
+        k === "confirm_button" ? confirmBtn : k === "greeting" ? escHtml(greeting) : "");
+      const html = `<!doctype html><html><body style="font-family:system-ui,sans-serif;color:#1A1410;line-height:1.55;max-width:520px;margin:24px auto;padding:0 16px;">${filled.replace(/\r\n/g, "\n").replace(/\n/g, "<br>")}</body></html>`;
       const sendRes = await resend.emails.send({
         from: FROM,
         to: email,
         replyTo: REPLY_TO,
-        subject: "Confirm your Come With subscription",
+        subject: tpl?.subject || "Confirm your Come With subscription",
         html,
       });
       if (sendRes.error) {
-        return jsonError(500, "Email send failed: " + sendRes.error.message);
+        console.error("subscribe confirm send failed:", sendRes.error.message);
+        return jsonError(500, "We couldn't send the confirmation email — please try again.");
       }
+      await admin.from("subscribers").update({ confirm_sent_at: new Date().toISOString() }).eq("id", subscriberId);
     }
 
     return new Response(
@@ -148,6 +162,7 @@ Deno.serve(async (req) => {
       { headers: JSON_HEADERS },
     );
   } catch (e) {
-    return jsonError(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));
+    console.error("subscribe unexpected:", e instanceof Error ? e.message : String(e));
+    return jsonError(500, "Something went wrong — please try again.");
   }
 });

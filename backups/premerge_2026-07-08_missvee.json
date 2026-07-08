@@ -1,0 +1,121 @@
+{
+ "actors": [
+  {
+   "id": "c24e8549-0bc5-4220-8f57-a45f79cde8cc",
+   "kind": "person",
+   "display_name": "Victoriarose Vargas",
+   "legal_name": null,
+   "email": "victoriarose.business@outlook.com",
+   "phone": null,
+   "instagram": null,
+   "website": null,
+   "notes": "[GUEST LEDGER 2026-06-16]",
+   "user_id": null,
+   "created_at": "2026-06-16 23:48:48.488957+00",
+   "updated_at": "2026-06-16 23:48:48.488957+00",
+   "deleted_at": null,
+   "status": "active",
+   "org_id": null,
+   "bio": null,
+   "photo_path": null,
+   "soundcloud": null,
+   "tiktok": null,
+   "public_profile": false,
+   "collective_rank": 100,
+   "edit_token": "7929f3e1-40d3-47ab-abac-9f18fcc1d236"
+  },
+  {
+   "id": "0fcf0af5-2ea6-4de1-8e34-c873ea3a40bb",
+   "kind": "person",
+   "display_name": "Miss Vee",
+   "legal_name": null,
+   "email": "victoriarose.business@outlook.com",
+   "phone": null,
+   "instagram": null,
+   "website": null,
+   "notes": null,
+   "user_id": null,
+   "created_at": "2026-07-07 17:07:40.67901+00",
+   "updated_at": "2026-07-07 17:09:39.427679+00",
+   "deleted_at": null,
+   "status": "active",
+   "org_id": null,
+   "bio": null,
+   "photo_path": null,
+   "soundcloud": null,
+   "tiktok": null,
+   "public_profile": false,
+   "collective_rank": 100,
+   "edit_token": "b3be08d5-9020-44e7-99a4-9748e65dae30"
+  }
+ ],
+ "actor_roles_vic": [
+  {
+   "id": "aefca00e-5444-41db-831d-94d1908356f4",
+   "actor_id": "c24e8549-0bc5-4220-8f57-a45f79cde8cc",
+   "role": "donor",
+   "context": null,
+   "active": true,
+   "created_at": "2026-06-16 23:48:48.488957+00",
+   "updated_at": "2026-06-16 23:48:48.488957+00"
+  }
+ ],
+ "actor_roles_vee": [
+  {
+   "id": "21f09df9-9169-430b-a81d-25402739b96e",
+   "actor_id": "0fcf0af5-2ea6-4de1-8e34-c873ea3a40bb",
+   "role": "artist",
+   "context": null,
+   "active": true,
+   "created_at": "2026-07-07 17:07:40.729706+00",
+   "updated_at": "2026-07-07 17:07:40.729706+00"
+  },
+  {
+   "id": "73c8175d-d56e-4514-a4e3-8179d96f9c0b",
+   "actor_id": "0fcf0af5-2ea6-4de1-8e34-c873ea3a40bb",
+   "role": "contractor",
+   "context": null,
+   "active": true,
+   "created_at": "2026-07-07 17:33:47.783889+00",
+   "updated_at": "2026-07-07 17:33:47.783889+00"
+  },
+  {
+   "id": "9b6c9571-4b70-40d2-8179-12bf4a3a5cd3",
+   "actor_id": "0fcf0af5-2ea6-4de1-8e34-c873ea3a40bb",
+   "role": "dj",
+   "context": null,
+   "active": true,
+   "created_at": "2026-07-07 17:33:47.676549+00",
+   "updated_at": "2026-07-07 17:33:47.676549+00"
+  }
+ ],
+ "guests_vic": [
+  {
+   "id": "7a425ab8-ec15-4514-bc32-d79d9eff93ea",
+   "full_name": "Victoriarose Vargas",
+   "email": "victoriarose.business@outlook.com",
+   "phone": null,
+   "opted_in_mailing": true,
+   "source": "di2-ledger",
+   "notes": "[GUEST LEDGER 2026-06-16]",
+   "created_at": "2026-06-16 23:48:48.488957+00",
+   "updated_at": "2026-06-16 23:48:48.488957+00",
+   "deleted_at": null,
+   "actor_id": "c24e8549-0bc5-4220-8f57-a45f79cde8cc"
+  }
+ ],
+ "events": [
+  {
+   "id": "529cc7a9-84d6-4c3f-bba0-56ff1df8ae91",
+   "name": "Knicks G5 Watch Party",
+   "venue_id": null,
+   "capacity": 100
+  },
+  {
+   "id": "639bc2d2-04f7-4d1d-8b12-1ec0d313c569",
+   "name": "Henry Artist Showcase",
+   "venue_id": null,
+   "capacity": null
+  }
+ ]
+}
