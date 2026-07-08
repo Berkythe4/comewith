@@ -5332,7 +5332,10 @@ async function hubSecCustomers() {
     </div>`).join('');
   const glBlock = `
     <div class="hub-sec-bar" style="margin-top:2px;"><h3>Guest list — expected <span class="li-sub">(${glList.length})</span></h3>
-      <button class="hub-btn" data-hub-action="add-guestlist">+ Add people</button></div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="hub-btn" data-hub-action="add-guestlist">+ Add people</button>
+        ${glList.length ? '<button class="hub-btn ghost" data-hub-action="export-guestlist-ra" title="Download a CSV formatted for Resident Advisor’s guest-list upload">⬇ Export for RA</button>' : ''}
+      </div></div>
     <div class="kpi-hint" style="margin-bottom:10px;">Pre-assign customers you know will be there. They show as guests below; after the event, mark real attendance or import tickets.</div>
     ${glRows ? `<div class="hub-list" style="margin-bottom:20px;">${glRows}</div>` : '<div class="hub-empty" style="margin-bottom:20px;">No one on the guest list yet.</div>'}`;
   $('hubSecBody').innerHTML = glBlock + `
@@ -5454,6 +5457,29 @@ async function hubDelGuestList(id) {
   const { error } = await sb.from('guest_event_attendance').delete().eq('id', id);
   if (error) { toast(error.message, 'err'); return; }
   toast('Removed', 'ok'); hubGoSection('customers');
+}
+// Export the guest list as a Resident Advisor bulk-upload CSV. RA requires a single
+// "Name" column plus Email / Quantity / Type (exact header text, any order). Type
+// defaults to "Guest List" — rename that column in RA if your event uses a different
+// list name. BOM + CRLF so Excel/RA parse names with accents & commas correctly.
+async function hubExportGuestListRA() {
+  const { data, error } = await sb.from('guest_event_attendance')
+    .select('quantity, guest:guests(full_name, email)')
+    .eq('event_id', hub.eventId).eq('source', 'guestlist').order('created_at');
+  if (error) { toast('Export failed: ' + error.message, 'err'); return; }
+  const rows = (data || []).filter(r => r.guest && (r.guest.full_name || '').trim());
+  if (!rows.length) { toast('No one on the guest list to export', 'err'); return; }
+  const cell = (v) => { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+  const lines = [['Name', 'Email', 'Quantity', 'Type'].join(',')];
+  for (const r of rows) lines.push([cell(r.guest.full_name.trim()), cell(r.guest.email || ''), cell(r.quantity || 1), cell('Guest List')].join(','));
+  const csv = '﻿' + lines.join('\r\n');
+  const safe = (hub.event?.name || 'event').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `RA_guestlist_${safe}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+  toast(`Exported ${rows.length} ${rows.length === 1 ? 'guest' : 'guests'} for Resident Advisor`, 'ok');
 }
 
 // ---- Section: Files (unified document hub — doc-type "buckets" + vendor) ----
@@ -6079,6 +6105,7 @@ const HUB_ACTIONS = {
   'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
   'edit-impact': () => openImpactReportEditor(hub.eventId),
   'add-guestlist': hubAddGuestList,
+  'export-guestlist-ra': hubExportGuestListRA,
   'load-all': hubLoadAll,
 };
 
