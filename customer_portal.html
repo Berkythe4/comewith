@@ -257,7 +257,7 @@ async function loadAgreements() {
   }
   if (!data || data.length === 0) {
     countEl.textContent = '';
-    panel.innerHTML = `<div class="placeholder">No agreements yet. When Berky drafts and sends you one, it'll show up here.</div>`;
+    panel.innerHTML = `<div class="placeholder">No agreements yet. When Berky drafts and sends you one, it'll show up here. Questions? <a href="mailto:berky@comewith.org" style="color:inherit;">Email berky@comewith.org</a>.</div>`;
     return;
   }
 

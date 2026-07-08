@@ -154,7 +154,10 @@ Deno.serve(async (req) => {
     }
 
     // ---- Bump the agreement status to 'sent' ----
-    await admin
+    // The email is already out at this point, so a failed status write must NOT
+    // read as a failed send — surface it as a warning so the dashboard can say
+    // "sent, but flip the status manually".
+    const { error: statusErr } = await admin
       .from("agreements")
       .update({ status: "sent" })
       .eq("id", agreement_id);
@@ -166,6 +169,7 @@ Deno.serve(async (req) => {
         token: link.token,
         sign_url: signUrl,
         resend_id: emailRes.data?.id,
+        warning: statusErr ? "Email sent, but the agreement status could not be updated to 'sent' — set it manually." : undefined,
       }),
       { headers: JSON_HEADERS },
     );

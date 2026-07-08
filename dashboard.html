@@ -1062,6 +1062,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-conversations"><div id="conversationsBody"></div></div>
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
+      <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -2794,6 +2795,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
+  if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -5218,10 +5220,10 @@ async function hubSecEquipment() {
     <div class="kpi-hint" style="margin-bottom:12px;">Check items off as you load them in — it saves to the event. The 🖨 sheet is a printable copy.</div>
     <div class="hub-list">${rows}</div>`;
 }
-async function hubToggleLoaded(id, checked) {
+async function hubToggleLoaded(id, checked, cb) {
   const ts = checked ? new Date().toISOString() : null;
   const { error } = await sb.from('equipment_usage').update({ loaded_at: ts }).eq('id', id);
-  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  if (error) { toast('Save failed: ' + error.message, 'err'); if (cb) cb.checked = !checked; return; } // revert the box — it didn't save
   const u = hub.equipment.find(x => x.id === id); if (u) u.loaded_at = ts;
   const badge = $('eqLoadedCount');
   if (badge) badge.textContent = `${hub.equipment.filter(x => x.loaded_at).length}/${hub.equipment.length} loaded`;
@@ -5463,15 +5465,20 @@ async function hubDelGuestList(id) {
 // defaults to "Guest List" — rename that column in RA if your event uses a different
 // list name. BOM + CRLF so Excel/RA parse names with accents & commas correctly.
 async function hubExportGuestListRA() {
-  const { data, error } = await sb.from('guest_event_attendance')
-    .select('quantity, guest:guests(full_name, email)')
-    .eq('event_id', hub.eventId).eq('source', 'guestlist').order('created_at');
+  const [{ data, error }, { data: typeRow }] = await Promise.all([
+    sb.from('guest_event_attendance')
+      .select('quantity, guest:guests(full_name, email)')
+      .eq('event_id', hub.eventId).eq('source', 'guestlist').order('created_at'),
+    sb.from('site_content').select('value').eq('key', 'ops.ra_guestlist_type').maybeSingle(),
+  ]);
   if (error) { toast('Export failed: ' + error.message, 'err'); return; }
   const rows = (data || []).filter(r => r.guest && (r.guest.full_name || '').trim());
   if (!rows.length) { toast('No one on the guest list to export', 'err'); return; }
+  // RA "Type" must match a list name on your RA event — editable in Site Editor → Dashboard settings.
+  const raType = (typeRow?.value || '').trim() || 'Guest List';
   const cell = (v) => { v = (v == null ? '' : String(v)); return /[",\n\r]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
   const lines = [['Name', 'Email', 'Quantity', 'Type'].join(',')];
-  for (const r of rows) lines.push([cell(r.guest.full_name.trim()), cell(r.guest.email || ''), cell(r.quantity || 1), cell('Guest List')].join(','));
+  for (const r of rows) lines.push([cell(r.guest.full_name.trim()), cell(r.guest.email || ''), cell(r.quantity || 1), cell(raType)].join(','));
   const csv = '﻿' + lines.join('\r\n');
   const safe = (hub.event?.name || 'event').replace(/[^a-zA-Z0-9._-]+/g, '_').replace(/^_+|_+$/g, '');
   const a = document.createElement('a');
@@ -5582,7 +5589,7 @@ async function hubGenerateDayOf() {
 async function hubFeeToExpense(participantId) {
   const p = hub.people.find(x => x.id === participantId);
   if (!p) return;
-  if (p.fee == null || !(Number(p.fee) > 0)) { toast('No fee on this participant', 'err'); return; }
+  if (p.fee == null || !(Number(p.fee) > 0)) { toast('No fee set — edit the participant and add a fee first, then post it as an expense.', 'err'); return; }
   if (!confirm(`Create an expense of ${money(p.fee)} for ${p.actor?.display_name || 'this participant'}?\n\nThis is a one-time manual post — it is not auto-tracked or linked back, so only run it once per fee.`)) return;
   const { data: { session } } = await sb.auth.getSession();
   const { error } = await sb.from('expenses').insert({
@@ -6112,7 +6119,7 @@ const HUB_ACTIONS = {
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
 
 $('panel-eventhub').addEventListener('change', (e) => {
-  const cb = e.target.closest('[data-eq-load]'); if (cb) hubToggleLoaded(cb.dataset.eqLoad, cb.checked);
+  const cb = e.target.closest('[data-eq-load]'); if (cb) hubToggleLoaded(cb.dataset.eqLoad, cb.checked, cb);
 });
 $('panel-eventhub').addEventListener('click', (e) => {
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
@@ -7381,8 +7388,8 @@ document.addEventListener('click', async (e) => {
 // ============================================================
 const VENDOR_CATEGORIES = ['Software & Subscriptions', 'Equipment & Gear', 'Marketing & Ads', 'Travel', 'Talent & Contractors', 'Venue & Space', 'Supplies', 'Professional Development', 'Platform & Fees', 'Other'];
 // ---- Site Editor (public-site CMS over site_content) ----
-const SITE_SECTIONS = { brand: 'Brand & logo', strip: 'Ticker strip', hero: 'Hero', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page' };
-const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch'];
+const SITE_SECTIONS = { brand: 'Brand & logo', strip: 'Ticker strip', hero: 'Hero', lane1: 'What we do', lane2: 'What we do', lane3: 'What we do', events: 'Events section', rooms: 'Recent rooms', di: 'Dance Infusion (charity)', book: 'Booking', contact: 'Contact', footer: 'Footer', news: 'Newsletter', watch: 'Watch page', ops: 'Dashboard settings' };
+const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events', 'rooms', 'di', 'book', 'contact', 'news', 'footer', 'watch', 'ops'];
 const SITE_AREAS = new Set(['hero.lede', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
 const SITE_BOOLS = new Set(['di.donate_show', 'di.ticket_show', 'di.tiers_show']); // rendered as checkboxes
 const SITE_LABELS = {
@@ -7394,6 +7401,7 @@ const SITE_LABELS = {
   'di.ticket_show': 'Show "Tickets" button', 'di.ticket_label': 'Tickets button text', 'di.ticket_url': 'Tickets link (URL)',
   'di.donate_show': 'Show "Donate" button', 'di.donate_label': 'Donate button text', 'di.donate_url': 'Donate link (URL)',
   'contact.email': 'Contact email', 'contact.ig': 'Instagram handle', 'contact.ig_url': 'Instagram URL', 'contact.location': 'Location',
+  'ops.ra_guestlist_type': 'RA guest-list export "Type" (must match a list name on your RA event)',
 };
 const siteState = { values: {} };
 function siteSecFor(k) { return SITE_SECTIONS[k.split('.')[0]] || 'Other'; }
@@ -7507,6 +7515,80 @@ async function saveSiteContent() {
   } catch (e) { toast(e.message || String(e), 'err'); if (btn) { btn.disabled = false; btn.textContent = 'Save all changes'; } }
 }
 $('panel-site-editor').addEventListener('click', e => { if (e.target.closest('[data-site-save]')) saveSiteContent(); });
+
+// ---- Site Review (audit log — sits under Site Editor in the nav) ----
+// Findings from full-site reviews live in site_review_items so triage happens
+// in-app: flip a status, dismiss, or add your own item as you spot things.
+const REVIEW_KINDS = [
+  ['bug', '🐞 Bugs', 'Defects found in review — fixed rows stay for the record.'],
+  ['improvement', '✨ UX improvements', 'Definite-win changes that shipped.'],
+  ['capability', '🧰 In-app capability additions', 'Things that used to need a code edit.'],
+  ['data', '🗂 Data hygiene', 'Records to merge / backfill — your call.'],
+  ['saved', '🅿 Saved for review', 'Worth considering, not auto-applied. Decide, then set the status.'],
+];
+const REVIEW_STATUSES = ['open', 'review', 'planned', 'fixed', 'dismissed'];
+const REVIEW_STATUS_COLOR = { fixed: 'var(--green,#1f7a1f)', open: 'var(--amber,#b58900)', review: '#5b7fb3', planned: '#8a6db3', dismissed: 'var(--mid,#888)' };
+async function loadSiteReview() {
+  $('siteReviewBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading review…</div>';
+  const { data, error } = await sb.from('site_review_items').select('*').order('sort').order('created_at');
+  if (error) { $('siteReviewBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  const items = data || [];
+  const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
+  const openN = items.filter(i => ['open', 'review', 'planned'].includes(i.status)).length;
+  const statusSel = (it) => `<select class="modal-select" data-sr-status="${it.id}" style="max-width:110px;color:${REVIEW_STATUS_COLOR[it.status] || 'inherit'}">${REVIEW_STATUSES.map(s => `<option value="${s}"${it.status === s ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const section = ([kind, label, hint]) => {
+    const rows = items.filter(i => i.kind === kind);
+    if (!rows.length) return '';
+    return `<div class="hub-sec-bar" style="margin-top:18px;"><h3>${label} <span class="li-sub">(${rows.length})</span></h3></div>
+      <div class="kpi-hint" style="margin-bottom:8px;">${hint}</div>
+      <table class="data-table"><thead><tr><th style="width:110px;">Area</th><th>Finding</th><th style="width:200px;">Where</th><th style="width:120px;">Status</th></tr></thead>
+      <tbody>${rows.map(it => `<tr${it.status === 'dismissed' ? ' style="opacity:.45;"' : ''}>
+        <td>${escapeHtml(it.area)}</td>
+        <td><strong>${escapeHtml(it.title)}</strong>${it.detail ? `<div class="li-sub" style="white-space:normal;">${escapeHtml(it.detail)}</div>` : ''}</td>
+        <td class="li-sub" style="white-space:normal;">${escapeHtml(it.file_ref || '—')}</td>
+        <td>${statusSel(it)}</td>
+      </tr>`).join('')}</tbody></table>`;
+  };
+  $('siteReviewBody').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:12px;">
+      ${card('Findings', fmtNum(items.length))}${card('Fixed', fmtNum(items.filter(i => i.status === 'fixed').length))}${card('Open / to decide', fmtNum(openN))}${card('Dismissed', fmtNum(items.filter(i => i.status === 'dismissed').length))}
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px;">
+      <button class="hub-btn" data-sr-add>＋ Add item</button>
+      <span class="kpi-hint" style="margin:0;">Full-site audit log (last run 2026-07-08). Change a status inline — it saves immediately.</span>
+    </div>
+    ${REVIEW_KINDS.map(section).join('')}`;
+}
+async function srSetStatus(id, status) {
+  const { error } = await sb.from('site_review_items').update({ status, updated_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); loadSiteReview(); return; }
+  toast('Status saved', 'ok'); loadSiteReview();
+}
+function srOpenAdd() {
+  openKpi('Add review item', 'Log something you spotted', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Type</label><select class="modal-select" id="srKind">${REVIEW_KINDS.map(([k, l]) => `<option value="${k}">${l.replace(/^[^ ]+ /, '')}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Area</label><input class="modal-input" id="srArea" placeholder="e.g. Events, Homepage"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Finding *</label><input class="modal-input" id="srTitle" placeholder="Short description"></div>
+    <div class="modal-form-row"><label class="modal-label">Detail</label><textarea class="modal-textarea" id="srDetail" rows="3"></textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Where (file / screen)</label><input class="modal-input" id="srRef" placeholder="optional"></div>`,
+    async () => {
+      const title = ($('srTitle')?.value || '').trim();
+      if (!title) throw new Error('Enter the finding');
+      const { error } = await sb.from('site_review_items').insert({
+        kind: $('srKind').value, area: ($('srArea')?.value || '').trim() || 'General',
+        title, detail: ($('srDetail')?.value || '').trim() || null,
+        file_ref: ($('srRef')?.value || '').trim() || null, status: 'open',
+      });
+      if (error) throw error;
+      closeKpi(); toast('Added', 'ok'); loadSiteReview();
+    }, 'Add item');
+}
+$('panel-site-review').addEventListener('click', (e) => { if (e.target.closest('[data-sr-add]')) srOpenAdd(); });
+$('panel-site-review').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
+});
 
 // ===================== PRICING TOOL (Sales) =====================
 // Quote builder for DJ / rental / full-production events. Math lives in the shared
@@ -8500,12 +8582,26 @@ function viewInquiry(id) {
 }
 async function convertInquiry(id) {
   const x = inqDash.rows.find(r => r.id === id); if (!x) return;
-  if (!confirm(`Create a client (customer actor) from "${x.full_name}" and mark this inquiry converted?`)) return;
-  const { data: a, error } = await sb.from('actors').insert({ display_name: x.full_name || x.email || 'Client', kind: 'person', email: x.email || null, phone: x.phone || null }).select('id').single();
-  if (error) { toast('Failed: ' + error.message, 'err'); return; }
-  await sb.from('actor_roles').insert({ actor_id: a.id, role: 'customer' });
-  await sb.from('inquiries').update({ actor_id: a.id, status: 'converted' }).eq('id', id);
-  toast('Converted to client', 'ok'); loadInquiries();
+  // Dedupe by email — reuse the existing actor instead of creating a twin.
+  let actorId = null, reused = false;
+  if (x.email) {
+    const { data: dupe } = await sb.from('actors').select('id, display_name').ilike('email', x.email.trim()).is('deleted_at', null).maybeSingle();
+    if (dupe) {
+      if (!confirm(`An actor with this email already exists ("${dupe.display_name}"). Link this inquiry to them instead of creating a duplicate?`)) return;
+      actorId = dupe.id; reused = true;
+    }
+  }
+  if (!actorId) {
+    if (!confirm(`Create a client (customer actor) from "${x.full_name}" and mark this inquiry converted?`)) return;
+    const { data: a, error } = await sb.from('actors').insert({ display_name: x.full_name || x.email || 'Client', kind: 'person', email: x.email || null, phone: x.phone || null }).select('id').single();
+    if (error) { toast('Failed: ' + error.message, 'err'); return; }
+    actorId = a.id;
+  }
+  const { error: roleErr } = await sb.from('actor_roles').insert({ actor_id: actorId, role: 'customer' });
+  if (roleErr && roleErr.code !== '23505') { toast('Role assign failed: ' + roleErr.message, 'err'); return; } // 23505 = already has the role, fine
+  const { error: updErr } = await sb.from('inquiries').update({ actor_id: actorId, status: 'converted' }).eq('id', id);
+  if (updErr) { toast('Inquiry update failed: ' + updErr.message, 'err'); return; }
+  toast(reused ? 'Linked to existing client' : 'Converted to client', 'ok'); loadInquiries();
 }
 $('panel-inquiries').addEventListener('input', (e) => { const q = e.target.closest('[data-inqq]'); if (q) { inqDash.q = q.value; renderInquiriesBody(); } });
 $('panel-inquiries').addEventListener('change', (e) => {
@@ -8853,8 +8949,8 @@ const WORKFLOW = [
     links: [{ t: 'Open Events', tab: 'events' }] },
   { lane: 'money', n: 12, ico: '👥', t: 'Guests', where: 'Guests',
     short: 'Who came + what they spent.',
-    detail: `The guest roster with per-event attendance, spend and mailing opt-in. Flags which guests are subscribed to the email list.`,
-    links: [{ t: 'Open Guests', tab: 'guests' }] },
+    detail: `The guest roster with per-event attendance, spend and mailing opt-in. Flags which guests are subscribed to the email list. Before the event, build the guest list on the hub's Customers tab (pick people on file or add new) and export it as a Resident Advisor-ready CSV — the RA "Type" column is editable in Site Editor → Dashboard settings.`,
+    links: [{ t: 'Open Guests', tab: 'guests' }, { t: 'Open Events', tab: 'events' }] },
   { lane: 'money', n: 13, ico: '💵', t: 'Income', where: 'Income',
     short: 'Non-ticket revenue.',
     detail: `Service fees, bar share, merch — anything that isn't a ticket. Link each row to a payer (actor) and the event.`,
@@ -8883,6 +8979,10 @@ const WORKFLOW = [
     short: 'Turn the night into shareable content.',
     detail: `In an event's Edit → Recent Rooms: mark it Featured, add a hero photo, and one or more YouTube / SoundCloud recap links (each can be tagged to an artist). These power the homepage "Recent Rooms" cards and the Watch page — and every tagged clip shows in that artist's profile Content section.`,
     links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'mkt', n: 25, ico: '🪪', t: 'Artist intake', where: 'Artists',
+    short: 'Onboard new artists — they fill in their own profile.',
+    detail: `"＋ New artist" on the Artists tab creates someone directly (you land in their profile editor), or copy / email the public intake form so a prospective artist submits their own name, socials, bio and photo. Either way they're created as an actor with the artist role, hidden from the collective until you review and toggle them live — and they get a private self-edit link.`,
+    links: [{ t: 'Open Artists', tab: 'artists' }] },
   { lane: 'mkt', n: 19, ico: '🌟', t: 'Artist profiles', where: 'Artists',
     short: 'The collective + public profile pages.',
     detail: `Each DJ / artist can appear on the homepage collective with a public profile (photo, bio, socials, gig history, tagged content). Toggle who shows, set DJ name vs. real name, and send them a no-login link to update their own bio / socials / photo.`,
@@ -8899,6 +8999,10 @@ const WORKFLOW = [
     short: 'Everything rolls up automatically.',
     detail: `The event's money and attendance flow straight into the Event Hub money tab and the Strategy KPIs — gross, net P&L, total raised, sell-through — with no re-entry. Manual metrics (IG, YouTube) layer on top.`,
     links: [{ t: 'Open Strategy', tab: 'strategy' }] },
+  { lane: 'kpi', n: 26, ico: '🔍', t: 'Site review', where: 'Site Review',
+    short: 'The standing audit log — bugs, ideas, hygiene.',
+    detail: `Findings from full-site reviews live here as editable rows: bugs (with what was fixed), shipped improvements, data hygiene to decide on, and saved ideas. Flip a status inline or add your own items as you spot them — it's the maintenance backlog for the whole platform.`,
+    links: [{ t: 'Open Site Review', tab: 'site-review' }] },
 ];
 const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
 const WF_ORDER = ['crm', 'hub', 'money', 'mkt', 'kpi'];
@@ -8961,13 +9065,15 @@ const API_CONNECTIONS = [
   { grp: 'established', ico: '✉️', name: 'Resend (Email)', data: 'Outbound email (agreements, campaigns, actor/venue conversations) + delivery / bounce / open webhooks', note: 'LIVE — comewith.org verified as a sender, webhook wired, conversations + campaigns running.' },
   { grp: 'established', ico: '🗄️', name: 'Supabase', data: 'Database, auth, storage, edge functions — the whole backend', note: 'LIVE — the platform everything runs on.' },
   { grp: 'established', ico: '🎬', name: 'YouTube + SoundCloud embeds', data: 'Recap videos / audio play on the site (homepage Recent Rooms, Watch page, artist profiles)', note: 'LIVE — embed-only (no API key / no data pulled in). Paste a YouTube or SoundCloud link on an event’s Recent Rooms and it plays in a pop-up; YouTube also supplies the card thumbnail.' },
-  { grp: 'pending', ico: '📸', name: 'Instagram Graph API', data: 'Follower count, reach, impressions, profile views, per-post insights', note: 'NEEDS SETUP (yours): a Meta/Facebook developer app + your IG switched to Business/Creator and linked to a Facebook Page, then a long-lived access token. The pull-instagram-stats function is already built — once you add the IG_USER_ID + IG_ACCESS_TOKEN secrets it goes live like YouTube.' },
-  { grp: 'blocked', ico: '🎟️', name: 'Resident Advisor (RA)', data: 'Ticket sales, attendee counts, event listings', note: 'NO public / official API. Today: RA CSV export → the in-app importer. An unofficial GraphQL endpoint (ra.co/graphql) exists but is undocumented, against their ToS, and can break without notice — not recommended for production.' },
+  { grp: 'pending', ico: '📸', name: 'Instagram Graph API', data: 'Follower count, reach, impressions, profile views, per-post insights', note: 'PLAN #1 — biggest payoff for least work; the code is DONE. Your part (~1 hr, one-time): 1) switch IG to Business/Creator + link a Facebook Page, 2) create a Meta developer app, 3) generate a long-lived token, 4) add IG_USER_ID + IG_ACCESS_TOKEN secrets. Then pull-instagram-stats goes live like YouTube — nightly follower/reach snapshots feeding Strategy.' },
+  { grp: 'blocked', ico: '🎟️', name: 'Resident Advisor (RA)', data: 'Ticket sales, attendee counts, event listings, guest lists', note: 'NO public / official API. Workarounds BOTH directions are built-in: RA CSV export → in-app ticketing importer (IN), and event guest list → “Export for RA” CSV (OUT). The unofficial ra.co/graphql endpoint is against their ToS and can vanish — not for production.' },
   { grp: 'blocked', ico: '🎉', name: 'Partiful', data: 'RSVPs, guest lists', note: 'NO public API today. Manual export / entry for now — worth re-checking, they’re growing fast.' },
-  { grp: 'future', ico: '📊', name: 'Google Analytics (GA4)', data: 'Website traffic, sources, funnel — inquiry-form + ticket-link conversions', note: 'GA4 Data API — free, real API. Needs a GA4 property on comewith.org + a service account. Highest-value addition for marketing/funnel performance.' },
-  { grp: 'future', ico: '🎵', name: 'TikTok', data: 'Followers, video views + engagement', note: 'TikTok Display API (read) or Business API — needs a developer app + review. Worth it once TikTok is an active channel.' },
-  { grp: 'future', ico: '🎫', name: 'Eventbrite / DICE', data: 'Ticketing data if you sell there', note: 'Both have proper APIs (unlike RA/Partiful). If you ever move ticketing to one, full sales automation becomes possible.' },
-  { grp: 'future', ico: '🎚️', name: 'Spotify / Bandsintown', data: 'Artist popularity + tour data (for vetting/booking DJs)', note: 'Useful for talent decisions rather than your own performance metrics.' },
+  { grp: 'blocked', ico: '🏦', name: 'Simplifi (Quicken)', data: 'Bank transactions → expenses', note: 'NO public API. The CSV path is built: export Work Expenses from Simplifi → in-app import (deduped, auto-assigns events where it can).' },
+  { grp: 'future', ico: '📊', name: 'Google Analytics (GA4)', data: 'Website traffic, sources, funnel — inquiry-form + ticket-link conversions', note: 'PLAN #2 — the missing marketing layer: you can see IG/YouTube audience but not what the WEBSITE does. Your part: create a GA4 property + add the gtag snippet (Site Editor-able later) + a service account key. Build part (~half day): pull-ga4-stats edge fn → metric_snapshots → Strategy cards (sessions, sources, inquiry conversion).' },
+  { grp: 'future', ico: '📅', name: 'Calendar feed (ICS)', data: 'Public events → Google/Apple Calendar subscriptions', note: 'PLAN #3 — zero external dependencies, no keys, ~2 hrs: an edge function serving events.ics from v_public_events. Fans subscribe once, every future event lands in their calendar; also powers an “Add to calendar” button on event cards.' },
+  { grp: 'future', ico: '🎵', name: 'TikTok', data: 'Followers, video views + engagement', note: 'PLAN #4 — only once TikTok is an active channel (app review overhead is real). Until then, log follower counts via Log Numbers.' },
+  { grp: 'future', ico: '🎫', name: 'Eventbrite / DICE', data: 'Ticketing data if you sell there', note: 'PLAN #5 — both have proper APIs (unlike RA/Partiful). Revisit only if ticketing moves platforms; then full sales automation replaces CSV imports.' },
+  { grp: 'future', ico: '🎚️', name: 'Spotify / Bandsintown', data: 'Artist popularity + tour data (for vetting/booking DJs)', note: 'PLAN #6 — nice-to-have for talent decisions; Spotify embeds on artist profiles could come sooner (embed-only, no API key, like SoundCloud).' },
 ];
 const API_GROUPS = [['established', '✅ Established — live now', '#3B6D11', '#EAF3E0'], ['pending', '🔧 Pending — needs your setup', '#A6531C', '#F7EBE0'], ['blocked', '⛔ No official API (workaround only)', '#b3261e', '#fdecea'], ['future', '🔭 Future opportunities', '#1F5C8B', '#E2EEF7']];
 function renderApiMap() {

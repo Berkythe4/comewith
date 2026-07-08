@@ -200,6 +200,52 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-07-08 (Full-site audit + Site Review module + engagement tracking)
+
+> Migrations **075–076 APPLIED to prod**; `send-campaign` + `send-agreement` + **`artist-intake` (new)**
+> redeployed; `dashboard.html`, `index.html`, `watch.html`, `artist.html`, `artist-intake.html` (new),
+> `customer_portal.html` pushed (Netlify live).
+
+### ✅ Email engagement tracking fixed + reconciled (2026-07-07)
+- DI#2 campaign "0 opens" root-caused: Resend webhook wasn't subscribed to `email.opened/clicked`
+  (now subscribed to ALL events; verified live end-to-end). True numbers recovered from a Resend CSV
+  export and **backfilled**: 88 sent · 87 delivered · **38 opened (~44%)** · 2 clicked (both NMSS
+  partners) · 1 bounced. **CC recipients now logged** to `mailing_events` (they were invisible).
+- Campaign stats modal: data-aware hints (tracking-off vs webhook-down) + **click any card → named
+  recipient list**. Survey CTA in campaign emails enlarged. **075**: audit trigger on
+  `survey_responses` (submissions/deletions permanently logged).
+
+### ✅ Artist intake + guest list ops (2026-07-07/08)
+- **Artist intake**: `artist-intake` edge fn (public) + `artist-intake.html` + Artists tab "＋ New
+  artist" (create directly, or copy/email the intake form). Auto-creates actor + artist role +
+  self-edit link; hidden until reviewed; email-dedupe; honeypot; notifies berky@.
+- **Guest list**: "Add someone new" made obvious (staged chips + no-match inline add); **Export for
+  RA** button (RA bulk-upload CSV: Name/Email/Quantity/Type; Type editable in Site Editor →
+  Dashboard settings).
+
+### ✅ Full-site audit (2026-07-08) — 5 parallel reviews + DB checks; migration 076
+- **Fixed**: convert-inquiry hardened (email dedupe + checked writes); equipment load checkbox
+  reverts on failed save; send-agreement reports a failed status flip; fee-to-expense error explains
+  the fix; **og:image/og:url/twitter:card** on index/watch/artist (social sharing previews);
+  customer-portal empty state links a contact.
+- **Security verified**: all 7 financial views 401 for anon; zero RLS-without-policy tables;
+  new table anon-blocked. **Data checks clean** (no orphaned FKs; series contract intact).
+- **NEW module: Site Review** (Insights, under Site Editor; `site_review_items`, 076) — the audit
+  log lives in-app: bugs fixed / improvements / capability adds / data hygiene / saved-for-review,
+  inline status editing + add-your-own. 19 findings seeded; open decisions include a dup-email actor
+  pair, 3 venueless events, rate limiting on public endpoints, and an email-templates editor.
+- **Workflow map** gained Artist intake + Site review steps (guest-list/RA reflected in Guests).
+- **🔌 APIs map upgraded to a prioritized plan**: #1 Instagram Graph (code done — needs your Meta
+  app + secrets), #2 GA4 (property + service acct, then pull-ga4-stats), #3 self-hosted **ICS
+  calendar feed** (no keys, ~2 hrs), #4 TikTok (when active), #5 Eventbrite/DICE (if ticketing
+  moves), #6 Spotify. RA/Partiful/Simplifi remain no-API with CSV workarounds built in-app.
+
+### ▶️ Open / next
+- Flip **Site Review, Pricing, Surveys, Templates** `signed_off` when ready to release to staff.
+- Site Review "open" items: merge/fix the Victoriarose/Miss Vee dup email; venue-backfill 3 events;
+  decide on rate limiting + email-templates editor.
+- API plan step 1: Meta developer app for Instagram (your action; code is waiting).
+
 ## Current state — reconciled 2026-06-29 (Impact report public + Pricing + Surveys)
 
 > Migrations **067–074 all APPLIED to prod**; edge functions **survey-get / survey-submit /
