@@ -1063,7 +1063,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
-      <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div></div>
+      <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:sticky;bottom:0;z-index:5;"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -7752,7 +7752,8 @@ function renderRaMarket() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer]')) return;
+  if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
   if (t.closest('[data-ra-sync]')) { raSyncFromSc(t.closest('[data-ra-sync]')); return; }
   if (t.closest('[data-ra-publish]')) { raPublishTracklist(); return; }
   if (t.closest('[data-ra-copytracklist]')) { navigator.clipboard.writeText(raFmtTracklist()).then(() => toast('Tracklist copied', 'ok'), () => toast('Copy failed', 'err')); return; }
@@ -7892,7 +7893,6 @@ function renderRaRadio() {
     </div>
     <div class="kpi-hint" style="margin-bottom:8px;">${windowArtists.length} artists on SoundCloud in the next ${raState.radioWeeks} weeks · <strong>${producers} producers</strong> found${unscanned ? ` · ${unscanned} not yet scanned` : ' · all scanned'}. “Producers only” hides DJs who don’t post original songs. Expand <strong>🎵 songs</strong> to add tracks to your station.</div>
     ${raRenderPlaylist()}
-    <div id="raPlayer" style="margin:12px 0;"></div>
     <div class="hub-list">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
 function raRenderArtistTracks(key) {
@@ -7949,16 +7949,17 @@ function raRenderPlaylist() {
         <button class="hub-mini" data-ra-plmove="${t.id}:down" title="down">↓</button>
         <button class="hub-mini" data-ra-removetrack="${t.id}">✕</button>
       </span></div>`; }).join('')}</div>` : '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>'}
-    <div id="raStation" style="margin-top:10px;"></div>
   </div>`;
 }
+// Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
+// you add tracks / follow / scan — those rebuild raMarketBody, not the dock.
 async function raPlay(scUrl, name) {
-  const el = $('raPlayer'); if (!el) return;
+  const el = $('raDock'); if (!el) return;
   const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=true';
-  el.innerHTML = `<div class="li-sub" style="margin-bottom:4px;">▶ ${escapeHtml(name || '')}</div><iframe id="raPlayerFrame" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe>`;
-  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  // URL auto_play is unreliable in cross-origin iframes — drive it via the Widget API.
-  try { await ensureScWidget(); const w = window.SC.Widget($('raPlayerFrame')); w.bind(window.SC.Widget.Events.READY, () => w.play()); } catch (_) { /* the in-iframe play button still works */ }
+  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px 10px 0 0;padding:8px 10px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;">▶ ${escapeHtml(name || '')}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
+    <iframe id="raPlayerFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe></div>`;
+  try { await ensureScWidget(); const w = window.SC.Widget($('raPlayerFrame')); w.bind(window.SC.Widget.Events.READY, () => w.play()); } catch (_) { /* in-iframe play button still works */ }
 }
 // Expand an artist's songs. If not cached yet, scan just this one on the fly.
 async function raToggleSongs(scUrl) {
@@ -8073,9 +8074,11 @@ async function raClearPlaylist() {
 async function raPlayStation() {
   const tracks = raState.playlist.tracks; if (!tracks.length) return;
   await ensureScWidget();
-  const el = $('raStation'); if (!el) return;
-  el.innerHTML = `<iframe id="raStationFrame" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay"
-    src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe>`;
+  const el = $('raDock'); if (!el) return;
+  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px 10px 0 0;padding:8px 10px;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;">▶ Station: ${escapeHtml(raState.playlist.name)}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
+    <iframe id="raStationFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay"
+    src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe></div>`;
   const widget = window.SC.Widget($('raStationFrame'));
   let idx = 0;
   widget.bind(window.SC.Widget.Events.READY, () => widget.play());
