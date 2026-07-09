@@ -20,7 +20,8 @@ const CORS = {
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36";
-const norm = (u: string) => u.trim().toLowerCase().replace(/\/+$/, "").split("?")[0];
+// Normalize a SoundCloud profile URL: https, no www (SC's resolve 404s on www.), no trailing slash / query.
+const norm = (u: string) => u.trim().toLowerCase().replace(/^http:\/\//, "https://").replace("://www.", "://").replace(/\/+$/, "").split("?")[0];
 
 async function extractClientId(): Promise<string | null> {
   const home = await (await fetch("https://soundcloud.com/", { headers: { "User-Agent": UA } })).text();

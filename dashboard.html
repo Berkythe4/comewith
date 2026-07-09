@@ -7646,7 +7646,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 let raState = { events: [], artists: [], mine: [], radioWeeks: 4, sort: 'soon', search: '', genre: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
-const raKey = (u) => (u || '').trim().toLowerCase().replace(/\/+$/, '').split('?')[0];
+const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // SoundCloud Widget API (for playing a built playlist as a station) — loaded once.
 let _scWidgetReady = null;
 function ensureScWidget() {
