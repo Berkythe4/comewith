@@ -7657,15 +7657,22 @@ function ensureScWidget() {
 }
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading RA market…</div>';
-  const [ev, ar, mine, cache] = await Promise.all([
+  const [ev, ar, mine, cache, social] = await Promise.all([
     sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,interested_count,is_ticketed,is_pick,genres,content_url,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
     sb.from('ra_artists').select('ra_id,name,soundcloud,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('events').select('name,event_date,total_attendance,series').not('total_attendance', 'is', null).order('event_date', { ascending: false }),
-    sb.from('sc_artist_cache').select('soundcloud,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
+    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
+    sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
   if (ev.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.artists = ar.data || []; raState.mine = mine.data || [];
   raState.cache = {}; (cache.data || []).forEach(c => { raState.cache[raKey(c.soundcloud)] = c; });
+  // Latest action wins per target (follow then unfollow → not followed).
+  raState.followed = new Set(); raState.reposted = new Set();
+  (social.data || []).forEach(s => {
+    const set = s.target_type === 'user' ? raState.followed : raState.reposted;
+    if (s.action === 'follow' || s.action === 'repost') set.add(s.target_id); else set.delete(s.target_id);
+  });
   await raLoadPlaylist();
   try { const { data: st } = await sb.functions.invoke('sc-connect', { body: { action: 'status' } }); raState.sc = st || { configured: false, connected: false }; }
   catch (_) { raState.sc = { configured: false, connected: false }; }
@@ -7743,10 +7750,15 @@ function renderRaMarket() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-bpm],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost]')) return;
   if (t.closest('[data-ra-publish]')) { raPublishTracklist(); return; }
   if (t.closest('[data-ra-copytracklist]')) { navigator.clipboard.writeText(raFmtTracklist()).then(() => toast('Tracklist copied', 'ok'), () => toast('Copy failed', 'err')); return; }
   if (t.closest('[data-ra-preview]')) { window.open(ARTIST_ORIGIN + 'radio.html?t=' + encodeURIComponent(raState.playlist.public_token), '_blank'); return; }
+  if (t.closest('[data-ra-bpm]')) { raFillBpm(t.closest('[data-ra-bpm]')); return; }
+  const fo = t.closest('[data-ra-follow]'); if (fo) { raSocial('follow', fo.dataset.raFollow, fo.dataset.raName); return; }
+  const ufo = t.closest('[data-ra-unfollow]'); if (ufo) { raSocial('unfollow', ufo.dataset.raUnfollow, ufo.dataset.raName); return; }
+  const rp = t.closest('[data-ra-repost]'); if (rp) { if (confirm(`Repost “${rp.dataset.raName}” to your SoundCloud followers?`)) raSocial('repost', rp.dataset.raRepost, rp.dataset.raName); return; }
+  const urp = t.closest('[data-ra-unrepost]'); if (urp) { raSocial('unrepost', urp.dataset.raUnrepost, urp.dataset.raName); return; }
   if (t.closest('[data-ra-refresh]')) return raRefresh(t.closest('[data-ra-refresh]'));
   if (t.closest('[data-ra-scan]')) return raScan();
   if (t.closest('[data-ra-scancancel]')) { raState.scanCancel = true; return; }
@@ -7850,6 +7862,9 @@ function renderRaRadio() {
       <span style="display:flex;gap:6px;">
         <button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
         <button class="hub-mini" data-ra-songs="${escapeHtml(a.soundcloud)}">${open ? '▾ songs' : '🎵 songs'}</button>
+        ${c && c.ok && c.sc_user_id ? (raState.followed.has(String(c.sc_user_id))
+          ? `<button class="hub-mini" data-ra-unfollow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Following on SoundCloud — click to unfollow" style="background:var(--green,#1f7a1f);color:#fff;">✓ following</button>`
+          : `<button class="hub-mini" data-ra-follow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Follow on your SoundCloud">＋ follow</button>`) : ''}
       </span>
       ${open ? `<div style="flex:0 0 100%;margin-top:8px;">${raRenderArtistTracks(a.key)}</div>` : ''}
     </div>`;
@@ -7893,6 +7908,9 @@ function raRenderArtistTracks(key) {
         <div class="li-sub">${Math.round(t.duration_ms / 60000)}min · ${fmtNum(t.playback_count)} plays · ${escapeHtml((t.created_at || '').slice(0, 10))}</div></div>
       <span style="display:flex;gap:6px;">
         <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
+        ${raState.reposted.has(t.sc_track_id)
+          ? `<button class="hub-mini" data-ra-unrepost="${escapeHtml(t.sc_track_id)}" data-ra-name="${escapeHtml(t.title)}" title="Reposted — click to undo" style="background:var(--green,#1f7a1f);color:#fff;">✓ reposted</button>`
+          : `<button class="hub-mini" data-ra-repost="${escapeHtml(t.sc_track_id)}" data-ra-name="${escapeHtml(t.title)}" title="Repost to your SoundCloud followers">↻ repost</button>`}
         <button class="hub-mini" data-ra-addtrack="${escapeHtml(t.sc_track_id)}" ${inPl.has(t.sc_track_id) ? 'disabled title="Already in station"' : ''}>${inPl.has(t.sc_track_id) ? '✓' : '+ add'}</button>
       </span></div>`).join('')}
   </div>`;
@@ -7911,6 +7929,7 @@ function raRenderPlaylist() {
       <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
+        ${tracks.length ? '<button class="hub-btn ghost" data-ra-bpm title="Best-effort — fills BPM/Camelot for released tracks only (SoundCloud edits/unreleased won\'t match)">🎹 BPM/key</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
         <button class="hub-btn" data-ra-export title="Push this to a real playlist in your SoundCloud">${exportLabel}</button>
@@ -8103,6 +8122,35 @@ async function raSetPlaylistName() {
   const name = prompt('Name your station:', raState.playlist.name); if (!name) return;
   await sb.from('sc_playlists').update({ name: name.trim(), updated_at: new Date().toISOString() }).eq('id', raState.playlist.id);
   raState.playlist.name = name.trim(); renderRaMarket();
+}
+// Follow / repost on the connected SoundCloud account (manual, per target).
+async function raSocial(action, targetId, label) {
+  if (!raState.sc?.connected) { toast('Connect SoundCloud first (station → ⇪ To SoundCloud)', 'err'); return; }
+  const set = action.includes('follow') ? raState.followed : raState.reposted;
+  const on = action === 'follow' || action === 'repost';
+  if (on) set.add(String(targetId)); else set.delete(String(targetId)); // optimistic
+  renderRaMarket();
+  try {
+    const { data, error } = await sb.functions.invoke('sc-social', { body: { action, target_id: targetId, target_label: label } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error) throw new Error(data.error);
+    toast({ follow: 'Followed ' + label, unfollow: 'Unfollowed ' + label, repost: 'Reposted ' + label, unrepost: 'Un-reposted ' + label }[action], 'ok');
+  } catch (e) {
+    if (on) set.delete(String(targetId)); else set.add(String(targetId)); // revert
+    toast('Failed: ' + (e.message || e), 'err'); renderRaMarket();
+  }
+}
+// Best-effort BPM/key (released tracks only — SoundCloud edits/unreleased won't match).
+async function raFillBpm(btn) {
+  if (!(raState.playlist.tracks || []).length) { toast('Add songs first', 'err'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = '🎹 Looking up…'; }
+  try {
+    const { data, error } = await sb.functions.invoke('sc-bpm', { body: { playlist_id: raState.playlist.id } });
+    if (error) throw error;
+    await raLoadPlaylist();
+    toast(`BPM/key: matched ${data.matched}/${data.checked} (released tracks only)`, data.matched ? 'ok' : 'err');
+    renderRaMarket();
+  } catch (e) { toast('Lookup failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '🎹 BPM/key'; } }
 }
 
 // ===================== PRICING TOOL (Sales) =====================
