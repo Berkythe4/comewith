@@ -130,6 +130,7 @@ Deno.serve(async (req) => {
               follower_count: a.followerCount ?? null, image: a.image || null,
               content_url: a.contentUrl ? `https://ra.co${a.contentUrl}` : null,
               next_event_date: evDate, next_event_title: e.title, next_venue: e.venue?.name || null,
+              genres: (e.genres || []).map((g: any) => g.name),
               fetched_at: new Date().toISOString(),
             });
           }
