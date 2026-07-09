@@ -7664,12 +7664,14 @@ async function loadRaMarket() {
   if (ev.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.artists = ar.data || []; raState.mine = mine.data || [];
   await raLoadPlaylist();
+  try { const { data: st } = await sb.functions.invoke('sc-connect', { body: { action: 'status' } }); raState.sc = st || { configured: false, connected: false }; }
+  catch (_) { raState.sc = { configured: false, connected: false }; }
   renderRaMarket();
 }
 // The single working playlist (auto-created). Tracks ordered by sort.
 async function raLoadPlaylist() {
-  let { data: pl } = await sb.from('sc_playlists').select('id,name').order('created_at').limit(1).maybeSingle();
-  if (!pl) { const ins = await sb.from('sc_playlists').insert({ name: 'Weekly station' }).select('id,name').single(); pl = ins.data; }
+  let { data: pl } = await sb.from('sc_playlists').select('id,name,sc_playlist_url').order('created_at').limit(1).maybeSingle();
+  if (!pl) { const ins = await sb.from('sc_playlists').insert({ name: 'Weekly station' }).select('id,name,sc_playlist_url').single(); pl = ins.data; }
   const { data: tracks } = await sb.from('sc_playlist_tracks').select('*').eq('playlist_id', pl.id).order('sort');
   raState.playlist = { ...pl, tracks: tracks || [] };
 }
@@ -7748,7 +7750,15 @@ $('panel-ra-market').addEventListener('click', async (e) => {
   if (e.target.closest('[data-ra-copytracks]')) { raCopyTracks(); return; }
   if (e.target.closest('[data-ra-clearpl]')) { raClearPlaylist(); return; }
   if (e.target.closest('[data-ra-export]')) { raExportSoundcloud(); return; }
+  if (e.target.closest('[data-ra-connect]')) { raConnectSoundcloud(); return; }
 });
+// Return from the SoundCloud OAuth redirect (dashboard.html?sc=connected|error|denied).
+(function raHandleScReturn() {
+  const p = new URLSearchParams(location.search).get('sc'); if (!p) return;
+  const msg = { connected: ['SoundCloud connected ✓', 'ok'], denied: ['SoundCloud connection was cancelled', 'err'], error: ['SoundCloud connection failed — try again', 'err'], notconfigured: ['SoundCloud app not configured yet', 'err'] }[p];
+  if (msg) setTimeout(() => toast(msg[0], msg[1]), 800);
+  history.replaceState(null, '', location.pathname); // strip the param
+})();
 $('panel-ra-market').addEventListener('change', (e) => {
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
 });
@@ -7937,16 +7947,42 @@ function raCopyTracks() {
 }
 function raExportSoundcloud() {
   const n = (raState.playlist.tracks || []).length;
-  openKpi('Push station to SoundCloud', `${n} songs`, `
-    <div class="kpi-hint">To create this as a <strong>real playlist inside your SoundCloud account</strong> with one click, SoundCloud requires a connected app — and their API now needs a <strong>SoundCloud Artist Pro</strong> account to register one. It's a one-time setup:</div>
-    <ol style="margin:10px 0 10px 18px;line-height:1.7;">
-      <li>On SoundCloud (Artist Pro), go to <strong>soundcloud.com/you/apps → Register a new application</strong>.</li>
-      <li>Copy the <strong>Client ID</strong> + <strong>Client Secret</strong> and send them to me.</li>
-      <li>I'll add a <strong>“Connect SoundCloud”</strong> button here — after you connect once, this button creates/updates the playlist in your account automatically.</li>
-    </ol>
-    <div class="kpi-hint">Until then, use <strong>Copy links</strong> (paste into a SoundCloud playlist) or <strong>▶ Play station</strong> to listen right here — both work now with no setup.</div>
-    <div style="margin-top:10px;"><button type="button" class="hub-btn ghost" data-ra-copytracks>Copy the ${n} track links now</button></div>`,
-    () => closeKpi(), 'Close');
+  const sc = raState.sc || {};
+  const lastUrl = raState.playlist.sc_playlist_url;
+  if (!sc.configured) {
+    openKpi('Push station to SoundCloud', '', `<div class="kpi-hint">SoundCloud export isn't configured on the server yet (app Client ID/Secret). Once that's set, this becomes a one-click export. For now use <strong>Copy links</strong> or <strong>▶ Play station</strong>.</div>`, () => closeKpi(), 'Close');
+    return;
+  }
+  if (!sc.connected) {
+    openKpi('Connect SoundCloud', 'One-time — authorize the app', `
+      <div class="kpi-hint">Click below to sign in to SoundCloud and authorize Come With. After you approve, you'll come back here and can push any station to your account with one click.</div>
+      <div style="margin-top:12px;"><button type="button" class="hub-btn" data-ra-connect>🔗 Connect my SoundCloud</button></div>`,
+      () => closeKpi(), 'Close');
+    return;
+  }
+  openKpi('Push station to SoundCloud', `${n} songs → ${escapeHtml(sc.username || 'your account')}`, `
+    <div class="kpi-hint">This creates${lastUrl ? ' (or updates)' : ''} a <strong>private</strong> playlist "<strong>${escapeHtml(raState.playlist.name)}</strong>" in your SoundCloud (${escapeHtml(sc.username || '')}). You can make it public on SoundCloud anytime.</div>
+    ${lastUrl ? `<div class="kpi-hint">Last export: <a href="${escapeHtml(lastUrl)}" target="_blank">${escapeHtml(lastUrl)}</a></div>` : ''}
+    <div id="raExportResult" style="margin-top:10px;"></div>`,
+    () => raDoExport(), lastUrl ? 'Update playlist' : 'Create playlist');
+}
+async function raConnectSoundcloud() {
+  try {
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'start' } });
+    if (error || !data?.authorize_url) throw new Error(error?.message || 'Could not start');
+    window.location.href = data.authorize_url; // full redirect; SoundCloud returns to dashboard.html?sc=connected
+  } catch (e) { toast('Connect failed: ' + (e.message || e), 'err'); }
+}
+async function raDoExport() {
+  const res = $('raExportResult'); if (res) res.innerHTML = '<span class="spinner"></span> Sending to SoundCloud…';
+  try {
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'export', playlist_id: raState.playlist.id } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error) throw new Error(data.error);
+    raState.playlist.sc_playlist_url = data.url;
+    closeKpi(); toast(`${data.updated ? 'Updated' : 'Created'} playlist on SoundCloud`, 'ok');
+    if (data.url) window.open(data.url, '_blank');
+  } catch (e) { if (res) res.innerHTML = `<span class="err">${escapeHtml(e.message || String(e))}</span>`; }
 }
 async function raSetPlaylistName() {
   const name = prompt('Name your station:', raState.playlist.name); if (!name) return;
