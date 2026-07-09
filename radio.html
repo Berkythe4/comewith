@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With Radio</title>
+<meta name="robots" content="noindex,nofollow">
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.5;padding:0 0 60px}
+  .wrap{max-width:760px;margin:0 auto;padding:0 20px}
+  header{padding:38px 0 14px}
+  .k{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:clamp(1.9rem,6vw,3rem);margin:8px 0 6px;line-height:1}
+  .sub{color:var(--dim)}
+  .banner{background:var(--hot);color:#180c12;font-family:'DM Mono';font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;padding:7px 12px;border-radius:8px;display:inline-block;margin:10px 0}
+  .scbtn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono';font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:11px 18px;border-radius:999px;background:var(--lime);color:#180c12;text-decoration:none;font-weight:700;margin-top:8px}
+  .tk{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
+  .art{width:56px;height:56px;border-radius:8px;background:var(--bg2) center/cover;flex:0 0 auto}
+  .num{font-family:'Archivo';font-weight:900;color:var(--dim);min-width:22px;text-align:right}
+  .tt{font-weight:700}
+  .who{color:var(--dim);font-size:.92rem}
+  .meta{font-family:'DM Mono';font-size:.72rem;color:var(--dim);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 12px}
+  .meta .hot{color:var(--lime)}
+  .show{margin-top:5px;font-size:.86rem}
+  .show a{color:var(--cream)}
+  .play{color:var(--lime);text-decoration:none;font-family:'DM Mono';font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
+  .state{text-align:center;color:var(--dim);font-family:'DM Mono';padding:50px 0}
+  #player{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line);margin-top:14px}
+  footer{color:var(--dim);font-size:.8rem;text-align:center;padding:26px 0}
+  a{color:var(--lime)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><div class="k">Come With · Radio</div><h1 id="hd">Loading…</h1><div class="sub" id="sub"></div></header>
+  <div id="root"><div class="state">Loading station…</div></div>
+</div>
+<div id="player"></div>
+<footer>Come With — Brooklyn parties that give back · <a href="https://comewith.org">comewith.org</a></footer>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const $=s=>document.querySelector(s);
+const TOKEN=new URLSearchParams(location.search).get('t')||new URLSearchParams(location.search).get('token')||'';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function fmtDate(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
+function play(url){$('#player').innerHTML='<iframe width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay" src="https://w.soundcloud.com/player/?url='+encodeURIComponent(url)+'&color=%23a7e02e&auto_play=true&hide_related=true&visual=false"></iframe>';}
+(async function(){
+  if(!TOKEN){$('#root').innerHTML='<div class="state">This radio link is missing its code.</div>';$('#hd').textContent='Come With Radio';return;}
+  let j;
+  try{const r=await fetch(CWURL+'/functions/v1/get-station?t='+encodeURIComponent(TOKEN),{headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY}});j=await r.json();if(!r.ok)throw new Error(j.error||'error');}
+  catch(e){$('#root').innerHTML='<div class="state">'+esc(e.message||'Could not load this station.')+'</div>';$('#hd').textContent='Come With Radio';return;}
+  const st=j.station,tr=j.tracks||[];
+  $('#hd').textContent=st.name||'Come With Radio';
+  $('#sub').innerHTML=(tr.length+' tracks from artists playing NYC soon.')+(st.published?'':' <span class="banner">Preview · unlisted</span>');
+  const scBtn=st.soundcloud_url?`<a class="scbtn" href="${esc(st.soundcloud_url)}" target="_blank">▶ Open in SoundCloud</a>`:'';
+  $('#root').innerHTML=(st.note?`<p class="sub" style="margin-bottom:8px">${esc(st.note)}</p>`:'')+scBtn+'<div style="margin-top:14px">'+tr.map((t,i)=>{
+    const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):''].filter(Boolean).join(' · ');
+    const show=[t.show_date?'🗓 '+fmtDate(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
+    const art=t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:'';
+    return `<div class="tk"><div class="num">${i+1}</div><div class="art" ${art}></div><div style="flex:1;min-width:0">
+      <div class="tt">${esc(t.title)}</div><div class="who">${esc(t.artist_name||'')}</div>
+      ${key?`<div class="meta">${key}</div>`:''}
+      ${show?`<div class="show">${t.show_url?`<a href="${esc(t.show_url)}" target="_blank">${show}</a>`:show}</div>`:''}
+      </div><a class="play" href="#" data-p="${esc(t.permalink_url)}">▶ play</a></div>`;
+  }).join('')+'</div>';
+  $('#root').addEventListener('click',e=>{const a=e.target.closest('[data-p]');if(a){e.preventDefault();play(a.dataset.p);}});
+})();
+</script>
+</body>
+</html>
