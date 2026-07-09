@@ -111,5 +111,56 @@ Deno.serve(async (req) => {
     return ok({ success: true, url: purl, updated: isUpdate, tracks: trackObjs.length });
   }
 
+  // Pull the exported SoundCloud playlist back — capture the final track order
+  // (and any tracks added/removed on SoundCloud) into the tool.
+  if (action === "sync") {
+    if (!row?.access_token) return err(400, "Connect SoundCloud first.");
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const { data: pl } = await admin.from("sc_playlists").select("id, sc_playlist_id").eq("id", playlistId).single();
+    if (!pl?.sc_playlist_id) return err(400, "Export this station to SoundCloud first, then reorder it there and sync.");
+
+    let token = row.access_token;
+    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now() + 60000 && row.refresh_token) {
+      const rr = await fetch("https://secure.soundcloud.com/oauth/token", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "accept": "application/json; charset=utf-8" },
+        body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, client_secret: clientSecret, refresh_token: row.refresh_token }),
+      });
+      const rt = await rr.json();
+      if (rr.ok && rt.access_token) { token = rt.access_token; await admin.from("sc_oauth").update({ access_token: rt.access_token, refresh_token: rt.refresh_token || row.refresh_token, expires_at: new Date(Date.now() + (rt.expires_in || 3600) * 1000).toISOString() }).eq("id", "singleton"); }
+      else return err(401, "SoundCloud connection expired — reconnect.");
+    }
+
+    const scRes = await fetch(`https://api.soundcloud.com/playlists/${pl.sc_playlist_id}`, {
+      headers: { "Authorization": "OAuth " + token, "accept": "application/json; charset=utf-8" },
+    });
+    if (!scRes.ok) { if (scRes.status === 401) return err(401, "SoundCloud connection expired — reconnect."); return err(502, "Couldn't read the playlist from SoundCloud."); }
+    const j = await scRes.json().catch(() => ({}));
+    const scTracks = (j.tracks || []) as any[];
+    if (!scTracks.length) return err(400, "That SoundCloud playlist is empty or unreadable.");
+
+    const { data: existing } = await admin.from("sc_playlist_tracks").select("id, sc_track_id").eq("playlist_id", playlistId);
+    const byId: Record<string, string> = {}; (existing || []).forEach((t) => { byId[t.sc_track_id] = t.id; });
+    const scIds = new Set<string>();
+    let pos = 0, added = 0;
+    for (const t of scTracks) {
+      if (t?.id == null) continue;
+      const sid = String(t.id); scIds.add(sid); pos += 10;
+      if (byId[sid]) {
+        await admin.from("sc_playlist_tracks").update({ sort: pos }).eq("id", byId[sid]);
+      } else {
+        added++;
+        await admin.from("sc_playlist_tracks").insert({
+          playlist_id: playlistId, sc_track_id: sid, title: t.title || "(untitled)", artist_name: t.user?.username || null,
+          permalink_url: t.permalink_url || null, duration_ms: t.duration || null, playback_count: t.playback_count || null,
+          artwork_url: t.artwork_url || null, sort: pos,
+        });
+      }
+    }
+    const toRemove = (existing || []).filter((t) => !scIds.has(t.sc_track_id)).map((t) => t.id);
+    if (toRemove.length) await admin.from("sc_playlist_tracks").delete().in("id", toRemove);
+    return ok({ success: true, tracks: scIds.size, added, removed: toRemove.length });
+  }
+
   return err(400, "unknown action");
 });

@@ -7696,7 +7696,8 @@ function renderRaMarket() {
   // ---- Best days: demand (median RSVP) vs competition (event count) ----
   const byDow = DOW.map((d, i) => ({ d, i, list: evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i) }));
   const med = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
-  const dowStats = byDow.map(o => { const rs = o.list.map(e => e.attending || 0); return { d: o.d, n: o.list.length, avg: rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : 0, med: med(rs), tk: o.list.filter(e => e.is_ticketed).length }; });
+  // Demand (RSVP) is RA-only — Ticketmaster events have no RSVP (null); they still count for competition (n).
+  const dowStats = byDow.map(o => { const rs = o.list.map(e => e.attending).filter(x => x != null); return { d: o.d, n: o.list.length, avg: rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : 0, med: med(rs), tk: o.list.filter(e => e.is_ticketed).length }; });
   const maxOpp = Math.max(1, ...dowStats.map(s => s.n ? s.med / Math.sqrt(s.n) : 0)); // demand per unit of competition
   const mineByDow = DOW.map((d, i) => { const l = raState.mine.filter(m => m.event_date && new Date(m.event_date + 'T00:00:00').getDay() === i); return l.length ? Math.round(l.reduce((a, b) => a + Number(b.total_attendance || 0), 0) / l.length) : null; });
   const dowRows = dowStats.map((s, i) => {
@@ -7725,9 +7726,9 @@ function renderRaMarket() {
     <div class="hub-sec-bar"><h3>RA Market — NYC</h3>
       <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <span class="li-sub">${evs.length} events · updated ${lastFetch ? fmtDate(lastFetch) : '—'}</span>
-        <button class="hub-btn" data-ra-refresh>↻ Pull from RA</button>
+        <button class="hub-btn" data-ra-refresh>↻ Pull shows</button>
       </span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Public Resident Advisor data for upcoming NYC shows — use it to pick dates and benchmark. Your private ticket/revenue data isn't here (that stays in the CSV flow).</div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Upcoming NYC shows from <strong>Resident Advisor</strong> + <strong>Ticketmaster</strong> (EDM only) — pick dates and benchmark. RSVP demand is RA-based (Ticketmaster has no RSVP; it still counts toward competition + venues). Your private ticket/revenue data isn't here (that stays in the CSV flow).</div>
     <div class="hub-cards" style="margin-bottom:14px;">
       ${card('Upcoming shows', fmtNum(evs.length))}
       ${card('Best night', best ? best.d : '—', best ? `${fmtNum(best.med)} median RSVP · ${best.n} shows` : '')}
@@ -7750,7 +7751,8 @@ function renderRaMarket() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-bpm],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost]')) return;
+  if (t.closest('[data-ra-sync]')) { raSyncFromSc(t.closest('[data-ra-sync]')); return; }
   if (t.closest('[data-ra-publish]')) { raPublishTracklist(); return; }
   if (t.closest('[data-ra-copytracklist]')) { navigator.clipboard.writeText(raFmtTracklist()).then(() => toast('Tracklist copied', 'ok'), () => toast('Copy failed', 'err')); return; }
   if (t.closest('[data-ra-preview]')) { window.open(ARTIST_ORIGIN + 'radio.html?t=' + encodeURIComponent(raState.playlist.public_token), '_blank'); return; }
@@ -7802,13 +7804,16 @@ $('panel-ra-market').addEventListener('input', (e) => {
   }
 });
 async function raRefresh(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling… (~15s)'; }
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling… (~20s)'; }
   try {
     const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 28 } });
     if (error) throw error;
-    toast(`Pulled ${data.events_saved} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
+    // Also widen with Ticketmaster (EDM-only) — non-fatal if it's not configured.
+    let tm = 0;
+    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 42 } }); tm = r.data?.edm_saved || 0; } catch (_) { /* skip */ }
+    toast(`Pulled ${data.events_saved} RA shows${tm ? ` + ${tm} Ticketmaster EDM` : ''} · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
     await loadRaMarket();
-  } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull from RA'; } }
+  } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull shows'; } }
 }
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
@@ -7929,7 +7934,7 @@ function raRenderPlaylist() {
       <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-bpm title="Best-effort — fills BPM/Camelot for released tracks only (SoundCloud edits/unreleased won\'t match)">🎹 BPM/key</button>' : ''}
+        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back into the tool (after you reorder it there)">↺ Sync order from SoundCloud</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
         <button class="hub-btn" data-ra-export title="Push this to a real playlist in your SoundCloud">${exportLabel}</button>
@@ -8140,17 +8145,17 @@ async function raSocial(action, targetId, label) {
     toast('Failed: ' + (e.message || e), 'err'); renderRaMarket();
   }
 }
-// Best-effort BPM/key (released tracks only — SoundCloud edits/unreleased won't match).
-async function raFillBpm(btn) {
-  if (!(raState.playlist.tracks || []).length) { toast('Add songs first', 'err'); return; }
-  if (btn) { btn.disabled = true; btn.textContent = '🎹 Looking up…'; }
+// Pull the reordered SoundCloud playlist back into the tool (final order wins).
+async function raSyncFromSc(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '↺ Syncing…'; }
   try {
-    const { data, error } = await sb.functions.invoke('sc-bpm', { body: { playlist_id: raState.playlist.id } });
-    if (error) throw error;
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'sync', playlist_id: raState.playlist.id } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error) throw new Error(data.error);
     await raLoadPlaylist();
-    toast(`BPM/key: matched ${data.matched}/${data.checked} (released tracks only)`, data.matched ? 'ok' : 'err');
+    toast(`Synced ${data.tracks} tracks from SoundCloud${data.added ? ` · +${data.added} added` : ''}${data.removed ? ` · −${data.removed} removed` : ''}`, 'ok');
     renderRaMarket();
-  } catch (e) { toast('Lookup failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '🎹 BPM/key'; } }
+  } catch (e) { toast('Sync failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↺ Sync order from SoundCloud'; } }
 }
 
 // ===================== PRICING TOOL (Sales) =====================
