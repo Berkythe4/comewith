@@ -7667,6 +7667,7 @@ async function loadRaMarket() {
   if (ev.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.artists = ar.data || []; raState.mine = mine.data || [];
   raState.cache = {}; (cache.data || []).forEach(c => { raState.cache[raKey(c.soundcloud)] = c; });
+  ensureScWidget(); // preload the SoundCloud Widget API so the first ▶ plays instantly
   // Latest action wins per target (follow then unfollow → not followed).
   raState.followed = new Set(); raState.reposted = new Set();
   (social.data || []).forEach(s => {
@@ -7951,11 +7952,13 @@ function raRenderPlaylist() {
     <div id="raStation" style="margin-top:10px;"></div>
   </div>`;
 }
-function raPlay(scUrl, name) {
+async function raPlay(scUrl, name) {
   const el = $('raPlayer'); if (!el) return;
   const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=true';
-  el.innerHTML = `<div class="li-sub" style="margin-bottom:4px;">▶ ${escapeHtml(name || '')}</div><iframe width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe>`;
+  el.innerHTML = `<div class="li-sub" style="margin-bottom:4px;">▶ ${escapeHtml(name || '')}</div><iframe id="raPlayerFrame" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe>`;
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  // URL auto_play is unreliable in cross-origin iframes — drive it via the Widget API.
+  try { await ensureScWidget(); const w = window.SC.Widget($('raPlayerFrame')); w.bind(window.SC.Widget.Events.READY, () => w.play()); } catch (_) { /* the in-iframe play button still works */ }
 }
 // Expand an artist's songs. If not cached yet, scan just this one on the fly.
 async function raToggleSongs(scUrl) {
@@ -8075,6 +8078,7 @@ async function raPlayStation() {
     src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe>`;
   const widget = window.SC.Widget($('raStationFrame'));
   let idx = 0;
+  widget.bind(window.SC.Widget.Events.READY, () => widget.play());
   widget.bind(window.SC.Widget.Events.FINISH, () => {
     idx++; if (idx < tracks.length) widget.load(tracks[idx].permalink_url, { auto_play: true });
   });
