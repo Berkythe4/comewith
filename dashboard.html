@@ -7659,7 +7659,7 @@ async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading RA market…</div>';
   const [ev, ar, mine, cache] = await Promise.all([
     sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,interested_count,is_ticketed,is_pick,genres,content_url,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
-    sb.from('ra_artists').select('ra_id,name,soundcloud,follower_count,image,content_url,next_event_date,next_event_title,next_venue,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
+    sb.from('ra_artists').select('ra_id,name,soundcloud,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('events').select('name,event_date,total_attendance,series').not('total_attendance', 'is', null).order('event_date', { ascending: false }),
     sb.from('sc_artist_cache').select('soundcloud,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
   ]);
@@ -7743,7 +7743,9 @@ function renderRaMarket() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist]')) return;
+  if (t.closest('[data-ra-publish]')) { raPublishTracklist(); return; }
+  if (t.closest('[data-ra-copytracklist]')) { navigator.clipboard.writeText(raFmtTracklist()).then(() => toast('Tracklist copied', 'ok'), () => toast('Copy failed', 'err')); return; }
   if (t.closest('[data-ra-refresh]')) return raRefresh(t.closest('[data-ra-refresh]'));
   if (t.closest('[data-ra-scan]')) return raScan();
   if (t.closest('[data-ra-scancancel]')) { raState.scanCancel = true; return; }
@@ -7907,19 +7909,19 @@ function raRenderPlaylist() {
       ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
       <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-copytracks>Copy links</button>' : ''}
+        ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
         <button class="hub-btn" data-ra-export title="Push this to a real playlist in your SoundCloud">${exportLabel}</button>
       </span>
     </div>
-    ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => `<div class="hub-li" style="padding:4px 0;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays</div></div>
+    ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
         <button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
         <button class="hub-mini" data-ra-plmove="${t.id}:down" title="down">↓</button>
         <button class="hub-mini" data-ra-removetrack="${t.id}">✕</button>
-      </span></div>`).join('')}</div>` : '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>'}
+      </span></div>`; }).join('')}</div>` : '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>'}
     <div id="raStation" style="margin-top:10px;"></div>
   </div>`;
 }
@@ -7945,16 +7947,48 @@ async function raToggleSongs(scUrl) {
   }
   renderRaMarket();
 }
+// Normalize RA's free-text cost ("30" → "$30", "$20+" as-is, "" → null).
+function raCost(c) { c = (c || '').trim(); if (!c) return null; if (/^(0|0\.00|free)$/i.test(c)) return 'Free'; return /^\d/.test(c) ? '$' + c : c; }
 async function raAddTrack(scTrackId) {
   const c = raState.cache[raState.openArtist];
   const t = c && c.songs && c.songs.find(x => x.sc_track_id === scTrackId); if (!t) return;
+  // The show this artist is playing (soonest match — artists are ordered by date).
+  const show = raState.artists.find(x => raKey(x.soundcloud) === raState.openArtist) || {};
   const sort = (raState.playlist.tracks.length + 1) * 10;
   const { error } = await sb.from('sc_playlist_tracks').insert({
     playlist_id: raState.playlist.id, sc_track_id: t.sc_track_id, title: t.title, artist_name: c.username || t.artist_name,
     permalink_url: t.permalink_url, duration_ms: t.duration_ms, playback_count: t.playback_count, artwork_url: t.artwork_url, sort,
+    show_date: show.next_event_date || null, show_venue: show.next_venue || null,
+    show_cost: raCost(show.next_cost), show_url: show.next_event_url || null,
   });
   if (error) { toast(error.code === '23505' ? 'Already in your station' : error.message, 'err'); return; }
   await raLoadPlaylist(); toast('Added to station', 'ok'); renderRaMarket();
+}
+// A shareable, human-readable tracklist annotated with each artist's upcoming show.
+function raFmtTracklist() {
+  const pl = raState.playlist; const tr = pl.tracks || [];
+  const lines = [`🎧 ${pl.name} — Come With Radio`, `Tracks from artists playing NYC soon.`, ''];
+  tr.forEach((t, i) => {
+    lines.push(`${i + 1}. ${t.artist_name || ''} — “${t.title}”`);
+    if (t.permalink_url) lines.push(`   ${t.permalink_url}`);
+    const bits = [];
+    if (t.show_date) bits.push('🗓 ' + fmtDate(t.show_date));
+    if (t.show_venue) bits.push('📍 ' + t.show_venue);
+    if (t.show_cost) bits.push('🎟 ' + t.show_cost);
+    if (bits.length) lines.push('   ' + bits.join(' · ') + (t.show_url ? ' · ' + t.show_url : ''));
+    lines.push('');
+  });
+  return lines.join('\n').trim();
+}
+function raPublishTracklist() {
+  const tr = raState.playlist.tracks || [];
+  if (!tr.length) { toast('Add some songs first', 'err'); return; }
+  const text = raFmtTracklist();
+  openKpi('Publish tracklist', `${tr.length} songs · with show date, venue & price`, `
+    <div class="kpi-hint">Copy this to share the station as a gig guide — each track links to the song and shows where that artist is playing next. It's also saved as the SoundCloud playlist description when you export.</div>
+    <textarea class="modal-textarea" id="raTracklistTa" rows="14" readonly style="font-family:monospace;font-size:.82rem;">${escapeHtml(text)}</textarea>
+    <div style="margin-top:10px;"><button type="button" class="hub-btn" data-ra-copytracklist>📋 Copy tracklist</button></div>`,
+    () => closeKpi(), 'Close');
 }
 // Batch-scan every unscanned artist in the current window to find producers.
 async function raScan() {
@@ -8043,7 +8077,7 @@ async function raConnectSoundcloud() {
 async function raDoExport() {
   const res = $('raExportResult'); if (res) res.innerHTML = '<span class="spinner"></span> Sending to SoundCloud…';
   try {
-    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'export', playlist_id: raState.playlist.id } });
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'export', playlist_id: raState.playlist.id, description: raFmtTracklist() } });
     if (error) throw new Error((await fnErrorDetail(error)) || error.message);
     if (data?.error) throw new Error(data.error);
     raState.playlist.sc_playlist_url = data.url;

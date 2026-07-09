@@ -92,7 +92,8 @@ Deno.serve(async (req) => {
     const trackObjs = (tracks || []).map((t) => ({ id: Number(t.sc_track_id) })).filter((t) => t.id);
     if (!trackObjs.length) return err(400, "This station has no songs to export.");
 
-    const payload = { playlist: { title: pl.name || "Come With station", description: "Built in the Come With dashboard from upcoming NYC artists.", sharing: "private", tracks: trackObjs } };
+    const description = (body.description || "").toString().slice(0, 4000) || "Built in the Come With dashboard from upcoming NYC artists.";
+    const payload = { playlist: { title: pl.name || "Come With station", description, sharing: "private", tracks: trackObjs } };
     const isUpdate = !!pl.sc_playlist_id;
     const scRes = await fetch(`https://api.soundcloud.com/playlists${isUpdate ? "/" + pl.sc_playlist_id : ""}`, {
       method: isUpdate ? "PUT" : "POST",

@@ -31,7 +31,7 @@ const LISTINGS_QUERY = `query($f: FilterInputDtoInput, $ps: Int, $pg: Int) {
   eventListings(filters: $f, pageSize: $ps, page: $pg) {
     totalResults
     data { event {
-      id title date startTime attending interestedCount isTicketed
+      id title date startTime attending interestedCount isTicketed cost
       pick { id } genres { name } flyerFront contentUrl
       venue { name }
       artists { id name soundcloud instagram followerCount image contentUrl }
@@ -130,6 +130,8 @@ Deno.serve(async (req) => {
               follower_count: a.followerCount ?? null, image: a.image || null,
               content_url: a.contentUrl ? `https://ra.co${a.contentUrl}` : null,
               next_event_date: evDate, next_event_title: e.title, next_venue: e.venue?.name || null,
+              next_cost: (e.cost || "").toString().trim() || null,
+              next_event_url: e.contentUrl ? `https://ra.co${e.contentUrl}` : null,
               genres: (e.genres || []).map((g: any) => g.name),
               fetched_at: new Date().toISOString(),
             });
