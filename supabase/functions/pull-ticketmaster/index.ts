@@ -44,6 +44,7 @@ Deno.serve(async (req) => {
     const start = iso(now), end = iso(new Date(now.getTime() + days * 86400000));
 
     const rows: Record<string, unknown>[] = [];
+    const artistMap = new Map<string, Record<string, unknown>>();
     let total = 0;
     for (let page = 0; page < 5; page++) {
       const params = new URLSearchParams({
@@ -66,14 +67,29 @@ Deno.serve(async (req) => {
         const cost = pr ? (pr.min === pr.max ? `$${Math.round(pr.min)}` : `$${Math.round(pr.min)}-${Math.round(pr.max)}`) : null;
         const genres = [genre, cls.subGenre?.name].filter(Boolean);
         const flyer = (e.images || []).sort((a: any, z: any) => (z.width || 0) - (a.width || 0))[0]?.url || null;
+        const attractions = (e._embedded?.attractions || []) as any[];
         rows.push({
           ra_id: `tm:${e.id}`, source: "tm", title: e.name, event_date: date,
           start_time: e.dates?.start?.dateTime || null, venue_name: venue.name || null, area_id: null,
           attending: null, interested_count: null, is_ticketed: true, is_pick: false,
           genres, flyer_url: flyer, content_url: e.url || null,
-          lineup: (e._embedded?.attractions || []).map((a: any) => ({ name: a.name, soundcloud: null })),
+          lineup: attractions.map((a) => ({ name: a.name, soundcloud: null })),
           next_cost: cost, fetched_at: new Date().toISOString(),
         });
+        // TM performers → ra_artists (so they appear in the artist views). No socials/RSVP.
+        for (const a of attractions) {
+          if (!a?.id || !a?.name) continue;
+          const key = `tm:${a.id}`;
+          const prev = artistMap.get(key);
+          if (!prev || (date && (prev.next_event_date as string) > date)) {
+            artistMap.set(key, {
+              ra_id: key, source: "tm", name: a.name, soundcloud: null, instagram: null,
+              follower_count: null, image: (a.images || [])[0]?.url || null, content_url: a.url || null,
+              next_event_date: date, next_event_title: e.name, next_venue: venue.name || null,
+              next_cost: cost, next_event_url: e.url || null, genres, fetched_at: new Date().toISOString(),
+            });
+          }
+        }
       }
       if (events.length < 100 || (page + 1) * 100 >= total) break;
     }
@@ -88,6 +104,13 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("ra_events").upsert(finalRows, { onConflict: "ra_id" });
       if (error) { console.error("tm upsert:", error.message); return err(500, "Could not save Ticketmaster events."); }
       saved = finalRows.length;
+    }
+    // TM artists
+    await admin.from("ra_artists").delete().eq("source", "tm").gte("next_event_date", start.slice(0, 10));
+    const artistRows = [...artistMap.values()];
+    if (artistRows.length) {
+      const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
+      if (ae) console.error("tm artist upsert:", ae.message);
     }
     return new Response(JSON.stringify({ success: true, source: "ticketmaster", total_from_tm: total, edm_saved: saved }), { headers: JH });
   } catch (e) {

@@ -85,8 +85,8 @@ Deno.serve(async (req) => {
       const { data: s } = await admin.from("site_content").select("value").eq("key", "ops.ra_area_id").maybeSingle();
       area = Number(s?.value) || 8;
     }
-    const days = Math.min(90, Math.max(7, Number(b.days) || 28));
-    const maxPages = Math.min(20, Math.max(1, Number(b.maxPages) || 12));
+    const days = Math.min(120, Math.max(7, Number(b.days) || 28));
+    const maxPages = Math.min(40, Math.max(1, Number(b.maxPages) || 30)); // ~2000 events, enough to reach 3 months out
 
     const today = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 10);
@@ -141,10 +141,9 @@ Deno.serve(async (req) => {
       if (items.length < 50 || page * 50 >= total) break;
     }
 
-    // Replace the window: clear old cache, then insert fresh (keeps the table
-    // to "what's upcoming now" and avoids stale past events lingering).
-    await admin.from("ra_events").delete().gte("event_date", dayFrom);
-    await admin.from("ra_artists").delete().gte("next_event_date", dayFrom);
+    // Replace the RA slice of the window only (leave Ticketmaster rows intact).
+    await admin.from("ra_events").delete().eq("source", "ra").gte("event_date", dayFrom);
+    await admin.from("ra_artists").delete().eq("source", "ra").gte("next_event_date", dayFrom);
     let evN = 0, arN = 0;
     const eventRows = [...eventMap.values()];
     if (eventRows.length) {

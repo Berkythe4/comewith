@@ -7667,7 +7667,7 @@ function ensureScWidget() {
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social] = await Promise.all([
-    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
+    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
@@ -7704,7 +7704,7 @@ function renderRaMarket() {
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
-let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false };
+let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReason: '' };
 // How good a night-of-week is for throwing a party, independent of the data
 // (Fri/Sat prime, Sun/Thu decent, Mon/Tue dead). Multiplies the score so Monday
 // can't top the list even on a quiet week. Sun..Sat.
@@ -7853,7 +7853,12 @@ function renderMkGenres() {
 }
 const igUrl = (h) => { h = (h || '').trim(); if (!h) return null; if (/^https?:/i.test(h)) return h; return 'https://instagram.com/' + h.replace(/^@/, '').replace(/\/+$/, ''); };
 // ---- Watchlist: tag artists to keep an eye on + shows worth attending ----
-const WATCH_REASONS = { artist: 'Show up for the artist', venue: 'Show up for the venue', personal: 'Personally interested', booking: 'Potential booking', network: 'Networking / scene', scout: 'Scout the competition', other: 'Other' };
+const WATCH_REASONS = { artist: 'Show up for the artist', venue: 'Show up for the venue', collaborator: 'Collaborator', personal: 'Personally interested', booking: 'Potential booking', network: 'Networking / scene', scout: 'Scout the competition', other: 'Other' };
+// Upcoming shows for a watched artist, pulled from the events lineups.
+function artistShows(name) {
+  const n = (name || '').toLowerCase();
+  return (raState.events || []).filter(e => (e.lineup || []).some(a => (a.name || '').toLowerCase() === n)).sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
+}
 const watchKey = (kind, ref) => kind + ':' + String(ref).toLowerCase();
 function isWatched(kind, ref) { return !!(raState.watch && raState.watch[watchKey(kind, ref)]); }
 async function raLoadWatch() {
@@ -7862,17 +7867,40 @@ async function raLoadWatch() {
   (data || []).forEach(w => { raState.watch[watchKey(w.kind, w.ref)] = w; });
 }
 function rerenderActive() { if (document.querySelector('#panel-market.active')) renderMarket(); if (document.querySelector('#panel-ra-market.active')) renderRaMarket(); }
-function openWatchModal(kind, ref, label, meta) {
+async function openWatchModal(kind, ref, label, meta) {
   meta = meta || {};
   const existing = raState.watch && raState.watch[watchKey(kind, ref)];
   const cur = existing || { reason: kind === 'artist' ? 'artist' : 'personal', note: '' };
   const opts = Object.entries(WATCH_REASONS).map(([k, l]) => `<option value="${k}"${cur.reason === k ? ' selected' : ''}>${l}</option>`).join('');
+  // For artists, offer to link/create a roster actor (used esp. for Collaborators).
+  let rosterHtml = '';
+  if (kind === 'artist') {
+    const { data: roster } = await sb.from('actor_roles').select('actor:actors(id,display_name)').in('role', ['artist', 'dj']).limit(500);
+    const actors = [...new Map((roster || []).map(r => r.actor).filter(Boolean).map(a => [a.id, a])).values()].sort((a, b) => a.display_name.localeCompare(b.display_name));
+    const aopts = actors.map(a => `<option value="link:${a.id}"${existing?.actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
+    rosterHtml = `<div class="modal-form-row"><label class="modal-label">Link to your roster <span class="li-sub">(for collaborators)</span></label>
+      <select class="modal-select" id="wRoster"><option value="">— not in my roster —</option><option value="create">＋ Create “${escapeHtml(label)}” as a new artist</option>${aopts}</select></div>`;
+  }
   openKpi((existing ? 'Edit watchlist — ' : '⭐ Watch — ') + label, meta.sublabel || '', `
     <div class="modal-form-row"><label class="modal-label">Reason</label><select class="modal-select" id="wReason">${opts}</select></div>
+    ${rosterHtml}
     <div class="modal-form-row"><label class="modal-label">Note (optional)</label><textarea class="modal-textarea" id="wNote" rows="2" placeholder="Why this one?">${escapeHtml(cur.note || '')}</textarea></div>
     ${existing ? `<div style="margin-top:8px;display:flex;gap:8px;"><button type="button" class="hub-btn ghost" data-w-arch="${existing.id}:${existing.archived ? '0' : '1'}">${existing.archived ? 'Un-archive' : 'Archive'}</button><button type="button" class="hub-btn ghost" data-w-remove="${existing.id}">Remove</button></div>` : ''}`,
     async () => {
-      const row = { kind, ref: String(ref).toLowerCase(), label, sublabel: meta.sublabel || null, event_date: meta.event_date || null, venue: meta.venue || null, reason: $('wReason').value, note: ($('wNote')?.value || '').trim() || null, archived: false, updated_at: new Date().toISOString() };
+      let actor_id = existing?.actor_id || null;
+      const rv = $('wRoster')?.value || '';
+      if (rv === 'create') {
+        const { data: dupe } = await sb.from('actors').select('id').ilike('display_name', label).is('deleted_at', null).maybeSingle();
+        if (dupe) { actor_id = dupe.id; }
+        else {
+          const { data: na, error: ce } = await sb.from('actors').insert({ display_name: label, kind: 'person' }).select('id').single();
+          if (ce) throw ce; actor_id = na.id;
+          await sb.from('actor_roles').insert({ actor_id, role: 'artist' });
+          toast('Created ' + label + ' in your roster', 'ok');
+        }
+      } else if (rv.startsWith('link:')) { actor_id = rv.slice(5); }
+      else if (rv === '') { actor_id = null; }
+      const row = { kind, ref: String(ref).toLowerCase(), label, sublabel: meta.sublabel || null, event_date: meta.event_date || null, venue: meta.venue || null, reason: $('wReason').value, note: ($('wNote')?.value || '').trim() || null, actor_id, archived: false, updated_at: new Date().toISOString() };
       const { error } = await sb.from('watchlist').upsert(row, { onConflict: 'kind,ref' });
       if (error) throw error;
       closeKpi(); toast(existing ? 'Watchlist updated' : 'Added to watchlist', 'ok'); await raLoadWatch(); rerenderActive();
@@ -7889,13 +7917,24 @@ const watchBtn = (kind, ref, label, meta) => { const on = isWatched(kind, ref); 
 function renderMkWatchlist() {
   const items = raState.watchList || []; const active = items.filter(w => !w.archived);
   if (!active.length && !marketState.showArchived) return '';
-  const show = marketState.showArchived ? items : active;
+  let show = marketState.showArchived ? items : active;
+  if (marketState.watchReason) show = show.filter(w => w.reason === marketState.watchReason);
+  const usedReasons = [...new Set(items.map(w => w.reason).filter(Boolean))];
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = show.map(w => {
+    let sub;
+    if (w.kind === 'show') { sub = (w.event_date ? escapeHtml(fmtDate(w.event_date)) + ' · ' : '') + escapeHtml(w.venue || w.sublabel || ''); }
+    else { const sh = artistShows(w.label).filter(e => e.event_date >= today); sub = sh.length ? sh.slice(0, 3).map(e => '🗓 ' + escapeHtml(fmtDate(e.event_date)) + ' @ ' + escapeHtml(e.venue_name || '?')).join(' · ') + (sh.length > 3 ? ` +${sh.length - 3} more` : '') : '<em>no upcoming shows in the current pull</em>'; }
+    return `<div class="hub-li"${w.archived ? ' style="opacity:.5;"' : ''}>
+      <div class="li-main"><strong>${w.kind === 'show' ? '🎫' : '🎤'} ${escapeHtml(w.label)}</strong> <span class="role-chip" style="cursor:default;">${escapeHtml(WATCH_REASONS[w.reason] || w.reason || '')}</span>${w.actor_id ? ' <span class="li-sub" title="Linked to your roster">· 🔗 roster</span>' : ''}
+        <div class="li-sub">${sub}${w.note ? ' · ' + escapeHtml(w.note) : ''}</div></div>
+      <button class="hub-mini" data-w-tag data-w-kind="${w.kind}" data-w-ref="${escapeHtml(w.ref)}" data-w-label="${escapeHtml(w.label)}">✎ edit</button></div>`;
+  }).join('');
   return `<div class="hub-sec-bar" style="margin-top:8px;"><h3>⭐ Watchlist <span class="li-sub">(${active.length})</span></h3>
-      <button class="hub-btn ghost" data-mk-archtoggle>${marketState.showArchived ? 'Hide archived' : 'Show archived'}</button></div>
-    <div class="hub-list" style="margin-bottom:6px;">${show.map(w => `<div class="hub-li"${w.archived ? ' style="opacity:.5;"' : ''}>
-      <div class="li-main"><strong>${w.kind === 'show' ? '🎫' : '🎤'} ${escapeHtml(w.label)}</strong> <span class="role-chip" style="cursor:default;">${escapeHtml(WATCH_REASONS[w.reason] || w.reason || '')}</span>
-        <div class="li-sub">${w.event_date ? escapeHtml(fmtDate(w.event_date)) + ' · ' : ''}${escapeHtml(w.venue || w.sublabel || '')}${w.note ? ' · ' + escapeHtml(w.note) : ''}</div></div>
-      <button class="hub-mini" data-w-tag data-w-kind="${w.kind}" data-w-ref="${escapeHtml(w.ref)}" data-w-label="${escapeHtml(w.label)}">✎ edit</button></div>`).join('')}</div>`;
+      <span style="display:flex;gap:6px;align-items:center;">
+        <select class="modal-select" data-mk-wreason style="max-width:170px;"><option value="">All reasons</option>${usedReasons.map(r => `<option value="${r}"${marketState.watchReason === r ? ' selected' : ''}>${escapeHtml(WATCH_REASONS[r] || r)}</option>`).join('')}</select>
+        <button class="hub-btn ghost" data-mk-archtoggle>${marketState.showArchived ? 'Hide archived' : 'Show archived'}</button></span></div>
+    <div class="hub-list" style="margin-bottom:6px;">${rows || '<div class="li-sub">No items match this reason.</div>'}</div>`;
 }
 function renderMkTopArtists() {
   const g = marketState.genre;
@@ -7989,7 +8028,8 @@ $('panel-market').addEventListener('click', (e) => {
   if (e.target.closest('[data-mk-archtoggle]')) { marketState.showArchived = !marketState.showArchived; renderMarket(); return; }
 });
 $('panel-market').addEventListener('change', (e) => {
-  const vs = e.target.closest('[data-mk-vsort]'); if (vs) { marketState.venueSort = vs.value; marketState.venuePage = 0; renderMarket(); }
+  const vs = e.target.closest('[data-mk-vsort]'); if (vs) { marketState.venueSort = vs.value; marketState.venuePage = 0; renderMarket(); return; }
+  const wr = e.target.closest('[data-mk-wreason]'); if (wr) { marketState.watchReason = wr.value; renderMarket(); }
 });
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
@@ -7997,9 +8037,10 @@ function raRadioList() {
   const { start, cut } = raWindow();
   const seen = new Set(); let out = [];
   for (const a of raState.artists) {
-    if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
-    const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k);
-    out.push({ ...a, key: k, c: raState.cache[k] || null });
+    if (!a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
+    const k = a.soundcloud ? raKey(a.soundcloud) : 'n:' + (a.name || '').toLowerCase();
+    if (seen.has(k)) continue; seen.add(k);
+    out.push({ ...a, key: k, c: a.soundcloud ? (raState.cache[k] || null) : null });
   }
   if (raState.genre) out = out.filter(a => (a.genres || []).includes(raState.genre));
   if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
@@ -8031,18 +8072,19 @@ function renderRaRadio() {
 
   const cards = list.slice(0, 120).map((a) => {
     const c = a.c, open = raState.openArtist === a.key;
-    const badge = !c ? `<span class="li-sub">⏳ tap 🎵 to scan</span>`
-      : !c.ok ? `<span class="li-sub" style="color:var(--mid,#888)">⚠ profile unavailable</span>`
-        : c.is_producer ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">🎛 Producer · ${c.song_count} song${c.song_count === 1 ? '' : 's'}</span>`
-          : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
+    const badge = !a.soundcloud ? `<span class="li-sub" style="color:var(--mid,#888)">no SoundCloud on RA</span>`
+      : !c ? `<span class="li-sub">⏳ tap 🎵 to scan</span>`
+        : !c.ok ? `<span class="li-sub" style="color:var(--mid,#888)">⚠ profile unavailable</span>`
+          : c.is_producer ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">🎛 Producer · ${c.song_count} song${c.song_count === 1 ? '' : 's'}</span>`
+            : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
     return `<div class="hub-li" style="flex-wrap:wrap;">
       <div class="li-main">
         <strong>${escapeHtml(a.name)}</strong>${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
         <div class="li-sub">Playing ${escapeHtml(a.next_venue || 'NYC')} · ${escapeHtml(fmtDate(a.next_event_date))}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}</div>
       </div>
       <span style="display:flex;gap:6px;">
-        <button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
-        <button class="hub-mini" data-ra-songs="${escapeHtml(a.soundcloud)}">${open ? '▾ songs' : '🎵 songs'}</button>
+        ${a.soundcloud ? `<button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
+        <button class="hub-mini" data-ra-songs="${escapeHtml(a.soundcloud)}">${open ? '▾ songs' : '🎵 songs'}</button>` : ''}
         ${watchBtn('artist', a.name, a.name, { sublabel: a.next_venue || '' })}
         ${igUrl(a.instagram) ? `<a class="hub-mini" href="${escapeHtml(igUrl(a.instagram))}" target="_blank" title="Instagram — follow there">📷</a>` : ''}
         ${c && c.ok && c.sc_user_id ? (raState.followed.has(String(c.sc_user_id))
@@ -8138,7 +8180,7 @@ async function raPlay(scUrl, name) {
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ ${escapeHtml(name || '')}</span>
       <a class="hub-mini" href="${escapeHtml(scUrl)}" target="_blank" rel="noopener" title="Open on SoundCloud (always works)">open ↗</a>
       <button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
-    <iframe id="raPlayerFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe>
+    <iframe id="raPlayerFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay; encrypted-media" src="${src}"></iframe>
     <div class="li-sub" style="font-size:.68rem;margin-top:3px;">If it doesn't start, tap ▶ in the player above (browser autoplay), or use “open ↗”.</div></div>`;
   // Try to auto-start via the Widget API (best-effort; the in-player ▶ always works).
   try { await ensureScWidget(); const w = window.SC.Widget($('raPlayerFrame')); w.bind(window.SC.Widget.Events.READY, () => { try { w.play(); } catch (_) {} }); } catch (_) {}
@@ -8258,7 +8300,7 @@ async function raPlayStation() {
   const el = $('raDock'); if (!el) return;
   el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.45);">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ Station: ${escapeHtml(raState.playlist.name)}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
-    <iframe id="raStationFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay"
+    <iframe id="raStationFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay; encrypted-media"
     src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe></div>`;
   const widget = window.SC.Widget($('raStationFrame'));
   let idx = 0;
