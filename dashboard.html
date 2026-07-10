@@ -7704,7 +7704,7 @@ function renderRaMarket() {
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
-let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReason: '' };
+let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReasons: [] };
 // How good a night-of-week is for throwing a party, independent of the data
 // (Fri/Sat prime, Sun/Thu decent, Mon/Tue dead). Multiplies the score so Monday
 // can't top the list even on a quiet week. Sun..Sat.
@@ -7918,23 +7918,35 @@ function renderMkWatchlist() {
   const items = raState.watchList || []; const active = items.filter(w => !w.archived);
   if (!active.length && !marketState.showArchived) return '';
   let show = marketState.showArchived ? items : active;
-  if (marketState.watchReason) show = show.filter(w => w.reason === marketState.watchReason);
+  if (marketState.watchReasons.length) show = show.filter(w => marketState.watchReasons.includes(w.reason));
   const usedReasons = [...new Set(items.map(w => w.reason).filter(Boolean))];
   const today = new Date().toISOString().slice(0, 10);
+  const box = 'display:inline-block;border:1px solid var(--border-strong);border-radius:6px;padding:3px 8px;font-size:.76rem;background:var(--surface-2);white-space:nowrap;';
+  // Multi-select reason filter — toggle chips.
+  const filterChips = usedReasons.map(r => `<span class="role-chip" data-mk-wreason="${r}" style="cursor:pointer;${marketState.watchReasons.includes(r) ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${escapeHtml(WATCH_REASONS[r] || r)}</span>`).join('');
   const rows = show.map(w => {
-    let sub;
-    if (w.kind === 'show') { sub = (w.event_date ? escapeHtml(fmtDate(w.event_date)) + ' · ' : '') + escapeHtml(w.venue || w.sublabel || ''); }
-    else { const sh = artistShows(w.label).filter(e => e.event_date >= today); sub = sh.length ? sh.slice(0, 3).map(e => '🗓 ' + escapeHtml(fmtDate(e.event_date)) + ' @ ' + escapeHtml(e.venue_name || '?')).join(' · ') + (sh.length > 3 ? ` +${sh.length - 3} more` : '') : '<em>no upcoming shows in the current pull</em>'; }
-    return `<div class="hub-li"${w.archived ? ' style="opacity:.5;"' : ''}>
-      <div class="li-main"><strong>${w.kind === 'show' ? '🎫' : '🎤'} ${escapeHtml(w.label)}</strong> <span class="role-chip" style="cursor:default;">${escapeHtml(WATCH_REASONS[w.reason] || w.reason || '')}</span>${w.actor_id ? ' <span class="li-sub" title="Linked to your roster">· 🔗 roster</span>' : ''}
-        <div class="li-sub">${sub}${w.note ? ' · ' + escapeHtml(w.note) : ''}</div></div>
-      <button class="hub-mini" data-w-tag data-w-kind="${w.kind}" data-w-ref="${escapeHtml(w.ref)}" data-w-label="${escapeHtml(w.label)}">✎ edit</button></div>`;
+    let boxes;
+    if (w.kind === 'show') {
+      boxes = (w.event_date || w.venue) ? `<div style="margin-top:6px;"><span style="${box}">${w.event_date ? '<strong>' + escapeHtml(fmtDate(w.event_date)) + '</strong>' : ''}${w.venue ? (w.event_date ? ' · ' : '') + escapeHtml(w.venue) : ''}</span></div>` : '';
+    } else {
+      const sh = artistShows(w.label).filter(e => e.event_date >= today);
+      boxes = sh.length
+        ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;">${sh.slice(0, 10).map(e => `<span style="${box}" title="${escapeHtml(e.title || '')}"><strong>${escapeHtml(fmtDate(e.event_date))}</strong> · ${escapeHtml(e.venue_name || '?')}</span>`).join('')}${sh.length > 10 ? `<span class="li-sub" style="align-self:center;">+${sh.length - 10} more</span>` : ''}</div>`
+        : '<div class="li-sub" style="margin-top:4px;"><em>no upcoming shows in the current pull</em></div>';
+    }
+    return `<div class="hub-li" style="display:block;${w.archived ? 'opacity:.5;' : ''}">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <strong>${w.kind === 'show' ? '🎫' : '🎤'} ${escapeHtml(w.label)}</strong>
+        <span class="role-chip" style="cursor:default;">${escapeHtml(WATCH_REASONS[w.reason] || w.reason || '')}</span>
+        ${w.note ? `<span class="li-sub">— ${escapeHtml(w.note)}</span>` : ''}
+        ${w.actor_id ? '<span class="li-sub" title="Linked to your roster">🔗 roster</span>' : ''}
+        <button class="hub-mini" data-w-tag data-w-kind="${w.kind}" data-w-ref="${escapeHtml(w.ref)}" data-w-label="${escapeHtml(w.label)}" style="margin-left:auto;">✎ edit</button>
+      </div>${boxes}</div>`;
   }).join('');
   return `<div class="hub-sec-bar" style="margin-top:8px;"><h3>⭐ Watchlist <span class="li-sub">(${active.length})</span></h3>
-      <span style="display:flex;gap:6px;align-items:center;">
-        <select class="modal-select" data-mk-wreason style="max-width:170px;"><option value="">All reasons</option>${usedReasons.map(r => `<option value="${r}"${marketState.watchReason === r ? ' selected' : ''}>${escapeHtml(WATCH_REASONS[r] || r)}</option>`).join('')}</select>
-        <button class="hub-btn ghost" data-mk-archtoggle>${marketState.showArchived ? 'Hide archived' : 'Show archived'}</button></span></div>
-    <div class="hub-list" style="margin-bottom:6px;">${rows || '<div class="li-sub">No items match this reason.</div>'}</div>`;
+      <button class="hub-btn ghost" data-mk-archtoggle>${marketState.showArchived ? 'Hide archived' : 'Show archived'}</button></div>
+    ${usedReasons.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px;"><span class="li-sub">Filter:</span>${filterChips}${marketState.watchReasons.length ? '<button class="hub-mini" data-mk-wreason-clear>clear</button>' : ''}</div>` : ''}
+    <div class="hub-list" style="margin-bottom:6px;">${rows || '<div class="li-sub">No items match those reasons.</div>'}</div>`;
 }
 function renderMkTopArtists() {
   const g = marketState.genre;
@@ -8026,10 +8038,11 @@ $('panel-market').addEventListener('click', (e) => {
   const vp = e.target.closest('[data-mk-vpage]'); if (vp) { marketState.venuePage += Number(vp.dataset.mkVpage); renderMarket(); return; }
   const ge = e.target.closest('[data-mk-genre]'); if (ge) { const g = ge.dataset.mkGenre; marketState.genre = (g === marketState.genre) ? '' : g; marketState.venuePage = 0; renderMarket(); return; }
   if (e.target.closest('[data-mk-archtoggle]')) { marketState.showArchived = !marketState.showArchived; renderMarket(); return; }
+  const wr = e.target.closest('[data-mk-wreason]'); if (wr) { const r = wr.dataset.mkWreason; const i = marketState.watchReasons.indexOf(r); if (i >= 0) marketState.watchReasons.splice(i, 1); else marketState.watchReasons.push(r); renderMarket(); return; }
+  if (e.target.closest('[data-mk-wreason-clear]')) { marketState.watchReasons = []; renderMarket(); return; }
 });
 $('panel-market').addEventListener('change', (e) => {
   const vs = e.target.closest('[data-mk-vsort]'); if (vs) { marketState.venueSort = vs.value; marketState.venuePage = 0; renderMarket(); return; }
-  const wr = e.target.closest('[data-mk-wreason]'); if (wr) { marketState.watchReason = wr.value; renderMarket(); }
 });
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
