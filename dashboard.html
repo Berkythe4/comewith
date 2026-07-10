@@ -8399,7 +8399,8 @@ async function raSyncFromSc(btn) {
     if (error) throw new Error((await fnErrorDetail(error)) || error.message);
     if (data?.error) throw new Error(data.error);
     await raLoadPlaylist();
-    toast(`Synced ${data.tracks} tracks from SoundCloud${data.added ? ` · +${data.added} added` : ''}${data.removed ? ` · −${data.removed} removed` : ''}`, 'ok');
+    if (data.incomplete) toast('SoundCloud is still settling the reorder — order synced, nothing removed. Sync again in a few seconds to finish.', 'warn');
+    else toast(`Synced ${data.tracks} tracks from SoundCloud${data.added ? ` · +${data.added} added` : ''}${data.removed ? ` · −${data.removed} removed` : ''}`, 'ok');
     renderRaMarket();
   } catch (e) { toast('Sync failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↺ Sync order from SoundCloud'; } }
 }

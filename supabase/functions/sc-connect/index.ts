@@ -156,20 +156,26 @@ Deno.serve(async (req) => {
       else return err(401, "SoundCloud connection expired — reconnect.");
     }
 
-    const scRes = await fetch(`https://api.soundcloud.com/playlists/${pl.sc_playlist_id}`, {
+    const scRes = await fetch(`https://api.soundcloud.com/playlists/${pl.sc_playlist_id}?access=playable,preview,blocked`, {
       headers: { "Authorization": "OAuth " + token, "accept": "application/json; charset=utf-8" },
     });
     if (!scRes.ok) { if (scRes.status === 401) return err(401, "SoundCloud connection expired — reconnect."); return err(502, "Couldn't read the playlist from SoundCloud."); }
     const j = await scRes.json().catch(() => ({}));
-    const scTracks = (j.tracks || []) as any[];
+    const scTracks = ((j.tracks || []) as any[]).filter((t) => t?.id != null);
     if (!scTracks.length) return err(400, "That SoundCloud playlist is empty or unreadable.");
+
+    // SoundCloud processes a reorder as a remove-then-re-add; for a moment the API
+    // returns the playlist with the in-flight tracks MISSING. `track_count` is the
+    // true size — if fewer tracks came back, the snapshot is mid-update, so we
+    // reorder/add but NEVER delete (a reorder must never lose songs).
+    const trackCount = typeof j.track_count === "number" ? j.track_count : scTracks.length;
+    const complete = scTracks.length >= trackCount;
 
     const { data: existing } = await admin.from("sc_playlist_tracks").select("id, sc_track_id").eq("playlist_id", playlistId);
     const byId: Record<string, string> = {}; (existing || []).forEach((t) => { byId[t.sc_track_id] = t.id; });
     const scIds = new Set<string>();
     let pos = 0, added = 0;
     for (const t of scTracks) {
-      if (t?.id == null) continue;
       const sid = String(t.id); scIds.add(sid); pos += 10;
       if (byId[sid]) {
         await admin.from("sc_playlist_tracks").update({ sort: pos }).eq("id", byId[sid]);
@@ -182,9 +188,10 @@ Deno.serve(async (req) => {
         });
       }
     }
-    const toRemove = (existing || []).filter((t) => !scIds.has(t.sc_track_id)).map((t) => t.id);
+    // Only remove locally when the snapshot is trustworthy (complete).
+    const toRemove = complete ? (existing || []).filter((t) => !scIds.has(t.sc_track_id)).map((t) => t.id) : [];
     if (toRemove.length) await admin.from("sc_playlist_tracks").delete().in("id", toRemove);
-    return ok({ success: true, tracks: scIds.size, added, removed: toRemove.length });
+    return ok({ success: true, tracks: scIds.size, added, removed: toRemove.length, incomplete: !complete });
   }
 
   return err(400, "unknown action");
