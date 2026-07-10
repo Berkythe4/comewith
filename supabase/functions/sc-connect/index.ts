@@ -88,9 +88,27 @@ Deno.serve(async (req) => {
 
     const { data: pl } = await admin.from("sc_playlists").select("id, name, sc_playlist_id").eq("id", playlistId).single();
     if (!pl) return err(404, "playlist not found");
-    const { data: tracks } = await admin.from("sc_playlist_tracks").select("sc_track_id").eq("playlist_id", playlistId).order("sort");
-    const trackObjs = (tracks || []).map((t) => ({ id: Number(t.sc_track_id) })).filter((t) => t.id);
-    if (!trackObjs.length) return err(400, "This station has no songs to export.");
+    const { data: tracks } = await admin.from("sc_playlist_tracks").select("sc_track_id, title").eq("playlist_id", playlistId).order("sort");
+    const wanted = (tracks || []).map((t) => ({ id: Number(t.sc_track_id), title: (t.title || "track " + t.sc_track_id).toString() })).filter((t) => t.id);
+    if (!wanted.length) return err(400, "This station has no songs to export.");
+
+    // SoundCloud rejects the WHOLE playlist if even one track can't be added via
+    // the public API (uploader disabled off-SoundCloud/API embedding, or it went
+    // private/deleted since we cached it). Pre-check each track with this user's
+    // token and keep only the ones the API will actually accept — reporting the
+    // rest instead of failing the whole export.
+    const checks = await Promise.all(wanted.map(async (t) => {
+      try {
+        const cr = await fetch(`https://api.soundcloud.com/tracks/${t.id}`, { headers: { "Authorization": "OAuth " + token, "accept": "application/json; charset=utf-8" } });
+        const tj = cr.ok ? await cr.json().catch(() => ({})) : {};
+        // Reject deleted/private (non-200) and tracks explicitly blocked from embedding.
+        return { ...t, okTrack: cr.ok && tj.embeddable_by !== "none" };
+      } catch { return { ...t, okTrack: false }; }
+    }));
+    const good = checks.filter((t) => t.okTrack);
+    const skipped = checks.filter((t) => !t.okTrack).map((t) => t.title);
+    if (!good.length) return err(422, `SoundCloud won't let any of these ${wanted.length} track(s) be added via the API — the uploaders have off-SoundCloud/API sharing turned off. Try a station with different songs.`);
+    const trackObjs = good.map((t) => ({ id: t.id }));
 
     const description = (body.description || "").toString().slice(0, 4000) || "Built in the Come With dashboard from upcoming NYC artists.";
     const payload = { playlist: { title: pl.name || "Come With station", description, sharing: "private", tracks: trackObjs } };
@@ -102,13 +120,14 @@ Deno.serve(async (req) => {
     });
     const j = await scRes.json().catch(() => ({}));
     if (!scRes.ok) {
-      console.error("sc playlist:", scRes.status, JSON.stringify(j).slice(0, 200));
+      console.error("sc playlist:", scRes.status, JSON.stringify(j).slice(0, 300));
       if (scRes.status === 401) return err(401, "SoundCloud connection expired — reconnect.");
-      return err(502, "SoundCloud rejected the playlist. It may not recognize one of the track IDs.");
+      const scMsg = (j?.errors?.[0]?.error_message || j?.error?.message || j?.error || j?.message || "").toString().slice(0, 160);
+      return err(502, "SoundCloud rejected the playlist" + (scMsg ? ": " + scMsg : ". It may not recognize one of the track IDs."));
     }
     const purl = j.permalink_url || null, pid = j.id != null ? String(j.id) : pl.sc_playlist_id;
     await admin.from("sc_playlists").update({ sc_playlist_id: pid, sc_playlist_url: purl, updated_at: new Date().toISOString() }).eq("id", playlistId);
-    return ok({ success: true, url: purl, updated: isUpdate, tracks: trackObjs.length });
+    return ok({ success: true, url: purl, updated: isUpdate, tracks: trackObjs.length, skipped });
   }
 
   // Pull the exported SoundCloud playlist back — capture the final track order

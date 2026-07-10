@@ -8362,7 +8362,10 @@ async function raDoExport() {
     if (error) throw new Error((await fnErrorDetail(error)) || error.message);
     if (data?.error) throw new Error(data.error);
     raState.playlist.sc_playlist_url = data.url;
-    closeKpi(); toast(`${data.updated ? 'Updated' : 'Created'} playlist on SoundCloud`, 'ok');
+    const skipped = data.skipped || [];
+    closeKpi();
+    toast(`${data.updated ? 'Updated' : 'Created'} playlist on SoundCloud — ${data.tracks} track${data.tracks === 1 ? '' : 's'}${skipped.length ? `, ${skipped.length} skipped` : ''}`, 'ok');
+    if (skipped.length) toast(`Skipped (uploader blocks API sharing): ${skipped.slice(0, 4).join(', ')}${skipped.length > 4 ? ` +${skipped.length - 4}` : ''}`, 'warn');
     if (data.url) window.open(data.url, '_blank');
   } catch (e) { if (res) res.innerHTML = `<span class="err">${escapeHtml(e.message || String(e))}</span>`; }
 }
