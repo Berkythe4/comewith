@@ -111,12 +111,18 @@ Deno.serve(async (req) => {
     const trackObjs = good.map((t) => ({ id: t.id }));
 
     const description = (body.description || "").toString().slice(0, 4000) || "Built in the Come With dashboard from upcoming NYC artists.";
-    const payload = { playlist: { title: pl.name || "Come With station", description, sharing: "private", tracks: trackObjs } };
+    // SoundCloud's playlist endpoint rejects a JSON body ("Could not parse JSON
+    // request body") — it wants Rails-style nested form params instead.
+    const form = new URLSearchParams();
+    form.set("playlist[title]", pl.name || "Come With station");
+    form.set("playlist[description]", description);
+    form.set("playlist[sharing]", "private");
+    for (const t of trackObjs) form.append("playlist[tracks][][id]", String(t.id));
     const isUpdate = !!pl.sc_playlist_id;
     const scRes = await fetch(`https://api.soundcloud.com/playlists${isUpdate ? "/" + pl.sc_playlist_id : ""}`, {
       method: isUpdate ? "PUT" : "POST",
-      headers: { "Authorization": "OAuth " + token, "Content-Type": "application/json", "accept": "application/json; charset=utf-8" },
-      body: JSON.stringify(payload),
+      headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": "application/json; charset=utf-8" },
+      body: form.toString(),
     });
     const j = await scRes.json().catch(() => ({}));
     if (!scRes.ok) {
