@@ -1063,6 +1063,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
+      <div class="panel" id="panel-market"><div id="marketBody"></div></div>
       <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:sticky;bottom:0;z-index:5;"></div></div>
 
       <div class="panel" id="panel-income">
@@ -2797,7 +2798,8 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
-  if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Resident Advisor market intel + radio)
+  if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
+  if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Artist Radio)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
@@ -7645,8 +7647,14 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, sort: 'soon', search: '', genre: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
+// The radio window: [start (default today), start + N weeks].
+function raWindow() {
+  const start = raState.radioStart || new Date().toISOString().slice(0, 10);
+  const c = new Date(start + 'T00:00:00'); c.setDate(c.getDate() + raState.radioWeeks * 7);
+  return { start, cut: c.toISOString().slice(0, 10) };
+}
 // SoundCloud Widget API (for playing a built playlist as a station) — loaded once.
 let _scWidgetReady = null;
 function ensureScWidget() {
@@ -7655,20 +7663,18 @@ function ensureScWidget() {
   _scWidgetReady = new Promise((res) => { const s = document.createElement('script'); s.src = 'https://w.soundcloud.com/player/api.js'; s.onload = res; document.head.appendChild(s); });
   return _scWidgetReady;
 }
+// ===== ARTIST RADIO module (panel-ra-market) =====
 async function loadRaMarket() {
-  $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading RA market…</div>';
-  const [ev, ar, mine, cache, social] = await Promise.all([
-    sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,interested_count,is_ticketed,is_pick,genres,content_url,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
-    sb.from('ra_artists').select('ra_id,name,soundcloud,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
-    sb.from('events').select('name,event_date,total_attendance,series').not('total_attendance', 'is', null).order('event_date', { ascending: false }),
+  $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
+  const [ar, cache, social] = await Promise.all([
+    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').not('soundcloud', 'is', null).gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
-  if (ev.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
-  raState.events = ev.data || []; raState.artists = ar.data || []; raState.mine = mine.data || [];
+  if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
+  raState.artists = ar.data || [];
   raState.cache = {}; (cache.data || []).forEach(c => { raState.cache[raKey(c.soundcloud)] = c; });
   ensureScWidget(); // preload the SoundCloud Widget API so the first ▶ plays instantly
-  // Latest action wins per target (follow then unfollow → not followed).
   raState.followed = new Set(); raState.reposted = new Set();
   (social.data || []).forEach(s => {
     const set = s.target_type === 'user' ? raState.followed : raState.reposted;
@@ -7686,67 +7692,166 @@ async function raLoadPlaylist() {
   const { data: tracks } = await sb.from('sc_playlist_tracks').select('*').eq('playlist_id', pl.id).order('sort');
   raState.playlist = { ...pl, tracks: tracks || [] };
 }
+// Artist Radio panel = just the radio UI now (market intel moved to its own module).
 function renderRaMarket() {
-  const evs = raState.events;
-  const lastFetch = evs.length ? evs.reduce((m, e) => e.fetched_at > m ? e.fetched_at : m, evs[0].fetched_at) : null;
-  if (!evs.length) {
-    $('raMarketBody').innerHTML = `<div class="hub-sec-bar"><h3>RA Market</h3><button class="hub-btn" data-ra-refresh>↻ Pull from Resident Advisor</button></div>
-      <div class="hub-empty">No RA data yet. Hit "Pull from Resident Advisor" to load the next few weeks of NYC events (public data only — RSVP counts, venues, lineups). Takes ~15s.</div>`;
+  if (!raState.artists.length) {
+    $('raMarketBody').innerHTML = `<div class="hub-sec-bar"><h3>Artist Radio</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
+      <div class="hub-empty">No artists yet. Hit “↻ Pull shows” (or run it from Best Nights) to load upcoming NYC lineups, then scan for producers.</div>`;
     return;
   }
-  // ---- Best days: demand (median RSVP) vs competition (event count) ----
-  const byDow = DOW.map((d, i) => ({ d, i, list: evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i) }));
-  const med = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
-  // Demand (RSVP) is RA-only — Ticketmaster events have no RSVP (null); they still count for competition (n).
-  const dowStats = byDow.map(o => { const rs = o.list.map(e => e.attending).filter(x => x != null); return { d: o.d, n: o.list.length, avg: rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : 0, med: med(rs), tk: o.list.filter(e => e.is_ticketed).length }; });
-  const maxOpp = Math.max(1, ...dowStats.map(s => s.n ? s.med / Math.sqrt(s.n) : 0)); // demand per unit of competition
-  const mineByDow = DOW.map((d, i) => { const l = raState.mine.filter(m => m.event_date && new Date(m.event_date + 'T00:00:00').getDay() === i); return l.length ? Math.round(l.reduce((a, b) => a + Number(b.total_attendance || 0), 0) / l.length) : null; });
-  const dowRows = dowStats.map((s, i) => {
-    const opp = s.n ? s.med / Math.sqrt(s.n) : 0; const pct = Math.round(opp / maxOpp * 100);
-    const barColor = pct > 66 ? 'var(--green,#1f7a1f)' : pct > 33 ? 'var(--amber,#b58900)' : 'var(--mid,#888)';
-    return `<tr>
-      <td><strong>${s.d}</strong></td>
-      <td class="num">${s.n}</td>
-      <td class="num">${fmtNum(s.med)}</td>
-      <td class="num">${fmtNum(s.avg)}</td>
-      <td><div style="background:var(--surface-2);border-radius:5px;height:16px;width:120px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${barColor};"></div></div></td>
-      <td class="num">${mineByDow[i] != null ? fmtNum(mineByDow[i]) : '<span class="li-sub">—</span>'}</td>
-    </tr>`;
-  }).join('');
-  // best day = highest opportunity with at least a little demand
-  const best = [...dowStats].map((s, i) => ({ ...s, opp: s.n ? s.med / Math.sqrt(s.n) : 0 })).sort((a, b) => b.opp - a.opp)[0];
-  // ---- venues + genres ----
-  const vAgg = {}; evs.forEach(e => { if (!e.venue_name) return; const o = vAgg[e.venue_name] ||= { n: 0, sum: 0 }; o.n++; o.sum += e.attending || 0; });
-  const venues = Object.entries(vAgg).filter(([, o]) => o.n >= 2).map(([v, o]) => ({ v, n: o.n, avg: Math.round(o.sum / o.n) })).sort((a, b) => b.avg - a.avg).slice(0, 10);
-  const gAgg = {}; evs.forEach(e => (e.genres || []).forEach(g => gAgg[g] = (gAgg[g] || 0) + 1));
-  const genres = Object.entries(gAgg).sort((a, b) => b[1] - a[1]).slice(0, 12);
-  const picks = evs.filter(e => e.is_pick).length;
-  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  $('raMarketBody').innerHTML = renderRaRadio();
+}
 
-  $('raMarketBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>RA Market — NYC</h3>
-      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <span class="li-sub">${evs.length} events · updated ${lastFetch ? fmtDate(lastFetch) : '—'}</span>
-        <button class="hub-btn" data-ra-refresh>↻ Pull shows</button>
-      </span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Upcoming NYC shows from <strong>Resident Advisor</strong> + <strong>Ticketmaster</strong> (EDM only) — pick dates and benchmark. RSVP demand is RA-based (Ticketmaster has no RSVP; it still counts toward competition + venues). Your private ticket/revenue data isn't here (that stays in the CSV flow).</div>
+// ================= BEST NIGHTS module (panel-market) — scheduling intel =========
+let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '' };
+const median = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
+const headlinerK = (e) => Math.round(Math.max(0, ...((e.lineup || []).map(a => Number(a.follower_count) || 0))) / 1000); // top artist's followers, in thousands
+// Blended night metrics: demand (RSVP) + star power (headliner reach) vs competition.
+function nightMetrics(list) {
+  const rs = list.map(e => e.attending).filter(x => x != null);
+  const stars = list.map(headlinerK);
+  const med = median(rs), starK = stars.length ? Math.round(stars.reduce((a, b) => a + b, 0) / stars.length) : 0;
+  const opp = list.length ? (med + starK) / Math.sqrt(list.length) : 0;
+  return { n: list.length, med, avg: rs.length ? Math.round(rs.reduce((a, b) => a + b, 0) / rs.length) : 0, starK, opp };
+}
+async function loadMarket() {
+  $('marketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading market…</div>';
+  const [ev, mine] = await Promise.all([
+    sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
+    sb.from('events').select('name,event_date,total_attendance').not('total_attendance', 'is', null),
+    // artists (for top-by-follows) share raState — load if empty
+    (raState.artists && raState.artists.length) ? Promise.resolve({ data: raState.artists }) : sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue').not('follower_count', 'is', null).order('follower_count', { ascending: false }),
+  ]);
+  if (ev.error) { $('marketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
+  raState.events = ev.data || []; raState.mine = mine.data || [];
+  if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue').not('follower_count', 'is', null).order('follower_count', { ascending: false }); raState.artists = data || []; }
+  if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
+  renderMarket();
+}
+function renderMarket() {
+  const evs = raState.events;
+  if (!evs.length) {
+    $('marketBody').innerHTML = `<div class="hub-sec-bar"><h3>Best Nights</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
+      <div class="hub-empty">No show data yet. Hit “↻ Pull shows” to load upcoming NYC events from Resident Advisor + Ticketmaster (~20s).</div>`;
+    return;
+  }
+  const lastFetch = evs.reduce((m, e) => e.fetched_at > m ? e.fetched_at : m, evs[0].fetched_at);
+  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  const dowM = DOW.map((d, i) => ({ d, ...nightMetrics(evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i)) }));
+  const best = [...dowM].sort((a, b) => b.opp - a.opp)[0];
+  const picks = evs.filter(e => e.is_pick).length;
+
+  $('marketBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Best Nights — NYC</h3>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="li-sub">${evs.length} shows · updated ${fmtDate(lastFetch)}</span>
+        <button class="hub-btn" data-ra-refresh>↻ Pull shows</button></span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Upcoming NYC shows from <strong>Resident Advisor</strong> + <strong>Ticketmaster</strong> (EDM only). Score blends <strong>demand</strong> (RSVP) + <strong>star power</strong> (headliner reach) against <strong>competition</strong> (how many shows that night).</div>
     <div class="hub-cards" style="margin-bottom:14px;">
-      ${card('Upcoming shows', fmtNum(evs.length))}
-      ${card('Best night', best ? best.d : '—', best ? `${fmtNum(best.med)} median RSVP · ${best.n} shows` : '')}
+      ${card('Shows ahead', fmtNum(evs.length))}
+      ${card('Best night', best ? best.d : '—', best ? `${fmtNum(best.med)} RSVP · ${best.starK}k reach · ${best.n} shows` : '')}
       ${card('RA picks', fmtNum(picks), 'editor-featured')}
       ${card('Ticketed', Math.round(evs.filter(e => e.is_ticketed).length / evs.length * 100) + '%', 'of shows')}
     </div>
-    <div class="hub-sec-bar"><h3>Best nights to throw</h3></div>
-    <div class="kpi-hint" style="margin-bottom:6px;">“Opportunity” = demand (median RSVP) weighed against competition (how many shows that night). Long green bar = strong demand, thinner field. Your own avg attendance by night is the last column.</div>
-    <table class="data-table"><thead><tr><th>Night</th><th class="num">Shows</th><th class="num">Median RSVP</th><th class="num">Avg RSVP</th><th>Opportunity</th><th class="num">Your avg</th></tr></thead><tbody>${dowRows}</tbody></table>
-    <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:18px;">
-      <div><div class="hub-sec-bar"><h3>Top venues</h3></div>
-        <table class="data-table"><thead><tr><th>Venue</th><th class="num">Shows</th><th class="num">Avg RSVP</th></tr></thead>
-        <tbody>${venues.map(v => `<tr><td>${escapeHtml(v.v)}</td><td class="num">${v.n}</td><td class="num">${fmtNum(v.avg)}</td></tr>`).join('')}</tbody></table></div>
-      <div><div class="hub-sec-bar"><h3>Hot genres</h3></div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;padding:6px 0;">${genres.map(([g, n]) => `<span class="role-chip" style="cursor:default;">${escapeHtml(g)} <span class="li-sub">${n}</span></span>`).join('')}</div></div>
+    <div class="hub-sec-bar"><h3>Best nights to throw</h3>
+      <span style="display:flex;gap:6px;"><button class="hub-btn ghost" data-mk-view="week" style="${marketState.view === 'week' ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">By weekday</button>
+        <button class="hub-btn ghost" data-mk-view="calendar" style="${marketState.view === 'calendar' ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">📅 Calendar</button></span></div>
+    ${marketState.view === 'week' ? renderMkWeek(dowM) : renderMkCalendar()}
+    <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px;align-items:start;">
+      ${renderMkVenues()}
+      ${renderMkGenres()}
     </div>
-    ${renderRaRadio()}`;
+    ${renderMkTopArtists()}`;
+}
+function renderMkWeek(dowM) {
+  const maxOpp = Math.max(1, ...dowM.map(s => s.opp));
+  const mineByDow = DOW.map((d, i) => { const l = raState.mine.filter(m => m.event_date && new Date(m.event_date + 'T00:00:00').getDay() === i); return l.length ? Math.round(l.reduce((a, b) => a + Number(b.total_attendance || 0), 0) / l.length) : null; });
+  const rows = dowM.map((s, i) => {
+    const pct = Math.round(s.opp / maxOpp * 100); const bar = pct > 66 ? 'var(--green,#1f7a1f)' : pct > 33 ? 'var(--amber,#b58900)' : 'var(--mid,#888)';
+    return `<tr><td><strong>${s.d}</strong></td><td class="num">${s.n}</td><td class="num">${fmtNum(s.med)}</td><td class="num">${s.starK ? s.starK + 'k' : '—'}</td>
+      <td><div style="background:var(--surface-2);border-radius:5px;height:16px;width:120px;overflow:hidden;"><div style="width:${pct}%;height:100%;background:${bar};"></div></div></td>
+      <td class="num">${mineByDow[i] != null ? fmtNum(mineByDow[i]) : '<span class="li-sub">—</span>'}</td></tr>`;
+  }).join('');
+  return `<div class="kpi-hint" style="margin-bottom:6px;">Higher score = strong demand + star power, thinner competition. Your own avg attendance by night is the last column.</div>
+    <table class="data-table"><thead><tr><th>Night</th><th class="num">Shows</th><th class="num">Median RSVP</th><th class="num">★ Reach</th><th>Score</th><th class="num">Your avg</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+function renderMkCalendar() {
+  const m = marketState.month; const y = m.getFullYear(), mo = m.getMonth();
+  const first = new Date(y, mo, 1), startDow = first.getDay(), days = new Date(y, mo + 1, 0).getDate();
+  const byDate = {}; raState.events.forEach(e => { (byDate[e.event_date] ||= []).push(e); });
+  // heat scale across this month's dates
+  const dm = [];
+  for (let d = 1; d <= days; d++) { const ds = `${y}-${String(mo + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`; dm.push({ d, ds, met: nightMetrics(byDate[ds] || []) }); }
+  const maxOpp = Math.max(1, ...dm.map(x => x.met.opp));
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push('<div></div>');
+  const todayStr = new Date().toISOString().slice(0, 10);
+  dm.forEach(x => {
+    const pct = Math.round(x.met.opp / maxOpp * 100);
+    const bg = x.met.n ? (pct > 66 ? 'rgba(31,122,31,.55)' : pct > 33 ? 'rgba(181,137,0,.5)' : 'rgba(120,120,120,.35)') : 'transparent';
+    const sel = marketState.selDate === x.ds ? 'outline:2px solid var(--accent,#5b7fb3);' : '';
+    const past = x.ds < todayStr ? 'opacity:.4;' : '';
+    cells.push(`<div data-mk-day="${x.ds}" style="cursor:pointer;min-height:52px;border:1px solid var(--border);border-radius:7px;padding:4px 5px;background:${bg};${sel}${past}">
+      <div style="font-weight:700;font-size:.85rem;">${x.d}</div>${x.met.n ? `<div class="li-sub" style="font-size:.7rem;">${x.met.n} show${x.met.n > 1 ? 's' : ''}${x.met.med ? ` · ${x.met.med}` : ''}</div>` : ''}</div>`);
+  });
+  const monthLbl = m.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const dayHdr = DOW.map(d => `<div class="li-sub" style="text-align:center;font-size:.7rem;">${d}</div>`).join('');
+  let detail = '';
+  if (marketState.selDate) {
+    const list = (byDate[marketState.selDate] || []).sort((a, b) => (b.attending || 0) - (a.attending || 0));
+    detail = `<div class="hub-sec-bar" style="margin-top:12px;"><h3>${fmtDate(marketState.selDate)} — ${list.length} show${list.length !== 1 ? 's' : ''}</h3></div>
+      <div class="hub-list">${list.map(e => `<div class="hub-li"><div class="li-main"><strong>${e.content_url ? `<a href="${escapeHtml(e.content_url)}" target="_blank">${escapeHtml(e.title)}</a>` : escapeHtml(e.title)}</strong>
+        <div class="li-sub">${escapeHtml(e.venue_name || '')}${(e.genres || []).length ? ' · ' + escapeHtml((e.genres || []).slice(0, 2).join(', ')) : ''}${headlinerK(e) ? ' · ★' + headlinerK(e) + 'k' : ''}</div></div>
+        <div class="li-amt">${e.attending != null ? fmtNum(e.attending) + ' <span class="li-sub">RSVP</span>' : '<span class="li-sub">' + (e.source === 'tm' ? 'Ticketmaster' : '') + '</span>'}</div></div>`).join('') || '<div class="hub-empty">No shows.</div>'}</div>`;
+  }
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+      <button class="hub-mini" data-mk-mon="-1">‹</button><strong>${monthLbl}</strong><button class="hub-mini" data-mk-mon="1">›</button>
+      <span class="li-sub" style="margin-left:8px;">click a night for its lineup</span></div>
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;">${dayHdr}${cells.join('')}</div>${detail}`;
+}
+function mkVenueAgg() {
+  const g = marketState.genre;
+  const vAgg = {};
+  raState.events.forEach(e => {
+    if (!e.venue_name) return; if (g && !(e.genres || []).includes(g)) return;
+    const o = vAgg[e.venue_name] ||= { n: 0, sum: 0, rsvp: 0 };
+    o.n++; if (e.attending != null) { o.sum += e.attending; o.rsvp++; }
+  });
+  let list = Object.entries(vAgg).map(([v, o]) => ({ v, n: o.n, avg: o.rsvp ? Math.round(o.sum / o.rsvp) : 0 }));
+  const s = marketState.venueSort;
+  list.sort((a, b) => s === 'shows' ? b.n - a.n : s === 'name' ? a.v.localeCompare(b.v) : b.avg - a.avg);
+  return list;
+}
+function renderMkVenues() {
+  const all = mkVenueAgg(); const per = 12; const pages = Math.max(1, Math.ceil(all.length / per));
+  marketState.venuePage = Math.min(marketState.venuePage, pages - 1);
+  const page = all.slice(marketState.venuePage * per, marketState.venuePage * per + per);
+  const sortOpt = (v, l) => `<option value="${v}"${marketState.venueSort === v ? ' selected' : ''}>${l}</option>`;
+  return `<div><div class="hub-sec-bar"><h3>Venues${marketState.genre ? ` · ${escapeHtml(marketState.genre)}` : ''} <span class="li-sub">(${all.length})</span></h3>
+      <select class="modal-select" data-mk-vsort style="max-width:130px;">${sortOpt('avg', 'Avg RSVP')}${sortOpt('shows', 'Most shows')}${sortOpt('name', 'Name A–Z')}</select></div>
+    <table class="data-table"><thead><tr><th>Venue</th><th class="num">Shows</th><th class="num">Avg RSVP</th></tr></thead>
+      <tbody>${page.map(v => `<tr><td>${escapeHtml(v.v)}</td><td class="num">${v.n}</td><td class="num">${v.avg ? fmtNum(v.avg) : '—'}</td></tr>`).join('') || '<tr><td colspan="3" class="li-sub" style="padding:10px;">No venues.</td></tr>'}</tbody></table>
+    ${pages > 1 ? `<div style="display:flex;gap:8px;align-items:center;margin-top:8px;"><button class="hub-mini" data-mk-vpage="-1" ${marketState.venuePage === 0 ? 'disabled' : ''}>‹ prev</button>
+      <span class="li-sub">${marketState.venuePage + 1}/${pages}</span><button class="hub-mini" data-mk-vpage="1" ${marketState.venuePage >= pages - 1 ? 'disabled' : ''}>next ›</button></div>` : ''}</div>`;
+}
+function renderMkGenres() {
+  const gAgg = {}; raState.events.forEach(e => (e.genres || []).forEach(g => gAgg[g] = (gAgg[g] || 0) + 1));
+  const genres = Object.entries(gAgg).sort((a, b) => b[1] - a[1]).slice(0, 16);
+  return `<div><div class="hub-sec-bar"><h3>Hot genres</h3>${marketState.genre ? '<button class="hub-mini" data-mk-genre="">clear</button>' : ''}</div>
+    <div class="kpi-hint" style="margin:0 0 6px;">Click a genre to filter venues + artists below.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;padding:2px 0;">${genres.map(([g, n]) => `<span class="role-chip" data-mk-genre="${escapeHtml(g)}" style="cursor:pointer;${marketState.genre === g ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${escapeHtml(g)} <span class="li-sub">${n}</span></span>`).join('')}</div></div>`;
+}
+const igUrl = (h) => { h = (h || '').trim(); if (!h) return null; if (/^https?:/i.test(h)) return h; return 'https://instagram.com/' + h.replace(/^@/, '').replace(/\/+$/, ''); };
+function renderMkTopArtists() {
+  const g = marketState.genre;
+  const seen = new Set(); let list = [];
+  for (const a of raState.artists) { if (!a.name || (a.follower_count == null)) continue; if (g && !(a.genres || []).includes(g)) continue; const k = a.name.toLowerCase(); if (seen.has(k)) continue; seen.add(k); list.push(a); }
+  list.sort((a, b) => (b.follower_count || 0) - (a.follower_count || 0));
+  list = list.slice(0, 24);
+  return `<div class="hub-sec-bar" style="margin-top:20px;"><h3>Biggest artists coming${g ? ` · ${escapeHtml(g)}` : ''} <span class="li-sub">(by followers)</span></h3></div>
+    <div class="hub-list">${list.map(a => { const ig = igUrl(a.instagram); return `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(a.name)}</strong> <span class="li-sub">· ${fmtNum(a.follower_count || 0)} RA followers</span>
+        <div class="li-sub">Playing ${escapeHtml(a.next_venue || 'NYC')} · ${a.next_event_date ? escapeHtml(fmtDate(a.next_event_date)) : ''}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}</div></div>
+      <span style="display:flex;gap:6px;">${ig ? `<a class="hub-mini" href="${escapeHtml(ig)}" target="_blank" title="Open Instagram — follow there">📷 IG</a>` : ''}${a.soundcloud ? `<a class="hub-mini" href="${escapeHtml(a.soundcloud)}" target="_blank" title="SoundCloud">☁</a>` : ''}</span></div>`; }).join('') || '<div class="hub-empty">No artists' + (g ? ' in this genre' : '') + '.</div>'}</div>`;
 }
 // ---- All radio/market clicks handled at DOCUMENT level so buttons that live in
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
@@ -7792,6 +7897,7 @@ document.addEventListener('click', async (e) => {
 $('panel-ra-market').addEventListener('change', (e) => {
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
+  const sd = e.target.closest('[data-ra-startdate]'); if (sd) { raState.radioStart = sd.value; renderRaMarket(); return; }
 });
 let _raSearchT;
 $('panel-ra-market').addEventListener('input', (e) => {
@@ -7810,21 +7916,30 @@ async function raRefresh(btn) {
   try {
     const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 28 } });
     if (error) throw error;
-    // Also widen with Ticketmaster (EDM-only) — non-fatal if it's not configured.
     let tm = 0;
     try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 42 } }); tm = r.data?.edm_saved || 0; } catch (_) { /* skip */ }
     toast(`Pulled ${data.events_saved} RA shows${tm ? ` + ${tm} Ticketmaster EDM` : ''} · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
-    await loadRaMarket();
+    if (document.querySelector('#panel-market.active')) await loadMarket(); else await loadRaMarket();
   } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull shows'; } }
 }
+// Best Nights (panel-market) controls.
+$('panel-market').addEventListener('click', (e) => {
+  const v = e.target.closest('[data-mk-view]'); if (v) { marketState.view = v.dataset.mkView; renderMarket(); return; }
+  const mon = e.target.closest('[data-mk-mon]'); if (mon) { const d = marketState.month; marketState.month = new Date(d.getFullYear(), d.getMonth() + Number(mon.dataset.mkMon), 1); marketState.selDate = null; renderMarket(); return; }
+  const day = e.target.closest('[data-mk-day]'); if (day) { marketState.selDate = marketState.selDate === day.dataset.mkDay ? null : day.dataset.mkDay; renderMarket(); return; }
+  const vp = e.target.closest('[data-mk-vpage]'); if (vp) { marketState.venuePage += Number(vp.dataset.mkVpage); renderMarket(); return; }
+  const ge = e.target.closest('[data-mk-genre]'); if (ge) { const g = ge.dataset.mkGenre; marketState.genre = (g === marketState.genre) ? '' : g; marketState.venuePage = 0; renderMarket(); return; }
+});
+$('panel-market').addEventListener('change', (e) => {
+  const vs = e.target.closest('[data-mk-vsort]'); if (vs) { marketState.venueSort = vs.value; marketState.venuePage = 0; renderMarket(); }
+});
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
 function raRadioList() {
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + raState.radioWeeks * 7);
-  const cut = cutoff.toISOString().slice(0, 10);
+  const { start, cut } = raWindow();
   const seen = new Set(); let out = [];
   for (const a of raState.artists) {
-    if (!a.soundcloud || !a.next_event_date || a.next_event_date > cut) continue;
+    if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
     const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k);
     out.push({ ...a, key: k, c: raState.cache[k] || null });
   }
@@ -7842,10 +7957,9 @@ function raRadioList() {
 function renderRaRadio() {
   const list = raRadioList();
   // full deduped window (pre-producer-filter) — for stats + scan candidates
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + raState.radioWeeks * 7);
-  const cut = cutoff.toISOString().slice(0, 10);
+  const { start, cut } = raWindow();
   const seen = new Set(); const windowArtists = [];
-  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); windowArtists.push({ ...a, key: k }); }
+  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); windowArtists.push({ ...a, key: k }); }
   const scanned = windowArtists.filter(a => raState.cache[a.key]).length;
   const unscanned = windowArtists.length - scanned;
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
@@ -7869,6 +7983,7 @@ function renderRaRadio() {
       <span style="display:flex;gap:6px;">
         <button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
         <button class="hub-mini" data-ra-songs="${escapeHtml(a.soundcloud)}">${open ? '▾ songs' : '🎵 songs'}</button>
+        ${igUrl(a.instagram) ? `<a class="hub-mini" href="${escapeHtml(igUrl(a.instagram))}" target="_blank" title="Instagram — follow there">📷</a>` : ''}
         ${c && c.ok && c.sc_user_id ? (raState.followed.has(String(c.sc_user_id))
           ? `<button class="hub-mini" data-ra-unfollow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Following on SoundCloud — click to unfollow" style="background:var(--green,#1f7a1f);color:#fff;">✓ following</button>`
           : `<button class="hub-mini" data-ra-follow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Follow on your SoundCloud">＋ follow</button>`) : ''}
@@ -7884,6 +7999,7 @@ function renderRaRadio() {
   return `
     <div class="hub-sec-bar" style="margin-top:22px;"><h3>📻 Radio — incoming artists</h3></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
       ${[2, 3, 4, 6].map(weekBtn).join('')}
       <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}">🎛 Producers only</button>
       <select class="modal-select" data-ra-genre style="max-width:150px;"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
@@ -8034,10 +8150,9 @@ function raPublishTracklist() {
 }
 // Batch-scan every unscanned artist in the current window to find producers.
 async function raScan() {
-  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() + raState.radioWeeks * 7);
-  const cut = cutoff.toISOString().slice(0, 10);
+  const { start, cut } = raWindow();
   const seen = new Set(); const todo = [];
-  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); if (!raState.cache[k]) todo.push(k); }
+  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); if (!raState.cache[k]) todo.push(k); }
   if (!todo.length) { toast('All artists in this window are already scanned', 'ok'); return; }
   raState.scanning = true; raState.scanCancel = false; raState.scanDone = 0; raState.scanTotal = todo.length; renderRaMarket();
   for (let i = 0; i < todo.length && !raState.scanCancel; i += 20) {
