@@ -1064,7 +1064,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
-      <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:sticky;bottom:0;z-index:5;"></div></div>
+      <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:fixed;bottom:14px;right:14px;width:min(440px,94vw);z-index:1000;"></div></div>
 
       <div class="panel" id="panel-income">
         <button class="add-btn" data-add="income">+ Add income</button>
@@ -7647,7 +7647,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -7897,6 +7897,7 @@ document.addEventListener('click', async (e) => {
 $('panel-ra-market').addEventListener('change', (e) => {
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
+  const ve = e.target.closest('[data-ra-venue]'); if (ve) { raState.venue = ve.value; renderRaMarket(); return; }
   const sd = e.target.closest('[data-ra-startdate]'); if (sd) { raState.radioStart = sd.value; renderRaMarket(); return; }
 });
 let _raSearchT;
@@ -7944,6 +7945,7 @@ function raRadioList() {
     out.push({ ...a, key: k, c: raState.cache[k] || null });
   }
   if (raState.genre) out = out.filter(a => (a.genres || []).includes(raState.genre));
+  if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
   const ql = raState.search.toLowerCase();
   if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
   if (raState.producersOnly) out = out.filter(a => a.c && a.c.is_producer);
@@ -7964,6 +7966,7 @@ function renderRaRadio() {
   const unscanned = windowArtists.length - scanned;
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
   const genreSet = [...new Set(raState.artists.flatMap(a => a.genres || []))].sort();
+  const venueSet = [...new Set(windowArtists.map(a => a.next_venue).filter(Boolean))].sort();
 
   const weekBtn = (w) => `<button class="hub-btn ghost" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w}w</button>`;
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
@@ -8003,6 +8006,7 @@ function renderRaRadio() {
       ${[2, 3, 4, 6].map(weekBtn).join('')}
       <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}">🎛 Producers only</button>
       <select class="modal-select" data-ra-genre style="max-width:150px;"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
+      <select class="modal-select" data-ra-venue style="max-width:160px;"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
       <select class="modal-select" data-ra-sort style="max-width:150px;">${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}${sortOpt('name', 'Name A–Z')}</select>
       <input class="modal-input" data-ra-search placeholder="Search artist / venue…" style="max-width:170px;" value="${escapeHtml(raState.search)}">
       ${scanBar}
@@ -8071,9 +8075,9 @@ function raRenderPlaylist() {
 // you add tracks / follow / scan — those rebuild raMarketBody, not the dock.
 async function raPlay(scUrl, name) {
   const el = $('raDock'); if (!el) return;
-  const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=true';
-  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px 10px 0 0;padding:8px 10px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;">▶ ${escapeHtml(name || '')}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
+  const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=false';
+  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.45);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ ${escapeHtml(name || '')}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
     <iframe id="raPlayerFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay" src="${src}"></iframe></div>`;
   try { await ensureScWidget(); const w = window.SC.Widget($('raPlayerFrame')); w.bind(window.SC.Widget.Events.READY, () => w.play()); } catch (_) { /* in-iframe play button still works */ }
 }
@@ -8190,8 +8194,8 @@ async function raPlayStation() {
   const tracks = raState.playlist.tracks; if (!tracks.length) return;
   await ensureScWidget();
   const el = $('raDock'); if (!el) return;
-  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:10px 10px 0 0;padding:8px 10px;">
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;">▶ Station: ${escapeHtml(raState.playlist.name)}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
+  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.45);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ Station: ${escapeHtml(raState.playlist.name)}</span><button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
     <iframe id="raStationFrame" width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay"
     src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe></div>`;
   const widget = window.SC.Widget($('raStationFrame'));
