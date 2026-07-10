@@ -200,6 +200,55 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-07-10 (RA Market data completeness + Watchlist + SoundCloud station)
+
+> Migrations **088–089 APPLIED to prod**; edge functions **pull-ra-market / pull-ticketmaster /
+> sc-connect** redeployed; `dashboard.html` pushed (Netlify live). All work is on the RA Market /
+> Artist Radio module.
+
+### ✅ Market data completeness (the "few August shows" + missing-artists root cause)
+- **pull-ra-market only fetched ~12 pages (600 events) = all of July**; Aug/Sep shows *and their
+  artists* were never pulled. Cap raised to 40 pages (~2000) → now **1011 events across Jul–Oct**
+  (Aug 298, Sep 129), window ~3 months.
+- **088 (`ra_artists.source`)** source-tags artists so RA + Ticketmaster coexist; both pulls now
+  delete only their **own** source (pull-ra-market's window-delete had been wiping ALL rows incl. TM).
+- **Ticketmaster performers now upserted into `ra_artists`** (source=`tm`, no socials/RSVP) so TM
+  artists show in the artist views — previously TM wrote events only.
+- **Radio now shows artists WITHOUT SoundCloud** (e.g. MISS VEE) — visible + taggable, no play/songs.
+  Note: **VeeDay isn't in RA's data** (not on the RA lineup for that event) — can't pull what RA
+  doesn't publish; add manually via the watchlist "create as new artist".
+
+### ✅ Best-Nights day-of-week weighting
+- `DOW_WEIGHT` (Sun..Sat = .65/.15/.30/.55/.80/1.0/1.0) folds into the night score so it **never
+  calls Monday the best night**; best flipped Mon→Fri. Calendar cell dropped the confusing median
+  number (shows "N shows" + weighted-score color, full breakdown on hover).
+
+### ✅ Watchlist upgrades (089 `watchlist.actor_id`)
+- **"Collaborator" reason** added; **multi-select reason filter** (toggle chips + clear).
+- Each watched artist lists **upcoming nights as little boxes** (date · venue, from event lineups);
+  the note now sits **inline next to the reason**.
+- Collaborators can be **linked to a roster actor or created as a new artist** (stores `actor_id`,
+  shows "🔗 roster").
+
+### ✅ SoundCloud station export/sync hardening (sc-connect)
+- Export **pre-validates each track** against the public API and **skips uploader-blocked/deleted
+  tracks** (reported as `skipped`) instead of failing the whole playlist.
+- Playlist body switched to **form-encoded Rails params** (SoundCloud rejected JSON: "Could not
+  parse JSON request body").
+- **Sync is now non-destructive on an incomplete snapshot**: a reorder on SoundCloud is a
+  remove-then-re-add, and the API briefly returns the playlist with in-flight tracks MISSING — old
+  sync deleted them (data loss). Now it trusts `track_count` and deletes **nothing** when fewer
+  tracks come back, flagging `incomplete` so the UI says "still settling — sync again." Recovered
+  the 2 tracks a live sync had dropped; removed a stray duplicate "Weekly station" row.
+
+### ▶️ Open / next
+- **Player still "opens but doesn't play"** — diagnosed as environmental (Chrome ad-blocker or
+  third-party-cookie/Tracking-Protection blocking SoundCloud's embed, since SC's *own* ▶ fails).
+  Added `encrypted-media` + a guaranteed "open ↗" fallback. Awaiting Keith's incognito test to
+  confirm extension vs cookie setting; no code fix possible for a browser-side block.
+- `raLoadPlaylist` can still race two empty "Weekly station" rows into existence (cleaned one this
+  session) — a unique guard would prevent recurrence.
+
 ## Current state — reconciled 2026-07-08 (Full-site audit + Site Review module + engagement tracking)
 
 > Migrations **075–076 APPLIED to prod**; `send-campaign` + `send-agreement` + **`artist-intake` (new)**
