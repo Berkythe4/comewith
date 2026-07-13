@@ -68,8 +68,11 @@ Deno.serve(async (req) => {
   if (b.conversation_id) {
     const { data: conv } = await admin.from("conversations").select("*").eq("id", b.conversation_id).single();
     if (!conv) return err(404, "Conversation not found");
-    const link = gotoLink(conv.source_kind, conv.source_id);
-    const html = `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;"><a href="${link}">Open in Come With dashboard →</a></p>`;
+    // event_people threads go to performers/crew without dashboard access — no dead link for them.
+    const link = conv.source_kind === "event_people" ? null : gotoLink(conv.source_kind, conv.source_id);
+    const html = link
+      ? `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;"><a href="${link}">Open in Come With dashboard →</a></p>`
+      : bodyHtml;
     const r = await sendResend(apiKey, conv.recipient_email, subject, html, b.conversation_id);
     const { data: msg } = await admin.from("conversation_messages").insert({
       conversation_id: conv.id, direction: "outbound", from_email: REPLY_TO, to_email: conv.recipient_email,
@@ -115,8 +118,9 @@ Deno.serve(async (req) => {
     if (visibility === "restricted" && aclIds.length) {
       await admin.from("conversation_acl").insert(aclIds.map((u) => ({ conversation_id: conv.id, user_id: u })));
     }
-    const link = gotoLink(sourceKind, sourceId);
-    const html = `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;color:#777;">Sent from <strong>${esc(source || "Come With")}</strong>. <a href="${link}">Open in Come With dashboard →</a></p>`;
+    // event_people recipients (performers/crew) can't open the dashboard — skip the link for them.
+    const link = sourceKind === "event_people" ? null : gotoLink(sourceKind, sourceId);
+    const html = `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;color:#777;">Sent from <strong>${esc(source || "Come With")}</strong>.${link ? ` <a href="${link}">Open in Come With dashboard →</a>` : ""}</p>`;
     const sent = await sendResend(apiKey, email, taggedSubject, html, conv.id);
     await admin.from("conversation_messages").insert({
       conversation_id: conv.id, direction: "outbound", from_email: REPLY_TO, to_email: email,
