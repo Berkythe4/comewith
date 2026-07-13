@@ -1258,6 +1258,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 import { PRICING_DEFAULTS, computeQuote, mergeConfig, suggestDailyRate } from './assets/pricing-engine.js';
+import { parseCsv, classifyExport, buildImportPlan, TYPE_LABELS } from './assets/import-engine.js';
 
 // PUBLIC values — safe to embed in frontend per the env contract.
 const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
@@ -4838,7 +4839,7 @@ async function openEventHub(eventId) {
 
 async function hubLoadEvent() {
   const { data, error } = await sb.from('events')
-    .select('id, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, cw_providing_gear, venue_id, audited, audited_at, financials_released, financials_released_at')
+    .select('id, slug, name, series, type, event_date, status, stage, capacity, total_attendance, owner_actor_id, cw_providing_gear, venue_id, audited, audited_at, financials_released, financials_released_at')
     .eq('id', hub.eventId).single();
   hub.event = error ? null : data;
   if (hub.event?.owner_actor_id) {
@@ -5124,8 +5125,24 @@ async function hubSecPeople() {
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>People</h3>
       <span><button class="hub-mini" data-hub-email-people title="Email everyone ticked">✉ Email selected</button>
+      <button class="hub-mini" data-hub-copy-emails title="Copy email addresses — ticked people, or everyone if none ticked. Paste into Google Drive sharing.">⧉ Copy emails</button>
       <button class="hub-btn" data-hub-action="add-people">+ Add people</button></span></div>
     <div class="hub-list">${rows}</div>`;
+}
+
+// Copy a list of addresses for pasting into Google Drive sharing (comma-separated).
+function copyEmailList(emails, label) {
+  const uniq = [...new Set(emails.filter(Boolean).map((e) => e.trim().toLowerCase()))];
+  if (!uniq.length) { toast('No email addresses on file', 'err'); return; }
+  navigator.clipboard.writeText(uniq.join(', ')).then(
+    () => toast(`Copied ${uniq.length} email${uniq.length === 1 ? '' : 's'} (${label}) — paste into Google Drive sharing`, 'ok'),
+    () => toast('Copy failed — your browser blocked clipboard access', 'err'));
+}
+function hubCopyPeopleEmails() {
+  const sel = [...$('hubSecBody').querySelectorAll('[data-hub-psel]:checked')].map((c) => c.dataset.email);
+  const picked = sel.filter(Boolean);
+  if (picked.length) return copyEmailList(picked, 'selected');
+  copyEmailList((hub.people || []).map((p) => p.actor?.email), 'everyone on this event');
 }
 
 function hubEmailPeople(oneActorId) {
@@ -5344,7 +5361,21 @@ async function hubSecCustomers() {
       </div></div>
     <div class="kpi-hint" style="margin-bottom:10px;">Pre-assign customers you know will be there. They show as guests below; after the event, mark real attendance or import tickets.</div>
     ${glRows ? `<div class="hub-list" style="margin-bottom:20px;">${glRows}</div>` : '<div class="hub-empty" style="margin-bottom:20px;">No one on the guest list yet.</div>'}`;
-  $('hubSecBody').innerHTML = glBlock + `
+  // Import — drop the post-event exports, hit Run, everything updates in one pass.
+  const impBlock = `
+    <details id="impWrap" style="margin-bottom:20px;"${imp.keepOpen ? ' open' : ''}>
+      <summary style="cursor:pointer;font-weight:700;padding:4px 0;">⬆ Import event exports <span class="li-sub">(RA ticket list · RA scan data · RA guest list · Partiful)</span></summary>
+      <div class="kpi-hint" style="margin:8px 0;">Drop several CSVs at once — each is auto-detected by its columns. <strong>Run</strong> creates customers &amp; tickets, links attendance, sets the door count from scan data, and updates the mailing list (per-event + brand segments, opt-outs always honored). Safe to re-run — nothing is ever duplicated.</div>
+      <div id="impDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drag &amp; drop CSV exports here — or click to browse</div>
+      <input type="file" id="impFile" accept=".csv,text/csv" multiple style="display:none">
+      <div id="impStaged" class="hub-list" style="margin-bottom:8px;"></div>
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
+        <button class="hub-btn" id="impRun" disabled>▶ Run import</button>
+        <span class="li-sub" id="impStatus"></span>
+      </div>
+      <div id="impReport"></div>
+    </details>`;
+  $('hubSecBody').innerHTML = impBlock + glBlock + `
     <div class="hub-sec-bar"><h3>Customers</h3>
       <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · ${nAtt} attended · ${nDon} donors · ${nSpon} sponsors</span></div>
     <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name (🎟 = tickets/entries). Per-person detail above; the reconciliation below ties it to the event's audited financial totals (Money tab).</div>
@@ -5353,6 +5384,7 @@ async function hubSecCustomers() {
     <div class="hub-list" id="hubCustList">${rows}</div>`;
   const cs = $('hubCustSearch');
   if (cs) cs.addEventListener('input', () => { const ql = cs.value.toLowerCase(); document.querySelectorAll('#hubCustList .hub-li').forEach(el => { el.style.display = (el.dataset.search || '').includes(ql) ? '' : 'none'; }); });
+  hubImportWire();
 }
 
 // ---- Guest list: pre-assign expected customers/attendees to the event ----
@@ -5491,6 +5523,198 @@ async function hubExportGuestListRA() {
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1500);
   toast(`Exported ${rows.length} ${rows.length === 1 ? 'guest' : 'guests'} for Resident Advisor`, 'ok');
+}
+
+// ---- Import event exports (Customers tab) ----
+// Drag-and-drop RA / Partiful CSVs → assets/import-engine.js builds a pure plan
+// from the files + current DB state → this runner executes it (all inserts are
+// existence-guarded in the plan, so Run is idempotent) and renders a full
+// confirmation / flags / errors report. Engine tested by scripts/test_import_engine.mjs.
+const imp = { files: [], running: false, keepOpen: false };
+
+function hubImportWire() {
+  imp.files = []; imp.running = false; imp.keepOpen = false;
+  const drop = $('impDrop'), input = $('impFile');
+  if (!drop) return;
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent, #5b7fb3)'; });
+  drop.addEventListener('dragleave', () => { drop.style.borderColor = ''; });
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.style.borderColor = ''; hubImportStage([...(e.dataTransfer?.files || [])]); });
+  input.addEventListener('change', () => { hubImportStage([...input.files]); input.value = ''; });
+  $('impStaged').addEventListener('click', (e) => { const x = e.target.closest('[data-imp-del]'); if (x && !imp.running) { imp.files.splice(Number(x.dataset.impDel), 1); hubImportStagedRender(); } });
+  $('impRun').addEventListener('click', hubRunImport);
+}
+
+async function hubImportStage(fileList) {
+  for (const f of fileList) {
+    if (imp.files.some((x) => x.name === f.name && x.size === f.size)) continue;
+    let parsed;
+    try { parsed = parseCsv(await f.text()); }
+    catch { imp.files.push({ name: f.name, size: f.size, type: null, rows: [] }); continue; }
+    imp.files.push({ name: f.name, size: f.size, type: classifyExport(parsed.headers), rows: parsed.rows });
+  }
+  hubImportStagedRender();
+}
+
+function hubImportStagedRender() {
+  const el = $('impStaged'); if (!el) return;
+  el.innerHTML = imp.files.map((f, i) => `<div class="hub-li">
+      <div class="li-main"><strong>${escapeHtml(f.name)}</strong>
+        <span class="role-chip" style="cursor:default;${f.type ? '' : 'color:#ff5ca8;'}">${f.type ? TYPE_LABELS[f.type] : '⚠ not recognized'}</span>
+        <span class="li-sub">· ${f.rows.length} rows</span></div>
+      <button class="hub-mini" data-imp-del="${i}">✕</button></div>`).join('');
+  const ok = imp.files.some((f) => f.type);
+  $('impRun').disabled = !ok || imp.running;
+  $('impStatus').textContent = !imp.files.length ? ''
+    : ok ? `${imp.files.filter((f) => f.type).length} export${imp.files.filter((f) => f.type).length === 1 ? '' : 's'} ready — hit Run.`
+    : 'None of these look like RA / Partiful exports (need their original column headers).';
+}
+
+// Bulk insert with per-row fallback so ONE bad row can't sink a whole batch;
+// returns whatever rows made it in (for id mapping) and appends failures to errors.
+async function impInsert(table, rows, sel, errors, label) {
+  const out = [];
+  for (let i = 0; i < rows.length; i += 50) {
+    const chunk = rows.slice(i, i + 50);
+    const { data, error } = await sb.from(table).insert(chunk).select(sel);
+    if (!error) { out.push(...(data || [])); continue; }
+    for (const row of chunk) {
+      const r1 = await sb.from(table).insert(row).select(sel);
+      if (r1.error) errors.push(`${label}: ${r1.error.message}`);
+      else out.push(...(r1.data || []));
+    }
+  }
+  return out;
+}
+
+async function hubRunImport() {
+  if (imp.running) return;
+  imp.running = true; imp.keepOpen = true;
+  const btn = $('impRun'), status = $('impStatus');
+  btn.disabled = true;
+  const errors = [], done = [];
+  const say = (m) => { if (status) status.textContent = m; };
+  try {
+    const ev = hub.event;
+    say('Reading current customers, tickets & mailing list…');
+    const [g, gea, tk, subs, segs] = await Promise.all([
+      sb.from('guests').select('id, full_name, email, opted_in_mailing').is('deleted_at', null),
+      sb.from('guest_event_attendance').select('guest_id').eq('event_id', ev.id),
+      sb.from('ticketing').select('source, external_id').eq('event_id', ev.id),
+      sb.from('subscribers').select('id, email, status'),
+      sb.from('subscriber_segments').select('subscriber_id, segment'),
+    ]);
+    for (const r of [g, gea, tk, subs, segs]) if (r.error) throw r.error;
+    const db = {
+      guests: g.data || [],
+      eventGeaGuestIds: (gea.data || []).map((r) => r.guest_id),
+      eventTicketKeys: (tk.data || []).map((r) => r.source + '|' + r.external_id),
+      subscribers: subs.data || [], segments: segs.data || [],
+    };
+    const plan = buildImportPlan({
+      files: imp.files.filter((f) => f.type), event: ev, db,
+      hostNames: [ev.owner_name, 'Keith Berkman'].filter(Boolean),
+    });
+
+    // 1) customers — map plan keys back from the returned rows (email, else name)
+    say('Creating customer records…');
+    const created = await impInsert('guests',
+      plan.guestsToCreate.map(({ key, ...rest }) => rest), 'id, full_name, email', errors, 'Customer');
+    const keyToId = new Map();
+    for (const r of created) keyToId.set(r.email ? 'e:' + r.email.toLowerCase() : 'n:' + (r.full_name || '').trim().replace(/\s+/g, ' ').toLowerCase(), r.id);
+    const rid = (o) => o.guestId || keyToId.get(o.guestKey) || null;
+    if (created.length) done.push(`👤 ${created.length} customer record${created.length === 1 ? '' : 's'} created`);
+
+    // 2) attendance links
+    say('Linking attendance…');
+    const geaRows = plan.gea.map((o) => ({ event_id: ev.id, guest_id: rid(o), amount_spent: o.amount_spent, ticket_type: o.ticket_type, quantity: o.quantity, source: o.source, purchased_at: o.purchased_at || null })).filter((r) => r.guest_id);
+    const geaIns = await impInsert('guest_event_attendance', geaRows, 'id', errors, 'Attendance link');
+    if (geaIns.length) done.push(`🔗 ${geaIns.length} attendance link${geaIns.length === 1 ? '' : 's'} added`);
+
+    // 3) tickets
+    say('Recording tickets…');
+    const tkRows = plan.ticketing.map((o) => ({ event_id: ev.id, guest_id: rid(o), ticket_type: o.ticket_type, amount_paid: o.amount_paid, quantity: o.quantity, source: o.source, external_id: o.external_id, purchased_at: o.purchased_at || null, attended: o.attended, notes: o.notes || null }));
+    const tkIns = await impInsert('ticketing', tkRows, 'id, source', errors, 'Ticket');
+    if (tkIns.length) {
+      const bySrc = {};
+      for (const r of tkIns) bySrc[r.source] = (bySrc[r.source] || 0) + 1;
+      done.push(`🎟 ${tkIns.length} tickets recorded (${Object.entries(bySrc).map(([s, n]) => `${n} ${s.replace('_', ' ')}`).join(' + ')})`);
+    }
+
+    // 4) attended flags on previously imported tickets
+    for (const [list, val] of [[plan.attendedTrue, true], [plan.attendedFalse, false]]) {
+      for (let i = 0; i < list.length; i += 100) {
+        const { error } = await sb.from('ticketing').update({ attended: val })
+          .eq('event_id', ev.id).eq('source', 'resident_advisor').in('external_id', list.slice(i, i + 100));
+        if (error) errors.push('Attended flags: ' + error.message);
+      }
+    }
+    if (plan.attendedTrue.length) done.push(`✅ attended flags set from scan data (${plan.attendedTrue.length} scanned in)`);
+
+    // 5) door count + status
+    if (plan.eventUpdate) {
+      const { error } = await sb.from('events').update(plan.eventUpdate).eq('id', ev.id);
+      if (error) errors.push('Event update: ' + error.message);
+      else {
+        Object.assign(hub.event, plan.eventUpdate);
+        done.push(`🕺 door count set to ${plan.eventUpdate.total_attendance} · event marked completed`);
+        renderHubHead();
+      }
+    }
+
+    // 6) mailing list
+    say('Updating mailing list…');
+    const nowIso = new Date().toISOString();
+    const newSubs = await impInsert('subscribers',
+      plan.subscribers.map((s) => ({ email: s.email, full_name: s.full_name, status: 'subscribed', source: plan.tag, confirmed_at: nowIso, guest_id: rid(s) })),
+      'id, email', errors, 'Subscriber');
+    if (newSubs.length) done.push(`📧 ${newSubs.length} new mailing-list subscriber${newSubs.length === 1 ? '' : 's'}`);
+
+    // 7) segments — per-event + brand for every subscribed attendee
+    const subId = new Map();
+    for (const s of db.subscribers) if (s.status === 'subscribed' && s.email) subId.set(s.email.toLowerCase(), s.id);
+    for (const s of newSubs) subId.set((s.email || '').toLowerCase(), s.id);
+    const haveSeg = new Set(db.segments.map((r) => r.subscriber_id + '|' + r.segment));
+    const segRows = [];
+    for (const email of plan.segmentEmails) {
+      const sid = subId.get(email); if (!sid) continue;
+      for (const seg of [plan.eventSeg, plan.brandSeg]) {
+        if (haveSeg.has(sid + '|' + seg)) continue;
+        haveSeg.add(sid + '|' + seg); segRows.push({ subscriber_id: sid, segment: seg });
+      }
+    }
+    const segIns = await impInsert('subscriber_segments', segRows, 'id', errors, 'Segment');
+    if (segIns.length) done.push(`🏷 ${segIns.length} segment tag${segIns.length === 1 ? '' : 's'} added ("${plan.eventSeg}" + "${plan.brandSeg}")`);
+
+    if (!done.length) done.push('Nothing new — everything in these files was already imported.');
+    hubImportReport(plan, done, errors);
+    await hubLoadCounts(); renderHubSecNav();
+    toast(errors.length ? `Import finished with ${errors.length} error${errors.length === 1 ? '' : 's'} — see report` : 'Import complete', errors.length ? 'err' : 'ok');
+  } catch (err) {
+    errors.push(err.message || String(err));
+    $('impReport').innerHTML = `<div class="panel-state err">Import failed: ${escapeHtml(err.message || String(err))}</div>`;
+    toast('Import failed: ' + (err.message || err), 'err');
+  } finally {
+    imp.running = false;
+    say('');
+    hubImportStagedRender();
+  }
+}
+
+function hubImportReport(plan, done, errors) {
+  const rep = plan.report;
+  const li = (arr, ico) => arr.map((x) => `<div class="hub-li"><div class="li-main">${ico} ${escapeHtml(typeof x === 'string' ? x : '')}</div></div>`).join('');
+  const sec = (title, inner) => inner ? `<div class="hub-sec-bar" style="margin-top:12px;"><h3>${title}</h3></div><div class="hub-list">${inner}</div>` : '';
+  const filesHtml = rep.detected.map((d) => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(d.file)}</strong> <span class="role-chip" style="cursor:default;">${TYPE_LABELS[d.type]}</span> <span class="li-sub">· ${d.rows} rows</span></div></div>`).join('')
+    + rep.unknownFiles.map((f) => `<div class="hub-li"><div class="li-main" style="color:#ff5ca8;">⚠ ${escapeHtml(f)} — not recognized, skipped</div></div>`).join('');
+  const dedupeHtml = rep.dedupes.map((d) => `<div class="hub-li"><div class="li-main">🔀 <strong>${escapeHtml(d.name)}</strong> = ${escapeHtml(d.matchedTo)} <span class="li-sub">· matched by ${escapeHtml(d.via)} — not double-counted</span></div></div>`).join('');
+  $('impReport').innerHTML =
+    sec('Files read', filesHtml)
+    + sec('Done', li(done, '') + rep.planned.map((p) => `<div class="hub-li"><div class="li-sub" style="padding:2px 0;">${escapeHtml(p)}</div></div>`).join(''))
+    + sec('De-duplicated across sources — review', dedupeHtml)
+    + sec('Flagged for you', li(rep.flags, '⚑') + li(rep.skips, '↷'))
+    + sec(errors.length ? '⚠ Errors' : '', errors.map((e) => `<div class="hub-li"><div class="li-main" style="color:#ff5ca8;">✖ ${escapeHtml(e)}</div></div>`).join(''))
+    + `<div class="kpi-hint" style="margin-top:10px;">Re-running the same files is safe — every write checks what's already there. Refresh the tab to see the updated customer list.</div>`;
 }
 
 // ---- Section: Files (unified document hub — doc-type "buckets" + vendor) ----
@@ -6134,6 +6358,7 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
   const ep = e.target.closest('[data-hub-email-person]'); if (ep) { hubEmailPeople(ep.dataset.hubEmailPerson); return; }
   if (e.target.closest('[data-hub-email-people]')) { hubEmailPeople(); return; }
+  if (e.target.closest('[data-hub-copy-emails]')) { hubCopyPeopleEmails(); return; }
   const gld = e.target.closest('[data-gl-del]'); if (gld) { hubDelGuestList(gld.dataset.glDel); return; }
   const act = e.target.closest('[data-hub-action]'); if (act) { const fn = HUB_ACTIONS[act.dataset.hubAction]; if (fn) fn(act); return; }
   const f2e = e.target.closest('[data-hub-fee2exp]'); if (f2e) { hubFeeToExpense(f2e.dataset.hubFee2exp); return; }
@@ -7235,9 +7460,10 @@ function renderArtists() {
   const totFees = s.rows.reduce((t, a) => t + a.fees, 0), totGigs = s.rows.reduce((t, a) => t + a.gigs, 0);
   const card = (l, v) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div></div>`;
   const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
-  const th = ARTIST_COLS.map(([key, lbl]) => `<th data-asort2="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
+  const th = '<th style="width:28px;"></th>' + ARTIST_COLS.map(([key, lbl]) => `<th data-asort2="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
   const chip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
   const rows = list.map(a => `<tr data-artist="${escapeHtml(a.id)}" style="cursor:pointer;">
+    <td><input type="checkbox" data-asel="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name || '')}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${a.email ? 'select to email / copy' : 'no email on file'}"></td>
     <td><strong>${escapeHtml(a.display_name)}</strong></td>
     <td>${a.public_profile ? '<span class="badge badge-public">🌐 Live</span>' : '<span class="badge badge-hidden">Hidden</span>'}</td>
     <td>${a.roles.map(chip).join(' ')}</td>
@@ -7245,11 +7471,13 @@ function renderArtists() {
     <td class="num">${a.fees ? money(a.fees) : muted}</td>
     <td>${a.lastGig ? escapeHtml(fmtDate(a.lastGig)) : muted}</td>
     <td class="truncate">${escapeHtml(a.email || a.instagram || a.phone || '') || muted}</td>
-  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
   $('artistsBody').innerHTML = `
     <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('On collective', fmtNum(s.rows.filter(a => a.public_profile).length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
       <input class="modal-input" data-artistq placeholder="Search artist / role…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <button type="button" class="hub-mini" data-artists-email title="Email everyone ticked">✉ Email selected</button>
+      <button type="button" class="hub-mini" data-artists-copy title="Copy email addresses — ticked artists, or all of them if none ticked. Paste into Google Drive sharing.">⧉ Copy emails</button>
       <button type="button" class="hub-btn" data-new-artist>＋ New artist</button>
     </div>
     <table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>
@@ -7416,9 +7644,27 @@ async function sendArtistEditLink(id) {
 $('panel-artists').addEventListener('input', (e) => { const q = e.target.closest('[data-artistq]'); if (q) { artistState.q = q.value; renderArtists(); } });
 $('panel-artists').addEventListener('click', (e) => {
   if (e.target.closest('[data-new-artist]')) { openNewArtist(); return; }
+  if (e.target.closest('[data-artists-email]')) { artistsEmailSelected(); return; }
+  if (e.target.closest('[data-artists-copy]')) { artistsCopyEmails(); return; }
+  if (e.target.closest('[data-asel]')) return; // ticking a checkbox shouldn't open the profile
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
   const row = e.target.closest('[data-artist]'); if (row) openArtistProfile(row.dataset.artist);
 });
+function artistsSelected() {
+  return [...$('artistsBody').querySelectorAll('[data-asel]:checked')].map((c) => ({ actor_id: c.dataset.asel, name: c.dataset.name, email: c.dataset.email }));
+}
+function artistsEmailSelected() {
+  const all = artistsSelected();
+  const recips = all.filter((r) => r.email);
+  if (!recips.length) { toast(all.length ? `None of the ${all.length} ticked artists have an email on file — add one via their profile` : 'Tick artists first', 'err'); return; }
+  if (all.length - recips.length) toast(`${all.length - recips.length} skipped (no email on file)`, 'ok');
+  openCompose(recips, { source: 'Artists', source_kind: recips.length === 1 ? 'actor' : null, source_id: recips.length === 1 ? recips[0].actor_id : null });
+}
+function artistsCopyEmails() {
+  const picked = artistsSelected().map((r) => r.email).filter(Boolean);
+  if (picked.length) return copyEmailList(picked, 'selected');
+  copyEmailList(artistState.rows.map((a) => a.email), 'all artists');
+}
 // Copy / email the self-service update + intake links (delegated; modal lives in kpiModal).
 document.addEventListener('click', async (e) => {
   const cp = e.target.closest('[data-ap-copy]');
@@ -9133,7 +9379,7 @@ async function openCompose(recipients, ctx) {
   openKpi('Email ' + (valid.length > 1 ? valid.length + ' recipients' : (valid[0].name || valid[0].email || '')), ctx.source ? ('From: ' + ctx.source) : '',
     `<div class="modal-form-row"><label class="modal-label">To</label><div style="display:flex;flex-wrap:wrap;gap:4px;">${chips}</div></div>
      <div class="modal-form-row"><label class="modal-label">Subject *</label><input class="modal-input" id="cmpSubj" placeholder="Subject"></div>
-     <div class="kpi-hint" style="margin:-4px 0 8px;max-width:60ch;">“[${escapeHtml(ctx.source || 'Come With')}]” is added to the subject so you can tell where it came from, and a link back to this page is added to the email body.</div>
+     <div class="kpi-hint" style="margin:-4px 0 8px;max-width:60ch;">“[${escapeHtml(ctx.source || 'Come With')}]” is added to the subject so you can tell where it came from${ctx.source_kind === 'event_people' ? '' : ', and a link back to this page is added to the email body'}.</div>
      <div class="modal-form-row"><label class="modal-label">Message</label><textarea class="modal-textarea" id="cmpBody" rows="7" placeholder="Write your message…"></textarea></div>
      <div class="modal-form-row"><label class="modal-label">Who can see this thread</label>
        <select class="modal-select" id="cmpVis"><option value="team">Whole team</option><option value="restricted">Only me + selected people</option></select></div>

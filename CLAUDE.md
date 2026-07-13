@@ -37,6 +37,19 @@ MUST write `series = 'Come With Parties'` for parties and `series = 'Dance Infus
 for DI events, or those KPIs read empty. `'Come With Production'` is services, not
 parties.
 
+## Mailing segments (brand delineation)
+
+Two-level segments on `subscriber_segments`, established 2026-07-13:
+- **Brand rollups** (what campaigns target): `come_with`, `dance_infusion`.
+  A subscriber can hold both. Unsubscribe stays **global** (one master list).
+- **Per-event segments** (cohort history): the event slug or event code,
+  e.g. `come-with-7-11`, `di-02-2026-05`.
+
+Every event import MUST add BOTH the event segment AND the matching brand
+segment. Public signup widgets pass the brand segment (`come_with` on the
+homepage; DI pages must pass `dance_infusion`). Never re-subscribe an
+unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
+
 ## Scope
 
 - This codebase is **Come With only**. Do **not** add anything Come With Fitness
