@@ -87,6 +87,10 @@ const files = [
   eq('KRNeY (guest list) scanned', gAtt('KRNeY'), true);
   eq('Marlo (Partiful) unknown', gAtt('Marlo'), undefined);
   eq('geaAttended update list covers everyone determinable', plan.geaAttended.length, 42);
+  // Admissions reconcile with the door count: parties roll up (Lunaera ×6, Liz ×2).
+  eq('scanned admissions sum = 27 (the door count)', plan.geaAttended.reduce((s, a) => s + (a.scans || 0), 0), 27);
+  eq('Lunaera party admissions', plan.gea.find(g => g.name === 'Lunaera')?.scan_count, 6);
+  eq('Liz two barcodes scanned', plan.gea.find(g => g.name === 'Liz McQuillan')?.scan_count, 2);
 }
 
 // ---- prod-like state: consent + existing-customer linking ----

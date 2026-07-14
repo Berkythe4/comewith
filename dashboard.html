@@ -2171,8 +2171,13 @@ document.addEventListener('click', (e) => {
 });
 
 // ---- Auth state ----
+let renderedUserId; // last user the dashboard was BUILT for (undefined = never)
 async function renderForSession(session) {
-  if (!session) { showLogin(); return; }
+  if (!session) { renderedUserId = null; showLogin(); return; }
+  // Same user already rendered → no-op. onAuthStateChange fires TOKEN_REFRESHED
+  // whenever a backgrounded window regains focus; rebuilding the nav + tab here
+  // yanked people out of whatever they had open (e.g. an event hub).
+  if (session.user.id === renderedUserId) return;
 
   // Fetch profile to get role + display name. The "Users can read own profile"
   // RLS policy lets the signed-in user select their own profile.
@@ -2188,6 +2193,7 @@ async function renderForSession(session) {
     return;
   }
 
+  renderedUserId = session.user.id; // only after a successful profile fetch, so errors can retry
   ME.id = session.user.id;
   ME.role = profile.role;
   ME.staff_role = profile.staff_role;
@@ -5288,7 +5294,7 @@ async function hubSecCustomers() {
     sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email)').eq('event_id', id),
     sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
-    sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, attended, guest:guests(id, full_name, email)').eq('event_id', id),
+    sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, attended, scan_count, guest:guests(id, full_name, email)').eq('event_id', id),
     sb.from('v_event_summary').select('ticket_revenue, tickets_sold, third_party_donations, sponsor_cash, sponsor_in_kind, revenue, expenses, net').eq('event_id', id).maybeSingle(),
     sb.from('guest_event_attendance').select('id, guest:guests(full_name, email)').eq('event_id', id).eq('source', 'guestlist').order('created_at'),
     sb.from('ticketing').select('guest_id').eq('event_id', id).eq('attended', true),
@@ -5299,7 +5305,7 @@ async function hubSecCustomers() {
   const rec = (name, email) => {
     const k = norm(name); if (!k) return null;
     let o = map.get(k);
-    if (!o) { o = { name: (name || '').trim(), email: email || '', roles: new Set(), spent: 0, donated: 0, sponsored: 0, fee: 0, tickets: 0, sources: new Set(), scanned: null }; map.set(k, o); }
+    if (!o) { o = { name: (name || '').trim(), email: email || '', roles: new Set(), spent: 0, donated: 0, sponsored: 0, fee: 0, tickets: 0, sources: new Set(), scanned: null, scans: 0, guestIds: new Set() }; map.set(k, o); }
     if (email && !o.email) o.email = email;
     return o;
   };
@@ -5314,6 +5320,8 @@ async function hubSecCustomers() {
     else { o.roles.add('attendee'); o.spent += Number(a.amount_spent || 0); }
     o.tickets += Number(a.quantity || 0); // count tickets/entries for everyone, incl. comps
     if (a.source) o.sources.add(a.source);
+    if (a.guest?.id) o.guestIds.add(a.guest.id);
+    o.scans += Number(a.scan_count || 0); // scanned ADMISSIONS (parties roll up: Lunaera ×6)
     // scanned aggregates across a person's records: any true wins, else explicit false, else unknown
     if (a.attended === true || tkScanned.has(a.guest?.id)) o.scanned = true;
     else if (a.attended === false && o.scanned !== true) o.scanned = false;
@@ -5326,6 +5334,8 @@ async function hubSecCustomers() {
   const has = (r) => (l) => l.roles.has(r);
   const nAtt = list.filter(has('attendee')).length, nDon = list.filter(has('donor')).length, nSpon = list.filter(has('sponsor')).length;
   const nScan = list.filter(o => o.scanned === true).length;
+  // Admissions: scan counts, plus 1 for anyone confirmed attended without a scan.
+  const nScanAdm = list.reduce((s, o) => s + (o.scans || (o.scanned === true ? 1 : 0)), 0);
   const namedTix = list.reduce((s, o) => s + o.tickets, 0);
   // Reconciliation — ties the per-person detail to the event's audited financial totals.
   const f = sum.data;
@@ -5381,8 +5391,8 @@ async function hubSecCustomers() {
   const opt = (v, lbl, cur) => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(lbl)}</option>`;
   $('hubSecBody').innerHTML = impBlock + glBlock + `
     <div class="hub-sec-bar"><h3>Customers</h3>
-      <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · <strong>${nScan} scanned in</strong> · ${nAtt} attendees · ${nDon} donors · ${nSpon} sponsors</span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name. Scanned = walked in per RA scan data (✗ = on a list but never scanned, — = no check-in data, e.g. Partiful). Click a column to sort; filters combine.</div>
+      <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · <strong>${nScanAdm} admissions scanned in</strong>${nScanAdm !== nScan ? ` (${nScan} records)` : ''} · ${nAtt} attendees · ${nDon} donors · ${nSpon} sponsors</span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name. Scanned = walked in per RA scan data (×N = a party's admissions on one record; ✓* = confirmed attended with no scan; ✗ = listed but never scanned; — = no check-in data, e.g. Partiful). <strong>Click a ✗ or — to confirm someone attended</strong>; click a ✓* to undo. Click a column to sort; filters combine.</div>
     ${recon}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <input class="modal-input" id="custQ" placeholder="Search name / email…" style="max-width:220px;" value="${escapeHtml(custState.q)}">
@@ -5396,6 +5406,8 @@ async function hubSecCustomers() {
   for (const [id2, key] of [['custRole', 'role'], ['custSrc', 'source'], ['custScan', 'scanned']])
     $(id2).addEventListener('change', () => { custState[key] = $(id2).value; renderCustGrid(); });
   $('custGrid').addEventListener('click', (e) => {
+    const att = e.target.closest('[data-cust-att]');
+    if (att) { const [gids, mode] = att.dataset.custAtt.split(':'); hubCustConfirmAttended(gids.split(','), mode === 'on'); return; }
     const th = e.target.closest('[data-csort]'); if (!th) return;
     const k = th.dataset.csort;
     if (custState.sortKey === k) custState.sortDir *= -1;
@@ -5403,6 +5415,25 @@ async function hubSecCustomers() {
     renderCustGrid();
   });
   hubImportWire();
+}
+
+// Manual attendance confirmation: only touches records with no scanned
+// admissions (scan-data records are authoritative and not clickable). Undo
+// restores the pre-confirm state: false where scan data existed, null where not.
+async function hubCustConfirmAttended(guestIds, confirm) {
+  let error;
+  if (confirm) {
+    ({ error } = await sb.from('guest_event_attendance').update({ attended: true })
+      .eq('event_id', hub.eventId).in('guest_id', guestIds).or('scan_count.is.null,scan_count.eq.0'));
+  } else {
+    ({ error } = await sb.from('guest_event_attendance').update({ attended: false })
+      .eq('event_id', hub.eventId).in('guest_id', guestIds).eq('scan_count', 0));
+    if (!error) ({ error } = await sb.from('guest_event_attendance').update({ attended: null })
+      .eq('event_id', hub.eventId).in('guest_id', guestIds).is('scan_count', null));
+  }
+  if (error) { toast(error.message, 'err'); return; }
+  toast(confirm ? 'Confirmed attended (no scan)' : 'Confirmation removed', 'ok');
+  hubGoSection('customers');
 }
 
 // Customers table state + renderer (filter/sort client-side over hub.custList).
@@ -5417,7 +5448,7 @@ function renderCustGrid() {
     && (s.source === 'all' || o.sources.has(s.source))
     && (s.scanned === 'all' || (s.scanned === 'yes' ? o.scanned === true : s.scanned === 'no' ? o.scanned === false : o.scanned == null)));
   const val = (o, k) => k === 'roles' ? [...o.roles].sort().join(',') : k === 'sources' ? [...o.sources].sort().join(',')
-    : k === 'scanned' ? (o.scanned === true ? 2 : o.scanned === false ? 1 : 0) : o[k];
+    : k === 'scanned' ? (o.scanned === true ? 2 + (o.scans || 0) : o.scanned === false ? 1 : 0) : o[k];
   list = [...list].sort((a, b) => {
     let av = val(a, s.sortKey), bv = val(b, s.sortKey);
     if (typeof av === 'number' || typeof bv === 'number') return ((av || 0) - (bv || 0)) * s.sortDir;
@@ -5433,8 +5464,14 @@ function renderCustGrid() {
     if (o.fee) return `${money(o.fee)} <span class="li-sub">paid (fee)</span>`;
     return muted;
   };
-  const scanCell = (o) => o.scanned === true ? '<span style="color:#8FB339;font-weight:700;">✓ scanned in</span>'
-    : o.scanned === false ? '<span class="li-sub">✗ not scanned</span>' : '<span class="muted">—</span>';
+  const scanCell = (o) => {
+    const gids = [...o.guestIds].join(',');
+    if (o.scans > 0) return `<span style="color:#8FB339;font-weight:700;">✓ scanned in${o.scans > 1 ? ' ×' + o.scans : ''}</span>`;
+    if (o.scanned === true) return `<span data-cust-att="${escapeHtml(gids)}:off" style="color:#8FB339;font-weight:700;cursor:pointer;" title="Confirmed attended — no scan on record. Click to undo.">✓ attended*</span>`;
+    if (!gids) return '<span class="muted">—</span>';
+    if (o.scanned === false) return `<span data-cust-att="${escapeHtml(gids)}:on" class="li-sub" style="cursor:pointer;" title="Never scanned. Click to confirm they attended anyway.">✗ not scanned</span>`;
+    return `<span data-cust-att="${escapeHtml(gids)}:on" class="muted" style="cursor:pointer;" title="No check-in data. Click to confirm they attended.">—</span>`;
+  };
   const rows = list.map(o => `<tr>
     <td><strong>${escapeHtml(o.name)}</strong>${o.email ? `<div class="li-sub">${escapeHtml(o.email)}</div>` : ''}</td>
     <td>${[...o.roles].sort().map(roleChip).join(' ') || muted}</td>
@@ -5687,21 +5724,24 @@ async function hubRunImport() {
 
     // 2) attendance links
     say('Linking attendance…');
-    const geaRows = plan.gea.map((o) => ({ event_id: ev.id, guest_id: rid(o), amount_spent: o.amount_spent, ticket_type: o.ticket_type, quantity: o.quantity, source: o.source, purchased_at: o.purchased_at || null, attended: o.attended ?? null })).filter((r) => r.guest_id);
+    const geaRows = plan.gea.map((o) => ({ event_id: ev.id, guest_id: rid(o), amount_spent: o.amount_spent, ticket_type: o.ticket_type, quantity: o.quantity, source: o.source, purchased_at: o.purchased_at || null, attended: o.attended ?? null, scan_count: o.scan_count ?? null })).filter((r) => r.guest_id);
     const geaIns = await impInsert('guest_event_attendance', geaRows, 'id', errors, 'Attendance link');
     if (geaIns.length) done.push(`🔗 ${geaIns.length} attendance link${geaIns.length === 1 ? '' : 's'} added`);
 
-    // Person-level scanned-in flags (covers pre-existing links too, e.g. the guest list)
-    const attTrue = [], attFalse = [];
-    for (const a of plan.geaAttended) { const gid = a.guestId || keyToId.get(a.guestKey); if (gid) (a.attended ? attTrue : attFalse).push(gid); }
-    for (const [list, val] of [[attTrue, true], [attFalse, false]]) {
-      for (let i = 0; i < list.length; i += 100) {
-        const { error } = await sb.from('guest_event_attendance').update({ attended: val })
-          .eq('event_id', ev.id).in('guest_id', list.slice(i, i + 100));
+    // Person-level scanned-in flags + admission counts (covers pre-existing links
+    // too, e.g. the guest list). Grouped by scan count so parties update correctly.
+    const byScans = new Map();
+    for (const a of plan.geaAttended) { const gid = a.guestId || keyToId.get(a.guestKey); if (gid) { if (!byScans.has(a.scans)) byScans.set(a.scans, []); byScans.get(a.scans).push(gid); } }
+    let admissions = 0, scannedPeople = 0, neverScanned = 0;
+    for (const [scans, gids] of byScans) {
+      if (scans > 0) { admissions += scans * gids.length; scannedPeople += gids.length; } else neverScanned += gids.length;
+      for (let i = 0; i < gids.length; i += 100) {
+        const { error } = await sb.from('guest_event_attendance').update({ attended: scans > 0, scan_count: scans })
+          .eq('event_id', ev.id).in('guest_id', gids.slice(i, i + 100));
         if (error) errors.push('Scanned-in flags: ' + error.message);
       }
     }
-    if (attTrue.length) done.push(`🚪 ${attTrue.length} ${attTrue.length === 1 ? 'person' : 'people'} marked scanned in (${attFalse.length} listed but never scanned)`);
+    if (scannedPeople) done.push(`🚪 ${admissions} admissions scanned across ${scannedPeople} ${scannedPeople === 1 ? 'record' : 'records'} (${neverScanned} listed but never scanned)`);
 
     // 3) tickets
     say('Recording tickets…');

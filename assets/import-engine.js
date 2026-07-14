@@ -281,16 +281,18 @@ export function buildImportPlan({ files, event, db, hostNames = [] }) {
       if (guestsByName.has(nn)) return guestsByName.get(nn).id;
       return newGuestByName.get(nn) || null;
     };
+    // Count scanned ADMISSIONS per person (a party's barcodes roll up onto one
+    // record — 0 means scan data covered them but nobody scanned in).
     const att = new Map();
     for (const [bc, s] of scanRows) {
       const k = resolveScanRef(bc, s);
-      if (k) att.set(k, (att.get(k) || false) || s.count > 0);
+      if (k) att.set(k, (att.get(k) || 0) + (s.count > 0 ? 1 : 0));
     }
-    for (const [k, val] of att)
-      plan.geaAttended.push(k.startsWith('e:') || k.startsWith('n:') ? { guestKey: k, attended: val } : { guestId: k, attended: val });
+    for (const [k, scans] of att)
+      plan.geaAttended.push(k.startsWith('e:') || k.startsWith('n:') ? { guestKey: k, attended: scans > 0, scans } : { guestId: k, attended: scans > 0, scans });
     for (const g of plan.gea) {
       const k = g.guestId || g.guestKey;
-      if (att.has(k)) g.attended = att.get(k);
+      if (att.has(k)) { g.attended = att.get(k) > 0; g.scan_count = att.get(k); }
     }
   }
 
