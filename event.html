@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With — Event</title>
+<meta name="description" content="Recap videos and photos from a Come With room.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;--gold:#e9b949}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.6;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  .label{font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1,h2{font-family:'Archivo',sans-serif;font-weight:900;line-height:.98;letter-spacing:-.02em;text-transform:uppercase}
+  nav{position:sticky;top:0;z-index:50;background:rgba(20,10,23,.82);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:64px}
+  .brand{font-family:'Archivo';font-weight:900;font-size:1.15rem}.brand b{color:var(--lime)}
+  .back{font-family:'DM Mono';font-size:.78rem;letter-spacing:.05em;color:var(--dim)}
+  .back:hover{color:var(--cream)}
+  header.evhead{padding:56px 0 30px;background:radial-gradient(800px 420px at 80% -10%,rgba(167,224,46,.14),transparent 60%),radial-gradient(600px 420px at 10% 110%,rgba(255,92,168,.12),transparent 60%)}
+  header.evhead h1{font-size:clamp(2rem,7vw,4.4rem);margin:14px 0 10px}
+  .meta{font-family:'DM Mono';color:var(--dim);font-size:.88rem}
+  .blurb{color:var(--dim);max-width:64ch;margin-top:14px;font-size:1.05rem}
+  section{padding:36px 0}
+  .sechead{margin-bottom:18px}
+  .sechead h2{font-size:clamp(1.3rem,3vw,1.9rem)}
+  .vids{display:grid;gap:18px;grid-template-columns:repeat(auto-fit,minmax(300px,1fr))}
+  .vid{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel)}
+  .vid .frame{position:relative;padding-top:56.25%}
+  .vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+  .vid.sc .frame{padding-top:166px}
+  .vid .cap{padding:10px 14px;font-family:'DM Mono';font-size:.78rem;color:var(--dim)}
+  .grid{display:grid;gap:10px;grid-template-columns:repeat(auto-fill,minmax(180px,1fr))}
+  .grid a{display:block;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--panel);aspect-ratio:1/1}
+  .grid img{width:100%;height:100%;object-fit:cover;display:block;transition:.2s}
+  .grid a:hover img{transform:scale(1.04)}
+  .empty{color:var(--dim);border:1px dashed var(--line);border-radius:14px;padding:26px;text-align:center;font-family:'DM Mono';font-size:.85rem}
+  #lb{position:fixed;inset:0;background:rgba(10,5,12,.94);display:none;align-items:center;justify-content:center;z-index:100;flex-direction:column;gap:12px;padding:20px}
+  #lb.show{display:flex}
+  #lb img{max-width:min(96vw,1400px);max-height:82vh;border-radius:10px}
+  #lb .cap{font-family:'DM Mono';font-size:.82rem;color:var(--dim);max-width:80ch;text-align:center}
+  #lb .bar{display:flex;gap:14px;align-items:center}
+  #lb button{background:none;border:1.5px solid var(--line);color:var(--cream);border-radius:999px;font-family:'DM Mono';font-size:.9rem;padding:8px 18px;cursor:pointer}
+  #lb button:hover{border-color:var(--lime)}
+  footer{border-top:1px solid var(--line);padding:34px 0;color:var(--dim);font-family:'DM Mono';font-size:.78rem}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="brand" href="index.html">COME<b>WITH</b></a>
+  <a class="back" href="index.html#rooms">← All rooms</a>
+</div></nav>
+
+<header class="evhead"><div class="wrap">
+  <div class="label" id="evTag">The archive</div>
+  <h1 id="evName">Loading…</h1>
+  <div class="meta" id="evMeta"></div>
+  <div class="blurb" id="evBlurb" hidden></div>
+</div></header>
+
+<section id="secVids" hidden><div class="wrap">
+  <div class="sechead"><div class="label">Linked content</div><h2>Watch &amp; listen</h2></div>
+  <div class="vids" id="vids"></div>
+</div></section>
+
+<section id="secPhotos" hidden><div class="wrap">
+  <div class="sechead"><div class="label">The room</div><h2>Photos</h2></div>
+  <div class="grid" id="photos"></div>
+</div></section>
+
+<section id="secEmpty" hidden><div class="wrap">
+  <div class="empty" id="emptyMsg">Nothing here yet — check back soon.</div>
+</div></section>
+
+<div id="lb" role="dialog" aria-modal="true">
+  <img id="lbImg" alt="">
+  <div class="cap" id="lbCap"></div>
+  <div class="bar">
+    <button id="lbPrev" aria-label="Previous">←</button>
+    <button id="lbClose" aria-label="Close">✕ close</button>
+    <button id="lbNext" aria-label="Next">→</button>
+  </div>
+</div>
+
+<footer><div class="wrap">© Come With · Brooklyn, NY · <a href="index.html" style="color:var(--lime)">comewith.org</a></div></footer>
+
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',CWH={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
+const PHOTO=CWURL+'/storage/v1/object/public/event-photos/';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path){try{const r=await fetch(CWURL+'/rest/v1/'+path,{headers:CWH});return r.ok?await r.json():[];}catch(_){return[];}}
+function fmtDate(d){if(!d)return'';const t=new Date(d+'T12:00:00');return t.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',year:'numeric'});}
+function ytId(u){const m=String(u||'').match(/(?:youtu\.be\/|v=|\/embed\/|\/shorts\/)([\w-]{11})/);return m?m[1]:null;}
+function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=false&show_teaser=false';}
+function recapVids(e){let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}
+  if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:'Event recap'}];
+  return a.filter(v=>v&&(ytId(v.url)||/soundcloud\.com|snd\.sc/i.test(v.url||'')));}
+
+let PHOTOS=[],LBI=0;
+function openLb(i){LBI=(i+PHOTOS.length)%PHOTOS.length;const p=PHOTOS[LBI];
+  $('#lbImg').src=PHOTO+p.storage_path;$('#lbCap').textContent=p.caption||'';$('#lb').classList.add('show');}
+function closeLb(){$('#lb').classList.remove('show');$('#lbImg').src='';}
+$('#lbClose').addEventListener('click',closeLb);
+$('#lbPrev').addEventListener('click',()=>openLb(LBI-1));
+$('#lbNext').addEventListener('click',()=>openLb(LBI+1));
+$('#lb').addEventListener('click',e=>{if(e.target.id==='lb')closeLb();});
+document.addEventListener('keydown',e=>{if(!$('#lb').classList.contains('show'))return;
+  if(e.key==='Escape')closeLb();if(e.key==='ArrowLeft')openLb(LBI-1);if(e.key==='ArrowRight')openLb(LBI+1);});
+
+async function load(){
+  const id=new URLSearchParams(location.search).get('id');
+  if(!id){$('#evName').textContent='Event not found';return;}
+  const [evs,photos]=await Promise.all([
+    api('v_public_recap?id=eq.'+encodeURIComponent(id)+'&select=*'),
+    api('v_public_event_photos?event_id=eq.'+encodeURIComponent(id)+'&select=*&order=sort_order.asc'),
+  ]);
+  const e=evs[0];
+  if(!e){$('#evName').textContent='Event not found';$('#evMeta').textContent='This room isn’t in the public archive.';return;}
+  document.title='Come With — '+e.name;
+  const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+  $('#evTag').textContent=benefit?'Benefit · MS Society':(e.series||'The archive');
+  $('#evName').textContent=e.name;
+  $('#evMeta').textContent=fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'');
+  if(e.recap_blurb){const b=$('#evBlurb');b.textContent=e.recap_blurb;b.hidden=false;}
+  // Linked content up top — YouTube embeds (free egress) + SoundCloud players.
+  const vids=recapVids(e);
+  if(vids.length){
+    $('#vids').innerHTML=vids.map(v=>{const y=ytId(v.url);
+      if(y)return '<div class="vid"><div class="frame"><iframe loading="lazy" src="https://www.youtube.com/embed/'+y+'?rel=0" title="'+esc(v.label||'Recap')+'" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>'+(v.label?'<div class="cap">▶ '+esc(v.label)+'</div>':'')+'</div>';
+      return '<div class="vid sc"><div class="frame"><iframe loading="lazy" src="'+esc(scEmbed(v.url))+'" title="'+esc(v.label||'Listen')+'"></iframe></div>'+(v.label?'<div class="cap">♪ '+esc(v.label)+'</div>':'')+'</div>';
+    }).join('');
+    $('#secVids').hidden=false;
+  }
+  // Photos below — grid serves the small thumbs; the lightbox loads full size.
+  PHOTOS=photos;
+  if(photos.length){
+    $('#photos').innerHTML=photos.map((p,i)=>'<a href="#" data-i="'+i+'" aria-label="'+esc(p.caption||'Photo '+(i+1))+'"><img loading="lazy" src="'+PHOTO+esc(p.thumb_path||p.storage_path)+'" alt="'+esc(p.caption||'')+'"></a>').join('');
+    $('#photos').addEventListener('click',ev=>{const a=ev.target.closest('[data-i]');if(a){ev.preventDefault();openLb(Number(a.dataset.i));}});
+    $('#secPhotos').hidden=false;
+  }
+  if(!vids.length&&!photos.length)$('#secEmpty').hidden=false;
+}
+load();
+</script>
+</body>
+</html>

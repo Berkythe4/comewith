@@ -4818,7 +4818,7 @@ const hub = { eventId: null, section: 'overview', event: null, actors: null, cou
               people: [], tasks: [], equipment: [], contracts: [], files: [] };
 const HUB_SECTIONS = [
   ['overview', 'Overview'], ['people', 'People'], ['customers', 'Customers'], ['tasks', 'Tasks'],
-  ['money', 'Money'], ['equipment', 'Equipment'], ['files', 'Files'],
+  ['money', 'Money'], ['equipment', 'Equipment'], ['photos', 'Photos'], ['files', 'Files'],
 ];
 const STAGES = ['idea', 'planning', 'confirmed', 'live', 'wrapped', 'reported'];
 
@@ -4863,16 +4863,17 @@ async function hubLoadCounts() {
   // and their counterparties under Customers. Pull them once to fold into both counts.
   const { data: ctr } = await sb.from('contracts').select('id, document_id').eq('event_id', id);
   hub.contractDocCount = (ctr || []).filter(c => c.document_id).length;
-  const [pp, tt, eq, ff, gea] = await Promise.all([
+  const [pp, tt, eq, ff, gea, ph] = await Promise.all([
     sb.from('event_participants').select('id', { count: 'exact', head: true }).eq('event_id', id),
     sb.from('tasks').select('id', { count: 'exact', head: true }).eq('event_id', id).is('deleted_at', null),
     sb.from('equipment_usage').select('id', { count: 'exact', head: true }).eq('event_id', id),
     sb.from('files').select('id', { count: 'exact', head: true }).eq('subject_type', 'event').eq('subject_id', id),
     sb.from('guest_event_attendance').select('guest_id', { count: 'exact', head: true }).eq('event_id', id),
+    sb.from('event_photos').select('id', { count: 'exact', head: true }).eq('event_id', id),
   ]);
   hub.counts = {
     people: pp.count ?? 0, tasks: tt.count ?? 0, equipment: eq.count ?? 0,
-    files: (ff.count ?? 0) + hub.contractDocCount,
+    files: (ff.count ?? 0) + hub.contractDocCount, photos: ph.count ?? 0,
     // Customers is a deduped union — refined to the exact distinct count when the tab opens.
     customers: (gea.count ?? 0) || (pp.count ?? 0),
   };
@@ -4931,7 +4932,7 @@ async function hubGoSection(name) {
   for (const b of $('hubSecNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.hubSec === name);
   $('hubSecBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading…</div>';
   const fn = { overview: hubSecOverview, people: hubSecPeople, customers: hubSecCustomers, tasks: hubSecTasks,
-               money: hubSecMoney, equipment: hubSecEquipment, files: hubSecFiles }[name];
+               money: hubSecMoney, equipment: hubSecEquipment, photos: hubSecPhotos, files: hubSecFiles }[name];
   try { await fn(); } catch (err) { $('hubSecBody').innerHTML = `<div class="panel-state err">${escapeHtml(err.message || String(err))}</div>`; }
 }
 
@@ -5715,6 +5716,115 @@ function hubImportReport(plan, done, errors) {
     + sec('Flagged for you', li(rep.flags, '⚑') + li(rep.skips, '↷'))
     + sec(errors.length ? '⚠ Errors' : '', errors.map((e) => `<div class="hub-li"><div class="li-main" style="color:#ff5ca8;">✖ ${escapeHtml(e)}</div></div>`).join(''))
     + `<div class="kpi-hint" style="margin-top:10px;">Re-running the same files is safe — every write checks what's already there. Refresh the tab to see the updated customer list.</div>`;
+}
+
+// ---- Section: Photos (event gallery → shown on the public event.html page) ----
+// Files live in the PUBLIC event-photos bucket. Two sizes per photo are made
+// client-side (downscaleImage): ~1600px full + ~480px grid thumb — the public
+// gallery serves thumbs so egress stays inside the Supabase Free plan.
+const PHOTO_BASE = SUPABASE_URL + '/storage/v1/object/public/event-photos/';
+async function hubSecPhotos() {
+  const { data, error } = await sb.from('event_photos')
+    .select('id, storage_path, thumb_path, caption, sort_order, is_public')
+    .eq('event_id', hub.eventId).order('sort_order').order('created_at');
+  if (error) throw error;
+  hub.photos = data || [];
+  hub.counts.photos = hub.photos.length; renderHubSecNav();
+  const cards = hub.photos.map((p, i) => `
+    <div class="hub-card" style="padding:10px;width:200px;">
+      <img src="${PHOTO_BASE}${escapeHtml(p.thumb_path || p.storage_path)}" loading="lazy" alt=""
+        style="width:100%;height:120px;object-fit:cover;border-radius:8px;display:block;margin-bottom:8px;">
+      <input class="modal-input" data-ph-cap="${escapeHtml(p.id)}" placeholder="Caption (optional)" value="${escapeHtml(p.caption || '')}" style="margin-bottom:6px;font-size:.85em;">
+      <div style="display:flex;gap:6px;align-items:center;">
+        <label style="display:flex;gap:5px;align-items:center;cursor:pointer;font-size:.8em;" title="Show in the public gallery"><input type="checkbox" data-ph-pub="${escapeHtml(p.id)}"${p.is_public ? ' checked' : ''} style="width:auto;margin:0;"> on site</label>
+        <span style="flex:1"></span>
+        ${i > 0 ? `<button class="hub-mini" data-ph-move="${escapeHtml(p.id)}:-1" title="Move earlier">↑</button>` : ''}
+        ${i < hub.photos.length - 1 ? `<button class="hub-mini" data-ph-move="${escapeHtml(p.id)}:1" title="Move later">↓</button>` : ''}
+        <button class="hub-mini danger" data-ph-del="${escapeHtml(p.id)}" title="Delete photo + its files">✕</button>
+      </div>
+    </div>`).join('');
+  $('hubSecBody').innerHTML = `
+    <div class="hub-sec-bar"><h3>Photos</h3>
+      <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page</span></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">Drop event photos here — each is resized in your browser to a ~1600px full version plus a small grid thumbnail before upload, so the public page stays fast and bandwidth stays cheap. “On site” controls what the gallery lists — but the photo bucket itself is public, so never upload anything sensitive here (documents belong in Files).</div>
+    <div id="phDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drag &amp; drop photos here — or click to browse</div>
+    <input type="file" id="phFile" accept="image/*,.heic,.heif" multiple style="display:none">
+    <div class="li-sub" id="phStatus" style="margin:4px 0 10px;"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;" id="phGrid">${cards || '<div class="hub-empty" style="width:100%;">No photos yet.</div>'}</div>`;
+  hubPhotosWire();
+}
+function hubPhotosWire() {
+  const drop = $('phDrop'), input = $('phFile'), grid = $('phGrid');
+  drop.addEventListener('click', () => input.click());
+  drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent, #5b7fb3)'; });
+  drop.addEventListener('dragleave', () => { drop.style.borderColor = ''; });
+  drop.addEventListener('drop', (e) => { e.preventDefault(); drop.style.borderColor = ''; hubPhotosUpload([...(e.dataTransfer?.files || [])]); });
+  input.addEventListener('change', () => { hubPhotosUpload([...input.files]); input.value = ''; });
+  grid.addEventListener('click', (e) => {
+    const mv = e.target.closest('[data-ph-move]');
+    if (mv) { const [id, dir] = mv.dataset.phMove.split(':'); hubPhotoMove(id, Number(dir)); return; }
+    const del = e.target.closest('[data-ph-del]'); if (del) hubPhotoDel(del.dataset.phDel);
+  });
+  grid.addEventListener('change', (e) => {
+    const pub = e.target.closest('[data-ph-pub]');
+    if (pub) hubPhotoPatch(pub.dataset.phPub, { is_public: pub.checked }, pub.checked ? 'Shown on site' : 'Hidden from site');
+  });
+  grid.addEventListener('focusout', (e) => {
+    const cap = e.target.closest('[data-ph-cap]'); if (!cap) return;
+    const p = hub.photos.find((x) => x.id === cap.dataset.phCap);
+    const val = cap.value.trim() || null;
+    if (p && val !== (p.caption || null)) { p.caption = val; hubPhotoPatch(p.id, { caption: val }, 'Caption saved'); }
+  });
+}
+async function hubPhotosUpload(files) {
+  const imgs = files.filter((f) => (f.type || '').startsWith('image/') || /\.hei[cf]$/i.test(f.name || ''));
+  if (!imgs.length) { toast('Drop image files (JPG / PNG / HEIC)', 'err'); return; }
+  const status = $('phStatus');
+  let done = 0, failed = 0;
+  let sort = hub.photos.length ? Math.max(...hub.photos.map((p) => p.sort_order || 0)) : 0;
+  for (const f of imgs) {
+    if (status) status.textContent = `Uploading ${done + failed + 1} of ${imgs.length}…`;
+    try {
+      const full = await downscaleImage(f, 1600, 0.85);
+      const thumb = await downscaleImage(f, 480, 0.8);
+      const safe = (f.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+      const base = `event/${hub.eventId}/${Date.now()}_${safe}`;
+      const up1 = await sb.storage.from('event-photos').upload(base + '_full.jpg', full, { contentType: full.type || 'image/jpeg' });
+      if (up1.error) throw up1.error;
+      const up2 = await sb.storage.from('event-photos').upload(base + '_thumb.jpg', thumb, { contentType: thumb.type || 'image/jpeg' });
+      const { error: insErr } = await sb.from('event_photos').insert({
+        event_id: hub.eventId, storage_path: base + '_full.jpg',
+        thumb_path: up2.error ? null : base + '_thumb.jpg', sort_order: (sort += 10),
+      });
+      if (insErr) throw insErr;
+      done++;
+    } catch (err) { failed++; console.warn('Photo upload failed:', f.name, err); }
+  }
+  if (status) status.textContent = '';
+  toast(`${done} photo${done === 1 ? '' : 's'} added${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
+  hubGoSection('photos');
+}
+async function hubPhotoPatch(id, patch, okMsg) {
+  const { error } = await sb.from('event_photos').update(patch).eq('id', id);
+  toast(error ? error.message : okMsg, error ? 'err' : 'ok');
+}
+async function hubPhotoMove(id, dir) {
+  const arr = [...hub.photos];
+  const i = arr.findIndex((p) => p.id === id), j = i + dir;
+  if (i < 0 || j < 0 || j >= arr.length) return;
+  [arr[i], arr[j]] = [arr[j], arr[i]];
+  const res = await Promise.all(arr.map((p, k) => sb.from('event_photos').update({ sort_order: (k + 1) * 10 }).eq('id', p.id)));
+  const bad = res.find((r) => r.error);
+  if (bad) toast(bad.error.message, 'err');
+  hubGoSection('photos');
+}
+async function hubPhotoDel(id) {
+  const p = hub.photos.find((x) => x.id === id); if (!p) return;
+  if (!confirm('Delete this photo? The files are removed from storage too.')) return;
+  await sb.storage.from('event-photos').remove([p.storage_path, p.thumb_path].filter(Boolean));
+  const { error } = await sb.from('event_photos').delete().eq('id', id);
+  if (error) { toast(error.message, 'err'); return; }
+  toast('Photo deleted', 'ok'); hubGoSection('photos');
 }
 
 // ---- Section: Files (unified document hub — doc-type "buckets" + vendor) ----

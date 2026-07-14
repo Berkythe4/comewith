@@ -313,6 +313,8 @@ function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
 $('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
 document.addEventListener('click',e=>{const w=e.target.closest('[data-media]');if(w)openMedia(w.dataset.media);});
+// Recent-rooms cards → event page (play/watch chips above keep their lightbox behavior).
+document.addEventListener('click',e=>{if(e.target.closest('[data-media]'))return;const c=e.target.closest('[data-event]');if(c)location.href='event.html?id='+encodeURIComponent(c.dataset.event);});
 function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
   document.querySelectorAll('[data-logo]').forEach(slot=>{
     if(tint==='none'){slot.innerHTML='<img src="'+url+'" alt="Come With" style="height:30px;width:auto">';}
@@ -367,7 +369,10 @@ function recapCard(e){const benefit=/infusion|benefit/i.test((e.series||'')+(e.n
   else if(firstYt){phClass+=' yt';phStyle='style="background-image:url(\'https://img.youtube.com/vi/'+firstYt+'/hqdefault.jpg\')"';}
   const play=firstUrl?'<div class="play" data-media="'+esc(firstUrl)+'"><span>'+(mediaKind(firstUrl)==='soundcloud'?'♪':'▶')+'</span></div>':'';
   const watch=vids.map(v=>{const k=mediaKind(v.url);if(!k)return '';const ico=k==='soundcloud'?'♪':'▶';const def=k==='soundcloud'?'Listen':'Watch the recap';return '<span class="watch" data-media="'+esc(v.url)+'">'+ico+' '+esc(v.label||def)+'</span>';}).join('');
-  return '<article class="recap"><div class="'+phClass+'" '+phStyle+'>'+play+'<span class="t">'+(benefit?'Benefit · MS Society':esc(e.series||'Party'))+'</span></div><div class="bd"><h3>'+esc(e.name)+'</h3><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+(e.recap_blurb?'<div class="blurb">'+esc(e.recap_blurb)+'</div>':'')+watch+'</div></article>';}
+  // Cards with a db id click through to the event page (linked content + photo gallery).
+  const evAttr=e.id?' data-event="'+esc(e.id)+'" style="cursor:pointer" title="Open this room — recap + photos"':'';
+  const more=e.id?'<span class="watch">📸 Photos &amp; more →</span>':'';
+  return '<article class="recap"'+evAttr+'><div class="'+phClass+'" '+phStyle+'>'+play+'<span class="t">'+(benefit?'Benefit · MS Society':esc(e.series||'Party'))+'</span></div><div class="bd"><h3>'+esc(e.name)+'</h3><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+(e.recap_blurb?'<div class="blurb">'+esc(e.recap_blurb)+'</div>':'')+watch+more+'</div></article>';}
 async function loadEvents(){
   const evs=await api('v_public_events?select=*&order=event_date.asc');const up=$('#upcoming');
   if(evs.length){up.innerHTML=evs.map(evCard).join('');const e=evs[0],d=fmtDay(e.event_date);
