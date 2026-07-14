@@ -76,6 +76,17 @@ const files = [
   const dd = plan.report.dedupes.map(d => d.name.split(' (')[0]).sort();
   eq('Partiful dedupes vs RA', dd, ['Kyle', 'Lila', 'Liz McQuillan', 'Marc', 'Steve', 'Victoriarose Vargas', 'emma stroble'].concat(['Knostalgia']).sort());
   eq('attended flags: 8 RA ticket barcodes scanned', ra.filter(t => t.attended === true).length, 8);
+  // Person-level scanned-in: 7 buyers + Victoriarose (guestlist barcode collapses onto her
+  // name) + 9 scanned guest-list names + 4 door walk-ins = 21 people through the door.
+  eq('scanned-in people', plan.gea.filter(g => g.attended === true).length, 21);
+  eq('listed but never scanned', plan.gea.filter(g => g.attended === false).length, 21);
+  eq('unknown (Partiful, no check-in data)', plan.gea.filter(g => g.attended == null).length, 14);
+  const gAtt = (n) => plan.gea.find(g => g.name === n)?.attended;
+  eq('Liz McQuillan scanned', gAtt('Liz McQuillan'), true);
+  eq('Rohon Nandi never scanned', gAtt('Rohon Nandi'), false);
+  eq('KRNeY (guest list) scanned', gAtt('KRNeY'), true);
+  eq('Marlo (Partiful) unknown', gAtt('Marlo'), undefined);
+  eq('geaAttended update list covers everyone determinable', plan.geaAttended.length, 42);
 }
 
 // ---- prod-like state: consent + existing-customer linking ----

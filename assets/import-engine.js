@@ -131,7 +131,8 @@ export function buildImportPlan({ files, event, db, hostNames = [] }) {
     guestsToCreate: [],           // {key, full_name, email, opted_in_mailing, source, notes}
     ticketing: [],                // {external_id, source, ticket_type, amount_paid, quantity, purchased_at, attended, notes, guestId?, guestKey?}
     gea: [],                      // {guestId?|guestKey?, name, amount_spent, ticket_type, quantity, source, purchased_at?}
-    attendedTrue: [], attendedFalse: [],   // RA barcodes to flip on existing rows
+    attendedTrue: [], attendedFalse: [],   // RA barcodes to flip on existing ticketing rows
+    geaAttended: [],              // {guestId?|guestKey?, attended} — person-level scanned-in flags
     eventUpdate: null,            // {total_attendance, status}
     subscribers: [],              // {email, full_name, guestId?|guestKey?}
     segmentEmails: new Set(),     // everyone tied to the event with an email
@@ -140,6 +141,7 @@ export function buildImportPlan({ files, event, db, hostNames = [] }) {
   const rep = plan.report;
 
   const newGuestByKey = new Map();
+  const newGuestByName = new Map();          // norm(name) -> key of first new guest with that name
   const plannedGeaKeys = new Set();          // guestId/guestKey already getting a gea row
   const geaNameIndex = [];                   // {name, email} of everyone on/joining the event (for dedupe)
   for (const g of (db.guests || [])) if (onEvent.has(g.id)) geaNameIndex.push({ name: g.full_name, email: g.email });
@@ -158,6 +160,7 @@ export function buildImportPlan({ files, event, db, hostNames = [] }) {
     const g = { key, full_name: String(name || '').trim() || email, email,
                 opted_in_mailing: !!(optIn && email), source: tag, notes: notes || null };
     newGuestByKey.set(key, g); plan.guestsToCreate.push(g);
+    const nn = normName(name); if (nn && !newGuestByName.has(nn)) newGuestByName.set(nn, key);
     return { guestKey: key };
   };
   const addGea = (ref, row) => {
@@ -262,6 +265,32 @@ export function buildImportPlan({ files, event, db, hostNames = [] }) {
       rep.flags.push(existing
         ? `Door walk-in "${base}" linked to existing customer record (no email on file)`
         : `Door walk-in "${base}" created as a customer with NO email (barcode ${bc}) — match later`);
+    }
+
+    // Person-level scanned-in flags: resolve every scan barcode to a guest ref
+    // (ticket buyers by email, everyone else by name) and OR the scans together.
+    const resolveScanRef = (bc, s) => {
+      const trow = ticketRows.get(bc);
+      let name = stripHash(s.name);
+      if (trow) {
+        const em = (trow['Email'] || '').toLowerCase();
+        if (em) return guestsByEmail.has(em) ? guestsByEmail.get(em).id : (newGuestByKey.has('e:' + em) ? 'e:' + em : null);
+        name = trow['Billing name'] || name;
+      }
+      const nn = normName(name);
+      if (guestsByName.has(nn)) return guestsByName.get(nn).id;
+      return newGuestByName.get(nn) || null;
+    };
+    const att = new Map();
+    for (const [bc, s] of scanRows) {
+      const k = resolveScanRef(bc, s);
+      if (k) att.set(k, (att.get(k) || false) || s.count > 0);
+    }
+    for (const [k, val] of att)
+      plan.geaAttended.push(k.startsWith('e:') || k.startsWith('n:') ? { guestKey: k, attended: val } : { guestId: k, attended: val });
+    for (const g of plan.gea) {
+      const k = g.guestId || g.guestKey;
+      if (att.has(k)) g.attended = att.get(k);
     }
   }
 
