@@ -5718,6 +5718,20 @@ function hubImportReport(plan, done, errors) {
     + `<div class="kpi-hint" style="margin-top:10px;">Re-running the same files is safe — every write checks what's already there. Refresh the tab to see the updated customer list.</div>`;
 }
 
+// A file dropped outside a drop zone must NEVER fall through to the browser
+// default (which opens one tab per file). Kill the default globally, and while
+// a drop-enabled section is on screen, route stray drops to its uploader so
+// "close enough" drops still work.
+window.addEventListener('dragover', (e) => { e.preventDefault(); });
+window.addEventListener('drop', (e) => {
+  e.preventDefault();
+  if (e.target.closest && (e.target.closest('#phDrop') || e.target.closest('#impDrop'))) return; // zones handle their own drops
+  const files = [...(e.dataTransfer?.files || [])];
+  if (!files.length || !document.querySelector('#panel-eventhub.active')) return;
+  if (hub.section === 'photos' && $('phDrop')) { hubPhotosUpload(files); return; }
+  if (hub.section === 'customers' && $('impWrap')?.open && $('impDrop')) hubImportStage(files);
+});
+
 // ---- Section: Photos (event gallery → shown on the public event.html page) ----
 // Files live in the PUBLIC event-photos bucket. Two sizes per photo are made
 // client-side (downscaleImage): ~1600px full + ~480px grid thumb — the public
