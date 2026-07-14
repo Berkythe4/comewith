@@ -379,7 +379,12 @@ async function loadEvents(){
     $('#nsM').textContent=d.mon;$('#nsD').textContent=d.day;$('#nsN').textContent=e.name;$('#nsV').textContent=fmtDate(e.event_date)+(e.venue_name?(' · '+e.venue_name):'');
     const b=$('#nsBtn');if(e.ticket_url){b.href=e.ticket_url;b.textContent=(e.ticket_label||'Get tickets')+' ↗';}else{b.style.display='none';}$('#nextShow').hidden=false;
   }else{up.innerHTML='<article class="ev"><div class="top"><div class="meta"><div class="n">More dates dropping soon</div><div class="sub">Join the list below to hear first.</div></div></div></article>';}
-  const rec=await api('v_public_recap?select=*');$('#recap').innerHTML=(rec.length?rec:PAST).map(recapCard).join('');
+  // Recent rooms: newest 6 only — the full archive lives on watch.html.
+  // Fetch 7 so we know whether a "see all" tile is warranted.
+  const rec=await api('v_public_recap?select=*&order=event_date.desc&limit=7');
+  const shown=(rec.length?rec:PAST).slice(0,6);
+  const moreTile=rec.length>6?'<article class="recap" style="cursor:pointer" onclick="location.href=\'watch.html\'"><div class="ph benefit" style="display:flex;align-items:center;justify-content:center;"><span style="font-family:\'Archivo\';font-weight:900;font-size:2.2rem;">→</span></div><div class="bd"><h3>See all rooms</h3><div class="meta">The full archive — every recap &amp; photo gallery</div></div></article>':'';
+  $('#recap').innerHTML=shown.map(recapCard).join('')+moreTile;
 }
 $('#inq').addEventListener('submit',async function(ev){ev.preventDefault();const f=ev.target,btn=f.querySelector('button[type=submit]');
   const body={full_name:f.full_name.value.trim(),email:f.email.value.trim(),event_type:f.event_type.value||null,event_date:f.event_date.value||null,message:f.message.value.trim()||null,services_selected:[],source:'website'};
