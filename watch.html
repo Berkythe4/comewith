@@ -82,7 +82,8 @@ function openMedia(url){const k=mediaKind(url);if(!k)return;$('#lbFrame').src=(k
 function closeVid(){$('#lb').classList.remove('show');$('#lbFrame').src='';}
 $('#lbX').onclick=closeVid;$('#lb').addEventListener('click',e=>{if(e.target===$('#lb'))closeVid();});
 document.addEventListener('keydown',e=>{if(e.key==='Escape')closeVid();});
-document.addEventListener('click',e=>{const v=e.target.closest('[data-media]');if(v)openMedia(v.dataset.media);});
+document.addEventListener('click',e=>{const v=e.target.closest('[data-media]');if(v){openMedia(v.dataset.media);return;}
+  const c=e.target.closest('[data-event]');if(c)location.href='event.html?id='+encodeURIComponent(c.dataset.event);});
 function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tint]||'#EDE4D3';
   document.querySelectorAll('[data-logo]').forEach(slot=>{if(tint==='none'){slot.innerHTML='<img src="'+url+'" style="height:30px">';}
     else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}});}
@@ -90,21 +91,22 @@ function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tin
   const rows=await api('site_content?select=key,value');const C={};rows.forEach(r=>C[r.key]=r.value);
   document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
   if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
-  const rec=await api('v_public_recap?select=*');
-  // Flatten to one card per video (an event can have several), keeping each
-  // video's own label.
-  const cards=[];
-  rec.forEach(function(e){
+  const rec=await api('v_public_recap?select=*&order=event_date.desc');
+  const g=$('#vids');
+  if(!rec.length){g.innerHTML='<div class="empty">No recaps yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
+  // One card PER EVENT — the card clicks into event.html (recaps + photo
+  // gallery); the play circle still quick-plays the first video in a lightbox.
+  g.innerHTML=rec.map(function(e){
     let a=[];try{a=Array.isArray(e.recap_videos)?e.recap_videos:(typeof e.recap_videos==='string'?JSON.parse(e.recap_videos):[]);}catch(_){a=[];}
     if(!a.length&&e.youtube_url)a=[{url:e.youtube_url,label:''}];
-    a.forEach(function(v){const k=mediaKind(v&&v.url);if(k)cards.push({e:e,url:v.url,kind:k,id:ytId(v.url),label:(v&&v.label)||''});});
-  });
-  const g=$('#vids');
-  if(!cards.length){g.innerHTML='<div class="empty">No recaps yet — they\'ll appear here as we add them. Meanwhile, catch us on <a href="https://www.youtube.com/@comewithnyc" target="_blank" rel="noopener" style="color:var(--lime)">YouTube ↗</a>.</div>';return;}
-  g.innerHTML=cards.map(function(c){const e=c.e;const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
-    const thumbStyle=(c.kind==='youtube')?(' style="background-image:url(\'https://img.youtube.com/vi/'+c.id+'/hqdefault.jpg\')"'):'';
-    const ico=c.kind==='soundcloud'?'♪':'▶';
-    return '<article class="vid" data-media="'+esc(c.url)+'"><div class="thumb '+(benefit?'benefit':'')+(c.kind==='soundcloud'?' audio':'')+'"'+thumbStyle+'><div class="pl">'+ico+'</div></div><div class="bd"><h2>'+esc(e.name)+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div><div class="blurb">'+esc(c.label||e.recap_blurb||'')+'</div></div></article>';}).join('');
+    a=a.filter(function(v){return v&&mediaKind(v.url);});
+    const benefit=/infusion|benefit/i.test((e.series||'')+(e.name||''));
+    const first=a[0]||null,kind=first?mediaKind(first.url):null;
+    const hero=e.hero_image_path?(CWURL+'/storage/v1/object/public/event-photos/'+e.hero_image_path):null;
+    const thumbStyle=hero?(' style="background-image:url(\''+hero+'\')"'):((kind==='youtube')?(' style="background-image:url(\'https://img.youtube.com/vi/'+ytId(first.url)+'/hqdefault.jpg\')"'):'');
+    const play=first?'<div class="pl" data-media="'+esc(first.url)+'" title="Quick play">'+(kind==='soundcloud'?'♪':'▶')+'</div>':'';
+    const extra=(a.length>1?('▶ '+a.length+' recaps · '):(a.length?'▶ 1 recap · ':''))+'📸 Photos &amp; more →';
+    return '<article class="vid" data-event="'+esc(e.id)+'" title="Open this room"><div class="thumb '+(benefit?'benefit':'')+(kind==='soundcloud'&&!hero?' audio':'')+'"'+thumbStyle+'>'+play+'</div><div class="bd"><h2>'+esc(e.name)+'</h2><div class="meta">'+fmtDate(e.event_date)+(e.venue_name?(' · '+esc(e.venue_name)):'')+'</div>'+(e.recap_blurb?'<div class="blurb">'+esc(e.recap_blurb)+'</div>':'')+'<div class="meta" style="margin-top:8px;color:var(--lime)">'+extra+'</div></div></article>';}).join('');
 })();
 </script>
 </body>
