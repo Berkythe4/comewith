@@ -5901,15 +5901,26 @@ function hubPhotosWire() {
     if (p && val !== (p.caption || null)) { p.caption = val; hubPhotoPatch(p.id, { caption: val }, 'Caption saved'); }
   });
 }
+// SHA-256 of the ORIGINAL file bytes — filenames lie (renamed copies, two
+// cameras both producing IMG_0001), content doesn't.
+async function fileHash(f) {
+  const buf = await crypto.subtle.digest('SHA-256', await f.arrayBuffer());
+  return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
 async function hubPhotosUpload(files) {
   const imgs = files.filter((f) => (f.type || '').startsWith('image/') || /\.hei[cf]$/i.test(f.name || ''));
   if (!imgs.length) { toast('Drop image files (JPG / PNG / HEIC)', 'err'); return; }
   const status = $('phStatus');
-  let done = 0, failed = 0;
+  // Hashes already on this event (photos from before the dedupe column are null → never match).
+  const { data: hashRows } = await sb.from('event_photos').select('file_hash').eq('event_id', hub.eventId).not('file_hash', 'is', null);
+  const seen = new Set((hashRows || []).map((r) => r.file_hash));
+  let done = 0, failed = 0, dupes = 0;
   let sort = hub.photos.length ? Math.max(...hub.photos.map((p) => p.sort_order || 0)) : 0;
   for (const f of imgs) {
-    if (status) status.textContent = `Uploading ${done + failed + 1} of ${imgs.length}…`;
+    if (status) status.textContent = `Uploading ${done + failed + dupes + 1} of ${imgs.length}…`;
     try {
+      const hash = await fileHash(f).catch(() => null);
+      if (hash && seen.has(hash)) { dupes++; continue; }   // same bytes already on this event
       const full = await downscaleImage(f, 1600, 0.85);
       const thumb = await downscaleImage(f, 480, 0.8);
       const safe = (f.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
@@ -5919,14 +5930,15 @@ async function hubPhotosUpload(files) {
       const up2 = await sb.storage.from('event-photos').upload(base + '_thumb.jpg', thumb, { contentType: thumb.type || 'image/jpeg' });
       const { error: insErr } = await sb.from('event_photos').insert({
         event_id: hub.eventId, storage_path: base + '_full.jpg',
-        thumb_path: up2.error ? null : base + '_thumb.jpg', sort_order: (sort += 10),
+        thumb_path: up2.error ? null : base + '_thumb.jpg', sort_order: (sort += 10), file_hash: hash,
       });
       if (insErr) throw insErr;
+      if (hash) seen.add(hash);   // also dedupes within this same drop
       done++;
     } catch (err) { failed++; console.warn('Photo upload failed:', f.name, err); }
   }
   if (status) status.textContent = '';
-  toast(`${done} photo${done === 1 ? '' : 's'} added${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
+  toast(`${done} photo${done === 1 ? '' : 's'} added${dupes ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} skipped` : ''}${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
   hubGoSection('photos');
 }
 async function hubPhotoPatch(id, patch, okMsg) {
