@@ -1269,6 +1269,10 @@ const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
 });
 
 const $ = (id) => document.getElementById(id);
+// Captured before boot: activateTab() strips #event=… from the URL, and the
+// boot sequence restores the last tab via activateTab — so the hub deep-link
+// must be read from this snapshot, never live location.hash.
+const BOOT_HASH = location.hash;
 
 // ---- UI helpers ----
 function hideBoot() {
@@ -1382,6 +1386,8 @@ async function renderNav() {
 function activateTab(key) {
   const btn = $('sidebarNav').querySelector(`button[data-tab="${key}"]`);
   if (!btn) return;
+  // Leaving the event hub for a regular tab — drop the hub deep-link from the URL.
+  try { if (location.hash.startsWith('#event=')) history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
   for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
   for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + key);
   $('mainTitle').textContent = btn.dataset.label || btn.textContent;
@@ -4824,6 +4830,8 @@ const STAGES = ['idea', 'planning', 'confirmed', 'live', 'wrapped', 'reported'];
 
 async function openEventHub(eventId) {
   hub.eventId = eventId; hub.section = 'overview'; hub.actors = null;
+  // Keep the open event in the URL so a refresh / discarded tab restores right here.
+  try { history.replaceState(null, '', '#event=' + encodeURIComponent(eventId)); } catch (_) {}
   for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-eventhub');
   // Hub is reached from Events — keep that tab highlighted for orientation.
   for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.tab === 'events');
@@ -4929,6 +4937,7 @@ function renderHubSecNav() {
 
 async function hubGoSection(name) {
   hub.section = name;
+  try { if (hub.eventId && document.querySelector('#panel-eventhub.active')) history.replaceState(null, '', '#event=' + encodeURIComponent(hub.eventId) + (name !== 'overview' ? '&sec=' + encodeURIComponent(name) : '')); } catch (_) {}
   for (const b of $('hubSecNav').querySelectorAll('button')) b.classList.toggle('active', b.dataset.hubSec === name);
   $('hubSecBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading…</div>';
   const fn = { overview: hubSecOverview, people: hubSecPeople, customers: hubSecCustomers, tasks: hubSecTasks,
@@ -10302,6 +10311,17 @@ try {
   const _p = new URLSearchParams(location.search);
   const _g = _p.get('goto'), _id = _p.get('id');
   if (_g && _id && session) { history.replaceState({}, '', location.pathname); setTimeout(() => gotoSource(_g, _id), 400); }
+} catch (_) { /* noop */ }
+
+// Restore an open event hub after a refresh / discarded tab (#event=<id>&sec=<section>,
+// written by openEventHub / hubGoSection and cleared by activateTab — hence BOOT_HASH).
+try {
+  const _h = new URLSearchParams(BOOT_HASH.replace(/^#/, ''));
+  const _ev = _h.get('event'), _sec = _h.get('sec');
+  if (_ev && session) setTimeout(async () => {
+    await openEventHub(_ev);
+    if (hub.event && _sec && _sec !== 'overview') hubGoSection(_sec);
+  }, 400);
 } catch (_) { /* noop */ }
 </script>
 
