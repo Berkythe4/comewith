@@ -1850,7 +1850,7 @@ async function openPostModal(post) {
   const isNew = !post;
   const chanBoxes = SOCIAL_CHANNELS.map(c => `<label class="chk"><input type="checkbox" data-chan value="${c}" ${(p.channels || []).includes(c) ? 'checked' : ''}> ${SOCIAL_CHAN_LABEL[c]}</label>`).join('');
   const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}" ${p.stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
-  const seriesOpts = ['', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
+  const seriesOpts = ['', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
   const ownerOpts = ['<option value="">— unassigned —</option>'].concat(socialPeople.map(pe => `<option value="${pe.id}" ${p.owner_id === pe.id ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`)).join('');
   const eventOpts = ['<option value="">— none —</option>'].concat(socialEvents.map(ev => `<option value="${ev.id}" ${p.event_id === ev.id ? 'selected' : ''}>${escapeHtml(ev.name)}</option>`)).join('');
   const assetOpts = ['none', 'requested', 'in_progress', 'ready'].map(a => `<option value="${a}" ${(p.asset_status || 'none') === a ? 'selected' : ''}>${a.replace('_', ' ')}</option>`).join('');
@@ -3890,10 +3890,12 @@ $('strat-manage-list').addEventListener('change', async (e) => {
 // ---- KPI entry forms (Phase 13 — Part B) ----
 // Series feed the KPI views by EXACT string (CLAUDE.md series contract). 'Come With
 // Production' = events produced as a service for other people (e.g. Maxwell House 4/20).
-const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation']; // no CWF
+const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings']; // no CWF
 // Keep events.type (axis for templates / content flag) in sync with the series choice.
+// Bookings = we're the booked talent at someone else's event ('gig'), vs Come With
+// Production = we run their production.
 function seriesToType(series) {
-  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase' })[series] || 'showcase';
+  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase', 'Bookings': 'gig' })[series] || 'showcase';
 }
 const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
 let kpiSubmit = null;
@@ -4390,10 +4392,11 @@ document.addEventListener('click', (e) => {
 // and soft-deletes via deleted_at. Ticket tiers / financial child rows are NOT
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
-  const [{ data: ev, error }, { data: venues }, { data: artistRoles }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path').eq('id', id).single(),
+  const [{ data: ev, error }, { data: venues }, { data: artistRoles }, { data: allActors }] = await Promise.all([
+    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path, owner_actor_id').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
     sb.from('actor_roles').select('actor:actors(id, display_name)').in('role', ['dj', 'artist']),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
   if (error) { toast('Load failed: ' + error.message, 'err'); return; }
   // Artists available to tag recap videos to (deduped by id).
@@ -4406,6 +4409,10 @@ async function openEditEvent(id) {
     seriesVals.map(s => `<option value="${escapeHtml(s)}"${s === ev.series ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
   const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled']
     .map(s => `<option value="${s}"${s === ev.status ? ' selected' : ''}>${s.replace('_', ' ')}</option>`).join('');
+  // Host / owner (events.owner_actor_id) — for Bookings this is the client who
+  // booked us; shown in the hub head and used as a host name by the import engine.
+  const ownerOpts = '<option value="">— none —</option>' + (allActors || []).map(a =>
+    `<option value="${escapeHtml(a.id)}"${a.id === ev.owner_actor_id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
   openKpi('Edit event', 'Updates the event row — financial rows unchanged', `
     <div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${escapeHtml(ev.name || '')}" required></div>
     <div class="modal-form-row half-row">
@@ -4419,6 +4426,7 @@ async function openEditEvent(id) {
     <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
     <div class="kpi-section-h">Venue & schedule</div>
     <div class="modal-form-row"><label class="modal-label">Venue</label><select class="modal-select" name="venue_id">${venueOpts}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Host / booked by — the actor who owns this event or booked us (add them under Actors first)</label><select class="modal-select" name="owner_actor_id">${ownerOpts}</select></div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Doors time</label><input class="modal-input" type="time" name="doors_time" value="${escapeHtml((ev.doors_time || '').slice(0, 5))}"></div>
       <div><label class="modal-label">End time</label><input class="modal-input" type="time" name="end_time" value="${escapeHtml((ev.end_time || '').slice(0, 5))}"></div>
@@ -4490,6 +4498,7 @@ async function submitEditEvent(id) {
   const turl = kpiVal('ticket_url'); patch.ticket_url = turl || null;
   const tlbl = kpiVal('ticket_label'); patch.ticket_label = tlbl || null;
   patch.venue_id = kpiVal('venue_id') || null;
+  patch.owner_actor_id = kpiVal('owner_actor_id') || null;
   patch.doors_time = kpiVal('doors_time') || null;
   patch.end_time = kpiVal('end_time') || null;
   patch.description = kpiVal('description') || null;
@@ -4921,7 +4930,7 @@ function renderHubHead() {
         ${fact('Series', escapeHtml(e.series || '') || muted)}
         ${fact('Venue', escapeHtml(e.venue?.name || '') || muted)}
         ${fact('Status', statusBadge)}
-        ${fact('Owner', escapeHtml(e.owner_name || '') || muted)}
+        ${fact((e.type === 'gig' || e.series === 'Bookings') ? 'Booked by' : 'Owner', escapeHtml(e.owner_name || '') || muted)}
         ${fact('Gear', e.cw_providing_gear ? 'CW providing' : 'Venue / other')}
       </div>
       ${stageStepper(e.stage)}
@@ -4972,7 +4981,9 @@ async function hubSecOverview() {
   const marketingSpend = (mkExp || []).reduce((t, x) => t + Number(x.amount || 0), 0);
   // Come With Production = a service gig for someone else's event — tickets/marketing/
   // donations/sponsors are the HOST's, not ours; show only our service income, costs & gear.
+  // Bookings ('gig') share that money model: we're the booked talent, fee in / costs out.
   const isProd = e.type === 'production' || e.series === 'Come With Production';
+  const isGig = e.type === 'gig' || e.series === 'Bookings';
   const sell = (f && f.capacity > 0) ? Math.round(f.tickets_sold / f.capacity * 1000) / 10 : null;
   const net = f?.net_pl ?? 0;
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
@@ -4984,15 +4995,17 @@ async function hubSecOverview() {
       <button class="hub-btn" data-hub-action="gen-dayof">Generate task checklist</button>
       ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
     </div>`;
-  const cards = isProd ? `
+  const cards = (isProd || isGig) ? `
     <div class="hub-cards">
-      ${card('Service income', money(f?.other_income || 0), (f?.other_income || 0) > 0 ? 'pos' : '')}
+      ${card(isGig ? 'Performance fee' : 'Service income', money(f?.other_income || 0), (f?.other_income || 0) > 0 ? 'pos' : '')}
       ${card('Expenses', money(f?.total_expenses || 0))}
       ${card('Net to Come With', money(net), net < 0 ? 'neg' : (net > 0 ? 'pos' : ''))}
       ${card('Equipment provided', fmtNum(hub.counts?.equipment || 0))}
       ${card('Event attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
     </div>
-    <div class="kpi-hint" style="margin-bottom:4px;max-width:62ch;">This is a <strong>Come With Production</strong> — a service gig (gear, setup, hosting) for someone else's event. Marketing, ticket sales, donations &amp; sponsors belong to the host, not Come With — track only your service income, expenses and equipment here.</div>`
+    <div class="kpi-hint" style="margin-bottom:4px;max-width:62ch;">${isGig
+      ? `This is a <strong>Booking</strong> — Come With is the hired talent at someone else's event. Track the performance fee (as income), your costs, and any gear you bring. The host's tickets, marketing, donations &amp; sponsors aren't yours. Set who booked you via "Edit core fields" → Host / booked by.`
+      : `This is a <strong>Come With Production</strong> — a service gig (gear, setup, hosting) for someone else's event. Marketing, ticket sales, donations &amp; sponsors belong to the host, not Come With — track only your service income, expenses and equipment here.`}</div>`
     : `
     <div class="hub-cards">
       ${card('Gross revenue', money(f?.gross_revenue || 0))}
@@ -5005,8 +5018,8 @@ async function hubSecOverview() {
       ${card('Attendance', f?.total_attendance != null ? fmtNum(f.total_attendance) : '—')}
       ${card('Expenses', money(f?.total_expenses || 0))}
     </div>`;
-  const moneyNote = isProd
-    ? `Record your service income and costs in the Money section. Don't add the host's tickets / donations / sponsors here.`
+  const moneyNote = (isProd || isGig)
+    ? `Record your ${isGig ? 'performance fee' : 'service'} income and costs in the Money section. Don't add the host's tickets / donations / sponsors here.`
     : `Tickets, other income, expenses, donations and sponsorships are managed in the Money section — add/remove and it reflects here immediately. Core fields (name, date, status, capacity, public listing) are edited from the header.`;
   // Engagement & marketing — IG follower snapshots captured for THIS event + marketing $ spent.
   const igCards = IG_ACCOUNTS.map(a => card('IG · ' + a.label, igByKey[a.key] != null ? fmtNum(igByKey[a.key]) : '—')).join('');
@@ -7337,7 +7350,8 @@ function eventsFiltered() {
 function eventResult(e) {
   const net = Number(e.f.net_pl || 0), cls = net < 0 ? 'neg' : (net > 0 ? 'pos' : '');
   const di = e.type === 'dance_infusion' || e.series === 'Dance Infusion';
-  const prod = e.type === 'production' || e.series === 'Come With Production';
+  const prod = e.type === 'production' || e.series === 'Come With Production'
+    || e.type === 'gig' || e.series === 'Bookings'; // bookings: same fee-in model
   const content = e.type === 'showcase' || e.series === 'Content Creation';
   if (di) return { lbl: 'to MS', html: `<span class="${cls}">${money(net)}</span>` };
   if (prod) return { lbl: 'net to CW', html: `<span class="${cls}">${money(net)}</span>` };
@@ -7351,7 +7365,7 @@ function eventResult(e) {
 function renderEventsDash() {
   const s = eventsDash;
   const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation'];
+  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'];
   const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'];
   $('eventsBody').innerHTML = `
     <div id="eventsAgg"></div>
@@ -7391,7 +7405,7 @@ function renderEventsBody() {
   $('eventsAgg').innerHTML = `
     ${grp('Come With Parties')}
     ${moneyGroup(parties)}
-    ${grp('Production &amp; content — service / content (≈ net $0 until you charge)', true)}
+    ${grp('Production, bookings &amp; content — service &amp; gig work', true)}
     ${moneyGroup(pc)}
     ${grp('Dance Infusion — charity', true)}
     <div class="hub-cards">
