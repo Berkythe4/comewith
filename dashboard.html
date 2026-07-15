@@ -1404,7 +1404,7 @@ async function loadTeam() {
   const [reg, ov, members, aliasActors, parts, recent] = await Promise.all([
     sb.from('module_registry').select('*').order('sort_order'),
     sb.from('user_module_access').select('user_id, module_key, access'),
-    sb.from('v_team_members').select('*'),
+    sb.rpc('get_team_members'),
     sb.from('actors').select('id, display_name, kind, email, user_id').not('user_id', 'is', null).is('deleted_at', null),
     sb.from('event_participants').select('actor_id, role, fee, event:events(id, name, event_date, series, deleted_at)'),
     sb.from('audit_log').select('actor_id, occurred_at').order('occurred_at', { ascending: false }).limit(800),
