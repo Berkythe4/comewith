@@ -34,8 +34,11 @@ notes live in Claude memory.
 
 `events.series` is free text. KPI views match it **exactly**. The Log Event form
 MUST write `series = 'Come With Parties'` for parties and `series = 'Dance Infusion'`
-for DI events, or those KPIs read empty. `'Come With Production'` is services, not
-parties.
+for DI events, or those KPIs read empty. `'Come With Production'` is services
+(we run someone else's production), not parties. `'Bookings'` (type `gig`,
+added in 095) is when we're the **booked talent** at someone else's event —
+performance fees go there, never under Production. The host/client who booked
+us goes in `events.owner_actor_id` ("Host / booked by" in the edit-event modal).
 
 ## Mailing segments (brand delineation)
 
