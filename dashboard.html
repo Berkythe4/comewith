@@ -5456,7 +5456,7 @@ async function hubSecTasks() {
 
 // ---- Email the event's task list (concise, formatted for team inboxes) ----
 // Email-client-safe: table layout + inline styles only, no CSS classes.
-function buildTasksEmailHtml(ev, tasks, includeDone) {
+function buildTasksEmailHtml(ev, tasks, includeDone, note) {
   const today = new Date().toISOString().slice(0, 10);
   const fmtDue = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const prioBadge = (p) => p ? `<span style="font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:1px 6px;border-radius:3px;color:#fff;background:${p === 'high' ? '#C75A3C' : p === 'medium' ? '#B5791F' : '#8a8377'};">${p}</span>` : '';
@@ -5487,6 +5487,7 @@ function buildTasksEmailHtml(ev, tasks, includeDone) {
       <div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(fmtDate(ev.event_date))}${ev.venue?.name ? ' · ' + escapeHtml(ev.venue.name) : ''}${ev.series ? ' · ' + escapeHtml(ev.series) : ''}</div>
       <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
     </div>
+    ${note ? `<div style="font-size:14px;line-height:1.55;color:#3c362e;margin:14px 2px 4px;">${note.trim().split(/\n{2,}/).map(p => `<p style="margin:0 0 10px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
     ${section('⚠ Overdue', '#C75A3C', overdue, true)}
     ${section('In progress', '#B5791F', byStatus('doing').sort(dueSort))}
     ${section('Blocked', '#8362A8', byStatus('blocked').sort(dueSort))}
@@ -5516,7 +5517,9 @@ async function hubEmailTasks() {
   };
   const staffRows = staff.map(p => recipRow(p.email, p.full_name || p.email, true)).join('');
   const partRows = (partsRes.data || []).map(x => x.actor).filter(a => a && a.email).map(a => recipRow(a.email, a.display_name, false)).join('');
-  const preview = () => buildTasksEmailHtml(ev, tasks, !!$('kpiModalBody').querySelector('#etIncDone')?.checked);
+  const preview = () => buildTasksEmailHtml(ev, tasks,
+    !!$('kpiModalBody').querySelector('#etIncDone')?.checked,
+    $('kpiModalBody').querySelector('#etNote')?.value || '');
   openKpi('Email task list', ev.name, `
     <div class="modal-form-row"><label class="modal-label">To</label>
       <div class="hub-list" style="max-height:150px;overflow:auto;">
@@ -5524,6 +5527,8 @@ async function hubEmailTasks() {
       </div></div>
     <div class="modal-form-row"><label class="modal-label">Subject</label>
       <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})"></div>
+    <div class="modal-form-row"><label class="modal-label">Message (goes above the task list)</label>
+      <textarea class="modal-textarea" id="etNote" rows="3" placeholder="Hey team — here's where we stand for the weekend. Flag anything blocked…"></textarea></div>
     <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etIncDone" style="width:auto;margin:0;"> Include completed tasks</label>
     <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
       <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(ev, tasks, false)}</div></div>`,
@@ -5542,6 +5547,7 @@ async function hubEmailTasks() {
     }, 'Send task list');
   setTimeout(() => {
     $('kpiModalBody').querySelector('#etIncDone')?.addEventListener('change', () => { $('etPreview').innerHTML = preview(); });
+    $('kpiModalBody').querySelector('#etNote')?.addEventListener('input', () => { $('etPreview').innerHTML = preview(); });
   }, 40);
 }
 
