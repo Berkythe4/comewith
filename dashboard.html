@@ -5441,6 +5441,7 @@ async function hubSecTasks() {
       </div>
       <div class="hub-li-actions">
         ${statusSel(t)}
+        <button class="hub-mini" data-hub-action="edit-task" data-id="${escapeHtml(t.id)}">Edit</button>
         <button class="hub-mini" data-hub-action="assign-task" data-id="${escapeHtml(t.id)}">Assign</button>
         <button class="hub-mini danger" data-hub-del="tasks:${escapeHtml(t.id)}">Delete</button>
       </div>
@@ -6828,6 +6829,7 @@ const HUB_ACTIONS = {
   'add-people': hubAddPeople,
   'edit-participant': (el) => hubEditParticipant(el.dataset.id),
   'add-task': hubAddTask,
+  'edit-task': (el) => openEditTask(el.dataset.id, hubSecTasks),
   'assign-task': (el) => hubAssignTask(el.dataset.id),
   'add-equipment': hubAddEquipment,
   'edit-equipment': (el) => hubEditEquipment(el.dataset.id),
@@ -10233,7 +10235,7 @@ function calGridHtml() {
       const c = CAL_SERIES_COLORS[e.series] || '#8a8a8a';
       chips.push(`<div class="cal-chip" data-cal-ev="${escapeHtml(e.id)}" title="${escapeHtml(e.name)}${e.venue?.name ? ' @ ' + escapeHtml(e.venue.name) : ''}" style="border-left-color:${c};background:${c}22;">${escapeHtml(e.name)}</div>`);
     });
-    (b.ms || []).forEach(t => chips.push(`<div class="cal-chip cal-ms" title="Milestone: ${escapeHtml(t.title)}">⭐ ${escapeHtml(t.title)}</div>`));
+    (b.ms || []).forEach(t => chips.push(`<div class="cal-chip cal-ms" data-tb-edit="${escapeHtml(t.id)}" title="Milestone: ${escapeHtml(t.title)} — click to edit" style="cursor:pointer;">⭐ ${escapeHtml(t.title)}</div>`));
     (b.so || []).forEach(p => chips.push(`<div class="cal-chip cal-so" title="Social: ${escapeHtml(p.title || '')}">📱 ${escapeHtml(p.title || 'post')}</div>`));
     (b.el || []).forEach(x => chips.push(`<div class="cal-chip cal-el" title="${escapeHtml(x.artist)} @ ${escapeHtml(x.venue || x.show)}">🎧 ${escapeHtml(x.artist)}</div>`));
     const extra = chips.length > 4 ? `<div class="cal-more">+${chips.length - 4} more</div>` : '';
@@ -10266,7 +10268,7 @@ function calDayListHtml(b, mkMax) {
       `<span style="color:${c};">●</span> <a href="#" data-cal-ev="${escapeHtml(e.id)}">${escapeHtml(e.name)}</a>`,
       `${escapeHtml(e.series || '')}${e.venue?.name ? ' · ' + escapeHtml(e.venue.name) : ''}${e.doors_time ? ' · doors ' + escapeHtml(e.doors_time.slice(0, 5)) : ''} · ${escapeHtml(e.status || '')}${lineup ? '<br>🎧 ' + escapeHtml(lineup) : ''}`));
   });
-  (b.ms || []).forEach(t => out.push(li(`⭐ ${escapeHtml(t.title)}`, `milestone · ${escapeHtml(t.status)}`)));
+  (b.ms || []).forEach(t => out.push(li(`<a href="#" data-tb-edit="${escapeHtml(t.id)}" style="color:inherit;">⭐ ${escapeHtml(t.title)}</a>`, `milestone · ${escapeHtml(t.status)}`)));
   (b.so || []).forEach(p => out.push(li(`📱 ${escapeHtml(p.title || 'post')}`, `social · ${escapeHtml(p.stage || '')}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}`)));
   (b.el || []).forEach(x => out.push(li(`🎧 ${escapeHtml(x.artist)}`, `plays ${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank">${escapeHtml(x.show)}</a>` : escapeHtml(x.show)}${x.venue ? ' @ ' + escapeHtml(x.venue) : ''}`)));
   (b.mk || []).slice(0, mkMax).forEach(e => out.push(li(
@@ -10317,13 +10319,13 @@ function calRenderBoard() {
     const over = t.due_date && t.due_date < today && t.status !== 'done';
     return `<tr class="${t.status === 'done' ? 'done' : ''}">
       <td><span class="tb-star${t.milestone ? ' on' : ''}" data-tb-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
-      <td>${escapeHtml(t.title)}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
+      <td><a href="#" data-tb-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
       <td>${t.event ? `<a href="#" data-cal-ev="${escapeHtml(t.event.id)}">${escapeHtml(t.event.name)}</a>` : '<span class="li-sub">—</span>'}</td>
       <td>${who || '<span class="li-sub">unassigned</span>'}</td>
       <td>${t.priority ? escapeHtml(t.priority) : '<span class="li-sub">—</span>'}</td>
       <td class="${over ? 'cal-due-over' : ''}">${t.due_date ? escapeHtml(fmtDate(t.due_date)) : '<span class="li-sub">—</span>'}</td>
       <td>${statusSel(t)}</td>
-      <td><button class="hub-mini danger" data-tb-del="${escapeHtml(t.id)}">✕</button></td>
+      <td style="white-space:nowrap;"><button class="hub-mini" data-tb-edit="${escapeHtml(t.id)}" title="Edit">✎</button> <button class="hub-mini danger" data-tb-del="${escapeHtml(t.id)}" title="Delete">✕</button></td>
     </tr>`;
   }).join('');
   $('calBoard').innerHTML = `
@@ -10339,6 +10341,88 @@ function calRenderBoard() {
     </div>
     <table><thead><tr><th>⭐</th>${th('title', 'Task')}${th('event', 'Event')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.</div></td></tr>`}</tbody></table>`;
+}
+// Shared task editor — used by the Calendar tasks board AND the event hub
+// Tasks section. Core fields save on Submit; assignment add/remove applies
+// immediately (then the modal refreshes).
+async function openEditTask(taskId, onSaved) {
+  const [tRes, evs, team] = await Promise.all([
+    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,event_id,effort,reward,task_assignments(id,role,actor:actors(id,display_name))').eq('id', taskId).single(),
+    sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(150),
+    sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true),
+  ]);
+  const t = tRes.data;
+  if (tRes.error || !t) { toast('Task not found', 'err'); return; }
+  let extra = [];
+  if (t.event_id) {
+    const p = await sb.from('event_participants').select('actor:actors(id,display_name)').eq('event_id', t.event_id);
+    extra = (p.data || []).map(x => x.actor).filter(Boolean);
+  }
+  const optMap = new Map();
+  (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at).forEach(a => optMap.set(a.id, a.display_name));
+  extra.forEach(a => optMap.set(a.id, a.display_name));
+  const assigned = new Set((t.task_assignments || []).map(a => a.actor?.id).filter(Boolean));
+  const asgOpts = [...optMap.entries()].filter(([id]) => !assigned.has(id)).sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => `<option value="${escapeHtml(id)}">${escapeHtml(name)}</option>`).join('');
+  const asgChips = (t.task_assignments || []).map(a =>
+    `<span class="role-chip" style="cursor:default;">${escapeHtml(a.actor?.display_name || '?')} (${escapeHtml(a.role)}) <a href="#" data-task-unassign="${escapeHtml(a.id)}" title="Remove" style="color:var(--red);text-decoration:none;">✕</a></span>`).join(' ') || '<span class="li-sub">unassigned</span>';
+  const evOpts = (evs.data || []).map(e =>
+    `<option value="${escapeHtml(e.id)}"${e.id === t.event_id ? ' selected' : ''}>${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('');
+  openKpi('Edit task', t.title, `
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" value="${escapeHtml(t.title)}" required></div>
+    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2">${escapeHtml(t.description || '')}</textarea></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Status</label><select class="modal-select" name="status">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Priority</label><select class="modal-select" name="priority"><option value="">—</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${p === t.priority ? ' selected' : ''}>${p}</option>`).join('')}</select></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date" value="${escapeHtml(t.due_date || '')}"></div>
+      <div><label class="modal-label" style="display:flex;gap:8px;align-items:center;margin-top:22px;"><input type="checkbox" name="milestone"${t.milestone ? ' checked' : ''}> ⭐ Milestone (shows on calendar grid)</label></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Event</label><select class="modal-select" name="event_id"><option value="">— standalone —</option>${evOpts}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Effort</label><input class="modal-input" type="number" min="0" step="1" name="effort" value="${t.effort ?? ''}"></div>
+      <div><label class="modal-label">Reward</label><input class="modal-input" type="number" min="0" step="1" name="reward" value="${t.reward ?? ''}"></div>
+    </div>
+    <div class="kpi-section-h">Assignees</div>
+    <div class="modal-form-row" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">${asgChips}</div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Add assignee</label><select class="modal-select" name="new_assignee"><option value="">—</option>${asgOpts}</select></div>
+      <div><label class="modal-label">As</label><select class="modal-select" name="new_assign_role"><option value="doer">doer</option><option value="owner">owner</option><option value="reviewer">reviewer</option></select></div>
+    </div>
+    <button type="button" class="hub-mini" data-task-assign-add>＋ Add assignee</button>`,
+    async () => {
+      const title = kpiVal('title'); if (!title) throw new Error('Title is required');
+      const patch = {
+        title,
+        description: kpiVal('description') || null,
+        status: kpiVal('status'),
+        priority: kpiVal('priority') || null,
+        due_date: kpiVal('due_date') || null,
+        event_id: kpiVal('event_id') || null,
+        milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked,
+        effort: kpiVal('effort') === '' ? null : Number(kpiVal('effort')),
+        reward: kpiVal('reward') === '' ? null : Number(kpiVal('reward')),
+      };
+      const { error } = await sb.from('tasks').update(patch).eq('id', t.id);
+      if (error) throw error;
+      closeKpi(); toast('Task saved', 'ok');
+      if (onSaved) await onSaved();
+    }, 'Save task');
+  setTimeout(() => {
+    $('kpiModalBody').querySelectorAll('[data-task-unassign]').forEach(a => a.addEventListener('click', async (e) => {
+      e.preventDefault();
+      const { error } = await sb.from('task_assignments').delete().eq('id', a.dataset.taskUnassign);
+      if (error) { toast(error.message, 'err'); return; }
+      openEditTask(taskId, onSaved);
+    }));
+    $('kpiModalBody').querySelector('[data-task-assign-add]')?.addEventListener('click', async () => {
+      const who = kpiVal('new_assignee'); if (!who) { toast('Pick someone to add first', 'err'); return; }
+      const { error } = await sb.from('task_assignments').insert({ task_id: t.id, actor_id: who, role: kpiVal('new_assign_role') || 'doer' });
+      if (error) { toast(error.message, 'err'); return; }
+      openEditTask(taskId, onSaved);
+    });
+  }, 40);
 }
 async function calAddTask() {
   const [evs, team] = await Promise.all([
@@ -10376,6 +10460,8 @@ async function calAddTask() {
     }, 'Add');
 }
 $('panel-calendar').addEventListener('click', async (e) => {
+  const ted = e.target.closest('[data-tb-edit]');
+  if (ted) { e.preventDefault(); openEditTask(ted.dataset.tbEdit, loadCalendar); return; }
   const evLink = e.target.closest('[data-cal-ev]');
   if (evLink) { e.preventDefault(); gotoSource('event', evLink.dataset.calEv); return; }
   const mon = e.target.closest('[data-cal-mon]');
