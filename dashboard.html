@@ -186,6 +186,111 @@ body::before {
 .nav-badge.new  { color: #8362A8; border: 1px solid rgba(131,98,168,0.55); }
 /* master-only modules get a faint key marker */
 .sidebar-nav button .nav-lock { opacity: 0.5; font-size: 0.7em; }
+/* Collapsible product-module groups (096 modular nav) */
+.nav-group-toggle {
+  display: flex; width: 100%; align-items: center; gap: 7px;
+  padding: 12px 22px 6px; margin-top: 2px;
+  font-family: 'Inconsolata', monospace; font-size: 0.62rem; font-weight: 700;
+  letter-spacing: 0.16em; text-transform: uppercase;
+  background: none; border: none; border-left: 3px solid transparent; cursor: pointer;
+  color: rgba(242,237,230,0.45); transition: color 0.15s;
+}
+.nav-group-toggle:hover { color: var(--ink); background: none; }
+.nav-group-toggle .nav-caret { flex: 0 0 auto; font-size: 0.62rem; opacity: 0.7; width: 0.8em; }
+.nav-group-toggle .nav-gicon { flex: 0 0 auto; font-size: 0.8rem; }
+.nav-group-toggle .nav-gcount {
+  margin-left: auto; font-size: 0.55rem; font-weight: 400;
+  color: rgba(242,237,230,0.28); letter-spacing: 0.08em;
+}
+.nav-group-toggle.open { color: rgba(242,237,230,0.72); }
+.nav-group-body.collapsed { display: none; }
+.nav-group-body button { padding-left: 38px; }
+/* Pinned items (Calendar) sit flat above the groups, slightly emphasized */
+.nav-pinned button { color: rgba(242,237,230,0.78); font-weight: 700; padding-top: 12px; padding-bottom: 12px; }
+
+/* ---- Master calendar (panel-calendar) ---- */
+.cal-toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.cal-chipbtn {
+  font-family: 'Inconsolata', monospace; font-size: 0.68rem; letter-spacing: 0.06em;
+  padding: 4px 10px; border-radius: 12px; cursor: pointer;
+  background: rgba(237,228,211,0.05); border: 1px solid rgba(237,228,211,0.18); color: rgba(242,237,230,0.55);
+}
+.cal-chipbtn.on { color: var(--ink); border-color: var(--red); background: rgba(199,90,60,0.12); }
+.cal-dd { position: relative; display: inline-block; }
+.cal-dd summary {
+  list-style: none; cursor: pointer; font-family: 'Inconsolata', monospace; font-size: 0.68rem;
+  letter-spacing: 0.06em; padding: 4px 10px; border-radius: 3px;
+  background: rgba(237,228,211,0.05); border: 1px solid rgba(237,228,211,0.18); color: rgba(242,237,230,0.65);
+}
+.cal-dd summary::-webkit-details-marker { display: none; }
+.cal-dd[open] summary { border-color: var(--red); color: var(--ink); }
+.cal-dd .cal-dd-pop {
+  position: absolute; z-index: 40; top: calc(100% + 4px); left: 0; min-width: 200px; max-height: 260px; overflow-y: auto;
+  background: #191713; border: 1px solid rgba(237,228,211,0.22); border-radius: 4px; padding: 8px 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+.cal-dd .cal-dd-pop label { display: flex; gap: 7px; align-items: center; font-size: 0.72rem; padding: 3px 0; cursor: pointer; color: rgba(242,237,230,0.75); }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal-cell { min-height: 92px; border: 1px solid rgba(237,228,211,0.12); border-radius: 6px; padding: 4px 5px; cursor: pointer; overflow: hidden; }
+.cal-cell:hover { border-color: rgba(237,228,211,0.35); }
+.cal-cell.sel { outline: 2px solid var(--red); }
+.cal-cell.past { opacity: 0.45; }
+.cal-cell.today { border-color: var(--red); }
+.cal-cell .cal-dnum { font-weight: 700; font-size: 0.8rem; display: flex; justify-content: space-between; align-items: baseline; }
+.cal-cell .cal-mkn { font-size: 0.6rem; color: rgba(242,237,230,0.35); font-weight: 400; }
+.cal-chip {
+  font-size: 0.62rem; line-height: 1.25; margin-top: 3px; padding: 1px 4px; border-radius: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(237,228,211,0.07); border-left: 3px solid rgba(237,228,211,0.3); color: rgba(242,237,230,0.85);
+}
+.cal-chip.cal-ms { border-left-color: #E0B84C; background: rgba(224,184,76,0.12); }
+.cal-chip.cal-so { border-left-color: #8362A8; background: rgba(131,98,168,0.12); }
+.cal-chip.cal-el { border-left-color: #4E7A9B; background: rgba(78,122,155,0.12); }
+.cal-more { font-size: 0.6rem; color: rgba(242,237,230,0.4); margin-top: 2px; }
+.cal-board-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; }
+.cal-board table { width: 100%; border-collapse: collapse; }
+.cal-board th { text-align: left; font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(242,237,230,0.4); padding: 6px 8px; border-bottom: 1px solid rgba(237,228,211,0.14); cursor: pointer; }
+.cal-board td { padding: 7px 8px; border-bottom: 1px solid rgba(237,228,211,0.07); font-size: 0.78rem; }
+.cal-board tr.done td { opacity: 0.4; text-decoration: line-through; }
+.cal-board td .tb-star { cursor: pointer; opacity: 0.35; }
+.cal-board td .tb-star.on { opacity: 1; }
+.cal-due-over { color: #C75A3C; font-weight: 700; }
+
+/* ---- Team chat slide-in ---- */
+.chat-unread {
+  background: var(--red); color: #fff; border-radius: 10px; padding: 0 6px;
+  font-size: 0.6rem; font-weight: 700; margin-left: 5px; display: inline-block; min-width: 16px; text-align: center;
+}
+.chat-panel {
+  position: fixed; top: 0; right: 0; bottom: 0; width: 400px; max-width: 92vw; z-index: 850;
+  background: #16140F; border-left: 1px solid rgba(237,228,211,0.2);
+  display: flex; flex-direction: column; box-shadow: -12px 0 40px rgba(0,0,0,0.55);
+}
+.chat-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px; border-bottom: 1px solid rgba(237,228,211,0.12); }
+.chat-cols { display: flex; flex: 1; min-height: 0; }
+.chat-chans { width: 128px; flex: 0 0 auto; overflow-y: auto; border-right: 1px solid rgba(237,228,211,0.1); padding: 8px 0; }
+.chat-chans button {
+  display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer; text-align: left;
+  font-family: 'Inconsolata', monospace; font-size: 0.7rem; color: rgba(242,237,230,0.6); padding: 7px 10px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.chat-chans button.active { color: var(--ink); background: rgba(237,228,211,0.08); }
+.chat-chans button:hover { color: var(--ink); }
+.chat-main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.chat-msgs { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.chat-msg { max-width: 85%; padding: 7px 10px; border-radius: 8px; font-size: 0.78rem; line-height: 1.4; background: rgba(237,228,211,0.07); align-self: flex-start; }
+.chat-msg.mine { align-self: flex-end; background: rgba(199,90,60,0.18); }
+.chat-msg.email { border-left: 3px solid #B5791F; }
+.chat-msg .chat-who { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(242,237,230,0.4); margin-bottom: 2px; }
+.chat-msg .chat-esub { font-weight: 700; color: #B5791F; font-size: 0.7rem; }
+.chat-msg .chat-when { font-size: 0.58rem; color: rgba(242,237,230,0.3); margin-top: 3px; text-align: right; }
+.chat-inputrow { display: flex; gap: 8px; padding: 10px 12px; border-top: 1px solid rgba(237,228,211,0.12); }
+.chat-inputrow textarea {
+  flex: 1; resize: none; font-family: 'Inconsolata', monospace; font-size: 0.78rem;
+  background: rgba(237,228,211,0.06); border: 1px solid rgba(237,228,211,0.18); color: var(--ink); padding: 7px 9px; outline: none;
+}
+.chat-inputrow textarea:focus { border-color: var(--red); }
 
 .sidebar-footer { padding: 14px 22px; border-top: 1px solid rgba(242,237,230,0.08); }
 .sidebar-footer button {
@@ -983,10 +1088,29 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
     </aside>
 
+    <!-- Team chat slide-in (097): team channel + DMs + event threads. -->
+    <div class="chat-panel" id="chatPanel" hidden>
+      <div class="chat-head">
+        <strong>💬 Team chat</strong>
+        <button class="hub-mini" id="chatCloseBtn">✕</button>
+      </div>
+      <div class="chat-cols">
+        <div class="chat-chans" id="chatChanList"></div>
+        <div class="chat-main">
+          <div class="chat-msgs" id="chatMsgs"><div class="hub-empty">Pick a channel.</div></div>
+          <div class="chat-inputrow">
+            <textarea id="chatInput" rows="2" placeholder="Message… (Enter to send, Shift+Enter for a new line)"></textarea>
+            <button class="hub-btn" id="chatSendBtn">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <main class="main">
       <div class="main-header">
         <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
+          <button class="refresh-btn" id="chatBtn" title="Team chat — messages between the team, live">💬 Chat<span class="chat-unread" id="chatUnread" hidden></span></button>
           <button class="refresh-btn wf-trigger" id="workflowBtn" title="See how everything connects, end to end">🗺️ Workflow</button>
           <button class="refresh-btn" id="apiMapBtn" title="See all API / data connections — established, pending, future">🔌 APIs</button>
           <button class="refresh-btn" id="logNoteBtn">＋ Log note</button>
@@ -1040,6 +1164,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           </div>
         </div>
       </div>
+
+      <div class="panel" id="panel-calendar"><div id="calBody"><div class="placeholder">Loading calendar…</div></div></div>
 
       <div class="panel" id="panel-inquiries">
         <div id="inquiriesBody"></div>
@@ -1309,7 +1435,28 @@ $('metaUrl').textContent = new URL(SUPABASE_URL).host;
 // truth for what each person sees in the menu.
 // ===========================================================================
 const ME = { id: null, role: null, staff_role: null, isMaster: false };
-const NAV_GROUP_ORDER = ['Sales', 'Operations', 'Finance', 'Partners', 'Audience', 'Insights'];
+// Modular product groups (096): 'Pinned' renders flat at the top; the rest are
+// collapsible sections that map 1:1 to sellable modules.
+const NAV_GROUP_ORDER = ['Pinned', 'Workflow', 'Finance', 'Marketing', 'Venues', 'Artists', 'Radio', 'Team HQ'];
+const NAV_GROUP_ICONS = { Workflow: '🎛️', Finance: '💰', Marketing: '📣', Venues: '🏛️', Artists: '🎧', Radio: '📻', 'Team HQ': '👥' };
+function navCollapsedState() {
+  try { return JSON.parse(localStorage.getItem('cw_nav_collapsed') || '{}'); } catch (_) { return {}; }
+}
+function setNavCollapsed(group, collapsed) {
+  const st = navCollapsedState(); st[group] = collapsed;
+  try { localStorage.setItem('cw_nav_collapsed', JSON.stringify(st)); } catch (_) {}
+}
+// Expand the group containing a tab (used when a tab is activated indirectly,
+// e.g. via the Workflow map or a restored session).
+function ensureNavGroupOpen(key) {
+  const btn = $('sidebarNav').querySelector(`button[data-tab="${key}"]`);
+  const body = btn && btn.closest('.nav-group-body');
+  if (!body || !body.classList.contains('collapsed')) return;
+  body.classList.remove('collapsed');
+  const head = $('sidebarNav').querySelector(`.nav-group-toggle[data-group="${body.dataset.group}"]`);
+  if (head) { head.classList.add('open'); const c = head.querySelector('.nav-caret'); if (c) c.textContent = '▾'; }
+  setNavCollapsed(body.dataset.group, false);
+}
 let MODULES = [];                 // module_registry rows
 let MY_OVERRIDES = {};            // { module_key: 'grant'|'revoke' } for the signed-in user
 const TEAM = { modules: [], people: [], overrides: {}, tab: 'people', users: [], aliasByUser: {}, gigByUser: {}, actRecent: [], activity: [], actFilter: { from: '', to: '', user: '', table: '' }, activeUser: null, detailActs: [], detailConvCount: 0 };
@@ -1346,7 +1493,9 @@ async function renderNav() {
   // Client-side fallback so the Pricing tab is visible/previewable before migration
   // 068 is applied (master only; staff still gated by signed_off). Skipped once the
   // real module_registry row exists.
-  if (!MODULES.some(m => m.key === 'pricing')) MODULES.push({ key: 'pricing', label: 'Pricing', nav_group: 'Sales', sort_order: 15, built: true, signed_off: false, master_only: false, default_roles: [] });
+  if (!MODULES.some(m => m.key === 'pricing')) MODULES.push({ key: 'pricing', label: 'Pricing', nav_group: 'Workflow', sort_order: 30, built: true, signed_off: false, master_only: false, default_roles: [] });
+  // Same resilience for the Calendar module ahead of migration 096.
+  if (!MODULES.some(m => m.key === 'calendar')) MODULES.push({ key: 'calendar', label: 'Calendar & Tasks', nav_group: 'Pinned', sort_order: 1, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -1354,28 +1503,54 @@ async function renderNav() {
   nav.innerHTML = '';
   let firstKey = null;
 
+  const collapsedSt = navCollapsedState();
+  const makeBtn = (m) => {
+    if (!firstKey) firstKey = m.key;
+    const btn = document.createElement('button');
+    btn.dataset.tab = m.key;
+    btn.dataset.label = m.label;
+    let html = `<span>${m.master_only ? '<span class="nav-lock">🔑</span> ' : ''}${escapeHtml(m.label)}</span>`;
+    if (ME.isMaster) {
+      const b = badgeForModule(m);
+      if (b) html += `<span class="nav-badge ${b.cls}">${b.text}</span>`;
+    }
+    btn.innerHTML = html;
+    return btn;
+  };
   for (const group of NAV_GROUP_ORDER) {
     const mods = MODULES
       .filter(m => m.nav_group === group && canAccessModule(m))
       .sort((a, b) => a.sort_order - b.sort_order);
     if (!mods.length) continue;
-    const label = document.createElement('div');
-    label.className = 'nav-group-label';
-    label.textContent = group;
-    nav.appendChild(label);
-    for (const m of mods) {
-      if (!firstKey) firstKey = m.key;
-      const btn = document.createElement('button');
-      btn.dataset.tab = m.key;
-      btn.dataset.label = m.label;
-      let html = `<span>${m.master_only ? '<span class="nav-lock">🔑</span> ' : ''}${escapeHtml(m.label)}</span>`;
-      if (ME.isMaster) {
-        const b = badgeForModule(m);
-        if (b) html += `<span class="nav-badge ${b.cls}">${b.text}</span>`;
-      }
-      btn.innerHTML = html;
-      nav.appendChild(btn);
+    if (group === 'Pinned') {
+      const wrap = document.createElement('div');
+      wrap.className = 'nav-pinned';
+      for (const m of mods) wrap.appendChild(makeBtn(m));
+      nav.appendChild(wrap);
+      continue;
     }
+    // Collapsed by default (compact bar); remembered per group.
+    const collapsed = collapsedSt[group] !== false;
+    const head = document.createElement('button');
+    head.type = 'button';
+    head.className = 'nav-group-toggle' + (collapsed ? '' : ' open');
+    head.dataset.group = group;
+    head.innerHTML = `<span class="nav-caret">${collapsed ? '▸' : '▾'}</span>`
+      + `<span class="nav-gicon">${NAV_GROUP_ICONS[group] || ''}</span>`
+      + `<span>${escapeHtml(group)}</span><span class="nav-gcount">${mods.length}</span>`;
+    nav.appendChild(head);
+    const body = document.createElement('div');
+    body.className = 'nav-group-body' + (collapsed ? ' collapsed' : '');
+    body.dataset.group = group;
+    for (const m of mods) body.appendChild(makeBtn(m));
+    nav.appendChild(body);
+    head.addEventListener('click', () => {
+      const nowCollapsed = !body.classList.contains('collapsed');
+      body.classList.toggle('collapsed', nowCollapsed);
+      head.classList.toggle('open', !nowCollapsed);
+      head.querySelector('.nav-caret').textContent = nowCollapsed ? '▸' : '▾';
+      setNavCollapsed(group, nowCollapsed);
+    });
   }
   // Master keeps Strategy as the default landing tab when visible (continuity).
   if (ME.isMaster && MODULES.some(m => m.key === 'strategy')) return 'strategy';
@@ -1388,8 +1563,9 @@ function activateTab(key) {
   if (!btn) return;
   // Leaving the event hub for a regular tab — drop the hub deep-link from the URL.
   try { if (location.hash.startsWith('#event=')) history.replaceState(null, '', location.pathname + location.search); } catch (_) {}
-  for (const b of $('sidebarNav').querySelectorAll('button')) b.classList.toggle('active', b === btn);
+  for (const b of $('sidebarNav').querySelectorAll('button[data-tab]')) b.classList.toggle('active', b === btn);
   for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-' + key);
+  ensureNavGroupOpen(key);
   $('mainTitle').textContent = btn.dataset.label || btn.textContent;
   try { localStorage.setItem('cw_active_tab', key); } catch (_) {}
   loadTab(key);
@@ -1452,10 +1628,11 @@ function renderTeamPeople() {
       <td class="num">${g.gigs || muted}</td>
       <td class="li-sub">${u.last_sign_in_at ? escapeHtml(fmtDate(u.last_sign_in_at)) : (u.email_confirmed ? 'never' : '<span class="muted">invite pending</span>')}</td>
       <td class="li-sub">${la ? escapeHtml(fmtDate(la)) : muted}</td>
+      <td>${u.id !== ME.id ? `<button class="hub-mini" data-user-email="${escapeHtml(u.id)}" title="Email ${escapeHtml(u.email)}">✉</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}" title="Chat with ${escapeHtml(u.full_name || u.email)}">💬</button>` : ''}</td>
     </tr>`;
   }).join('');
   return agg + `<div style="margin-bottom:10px;"><button class="hub-mini" id="addPersonBtn">＋ Add person</button></div>
-    <table class="data-table"><thead><tr><th>User</th><th>Scope</th><th>Aliases</th><th class="num">Gigs</th><th>Last sign-in</th><th>Last activity</th></tr></thead><tbody>${rows}</tbody></table>
+    <table class="data-table"><thead><tr><th>User</th><th>Scope</th><th>Aliases</th><th class="num">Gigs</th><th>Last sign-in</th><th>Last activity</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <div class="kpi-hint" style="margin-top:8px;">Click a user for their full profile — link their other aliases (e.g. a staffer who's also a DJ), see gig KPIs + history and their activity. Activity log tab shows everyone, filterable by date.</div>`;
 }
 function renderTeamModules() {
@@ -1546,7 +1723,8 @@ function renderUserDetail() {
   $('teamBody').innerHTML = `
     <button class="hub-mini" data-user-back>← all users</button>
     <div class="hub-head" style="margin-top:10px;">
-      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}</div>
+      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}
+        ${u.id !== ME.id ? `<span style="margin-left:10px;"><button class="hub-mini" data-user-email="${escapeHtml(u.id)}">✉ Email</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}">💬 Chat</button></span>` : ''}</div>
       <div class="hub-facts">
         <div><span class="lbl">Email</span>${escapeHtml(u.email)}</div>
         <div><span class="lbl">Last sign-in</span>${u.last_sign_in_at ? escapeHtml(fmtDT(u.last_sign_in_at)) : 'never'}</div>
@@ -1619,6 +1797,8 @@ async function openLinkAlias() {
 // Team panel listeners (additive — module/override/add-person handled by the global ones).
 $('panel-team').addEventListener('click', (e) => {
   const tb = e.target.closest('[data-team-tab]'); if (tb) { TEAM.tab = tb.dataset.teamTab; if (TEAM.tab === 'activity' && !TEAM.activity.length && !TEAM.actFilter.from) { const d = new Date(); d.setDate(d.getDate() - 30); TEAM.actFilter.from = d.toISOString().slice(0, 10); loadActivity(); } else renderTeam(); return; }
+  const ue = e.target.closest('[data-user-email]'); if (ue) { e.stopPropagation(); teamEmailUser(ue.dataset.userEmail); return; }
+  const uc = e.target.closest('[data-user-chat]'); if (uc) { e.stopPropagation(); chatOpenDmWith(uc.dataset.userChat); return; }
   const uo = e.target.closest('[data-user-open]'); if (uo) { openUserDetail(uo.dataset.userOpen); return; }
   if (e.target.closest('[data-user-back]')) { TEAM.activeUser = null; renderTeam(); return; }
   if (e.target.closest('[data-user-save]')) { saveUserProfile(); return; }
@@ -2218,6 +2398,7 @@ async function renderForSession(session) {
     if (saved && $('sidebarNav').querySelector(`button[data-tab="${saved}"]`)) target = saved;
   } catch (_) {}
   if (target) activateTab(target);
+  chatInit();
 }
 
 sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
@@ -2802,6 +2983,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'expenses') { await loadExpenses(); return; } // custom (inline event assignment)
   if (tab === 'income') { await loadIncome(); return; } // custom (inline event + payer assignment)
   if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
+  if (tab === 'calendar') { await loadCalendar(); return; } // custom (master calendar + tasks board)
   if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
   if (tab === 'pricing') { await loadPricing(); return; } // custom (event pricing tool)
@@ -9660,6 +9842,8 @@ async function openCompose(recipients, ctx) {
       const sent = data?.sent || 0, total = data?.total || valid.length;
       const failed = (data?.results || []).filter(r => !r.ok);
       toast(`Emailed ${sent}/${total}` + (failed.length ? ` · ${failed.length} couldn't send (${failed.map(f => f.error).join('; ')})` : ''), failed.length ? 'err' : 'ok');
+      // Optional hook (e.g. Team emails mirror into the DM chat thread).
+      if (!failed.length && typeof ctx.onSent === 'function') { try { await ctx.onSent({ subject, body: htmlBody }); } catch (_) {} }
     }, 'Send email');
   setTimeout(() => { const v = $('cmpSubj') && document.getElementById('cmpVis'); if (v) v.addEventListener('change', () => { $('cmpAclRow').style.display = v.value === 'restricted' ? '' : 'none'; }); }, 40);
 }
@@ -9805,6 +9989,613 @@ $('panel-conversations').addEventListener('input', (e) => { const q = e.target.c
 $('panel-conversations').addEventListener('change', (e) => {
   const f = e.target.closest('[data-convfilter]'); if (f) { convState.filter = f.value; renderConvList(); return; }
   const v = e.target.closest('[data-conv-vis]'); if (v) { convSetVisibility(v.value); return; }
+});
+
+// ============================================================================
+// Master Calendar & Tasks — pinned 'calendar' module (migration 096).
+// One grid for everything with a date: our events (colored by series, with
+// lineups), ⭐ milestones (tasks.milestone — the ONLY tasks on the grid),
+// social posts, RA/Ticketmaster market shows, and roster artists playing
+// elsewhere (name-matched against ra_events lineups). Ordinary tasks live on
+// the filterable board below the grid, cross-event for the first time.
+// Date convention: always local midnight via `ds + 'T00:00:00'` (see RA grid).
+// ============================================================================
+const CAL_SERIES_COLORS = {
+  'Come With Parties': '#C75A3C', 'Dance Infusion': '#2E8E72',
+  'Come With Production': '#B5791F', 'Content Creation': '#8362A8', 'Bookings': '#4E7A9B',
+};
+const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CAL = {
+  month: new Date().toISOString().slice(0, 7),           // 'YYYY-MM'
+  view: 'month',                                         // month | agenda
+  layers: { milestones: true, social: false, market: false, elsewhere: false },
+  filt: { series: [], status: [], venue: [], artist: [] }, // empty = all
+  selDay: null,
+  data: null,                                            // month bundle
+  tasks: [],                                             // full board list (not month-bound)
+  board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', due: 'all', msOnly: false, sort: 'due', dir: 1 },
+};
+function calToday() { return new Date().toISOString().slice(0, 10); }
+function calMonthRange() {
+  const [y, m] = CAL.month.split('-').map(Number);
+  const last = new Date(y, m, 0).getDate();
+  return { y, m, from: `${CAL.month}-01`, to: `${CAL.month}-${String(last).padStart(2, '0')}`, days: last };
+}
+async function loadCalendar() {
+  const body = $('calBody');
+  if (!CAL.data) body.innerHTML = '<div class="placeholder">Loading calendar…</div>';
+  try { await calFetch(); } catch (err) { body.innerHTML = `<div class="panel-state err">${escapeHtml(err.message || String(err))}</div>`; return; }
+  calRender();
+}
+async function calFetch() {
+  const { from, to } = calMonthRange();
+  const wantMarket = CAL.layers.market || CAL.layers.elsewhere;
+  const [evs, ms, so, mk, roster, ven, tasks] = await Promise.all([
+    sb.from('events').select('id,slug,name,series,type,status,event_date,doors_time,venue_id,venue:venues(name)')
+      .is('deleted_at', null).gte('event_date', from).lte('event_date', to).order('event_date'),
+    sb.from('tasks').select('id,title,due_date,status,event_id').eq('milestone', true)
+      .is('deleted_at', null).gte('due_date', from).lte('due_date', to),
+    CAL.layers.social
+      ? sb.from('social_posts').select('id,title,stage,scheduled_for,channels').is('deleted_at', null)
+          .gte('scheduled_for', from).lte('scheduled_for', to + 'T23:59:59')
+      : Promise.resolve({ data: [] }),
+    wantMarket
+      ? sb.from('ra_events').select('ra_id,title,event_date,venue_name,lineup,source,attending,content_url')
+          .gte('event_date', from).lte('event_date', to)
+          .order('attending', { ascending: false, nullsFirst: false }).limit(500)
+      : Promise.resolve({ data: [] }),
+    CAL.layers.elsewhere
+      ? sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').in('role', ['artist', 'dj', 'performer', 'dancer']).eq('active', true)
+      : Promise.resolve({ data: [] }),
+    sb.from('venues').select('id,name').is('deleted_at', null).order('name'),
+    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,event_id,event:events(id,name),task_assignments(id,role,actor:actors(id,display_name))')
+      .is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }).limit(600),
+  ]);
+  for (const r of [evs, ms, ven, tasks]) if (r.error) throw r.error;
+  const events = evs.data || [];
+  const ids = events.map(e => e.id);
+  const parts = ids.length
+    ? await sb.from('event_participants').select('event_id,roles,role,bill_order,actor:actors(id,display_name)').in('event_id', ids)
+    : { data: [] };
+  const partsByEvent = {};
+  (parts.data || []).forEach(p => { (partsByEvent[p.event_id] ||= []).push(p); });
+  Object.values(partsByEvent).forEach(l => l.sort((a, b) => (a.bill_order || 99) - (b.bill_order || 99)));
+  // roster name → actor, for the "ours elsewhere" layer
+  const rosterByName = new Map();
+  (roster.data || []).forEach(r => {
+    const a = r.actor; if (a && !a.deleted_at && a.display_name) rosterByName.set(a.display_name.toLowerCase().trim(), a);
+  });
+  const elsewhere = [];
+  if (CAL.layers.elsewhere) {
+    const ownNames = new Set(events.map(e => (e.name || '').toLowerCase().trim()));
+    (mk.data || []).forEach(me => {
+      if (ownNames.has((me.title || '').toLowerCase().trim())) return; // our own listed show, not "elsewhere"
+      (me.lineup || []).forEach(la => {
+        const hit = rosterByName.get((la.name || '').toLowerCase().trim());
+        if (hit) elsewhere.push({ date: me.event_date, actor_id: hit.id, artist: hit.display_name, show: me.title, venue: me.venue_name, url: me.content_url });
+      });
+    });
+  }
+  // artist filter options: anyone on a bill this month, plus elsewhere hits
+  const artistOpts = new Map();
+  Object.values(partsByEvent).flat().forEach(p => { if (p.actor) artistOpts.set(p.actor.id, p.actor.display_name); });
+  elsewhere.forEach(x => artistOpts.set(x.actor_id, x.artist));
+  CAL.data = {
+    events, partsByEvent, milestones: ms.data || [], social: so.data || [], market: mk.data || [],
+    elsewhere, venues: ven.data || [],
+    artistOpts: [...artistOpts.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => a.name.localeCompare(b.name)),
+  };
+  CAL.tasks = tasks.data || [];
+}
+function calVisibleEvents() {
+  const f = CAL.filt, d = CAL.data;
+  return d.events.filter(ev =>
+    (!f.series.length || f.series.includes(ev.series || '')) &&
+    (!f.status.length || f.status.includes(ev.status || '')) &&
+    (!f.venue.length || f.venue.includes(ev.venue_id || '')) &&
+    (!f.artist.length || (d.partsByEvent[ev.id] || []).some(p => p.actor && f.artist.includes(p.actor.id))));
+}
+function calVisibleElsewhere() {
+  const f = CAL.filt;
+  return CAL.data.elsewhere.filter(x => !f.artist.length || f.artist.includes(x.actor_id));
+}
+function calLineupStr(evId, max = 4) {
+  const l = (CAL.data.partsByEvent[evId] || []).map(p => p.actor?.display_name).filter(Boolean);
+  return l.length ? l.slice(0, max).join(', ') + (l.length > max ? ` +${l.length - max}` : '') : '';
+}
+function calDD(key, label, opts) {
+  const sel = CAL.filt[key];
+  const boxes = opts.map(o =>
+    `<label><input type="checkbox" data-cal-filt="${key}" value="${escapeHtml(o.v)}"${sel.includes(o.v) ? ' checked' : ''}> ${escapeHtml(o.l)}</label>`).join('');
+  return `<details class="cal-dd" data-key="${key}" data-label="${escapeHtml(label)}"><summary>${label}${sel.length ? ` (${sel.length})` : ''} ▾</summary><div class="cal-dd-pop">${boxes || '<span class="li-sub">none this month</span>'}</div></details>`;
+}
+function calRender() {
+  const d = CAL.data; if (!d) return;
+  const { y, m } = calMonthRange();
+  const monthLbl = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const layerChip = (k, lbl) => `<button class="cal-chipbtn${CAL.layers[k] ? ' on' : ''}" data-cal-layer="${k}">${lbl}</button>`;
+  const seriesOpts = [...new Set(d.events.map(e => e.series).filter(Boolean))].sort().map(s => ({ v: s, l: s }));
+  const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'].map(s => ({ v: s, l: s }));
+  const venueOpts = d.venues.map(v => ({ v: v.id, l: v.name }));
+  const artistOpts = d.artistOpts.map(a => ({ v: a.id, l: a.name }));
+  const legend = Object.entries(CAL_SERIES_COLORS)
+    .map(([s, c]) => `<span class="li-sub" style="font-size:.62rem;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:3px;"></span>${escapeHtml(s.replace('Come With ', ''))}</span>`).join(' ');
+  $('calBody').innerHTML = `
+    <div class="cal-toolbar">
+      <button class="hub-mini" data-cal-mon="-1">‹</button><strong style="min-width:120px;text-align:center;">${monthLbl}</strong><button class="hub-mini" data-cal-mon="1">›</button>
+      <button class="hub-mini" data-cal-goto-today>Today</button>
+      <span style="width:10px;"></span>
+      <button class="cal-chipbtn${CAL.view === 'month' ? ' on' : ''}" data-cal-view="month">Month</button>
+      <button class="cal-chipbtn${CAL.view === 'agenda' ? ' on' : ''}" data-cal-view="agenda">Agenda</button>
+      <span style="width:10px;"></span>
+      ${layerChip('milestones', '⭐ Milestones')}${layerChip('social', '📱 Social')}${layerChip('market', '🌐 Market')}${layerChip('elsewhere', '🎧 Ours elsewhere')}
+    </div>
+    <div class="cal-toolbar">
+      ${calDD('series', 'Series', seriesOpts)}${calDD('status', 'Status', statusOpts)}${calDD('venue', 'Venue', venueOpts)}${calDD('artist', 'Artist', artistOpts)}
+      <span style="margin-left:auto;display:flex;gap:10px;align-items:center;">${legend}</span>
+    </div>
+    <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : calAgendaHtml()}</div>
+    <div id="calDayDetail">${CAL.selDay ? calDayDetailHtml(CAL.selDay) : ''}</div>
+    <div class="hub-sec-bar" style="margin-top:22px;"><h3>Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
+    <div class="cal-board" id="calBoard"></div>`;
+  calRenderBoard();
+}
+// Refresh the grid/agenda + day detail without rebuilding the toolbar, so the
+// multi-select dropdowns stay open while the user ticks several options.
+function calRefreshViews() {
+  const w = $('calGridWrap'); if (w) w.innerHTML = CAL.view === 'month' ? calGridHtml() : calAgendaHtml();
+  const dd = $('calDayDetail'); if (dd) dd.innerHTML = CAL.selDay ? calDayDetailHtml(CAL.selDay) : '';
+  document.querySelectorAll('#calBody .cal-dd').forEach(d => {
+    const key = d.dataset.key; if (!key) return;
+    const n = CAL.filt[key].length;
+    const s = d.querySelector('summary'); if (s) s.textContent = `${d.dataset.label}${n ? ` (${n})` : ''} ▾`;
+  });
+}
+function calBuckets() {
+  const byDay = {};
+  const add = (ds, layer, item) => { if (!ds) return; ((byDay[ds] ||= {})[layer] ||= []).push(item); };
+  calVisibleEvents().forEach(e => add(e.event_date, 'events', e));
+  if (CAL.layers.milestones) CAL.data.milestones.forEach(t => add(t.due_date, 'ms', t));
+  if (CAL.layers.social) CAL.data.social.forEach(p => add((p.scheduled_for || '').slice(0, 10), 'so', p));
+  if (CAL.layers.market) CAL.data.market.forEach(e => add(e.event_date, 'mk', e));
+  if (CAL.layers.elsewhere) calVisibleElsewhere().forEach(x => add(x.date, 'el', x));
+  return byDay;
+}
+function calGridHtml() {
+  const { y, m, days } = calMonthRange();
+  const startDow = new Date(y, m - 1, 1).getDay();
+  const byDay = calBuckets();
+  const today = calToday();
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push('<div></div>');
+  for (let d = 1; d <= days; d++) {
+    const ds = `${CAL.month}-${String(d).padStart(2, '0')}`;
+    const b = byDay[ds] || {};
+    const chips = [];
+    (b.events || []).forEach(e => {
+      const c = CAL_SERIES_COLORS[e.series] || '#8a8a8a';
+      chips.push(`<div class="cal-chip" data-cal-ev="${escapeHtml(e.id)}" title="${escapeHtml(e.name)}${e.venue?.name ? ' @ ' + escapeHtml(e.venue.name) : ''}" style="border-left-color:${c};background:${c}22;">${escapeHtml(e.name)}</div>`);
+    });
+    (b.ms || []).forEach(t => chips.push(`<div class="cal-chip cal-ms" title="Milestone: ${escapeHtml(t.title)}">⭐ ${escapeHtml(t.title)}</div>`));
+    (b.so || []).forEach(p => chips.push(`<div class="cal-chip cal-so" title="Social: ${escapeHtml(p.title || '')}">📱 ${escapeHtml(p.title || 'post')}</div>`));
+    (b.el || []).forEach(x => chips.push(`<div class="cal-chip cal-el" title="${escapeHtml(x.artist)} @ ${escapeHtml(x.venue || x.show)}">🎧 ${escapeHtml(x.artist)}</div>`));
+    const extra = chips.length > 4 ? `<div class="cal-more">+${chips.length - 4} more</div>` : '';
+    const mkN = (b.mk || []).length;
+    cells.push(`<div class="cal-cell${ds === CAL.selDay ? ' sel' : ''}${ds < today ? ' past' : ''}${ds === today ? ' today' : ''}" data-cal-day="${ds}">
+      <div class="cal-dnum"><span>${d}</span>${mkN ? `<span class="cal-mkn">🌐${mkN}</span>` : ''}</div>${chips.slice(0, 4).join('')}${extra}</div>`);
+  }
+  const hdr = CAL_DOW.map(dw => `<div class="li-sub" style="text-align:center;font-size:.68rem;">${dw}</div>`).join('');
+  return `<div class="cal-grid">${hdr}${cells.join('')}</div>`;
+}
+function calAgendaHtml() {
+  const byDay = calBuckets();
+  const days = Object.keys(byDay).sort();
+  if (!days.length) return '<div class="hub-empty">Nothing on the calendar this month for the current filters.</div>';
+  return days.map(ds => `<div class="hub-sec-bar" style="margin-top:10px;"><h3>${escapeHtml(new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }))}</h3></div>${calDayListHtml(byDay[ds], 4)}`).join('');
+}
+function calDayDetailHtml(ds) {
+  const b = calBuckets()[ds];
+  const lbl = new Date(ds + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+  return `<div class="hub-sec-bar" style="margin-top:14px;"><h3>${escapeHtml(lbl)}</h3></div>${b ? calDayListHtml(b, 12) : '<div class="hub-empty">Nothing scheduled.</div>'}`;
+}
+function calDayListHtml(b, mkMax) {
+  const li = (main, sub, right = '', attrs = '') =>
+    `<div class="hub-li" ${attrs}><div class="li-main"><strong>${main}</strong><div class="li-sub">${sub}</div></div>${right}</div>`;
+  const out = [];
+  (b.events || []).forEach(e => {
+    const c = CAL_SERIES_COLORS[e.series] || '#8a8a8a';
+    const lineup = calLineupStr(e.id, 6);
+    out.push(li(
+      `<span style="color:${c};">●</span> <a href="#" data-cal-ev="${escapeHtml(e.id)}">${escapeHtml(e.name)}</a>`,
+      `${escapeHtml(e.series || '')}${e.venue?.name ? ' · ' + escapeHtml(e.venue.name) : ''}${e.doors_time ? ' · doors ' + escapeHtml(e.doors_time.slice(0, 5)) : ''} · ${escapeHtml(e.status || '')}${lineup ? '<br>🎧 ' + escapeHtml(lineup) : ''}`));
+  });
+  (b.ms || []).forEach(t => out.push(li(`⭐ ${escapeHtml(t.title)}`, `milestone · ${escapeHtml(t.status)}`)));
+  (b.so || []).forEach(p => out.push(li(`📱 ${escapeHtml(p.title || 'post')}`, `social · ${escapeHtml(p.stage || '')}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}`)));
+  (b.el || []).forEach(x => out.push(li(`🎧 ${escapeHtml(x.artist)}`, `plays ${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank">${escapeHtml(x.show)}</a>` : escapeHtml(x.show)}${x.venue ? ' @ ' + escapeHtml(x.venue) : ''}`)));
+  (b.mk || []).slice(0, mkMax).forEach(e => out.push(li(
+    `🌐 ${e.content_url ? `<a href="${escapeHtml(e.content_url)}" target="_blank">${escapeHtml(e.title)}</a>` : escapeHtml(e.title)}`,
+    `${escapeHtml(e.venue_name || '')}${e.attending != null ? ' · ' + e.attending + ' RSVP' : ''}${e.source === 'tm' ? ' · Ticketmaster' : ''}`)));
+  if ((b.mk || []).length > mkMax) out.push(`<div class="li-sub" style="padding:4px 8px;">…+${b.mk.length - mkMax} more market shows</div>`);
+  return `<div class="hub-list">${out.join('')}</div>`;
+}
+// ---- Tasks board (below the grid) ----
+const CAL_PRIO_RANK = { high: 0, medium: 1, low: 2 };
+function calBoardTasks() {
+  const f = CAL.board, today = calToday();
+  let list = CAL.tasks.filter(t =>
+    (!f.status.length || f.status.includes(t.status)) &&
+    (!f.event || String(t.event_id || '') === f.event) &&
+    (!f.assignee || (t.task_assignments || []).some(a => a.actor && a.actor.id === f.assignee)) &&
+    (!f.priority || t.priority === f.priority) &&
+    (!f.msOnly || t.milestone) &&
+    (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
+  if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
+  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date >= today && t.due_date <= lim); }
+  else if (f.due === 'none') list = list.filter(t => !t.due_date);
+  const dir = f.dir;
+  list.sort((a, b) => {
+    if (f.sort === 'due') return dir * String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
+    if (f.sort === 'priority') return dir * ((CAL_PRIO_RANK[a.priority] ?? 3) - (CAL_PRIO_RANK[b.priority] ?? 3));
+    if (f.sort === 'event') return dir * String(a.event?.name || '').localeCompare(String(b.event?.name || ''));
+    return dir * String(a.status).localeCompare(String(b.status));
+  });
+  return list;
+}
+function calRenderBoard() {
+  const f = CAL.board;
+  const list = calBoardTasks();
+  const today = calToday();
+  const evOpts = [...new Map(CAL.tasks.filter(t => t.event).map(t => [t.event.id, t.event.name])).entries()]
+    .sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => `<option value="${escapeHtml(id)}"${f.event === id ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+  const asgMap = new Map();
+  CAL.tasks.forEach(t => (t.task_assignments || []).forEach(a => { if (a.actor) asgMap.set(a.actor.id, a.actor.display_name); }));
+  const asgOpts = [...asgMap.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => `<option value="${escapeHtml(id)}"${f.assignee === id ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+  const sChip = (s) => `<button class="cal-chipbtn${f.status.includes(s) ? ' on' : ''}" data-tb-sf="${s}">${s}</button>`;
+  const statusSel = (t) => `<select class="hub-status-sel" data-tb-status="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const th = (k, lbl) => `<th data-tb-sort="${k}">${lbl}${f.sort === k ? (f.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+  const rows = list.map(t => {
+    const who = (t.task_assignments || []).map(a => escapeHtml(a.actor?.display_name || '?')).join(', ');
+    const over = t.due_date && t.due_date < today && t.status !== 'done';
+    return `<tr class="${t.status === 'done' ? 'done' : ''}">
+      <td><span class="tb-star${t.milestone ? ' on' : ''}" data-tb-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
+      <td>${escapeHtml(t.title)}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
+      <td>${t.event ? `<a href="#" data-cal-ev="${escapeHtml(t.event.id)}">${escapeHtml(t.event.name)}</a>` : '<span class="li-sub">—</span>'}</td>
+      <td>${who || '<span class="li-sub">unassigned</span>'}</td>
+      <td>${t.priority ? escapeHtml(t.priority) : '<span class="li-sub">—</span>'}</td>
+      <td class="${over ? 'cal-due-over' : ''}">${t.due_date ? escapeHtml(fmtDate(t.due_date)) : '<span class="li-sub">—</span>'}</td>
+      <td>${statusSel(t)}</td>
+      <td><button class="hub-mini danger" data-tb-del="${escapeHtml(t.id)}">✕</button></td>
+    </tr>`;
+  }).join('');
+  $('calBoard').innerHTML = `
+    <div class="cal-board-bar">
+      <input class="modal-input" style="width:180px;padding:5px 8px;font-size:.75rem;" placeholder="Search tasks…" value="${escapeHtml(f.q)}" data-tb-q>
+      ${['todo', 'doing', 'blocked', 'done'].map(sChip).join('')}
+      <select class="hub-status-sel" data-tb-filter="event"><option value="">All events</option>${evOpts}</select>
+      <select class="hub-status-sel" data-tb-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
+      <select class="hub-status-sel" data-tb-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue'], ['7', 'Next 7 days'], ['30', 'Next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-tb-mson>⭐ milestones only</button>
+      <span class="li-sub" style="margin-left:auto;">${list.length} task${list.length !== 1 ? 's' : ''}</span>
+    </div>
+    <table><thead><tr><th>⭐</th>${th('title', 'Task')}${th('event', 'Event')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.</div></td></tr>`}</tbody></table>`;
+}
+async function calAddTask() {
+  const [evs, team] = await Promise.all([
+    sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(150),
+    sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true),
+  ]);
+  const evOpts = (evs.data || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('');
+  const asgOpts = (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at)
+    .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi('Add task / milestone', 'Milestones show on the calendar grid; tasks live on the board', `
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required></div>
+    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2"></textarea></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date"></div>
+      <div><label class="modal-label">Priority</label><select class="modal-select" name="priority"><option value="">—</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Event (optional)</label><select class="modal-select" name="event_id"><option value="">— standalone —</option>${evOpts}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Assignee (optional)</label><select class="modal-select" name="assignee"><option value="">—</option>${asgOpts}</select></div>
+      <div><label class="modal-label" style="display:flex;gap:8px;align-items:center;margin-top:22px;"><input type="checkbox" name="milestone"> ⭐ Milestone</label></div>
+    </div>`,
+    async () => {
+      const title = kpiVal('title'); if (!title) throw new Error('Title is required');
+      const t = { title, source: 'manual', status: 'todo', milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked };
+      const desc = kpiVal('description'); if (desc) t.description = desc;
+      const dd = kpiVal('due_date'); if (dd) t.due_date = dd;
+      const pr = kpiVal('priority'); if (pr) t.priority = pr;
+      const ev = kpiVal('event_id'); if (ev) t.event_id = ev;
+      const { data, error } = await sb.from('tasks').insert(t).select('id').single();
+      if (error) throw error;
+      const asg = kpiVal('assignee');
+      if (asg) { const r = await sb.from('task_assignments').insert({ task_id: data.id, actor_id: asg, role: 'doer' }); if (r.error) throw r.error; }
+      closeKpi(); toast(t.milestone ? 'Milestone added' : 'Task added', 'ok');
+      await loadCalendar();
+    }, 'Add');
+}
+$('panel-calendar').addEventListener('click', async (e) => {
+  const evLink = e.target.closest('[data-cal-ev]');
+  if (evLink) { e.preventDefault(); gotoSource('event', evLink.dataset.calEv); return; }
+  const mon = e.target.closest('[data-cal-mon]');
+  if (mon) {
+    const { y, m } = calMonthRange();
+    const nd = new Date(y, m - 1 + Number(mon.dataset.calMon), 1);
+    CAL.month = `${nd.getFullYear()}-${String(nd.getMonth() + 1).padStart(2, '0')}`;
+    CAL.selDay = null; await loadCalendar(); return;
+  }
+  if (e.target.closest('[data-cal-goto-today]')) { CAL.month = calToday().slice(0, 7); CAL.selDay = calToday(); await loadCalendar(); return; }
+  const view = e.target.closest('[data-cal-view]');
+  if (view) { CAL.view = view.dataset.calView; calRender(); return; }
+  const layer = e.target.closest('[data-cal-layer]');
+  if (layer) { const k = layer.dataset.calLayer; CAL.layers[k] = !CAL.layers[k]; await loadCalendar(); return; }
+  const cell = e.target.closest('.cal-cell[data-cal-day]');
+  if (cell) { CAL.selDay = CAL.selDay === cell.dataset.calDay ? null : cell.dataset.calDay; calRefreshViews(); return; }
+  if (e.target.closest('[data-cal-task-add]')) { calAddTask(); return; }
+  const star = e.target.closest('[data-tb-star]');
+  if (star) {
+    const t = CAL.tasks.find(x => x.id === star.dataset.tbStar); if (!t) return;
+    const { error } = await sb.from('tasks').update({ milestone: !t.milestone }).eq('id', t.id);
+    if (error) { toast(error.message, 'err'); return; }
+    toast(!t.milestone ? 'Now a milestone — it shows on the grid' : 'No longer a milestone', 'ok');
+    await loadCalendar(); return;
+  }
+  const del = e.target.closest('[data-tb-del]');
+  if (del) {
+    if (!confirm('Delete this task?')) return;
+    const { error } = await sb.from('tasks').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.tbDel);
+    if (error) { toast(error.message, 'err'); return; }
+    toast('Task deleted', 'ok'); await loadCalendar(); return;
+  }
+  const sf = e.target.closest('[data-tb-sf]');
+  if (sf) { const s = sf.dataset.tbSf; const arr = CAL.board.status; const i = arr.indexOf(s); i >= 0 ? arr.splice(i, 1) : arr.push(s); calRenderBoard(); return; }
+  if (e.target.closest('[data-tb-mson]')) { CAL.board.msOnly = !CAL.board.msOnly; calRenderBoard(); return; }
+  const srt = e.target.closest('th[data-tb-sort]');
+  if (srt) { const k = srt.dataset.tbSort; if (CAL.board.sort === k) CAL.board.dir *= -1; else { CAL.board.sort = k; CAL.board.dir = 1; } calRenderBoard(); return; }
+});
+$('panel-calendar').addEventListener('change', async (e) => {
+  const filt = e.target.closest('[data-cal-filt]');
+  if (filt) {
+    const key = filt.dataset.calFilt, v = filt.value, arr = CAL.filt[key];
+    if (filt.checked) { if (!arr.includes(v)) arr.push(v); }
+    else { const i = arr.indexOf(v); if (i >= 0) arr.splice(i, 1); }
+    calRefreshViews(); return;
+  }
+  const st = e.target.closest('[data-tb-status]');
+  if (st) {
+    const { error } = await sb.from('tasks').update({ status: st.value }).eq('id', st.dataset.tbStatus);
+    if (error) { toast(error.message, 'err'); return; }
+    const t = CAL.tasks.find(x => x.id === st.dataset.tbStatus); if (t) t.status = st.value;
+    calRenderBoard(); return;
+  }
+  const bf = e.target.closest('[data-tb-filter]');
+  if (bf) { CAL.board[bf.dataset.tbFilter] = bf.value; calRenderBoard(); return; }
+});
+$('panel-calendar').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-tb-q]'); if (q) { CAL.board.q = q.value; calRenderBoard(); }
+});
+
+// ============================================================================
+// Team chat (migration 097) — 💬 header button on every tab opens a slide-in
+// panel: team-wide channel + per-pair DMs + per-event threads. Live delivery
+// via Supabase Realtime (postgres_changes on chat_messages, RLS-filtered per
+// subscriber) with a polling fallback. Emails sent to a teammate from Users
+// are mirrored into the DM thread as kind='email' rows so one thread holds
+// both. Unread = messages newer than my chat_members.last_read_at.
+// ============================================================================
+const CHAT_POLL_MS = 45000;
+const CHAT = { open: false, channels: [], staffMap: {}, activeId: null, msgs: [], unreadByChan: {}, sub: null, subOk: false, timer: null };
+async function chatInit() {
+  if (CHAT.timer) return;
+  chatRefreshUnread();
+  try {
+    CHAT.sub = sb.channel('team-chat')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (p) => chatOnInsert(p.new))
+      .subscribe((status) => { CHAT.subOk = status === 'SUBSCRIBED'; });
+  } catch (_) { CHAT.subOk = false; }
+  CHAT.timer = setInterval(() => {
+    if (CHAT.open && CHAT.activeId) chatOpenChannel(CHAT.activeId, { silent: true });
+    else if (!CHAT.subOk) chatRefreshUnread();
+  }, CHAT_POLL_MS);
+}
+async function chatLoadChannels() {
+  const staff = await loadStaff();
+  CHAT.staffMap = {};
+  staff.forEach(p => { CHAT.staffMap[p.id] = p.full_name || p.email; });
+  const { data, error } = await sb.from('chat_channels')
+    .select('id,kind,name,event_id,dm_key,created_by,event:events(name),members:chat_members(user_id,last_read_at)')
+    .is('deleted_at', null);
+  if (error) throw error;
+  const rank = (c) => c.kind === 'team' ? 0 : c.kind === 'event' ? 1 : 2;
+  CHAT.channels = (data || []).sort((a, b) => rank(a) - rank(b) || chatChanLabel(a).localeCompare(chatChanLabel(b)));
+}
+function chatChanLabel(c) {
+  if (c.kind === 'team') return '# Team';
+  if (c.kind === 'event') return '🎪 ' + (c.event?.name || c.name || 'Event');
+  const other = (c.members || []).map(m => m.user_id).find(u => u !== ME.id);
+  return '@ ' + (CHAT.staffMap[other] || 'DM');
+}
+function chatMyLastRead(c) {
+  const me = (c.members || []).find(m => m.user_id === ME.id);
+  return me ? me.last_read_at : null;
+}
+async function chatRefreshUnread() {
+  try {
+    await chatLoadChannels();
+    const { data } = await sb.from('chat_messages').select('id,channel_id,author_id,created_at')
+      .is('deleted_at', null).order('created_at', { ascending: false }).limit(300);
+    const byChan = {};
+    (data || []).forEach(m => {
+      if (m.author_id === ME.id) return;
+      const c = CHAT.channels.find(x => x.id === m.channel_id); if (!c) return;
+      const lr = chatMyLastRead(c);
+      if (!lr || m.created_at > lr) byChan[m.channel_id] = (byChan[m.channel_id] || 0) + 1;
+    });
+    CHAT.unreadByChan = byChan;
+    chatUpdateBadge();
+    if (CHAT.open) chatRenderChanList();
+  } catch (_) { /* badge refresh is best-effort */ }
+}
+function chatUpdateBadge() {
+  const n = Object.values(CHAT.unreadByChan).reduce((t, x) => t + x, 0);
+  const b = $('chatUnread'); if (!b) return;
+  b.hidden = !n; b.textContent = n > 99 ? '99+' : String(n);
+}
+function chatOpenPanel() {
+  CHAT.open = true; $('chatPanel').hidden = false;
+  chatRefreshUnread().then(() => {
+    chatRenderChanList();
+    let target = null;
+    try { target = localStorage.getItem('cw_chat_last'); } catch (_) {}
+    if (!CHAT.channels.some(c => c.id === target)) target = (CHAT.channels.find(c => c.kind === 'team') || CHAT.channels[0])?.id;
+    if (target) chatOpenChannel(target);
+  });
+}
+function chatClosePanel() { CHAT.open = false; $('chatPanel').hidden = true; }
+function chatRenderChanList() {
+  const el = $('chatChanList'); if (!el) return;
+  el.innerHTML = CHAT.channels.map(c => {
+    const n = CHAT.unreadByChan[c.id] || 0;
+    return `<button data-chat-chan="${escapeHtml(c.id)}" class="${c.id === CHAT.activeId ? 'active' : ''}" title="${escapeHtml(chatChanLabel(c))}">
+      <span style="overflow:hidden;text-overflow:ellipsis;">${escapeHtml(chatChanLabel(c))}</span>${n ? `<span class="chat-unread">${n}</span>` : ''}</button>`;
+  }).join('') + `<button data-chat-newdm>＋ New DM</button><button data-chat-newevent>＋ Event thread</button>`;
+}
+function chatRenderMsgs() {
+  const el = $('chatMsgs'); if (!el) return;
+  el.innerHTML = CHAT.msgs.map(m => {
+    const mine = m.author_id === ME.id;
+    const who = mine ? 'You' : (CHAT.staffMap[m.author_id] || 'Teammate');
+    const when = fmtDT(m.created_at);
+    if (m.kind === 'system') return `<div class="li-sub" style="align-self:center;font-size:.62rem;">${escapeHtml(m.body)}</div>`;
+    return `<div class="chat-msg${mine ? ' mine' : ''}${m.kind === 'email' ? ' email' : ''}">
+      <div class="chat-who">${escapeHtml(who)}${m.kind === 'email' ? ' · ✉ email' : ''}</div>
+      ${m.kind === 'email' && m.email_subject ? `<div class="chat-esub">${escapeHtml(m.email_subject)}</div>` : ''}
+      <div>${escapeHtml(m.body).replace(/\n/g, '<br>')}</div>
+      <div class="chat-when">${escapeHtml(when)}</div></div>`;
+  }).join('') || '<div class="hub-empty">No messages yet — say hi.</div>';
+  el.scrollTop = el.scrollHeight;
+}
+async function chatOpenChannel(id, opts = {}) {
+  const switching = CHAT.activeId !== id;
+  CHAT.activeId = id;
+  try { localStorage.setItem('cw_chat_last', id); } catch (_) {}
+  const { data, error } = await sb.from('chat_messages')
+    .select('id,channel_id,author_id,kind,body,email_subject,created_at')
+    .eq('channel_id', id).is('deleted_at', null).order('created_at').limit(400);
+  if (error) { if (!opts.silent) toast(error.message, 'err'); return; }
+  const changed = switching || (data || []).length !== CHAT.msgs.length;
+  CHAT.msgs = data || [];
+  if (changed) chatRenderMsgs();
+  if (changed || !opts.silent) {
+    await sb.from('chat_members').upsert({ channel_id: id, user_id: ME.id, last_read_at: new Date().toISOString() });
+    CHAT.unreadByChan[id] = 0; chatUpdateBadge(); chatRenderChanList();
+  }
+}
+async function chatSend() {
+  const inp = $('chatInput');
+  const body = inp.value.trim();
+  if (!body || !CHAT.activeId) return;
+  inp.value = '';
+  const { error } = await sb.from('chat_messages').insert({ channel_id: CHAT.activeId, author_id: ME.id, body });
+  if (error) { toast(error.message, 'err'); inp.value = body; return; }
+  await chatOpenChannel(CHAT.activeId, { silent: true });
+}
+function chatOnInsert(m) {
+  if (!m || m.author_id === ME.id) return;
+  if (CHAT.open && m.channel_id === CHAT.activeId) {
+    if (!CHAT.msgs.some(x => x.id === m.id)) { CHAT.msgs.push(m); chatRenderMsgs(); }
+    sb.from('chat_members').upsert({ channel_id: m.channel_id, user_id: ME.id, last_read_at: new Date().toISOString() }).then(() => {});
+    return;
+  }
+  if (!CHAT.channels.some(c => c.id === m.channel_id)) { chatRefreshUnread(); return; }
+  CHAT.unreadByChan[m.channel_id] = (CHAT.unreadByChan[m.channel_id] || 0) + 1;
+  chatUpdateBadge();
+  if (CHAT.open) chatRenderChanList();
+}
+async function chatEnsureDm(uid) {
+  if (!uid || uid === ME.id) return null;
+  await chatLoadChannels();
+  const key = [ME.id, uid].sort().join(':');
+  let ch = CHAT.channels.find(c => c.kind === 'dm' && c.dm_key === key);
+  if (ch) return ch;
+  const ins = await sb.from('chat_channels').insert({ kind: 'dm', dm_key: key, created_by: ME.id }).select('id,kind,dm_key,members:chat_members(user_id,last_read_at)').single();
+  if (ins.error) {
+    // unique dm_key race — the other person created it; reload and reuse
+    await chatLoadChannels();
+    ch = CHAT.channels.find(c => c.kind === 'dm' && c.dm_key === key);
+    if (!ch) toast(ins.error.message, 'err');
+    return ch || null;
+  }
+  const mem = await sb.from('chat_members').insert([
+    { channel_id: ins.data.id, user_id: ME.id },
+    { channel_id: ins.data.id, user_id: uid },
+  ]);
+  if (mem.error) toast(mem.error.message, 'err');
+  return ins.data;
+}
+async function chatOpenDmWith(uid) {
+  const ch = await chatEnsureDm(uid);
+  if (!ch) return;
+  if (!CHAT.open) chatOpenPanel();
+  await chatRefreshUnread();
+  chatRenderChanList();
+  chatOpenChannel(ch.id);
+}
+// Mirror a Users-tab email into the DM thread (called from openCompose onSent).
+async function chatMirrorEmail(uid, subject, htmlBody) {
+  try {
+    const ch = await chatEnsureDm(uid); if (!ch) return;
+    const text = (htmlBody || '').replace(/<br\s*\/?>/gi, '\n').replace(/<\/p>\s*<p>/gi, '\n\n').replace(/<[^>]+>/g, '').trim();
+    await sb.from('chat_messages').insert({ channel_id: ch.id, author_id: ME.id, kind: 'email', body: text || '(no body)', email_subject: subject });
+  } catch (_) { /* mirroring is best-effort; the email itself already sent */ }
+}
+function teamEmailUser(uid) {
+  const u = (TEAM.users || []).find(x => x.id === uid);
+  if (!u || !u.email) { toast('No email on file for that user', 'err'); return; }
+  openCompose([{ email: u.email, name: u.full_name || u.email }], {
+    source: 'Team', source_kind: 'team', source_id: uid,
+    onSent: ({ subject, body }) => chatMirrorEmail(uid, subject, body),
+  });
+}
+async function chatNewDmPicker() {
+  const staff = await loadStaff();
+  if (!staff.length) { toast('No other staff to message', 'err'); return; }
+  openKpi('New direct message', 'Pick a teammate', `<div class="hub-list">${staff.map(p =>
+    `<button class="hub-mini" data-chat-dmpick="${escapeHtml(p.id)}" style="display:block;width:100%;text-align:left;margin-bottom:6px;">${escapeHtml(p.full_name || p.email)}</button>`).join('')}</div>`,
+    async () => { closeKpi(); }, 'Close');
+  setTimeout(() => {
+    $('kpiModalBody').querySelectorAll('[data-chat-dmpick]').forEach(b =>
+      b.addEventListener('click', () => { closeKpi(); chatOpenDmWith(b.dataset.chatDmpick); }));
+  }, 40);
+}
+async function chatNewEventThread() {
+  const { data } = await sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(60);
+  openKpi('New event thread', 'A channel the whole team can see, tied to one event', `
+    <div class="modal-form-row"><label class="modal-label">Event</label><select class="modal-select" name="chat_event">${(data || []).map(e =>
+      `<option value="${escapeHtml(e.id)}" data-name="${escapeHtml(e.name)}">${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('')}</select></div>`,
+    async () => {
+      const sel = $('kpiModalBody').querySelector('[name="chat_event"]');
+      const evId = sel.value, evName = sel.selectedOptions[0]?.dataset.name || 'Event';
+      const existing = CHAT.channels.find(c => c.kind === 'event' && c.event_id === evId);
+      if (existing) { closeKpi(); if (!CHAT.open) chatOpenPanel(); else chatOpenChannel(existing.id); return; }
+      const ins = await sb.from('chat_channels').insert({ kind: 'event', event_id: evId, name: evName, created_by: ME.id }).select('id').single();
+      if (ins.error) throw ins.error;
+      closeKpi(); toast('Event thread created', 'ok');
+      if (!CHAT.open) chatOpenPanel(); else { await chatRefreshUnread(); chatRenderChanList(); chatOpenChannel(ins.data.id); }
+    }, 'Create');
+}
+$('chatBtn').addEventListener('click', () => { CHAT.open ? chatClosePanel() : chatOpenPanel(); });
+$('chatCloseBtn').addEventListener('click', chatClosePanel);
+$('chatSendBtn').addEventListener('click', chatSend);
+$('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } });
+$('chatChanList').addEventListener('click', (e) => {
+  const c = e.target.closest('[data-chat-chan]'); if (c) { chatOpenChannel(c.dataset.chatChan); return; }
+  if (e.target.closest('[data-chat-newdm]')) { chatNewDmPicker(); return; }
+  if (e.target.closest('[data-chat-newevent]')) { chatNewEventThread(); return; }
 });
 $('panel-conversations').addEventListener('click', (e) => {
   if (e.target.closest('[data-conv-back]')) { renderConvList(); return; }
