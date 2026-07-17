@@ -5448,8 +5448,101 @@ async function hubSecTasks() {
     </div>`;
   }).join('') : `<div class="hub-empty">No tasks yet. Add one, or generate the day-of checklist from Overview.</div>`;
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Tasks</h3><button class="hub-btn" data-hub-action="add-task">+ Add task</button></div>
+    <div class="hub-sec-bar"><h3>Tasks</h3><span style="display:flex;gap:8px;">
+      <button class="hub-btn" data-hub-action="email-tasks" title="Send a formatted task-list email to the team">✉ Email task list</button>
+      <button class="hub-btn" data-hub-action="add-task">+ Add task</button></span></div>
     <div class="hub-list">${rows}</div>`;
+}
+
+// ---- Email the event's task list (concise, formatted for team inboxes) ----
+// Email-client-safe: table layout + inline styles only, no CSS classes.
+function buildTasksEmailHtml(ev, tasks, includeDone) {
+  const today = new Date().toISOString().slice(0, 10);
+  const fmtDue = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  const prioBadge = (p) => p ? `<span style="font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:1px 6px;border-radius:3px;color:#fff;background:${p === 'high' ? '#C75A3C' : p === 'medium' ? '#B5791F' : '#8a8377'};">${p}</span>` : '';
+  const row = (t, overdue) => {
+    const who = (t.task_assignments || []).map(a => a.actor?.display_name).filter(Boolean).join(', ');
+    const bits = [];
+    if (t.due_date) bits.push(`<span style="color:${overdue ? '#C75A3C' : '#8a8377'};${overdue ? 'font-weight:bold;' : ''}">due ${fmtDue(t.due_date)}</span>`);
+    bits.push(who ? escapeHtml(who) : '<span style="color:#b3aa99;">unassigned</span>');
+    if (t.description) bits.push(escapeHtml(t.description.slice(0, 110)) + (t.description.length > 110 ? '…' : ''));
+    return `<tr><td style="padding:8px 10px;border-bottom:1px solid #eee6d8;font-family:Arial,Helvetica,sans-serif;">
+      <span style="font-size:14px;font-weight:bold;color:#26221c;">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</span> ${prioBadge(t.priority)}
+      <div style="font-size:12px;color:#8a8377;margin-top:2px;">${bits.join(' &nbsp;·&nbsp; ')}</div>
+    </td></tr>`;
+  };
+  const section = (label, color, list, overdue = false) => list.length ? `
+    <div style="font-family:Arial,Helvetica,sans-serif;font-size:11px;font-weight:bold;letter-spacing:2px;text-transform:uppercase;color:${color};margin:16px 0 2px;">${label} (${list.length})</div>
+    <table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">${list.map(t => row(t, overdue)).join('')}</table>` : '';
+  const open = tasks.filter(t => t.status !== 'done');
+  const done = tasks.filter(t => t.status === 'done');
+  const overdue = open.filter(t => t.due_date && t.due_date < today);
+  const byStatus = (s) => open.filter(t => t.status === s && !overdue.includes(t));
+  const dueSort = (a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
+  [overdue, done].forEach(l => l.sort(dueSort));
+  const nextDue = open.filter(t => t.due_date && t.due_date >= today).sort(dueSort)[0];
+  return `<div style="max-width:620px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#26221c;">
+    <div style="border-left:4px solid #C75A3C;background:#faf7f1;padding:12px 16px;">
+      <div style="font-size:20px;font-weight:bold;">${escapeHtml(ev.name)} — Tasks</div>
+      <div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(fmtDate(ev.event_date))}${ev.venue?.name ? ' · ' + escapeHtml(ev.venue.name) : ''}${ev.series ? ' · ' + escapeHtml(ev.series) : ''}</div>
+      <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
+    </div>
+    ${section('⚠ Overdue', '#C75A3C', overdue, true)}
+    ${section('In progress', '#B5791F', byStatus('doing').sort(dueSort))}
+    ${section('Blocked', '#8362A8', byStatus('blocked').sort(dueSort))}
+    ${section('To do', '#59524a', byStatus('todo').sort(dueSort))}
+    ${includeDone ? section('✓ Done', '#2E8E72', done) : (done.length ? `<div style="font-size:12px;color:#a09884;margin-top:14px;">✓ ${done.length} completed task${done.length === 1 ? '' : 's'} not shown</div>` : '')}
+    <div style="font-size:11px;color:#b3aa99;margin-top:18px;border-top:1px solid #eee6d8;padding-top:8px;">Sent from the Come With dashboard · ${escapeHtml(fmtDate(today))}</div>
+  </div>`;
+}
+async function hubEmailTasks() {
+  const [evRes, tRes, staff, partsRes] = await Promise.all([
+    sb.from('events').select('name,event_date,series,status,venue:venues(name)').eq('id', hub.eventId).single(),
+    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,task_assignments(role,actor:actors(display_name))')
+      .eq('event_id', hub.eventId).is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }),
+    loadStaff(),
+    sb.from('event_participants').select('actor:actors(id,display_name,email)').eq('event_id', hub.eventId),
+  ]);
+  const ev = evRes.data, tasks = tRes.data || [];
+  if (!ev) { toast('Event not found', 'err'); return; }
+  if (!tasks.length) { toast('No tasks on this event yet', 'err'); return; }
+  // Recipients: staff pre-checked; event people with an email opt-in.
+  const seen = new Set();
+  const recipRow = (email, name, checked) => {
+    if (!email || seen.has(email.toLowerCase())) return ''; seen.add(email.toLowerCase());
+    return `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;">
+      <input type="checkbox" data-etrecip data-email="${escapeHtml(email)}" data-name="${escapeHtml(name)}"${checked ? ' checked' : ''} style="width:auto;margin:0;">
+      ${escapeHtml(name)} <span class="li-sub">${escapeHtml(email)}</span></label>`;
+  };
+  const staffRows = staff.map(p => recipRow(p.email, p.full_name || p.email, true)).join('');
+  const partRows = (partsRes.data || []).map(x => x.actor).filter(a => a && a.email).map(a => recipRow(a.email, a.display_name, false)).join('');
+  const preview = () => buildTasksEmailHtml(ev, tasks, !!$('kpiModalBody').querySelector('#etIncDone')?.checked);
+  openKpi('Email task list', ev.name, `
+    <div class="modal-form-row"><label class="modal-label">To</label>
+      <div class="hub-list" style="max-height:150px;overflow:auto;">
+        ${staffRows}${partRows ? `<div class="li-sub" style="margin-top:6px;">Event people</div>${partRows}` : ''}
+      </div></div>
+    <div class="modal-form-row"><label class="modal-label">Subject</label>
+      <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})"></div>
+    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etIncDone" style="width:auto;margin:0;"> Include completed tasks</label>
+    <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
+      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(ev, tasks, false)}</div></div>`,
+    async () => {
+      const recips = [...$('kpiModalBody').querySelectorAll('[data-etrecip]:checked')]
+        .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
+      if (!recips.length) throw new Error('Pick at least one recipient');
+      const subject = $('etSubject').value.trim(); if (!subject) throw new Error('Subject is required');
+      const { data, error } = await sb.functions.invoke('send-actor-email', { body: {
+        recipients: recips, subject, body: preview(),
+        source: ev.name, source_kind: 'event_people', source_id: hub.eventId, event_id: hub.eventId, visibility: 'team' } });
+      if (error) throw new Error(error.message || 'send failed');
+      closeKpi();
+      const sent = data?.sent || 0;
+      toast(`Task list emailed to ${sent}/${recips.length}`, sent === recips.length ? 'ok' : 'err');
+    }, 'Send task list');
+  setTimeout(() => {
+    $('kpiModalBody').querySelector('#etIncDone')?.addEventListener('change', () => { $('etPreview').innerHTML = preview(); });
+  }, 40);
 }
 
 // ---- Section: Money (INLINE — line items live in the hub, refresh on every write) ----
@@ -6829,6 +6922,7 @@ const HUB_ACTIONS = {
   'add-people': hubAddPeople,
   'edit-participant': (el) => hubEditParticipant(el.dataset.id),
   'add-task': hubAddTask,
+  'email-tasks': hubEmailTasks,
   'edit-task': (el) => openEditTask(el.dataset.id, hubSecTasks),
   'assign-task': (el) => hubAssignTask(el.dataset.id),
   'add-equipment': hubAddEquipment,
