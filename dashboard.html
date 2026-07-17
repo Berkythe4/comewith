@@ -291,6 +291,13 @@ body::before {
   background: rgba(237,228,211,0.06); border: 1px solid rgba(237,228,211,0.18); color: var(--ink); padding: 7px 9px; outline: none;
 }
 .chat-inputrow textarea:focus { border-color: var(--red); }
+.chat-dock {
+  position: fixed; right: 18px; bottom: 14px; z-index: 840;
+  font-family: 'Inconsolata', monospace; font-size: 0.72rem; letter-spacing: 0.06em; cursor: pointer;
+  background: #16140F; color: rgba(242,237,230,0.8); border: 1px solid rgba(237,228,211,0.25);
+  border-radius: 18px; padding: 8px 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+}
+.chat-dock:hover { color: var(--ink); border-color: var(--red); }
 
 .sidebar-footer { padding: 14px 22px; border-top: 1px solid rgba(242,237,230,0.08); }
 .sidebar-footer button {
@@ -1092,7 +1099,10 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
     <div class="chat-panel" id="chatPanel" hidden>
       <div class="chat-head">
         <strong>💬 Team chat</strong>
-        <button class="hub-mini" id="chatCloseBtn">✕</button>
+        <span style="display:flex;gap:6px;">
+          <button class="hub-mini" id="chatMinBtn" title="Minimize — keeps a docked unread counter">—</button>
+          <button class="hub-mini" id="chatCloseBtn" title="Close">✕</button>
+        </span>
       </div>
       <div class="chat-cols">
         <div class="chat-chans" id="chatChanList"></div>
@@ -1105,6 +1115,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         </div>
       </div>
     </div>
+    <!-- Minimized-chat dock: click to restore the panel. -->
+    <button class="chat-dock" id="chatDock" hidden>💬 Team chat<span class="chat-unread" id="chatDockUnread" hidden></span></button>
 
     <main class="main">
       <div class="main-header">
@@ -1621,18 +1633,22 @@ function renderTeamPeople() {
   const agg = `<div class="hub-cards" style="margin-bottom:14px;">${card('Users', TEAM.users.length)}${card('Signed in', TEAM.users.filter(u => u.last_sign_in_at).length)}${card('Linked aliases', linkedAliases)}${card('Alias gigs', totalGigs)}</div>`;
   const rows = TEAM.users.map(u => {
     const aliases = TEAM.aliasByUser[u.id] || [], g = TEAM.gigByUser[u.id] || { gigs: 0 }, la = teamLastActivity(u.id);
-    return `<tr data-user-open="${escapeHtml(u.id)}" style="cursor:pointer;">
-      <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${u.role === 'master_admin' ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}<div class="li-sub">${escapeHtml(u.email)}</div></td>
+    return `<tr data-user-open="${escapeHtml(u.id)}" style="cursor:pointer;${u.deleted_at ? 'opacity:.45;' : ''}">
+      <td>${u.id !== ME.id && !u.deleted_at ? `<input type="checkbox" data-user-pick="${escapeHtml(u.id)}" style="width:auto;margin:0;">` : ''}</td>
+      <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${u.role === 'master_admin' ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}<div class="li-sub">${escapeHtml(u.email)}</div></td>
       <td>${escapeHtml(u.role === 'master_admin' ? 'all' : (u.staff_role || '—'))}</td>
       <td>${aliases.length ? aliases.map(a => `<span class="role-chip" style="cursor:default;">${escapeHtml(a.display_name)}</span>`).join(' ') : muted}</td>
       <td class="num">${g.gigs || muted}</td>
       <td class="li-sub">${u.last_sign_in_at ? escapeHtml(fmtDate(u.last_sign_in_at)) : (u.email_confirmed ? 'never' : '<span class="muted">invite pending</span>')}</td>
       <td class="li-sub">${la ? escapeHtml(fmtDate(la)) : muted}</td>
-      <td>${u.id !== ME.id ? `<button class="hub-mini" data-user-email="${escapeHtml(u.id)}" title="Email ${escapeHtml(u.email)}">✉</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}" title="Chat with ${escapeHtml(u.full_name || u.email)}">💬</button>` : ''}</td>
+      <td>${u.id !== ME.id && !u.deleted_at ? `<button class="hub-mini" data-user-email="${escapeHtml(u.id)}" title="Email ${escapeHtml(u.email)}">✉</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}" title="Chat with ${escapeHtml(u.full_name || u.email)}">💬</button>` : ''}</td>
     </tr>`;
   }).join('');
-  return agg + `<div style="margin-bottom:10px;"><button class="hub-mini" id="addPersonBtn">＋ Add person</button></div>
-    <table class="data-table"><thead><tr><th>User</th><th>Scope</th><th>Aliases</th><th class="num">Gigs</th><th>Last sign-in</th><th>Last activity</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+  return agg + `<div style="margin-bottom:10px;display:flex;gap:8px;align-items:center;">
+      <button class="hub-mini" id="addPersonBtn">＋ Add person</button>
+      <button class="hub-mini" id="teamEmailSelBtn" title="Tick users in the first column, then email them all in one thread-per-person send">✉ Email selected</button>
+    </div>
+    <table class="data-table"><thead><tr><th></th><th>User</th><th>Scope</th><th>Aliases</th><th class="num">Gigs</th><th>Last sign-in</th><th>Last activity</th><th></th></tr></thead><tbody>${rows}</tbody></table>
     <div class="kpi-hint" style="margin-top:8px;">Click a user for their full profile — link their other aliases (e.g. a staffer who's also a DJ), see gig KPIs + history and their activity. Activity log tab shows everyone, filterable by date.</div>`;
 }
 function renderTeamModules() {
@@ -1723,8 +1739,13 @@ function renderUserDetail() {
   $('teamBody').innerHTML = `
     <button class="hub-mini" data-user-back>← all users</button>
     <div class="hub-head" style="margin-top:10px;">
-      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}
-        ${u.id !== ME.id ? `<span style="margin-left:10px;"><button class="hub-mini" data-user-email="${escapeHtml(u.id)}">✉ Email</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}">💬 Chat</button></span>` : ''}</div>
+      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}
+        <span style="margin-left:10px;">
+          ${u.id !== ME.id && !u.deleted_at ? `<button class="hub-mini" data-user-email="${escapeHtml(u.id)}">✉ Email</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}">💬 Chat</button>` : ''}
+          ${ME.isMaster && u.id !== ME.id && !isMaster ? (u.deleted_at
+            ? `<button class="hub-mini" data-user-react="${escapeHtml(u.id)}">↻ Reactivate</button>`
+            : `<button class="hub-mini danger" data-user-deact="${escapeHtml(u.id)}">Deactivate</button>`) : ''}
+        </span></div>
       <div class="hub-facts">
         <div><span class="lbl">Email</span>${escapeHtml(u.email)}</div>
         <div><span class="lbl">Last sign-in</span>${u.last_sign_in_at ? escapeHtml(fmtDT(u.last_sign_in_at)) : 'never'}</div>
@@ -1767,6 +1788,30 @@ function renderUserDetail() {
     </div>
     <div id="udActivity">${userActivitySummaryHTML()}</div>`;
 }
+// Email every ticked user (one conversation per person, mirrored into each DM).
+function teamEmailSelected() {
+  const ids = [...$('teamBody').querySelectorAll('[data-user-pick]:checked')].map(c => c.dataset.userPick);
+  if (!ids.length) { toast('Tick at least one user first (first column)', 'err'); return; }
+  const users = ids.map(id => TEAM.users.find(u => u.id === id)).filter(u => u && u.email);
+  if (!users.length) { toast('No emails on file for that selection', 'err'); return; }
+  openCompose(users.map(u => ({ email: u.email, name: u.full_name || u.email })), {
+    source: 'Team', source_kind: 'team',
+    onSent: async ({ subject, body }) => { for (const u of users) await chatMirrorEmail(u.id, subject, body); },
+  });
+}
+// Deactivate = profiles.deleted_at (master-only). Migration 098 makes is_admin()/
+// user_can_access_module() treat a deactivated profile as no-role, so this
+// revokes every screen and API call instantly; reactivating restores them.
+async function setUserActive(uid, active) {
+  const u = TEAM.users.find(x => x.id === uid); if (!u) return;
+  if (!active && !confirm(`Deactivate ${u.full_name || u.email}? They keep their login but every screen and data call is denied until reactivated.`)) return;
+  const { error } = await sb.from('profiles').update({ deleted_at: active ? null : new Date().toISOString() }).eq('id', uid);
+  if (error) { toast(error.message, 'err'); return; }
+  toast(active ? 'User reactivated' : 'User deactivated', 'ok');
+  _staffCache = null; // refresh compose/DM pickers
+  await loadTeam();
+  if (TEAM.activeUser === uid) openUserDetail(uid);
+}
 async function saveUserProfile() {
   const uid = TEAM.activeUser; if (!uid) return;
   const { error } = await sb.from('profiles').update({ full_name: $('udName').value.trim() || null, phone: $('udPhone').value.trim() || null }).eq('id', uid);
@@ -1799,6 +1844,15 @@ $('panel-team').addEventListener('click', (e) => {
   const tb = e.target.closest('[data-team-tab]'); if (tb) { TEAM.tab = tb.dataset.teamTab; if (TEAM.tab === 'activity' && !TEAM.activity.length && !TEAM.actFilter.from) { const d = new Date(); d.setDate(d.getDate() - 30); TEAM.actFilter.from = d.toISOString().slice(0, 10); loadActivity(); } else renderTeam(); return; }
   const ue = e.target.closest('[data-user-email]'); if (ue) { e.stopPropagation(); teamEmailUser(ue.dataset.userEmail); return; }
   const uc = e.target.closest('[data-user-chat]'); if (uc) { e.stopPropagation(); chatOpenDmWith(uc.dataset.userChat); return; }
+  if (e.target.closest('[data-user-pick]')) {
+    const n = $('teamBody').querySelectorAll('[data-user-pick]:checked').length;
+    const b = document.getElementById('teamEmailSelBtn');
+    if (b) b.textContent = n ? `✉ Email selected (${n})` : '✉ Email selected';
+    return; // don't open the user detail when ticking the box
+  }
+  if (e.target.closest('#teamEmailSelBtn')) { teamEmailSelected(); return; }
+  const deact = e.target.closest('[data-user-deact]'); if (deact) { setUserActive(deact.dataset.userDeact, false); return; }
+  const react = e.target.closest('[data-user-react]'); if (react) { setUserActive(react.dataset.userReact, true); return; }
   const uo = e.target.closest('[data-user-open]'); if (uo) { openUserDetail(uo.dataset.userOpen); return; }
   if (e.target.closest('[data-user-back]')) { TEAM.activeUser = null; renderTeam(); return; }
   if (e.target.closest('[data-user-save]')) { saveUserProfile(); return; }
@@ -9809,7 +9863,7 @@ $('panel-vendors').addEventListener('click', (e) => {
 let _staffCache = null;
 async function loadStaff() {
   if (_staffCache) return _staffCache;
-  const { data } = await sb.from('profiles').select('id, full_name, email').in('role', ['master_admin', 'sub_admin']).order('email');
+  const { data } = await sb.from('profiles').select('id, full_name, email').in('role', ['master_admin', 'sub_admin']).is('deleted_at', null).order('email');
   _staffCache = (data || []).filter(p => p.id !== ME.id);
   return _staffCache;
 }
@@ -10391,6 +10445,7 @@ const CHAT_POLL_MS = 45000;
 const CHAT = { open: false, channels: [], staffMap: {}, activeId: null, msgs: [], unreadByChan: {}, sub: null, subOk: false, timer: null };
 async function chatInit() {
   if (CHAT.timer) return;
+  try { if (localStorage.getItem('cw_chat_min') === '1') { CHAT.min = true; $('chatDock').hidden = false; } } catch (_) {}
   chatRefreshUnread();
   try {
     CHAT.sub = sb.channel('team-chat')
@@ -10442,11 +10497,14 @@ async function chatRefreshUnread() {
 }
 function chatUpdateBadge() {
   const n = Object.values(CHAT.unreadByChan).reduce((t, x) => t + x, 0);
-  const b = $('chatUnread'); if (!b) return;
-  b.hidden = !n; b.textContent = n > 99 ? '99+' : String(n);
+  for (const id of ['chatUnread', 'chatDockUnread']) {
+    const b = $(id); if (b) { b.hidden = !n; b.textContent = n > 99 ? '99+' : String(n); }
+  }
 }
 function chatOpenPanel() {
-  CHAT.open = true; $('chatPanel').hidden = false;
+  CHAT.open = true; CHAT.min = false;
+  $('chatPanel').hidden = false; $('chatDock').hidden = true;
+  try { localStorage.setItem('cw_chat_min', '0'); } catch (_) {}
   chatRefreshUnread().then(() => {
     chatRenderChanList();
     let target = null;
@@ -10455,7 +10513,16 @@ function chatOpenPanel() {
     if (target) chatOpenChannel(target);
   });
 }
-function chatClosePanel() { CHAT.open = false; $('chatPanel').hidden = true; }
+function chatClosePanel() {
+  CHAT.open = false; CHAT.min = false;
+  $('chatPanel').hidden = true; $('chatDock').hidden = true;
+  try { localStorage.setItem('cw_chat_min', '0'); } catch (_) {}
+}
+function chatMinimizePanel() {
+  CHAT.open = false; CHAT.min = true;
+  $('chatPanel').hidden = true; $('chatDock').hidden = false;
+  try { localStorage.setItem('cw_chat_min', '1'); } catch (_) {}
+}
 function chatRenderChanList() {
   const el = $('chatChanList'); if (!el) return;
   el.innerHTML = CHAT.channels.map(c => {
@@ -10588,8 +10655,10 @@ async function chatNewEventThread() {
       if (!CHAT.open) chatOpenPanel(); else { await chatRefreshUnread(); chatRenderChanList(); chatOpenChannel(ins.data.id); }
     }, 'Create');
 }
-$('chatBtn').addEventListener('click', () => { CHAT.open ? chatClosePanel() : chatOpenPanel(); });
+$('chatBtn').addEventListener('click', () => { CHAT.open ? chatMinimizePanel() : chatOpenPanel(); });
 $('chatCloseBtn').addEventListener('click', chatClosePanel);
+$('chatMinBtn').addEventListener('click', chatMinimizePanel);
+$('chatDock').addEventListener('click', chatOpenPanel);
 $('chatSendBtn').addEventListener('click', chatSend);
 $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } });
 $('chatChanList').addEventListener('click', (e) => {
