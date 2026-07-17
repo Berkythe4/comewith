@@ -29,7 +29,7 @@ function gotoLink(kind: string | null, id: string | null) {
   return `${SITE}/dashboard.html?goto=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`;
 }
 
-async function sendResend(apiKey: string, to: string, subject: string, html: string, refId: string) {
+async function sendResend(apiKey: string, to: string | string[], subject: string, html: string, refId: string) {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { "Authorization": `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -73,7 +73,11 @@ Deno.serve(async (req) => {
     const html = link
       ? `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;"><a href="${link}">Open in Come With dashboard →</a></p>`
       : bodyHtml;
-    const r = await sendResend(apiKey, conv.recipient_email, subject, html, b.conversation_id);
+    // single_thread broadcasts store a comma-joined recipient list — split for Resend
+    const replyTo = conv.recipient_email.includes(",")
+      ? conv.recipient_email.split(",").map((s: string) => s.trim()).filter(Boolean)
+      : conv.recipient_email;
+    const r = await sendResend(apiKey, replyTo, subject, html, b.conversation_id);
     const { data: msg } = await admin.from("conversation_messages").insert({
       conversation_id: conv.id, direction: "outbound", from_email: REPLY_TO, to_email: conv.recipient_email,
       body: bodyHtml, subject_line: subject, resend_id: r.id, status: r.ok ? "sent" : "failed",
@@ -93,6 +97,45 @@ Deno.serve(async (req) => {
   const visibility = b.visibility === "restricted" ? "restricted" : "team";
   const aclIds: string[] = Array.isArray(b.acl_user_ids) ? b.acl_user_ids : [];
   const taggedSubject = source ? `[${source}] ${subject}` : subject;
+
+  // ---- SINGLE-THREAD broadcast (team task lists etc.): ONE conversation,
+  // one email with every recipient on the To line ----
+  if (b.single_thread) {
+    const resolved: { email: string; name: string }[] = [];
+    const failures: unknown[] = [];
+    for (const r of recips) {
+      let email = (r.email || "").toString().trim();
+      let name = r.name || "";
+      if (!email && r.actor_id) {
+        const { data: a } = await admin.from("actors").select("email, display_name").eq("id", r.actor_id).single();
+        email = a?.email || ""; name = name || a?.display_name || "";
+      }
+      if (!email) { failures.push({ recipient: r, ok: false, error: "no email on record" }); continue; }
+      if (!resolved.some((x) => x.email.toLowerCase() === email.toLowerCase())) resolved.push({ email, name });
+    }
+    if (!resolved.length) return err(400, "no recipients with an email");
+    const emails = resolved.map((x) => x.email);
+    const { data: conv, error: convErr } = await admin.from("conversations").insert({
+      subject, actor_id: null, recipient_email: emails.join(", "), source, source_kind: sourceKind,
+      source_id: sourceId, event_id: eventId, created_by: user.id, visibility,
+    }).select("id").single();
+    if (convErr || !conv) return err(500, convErr?.message || "thread create failed");
+    if (visibility === "restricted" && aclIds.length) {
+      await admin.from("conversation_acl").insert(aclIds.map((u) => ({ conversation_id: conv.id, user_id: u })));
+    }
+    const link = sourceKind === "event_people" ? null : gotoLink(sourceKind, sourceId);
+    const html = `${bodyHtml}<hr style="border:none;border-top:1px solid #eee;margin:18px 0;"><p style="font-size:.85rem;color:#777;">Sent from <strong>${esc(source || "Come With")}</strong>.${link ? ` <a href="${link}">Open in Come With dashboard →</a>` : ""}</p>`;
+    const sent = await sendResend(apiKey, emails, taggedSubject, html, conv.id);
+    await admin.from("conversation_messages").insert({
+      conversation_id: conv.id, direction: "outbound", from_email: REPLY_TO, to_email: emails.join(", "),
+      body: bodyHtml, subject_line: taggedSubject, resend_id: sent.id, status: sent.ok ? "sent" : "failed",
+      created_by: user.id, meta: sent.ok ? {} : { error: sent.error },
+    } as Record<string, unknown>);
+    return new Response(JSON.stringify({
+      ok: sent.ok, sent: sent.ok ? resolved.length : 0, total: recips.length, conversation_id: conv.id,
+      results: [...failures, ...resolved.map((x) => ({ email: x.email, ok: sent.ok, conversation_id: conv.id, error: sent.error }))],
+    }), { headers: JH });
+  }
 
   const results: unknown[] = [];
   for (const r of recips) {

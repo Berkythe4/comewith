@@ -5538,12 +5538,25 @@ async function hubEmailTasks() {
       if (!recips.length) throw new Error('Pick at least one recipient');
       const subject = $('etSubject').value.trim(); if (!subject) throw new Error('Subject is required');
       const { data, error } = await sb.functions.invoke('send-actor-email', { body: {
-        recipients: recips, subject, body: preview(),
+        recipients: recips, subject, body: preview(), single_thread: true,
         source: ev.name, source_kind: 'event_people', source_id: hub.eventId, event_id: hub.eventId, visibility: 'team' } });
       if (error) throw new Error(error.message || 'send failed');
       closeKpi();
       const sent = data?.sent || 0;
-      toast(`Task list emailed to ${sent}/${recips.length}`, sent === recips.length ? 'ok' : 'err');
+      // Post the broadcast into # Team chat as an open notice — it stays there
+      // until someone marks it ✓ complete; the conversation thread is permanent.
+      if (data?.conversation_id) {
+        try {
+          let team = CHAT.channels.find(c => c.kind === 'team');
+          if (!team) { await chatLoadChannels(); team = CHAT.channels.find(c => c.kind === 'team'); }
+          if (team) await sb.from('chat_messages').insert({
+            channel_id: team.id, author_id: ME.id, kind: 'email', email_subject: subject,
+            conversation_id: data.conversation_id,
+            body: `Task list for ${ev.name} — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
+          });
+        } catch (_) { /* notice is best-effort; the email already went out */ }
+      }
+      toast(sent ? `Task list sent (${sent} recipients, one thread) · posted to # Team chat` : 'Send failed', sent ? 'ok' : 'err');
     }, 'Send task list');
   setTimeout(() => {
     $('kpiModalBody').querySelector('#etIncDone')?.addEventListener('change', () => { $('etPreview').innerHTML = preview(); });
@@ -10097,9 +10110,10 @@ async function openThread(id) {
     <div style="border-top:1px solid var(--line,#E5DED3);padding-top:10px;display:flex;flex-direction:column;">${(msgs || []).map(bubble).join('')}</div>
     <div style="border:1px solid var(--line,#E5DED3);border-radius:12px;padding:12px;margin-top:12px;">
       <textarea class="modal-textarea" id="convReplyBody" rows="3" placeholder="Write a reply (emails ${escapeHtml(conv.recipient_email)}) or an internal note…"></textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;">
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;">
         <button class="hub-btn primary" data-conv-reply>Send reply email</button>
         <button class="hub-btn ghost" data-conv-note>Add internal note</button>
+        <button class="hub-btn ghost" data-conv-logmail title="Paste or upload a reply you received, so the thread shows both sides">📥 Log received email</button>
       </div>
     </div>`;
 }
@@ -10118,6 +10132,99 @@ async function convAddNote() {
   if (error) { toast('Failed: ' + error.message, 'err'); return; }
   await sb.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conv.id);
   toast('Note added', 'ok'); openThread(conv.id);
+}
+// ---- Log a RECEIVED email into the thread (no mailbox access needed) ----
+// Paste the text, or upload a .eml (Gmail: ⋮ → Download message) which is
+// parsed entirely client-side. Stored as a normal 'inbound' message.
+function qpDecode(s) {
+  s = s.replace(/=\r?\n/g, '');
+  try { return decodeURIComponent(s.replace(/%/g, '%25').replace(/=([0-9A-F]{2})/gi, '%$1')); }
+  catch (_) { return s.replace(/=([0-9A-F]{2})/gi, (_, h) => String.fromCharCode(parseInt(h, 16))); }
+}
+function decodeMimeWord(s) {
+  return (s || '').replace(/=\?[^?]+\?([BbQq])\?([^?]*)\?=/g, (_, enc, data) => {
+    try { return enc.toUpperCase() === 'B' ? decodeURIComponent(escape(atob(data))) : qpDecode(data.replace(/_/g, ' ')); }
+    catch (_) { return data; }
+  });
+}
+function emlDecodePart(s, headLower) {
+  if (/quoted-printable/i.test(headLower)) return qpDecode(s);
+  if (/base64/i.test(headLower)) { try { return decodeURIComponent(escape(atob(s.replace(/\s+/g, '')))); } catch (_) { try { return atob(s.replace(/\s+/g, '')); } catch (__) { return s; } } }
+  return s;
+}
+function stripHtmlToText(h) {
+  return h.replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, '\n').replace(/<\/(p|div|tr|li)>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/[ \t]{2,}/g, ' ').replace(/\n{3,}/g, '\n\n').trim();
+}
+function parseEml(text) {
+  const norm = text.replace(/\r\n/g, '\n');
+  const idx = norm.indexOf('\n\n');
+  const rawHead = idx === -1 ? norm : norm.slice(0, idx);
+  let body = idx === -1 ? '' : norm.slice(idx + 2);
+  const heads = {};
+  rawHead.replace(/\n[ \t]+/g, ' ').split('\n').forEach(l => { const m = l.match(/^([\w-]+):\s*(.*)$/); if (m) heads[m[1].toLowerCase()] = m[2]; });
+  const ct = heads['content-type'] || '';
+  const bm = ct.match(/boundary="?([^";]+)"?/i);
+  if (bm) {
+    const parts = body.split(new RegExp('--' + bm[1].replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?:--)?\n?'));
+    let plain = null, html = null;
+    for (const p of parts) {
+      const pi = p.indexOf('\n\n'); if (pi === -1) continue;
+      const ph = p.slice(0, pi).toLowerCase(), pb = p.slice(pi + 2);
+      if (ph.includes('text/plain') && plain === null) plain = emlDecodePart(pb, ph);
+      else if (ph.includes('text/html') && html === null) html = emlDecodePart(pb, ph);
+    }
+    body = plain != null ? plain : (html != null ? stripHtmlToText(html) : body);
+  } else {
+    body = emlDecodePart(body, (heads['content-transfer-encoding'] || '') + ' ' + ct);
+    if (/text\/html/i.test(ct)) body = stripHtmlToText(body);
+  }
+  const fromRaw = decodeMimeWord(heads['from'] || '');
+  return {
+    from: fromRaw.replace(/.*<([^>]+)>.*/, '$1').trim() || fromRaw,
+    subject: decodeMimeWord(heads['subject'] || ''),
+    date: heads['date'] || '',
+    body: body.trim(),
+  };
+}
+async function convLogInbound() {
+  const conv = convState.activeConv;
+  const localNow = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+  openKpi('Log received email', 'Paste the reply text, or upload a .eml (Gmail: ⋮ → Download message) — parsed locally, no mailbox access', `
+    <div class="modal-form-row"><label class="modal-label">.eml file (optional — prefills everything)</label><input class="modal-input" type="file" id="lgFile" accept=".eml,message/rfc822"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">From</label><input class="modal-input" name="lg_from" value="${escapeHtml((conv.recipient_email || '').split(',')[0].trim())}"></div>
+      <div><label class="modal-label">Received</label><input class="modal-input" type="datetime-local" name="lg_date" value="${localNow}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" name="lg_subject" value="${escapeHtml('Re: ' + conv.subject)}"></div>
+    <div class="modal-form-row"><label class="modal-label">Email text *</label><textarea class="modal-textarea" name="lg_body" rows="8" placeholder="Paste the email text here…"></textarea></div>`,
+    async () => {
+      const body = kpiVal('lg_body'); if (!body) throw new Error('Paste the email text (or pick a .eml file)');
+      const row = {
+        conversation_id: conv.id, direction: 'inbound', from_email: kpiVal('lg_from') || null,
+        subject_line: kpiVal('lg_subject') || null, body, created_by: ME.id, meta: { logged_manually: true },
+      };
+      const when = kpiVal('lg_date');
+      if (when) { const d = new Date(when); if (!isNaN(d)) row.created_at = d.toISOString(); }
+      const { error } = await sb.from('conversation_messages').insert(row);
+      if (error) throw error;
+      await sb.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conv.id);
+      closeKpi(); toast('Email logged to the thread', 'ok'); openThread(conv.id);
+    }, 'Log email');
+  setTimeout(() => {
+    $('kpiModalBody').querySelector('#lgFile')?.addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; if (!f) return;
+      try {
+        const parsed = parseEml(await f.text());
+        const set = (n, v) => { const el = $('kpiModalBody').querySelector(`[name="${n}"]`); if (el && v) el.value = v; };
+        set('lg_from', parsed.from); set('lg_subject', parsed.subject); set('lg_body', parsed.body);
+        if (parsed.date) { const d = new Date(parsed.date); if (!isNaN(d)) set('lg_date', new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16)); }
+        toast('Parsed — check the fields, then Log email', 'ok');
+      } catch (_) { toast("Couldn't parse that file — paste the text instead", 'err'); }
+    });
+  }, 40);
 }
 async function convSetVisibility(val) {
   const conv = convState.activeConv;
@@ -10722,15 +10829,23 @@ function chatRenderChanList() {
 }
 function chatRenderMsgs() {
   const el = $('chatMsgs'); if (!el) return;
+  const chanKind = CHAT.channels.find(c => c.id === CHAT.activeId)?.kind;
   el.innerHTML = CHAT.msgs.map(m => {
     const mine = m.author_id === ME.id;
     const who = mine ? 'You' : (CHAT.staffMap[m.author_id] || 'Teammate');
     const when = fmtDT(m.created_at);
     if (m.kind === 'system') return `<div class="li-sub" style="align-self:center;font-size:.62rem;">${escapeHtml(m.body)}</div>`;
+    let actions = '';
+    if (m.kind === 'email' && m.conversation_id) {
+      const canComplete = chanKind === 'team' && (mine || ME.isMaster);
+      actions = `<div style="margin-top:6px;display:flex;gap:12px;">
+        <a href="#" data-chat-openconv="${escapeHtml(m.conversation_id)}" style="font-size:.66rem;">Open thread →</a>
+        ${canComplete ? `<a href="#" data-chat-complete="${escapeHtml(m.id)}" style="font-size:.66rem;color:var(--green,#2E8E72);" title="Remove from chat — the thread stays in Conversations">✓ Complete</a>` : ''}</div>`;
+    }
     return `<div class="chat-msg${mine ? ' mine' : ''}${m.kind === 'email' ? ' email' : ''}">
       <div class="chat-who">${escapeHtml(who)}${m.kind === 'email' ? ' · ✉ email' : ''}</div>
       ${m.kind === 'email' && m.email_subject ? `<div class="chat-esub">${escapeHtml(m.email_subject)}</div>` : ''}
-      <div>${escapeHtml(m.body).replace(/\n/g, '<br>')}</div>
+      <div>${escapeHtml(m.body).replace(/\n/g, '<br>')}</div>${actions}
       <div class="chat-when">${escapeHtml(when)}</div></div>`;
   }).join('') || '<div class="hub-empty">No messages yet — say hi.</div>';
   el.scrollTop = el.scrollHeight;
@@ -10740,7 +10855,7 @@ async function chatOpenChannel(id, opts = {}) {
   CHAT.activeId = id;
   try { localStorage.setItem('cw_chat_last', id); } catch (_) {}
   const { data, error } = await sb.from('chat_messages')
-    .select('id,channel_id,author_id,kind,body,email_subject,created_at')
+    .select('id,channel_id,author_id,kind,body,email_subject,conversation_id,created_at')
     .eq('channel_id', id).is('deleted_at', null).order('created_at').limit(400);
   if (error) { if (!opts.silent) toast(error.message, 'err'); return; }
   const changed = switching || (data || []).length !== CHAT.msgs.length;
@@ -10850,6 +10965,19 @@ $('chatMinBtn').addEventListener('click', chatMinimizePanel);
 $('chatDock').addEventListener('click', chatOpenPanel);
 $('chatSendBtn').addEventListener('click', chatSend);
 $('chatInput').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); chatSend(); } });
+$('chatMsgs').addEventListener('click', async (e) => {
+  const oc = e.target.closest('[data-chat-openconv]');
+  if (oc) { e.preventDefault(); chatMinimizePanel(); gotoSource('conversation', oc.dataset.chatOpenconv); return; }
+  const cm = e.target.closest('[data-chat-complete]');
+  if (cm) {
+    e.preventDefault();
+    if (!confirm('Mark this email thread as completed? It disappears from chat; the conversation stays in Conversations.')) return;
+    const { error } = await sb.from('chat_messages').delete().eq('id', cm.dataset.chatComplete);
+    if (error) { toast(error.message, 'err'); return; }
+    CHAT.msgs = CHAT.msgs.filter(x => x.id !== cm.dataset.chatComplete);
+    chatRenderMsgs(); toast('Completed — the thread lives on in Conversations', 'ok');
+  }
+});
 $('chatChanList').addEventListener('click', (e) => {
   const c = e.target.closest('[data-chat-chan]'); if (c) { chatOpenChannel(c.dataset.chatChan); return; }
   if (e.target.closest('[data-chat-newdm]')) { chatNewDmPicker(); return; }
@@ -10860,6 +10988,7 @@ $('panel-conversations').addEventListener('click', (e) => {
   if (e.target.closest('[data-conv-goto]')) { const c = convState.activeConv; gotoSource(c.source_kind, c.source_id); return; }
   if (e.target.closest('[data-conv-reply]')) { convReply(); return; }
   if (e.target.closest('[data-conv-note]')) { convAddNote(); return; }
+  if (e.target.closest('[data-conv-logmail]')) { convLogInbound(); return; }
   if (e.target.closest('[data-conv-acl]')) { convManageAcl(); return; }
   const row = e.target.closest('[data-conv-open]'); if (row) openThread(row.dataset.convOpen);
 });
