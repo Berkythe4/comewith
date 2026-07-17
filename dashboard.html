@@ -298,6 +298,9 @@ body::before {
   border-radius: 18px; padding: 8px 14px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
 }
 .chat-dock:hover { color: var(--ink); border-color: var(--red); }
+/* The display rules above beat the UA's [hidden]{display:none} — reassert it,
+   or the hidden attribute silently does nothing on these elements. */
+.chat-panel[hidden], .chat-dock[hidden], .chat-unread[hidden] { display: none !important; }
 
 .sidebar-footer { padding: 14px 22px; border-top: 1px solid rgba(242,237,230,0.08); }
 .sidebar-footer button {
