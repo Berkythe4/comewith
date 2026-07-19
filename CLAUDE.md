@@ -29,6 +29,16 @@ notes live in Claude memory.
 - **Apply discipline:** apply additively, verify on prod (objects, RLS has a real
   policy — never RLS-enabled-with-no-policy, admin can read/write, anon blocked),
   then commit the migration file so tracked history matches prod.
+- **`INSERT..RETURNING` enforces the SELECT policy mid-statement.** A security-definer
+  helper that re-queries the table cannot see the not-yet-visible new row, so
+  `.insert().select()` fails RLS even for the creator (bit us on 097 chat DMs).
+  Put row-local predicates like `created_by = auth.uid()` directly in the SELECT
+  policy. RLS can be smoke-tested on prod via the Management API:
+  `set_config('request.jwt.claims', …)` + `set local role authenticated` inside
+  BEGIN..ROLLBACK.
+- **Deactivation contract (098):** `profiles.deleted_at` set = user deactivated;
+  `is_admin()` / `is_master_admin()` / `user_can_access_module()` all treat that
+  profile as no-role. Any new role helper MUST keep the `deleted_at is null` guard.
 
 ## Series contract (events.series)
 

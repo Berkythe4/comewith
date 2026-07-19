@@ -1094,7 +1094,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <button class="setpw-save" type="submit">Save password</button>
           <div class="setpw-msg" id="setPasswordMsg"></div>
         </form>
-        <div class="build">phase 12 · password auth</div>
+        <div class="build">modular nav · calendar · team chat</div>
       </div>
     </aside>
 
@@ -11427,6 +11427,10 @@ const WORKFLOW = [
     short: 'The signed copy files itself into the event.',
     detail: `The moment it's signed, a snapshot of the agreement is generated and dropped into the linked event's Files → Contract bucket automatically — no manual upload.`,
     links: [{ t: 'Open Events', tab: 'events' }] },
+  { lane: 'hub', n: 28, ico: '📅', t: 'Calendar & tasks', where: 'Calendar & Tasks',
+    short: 'One grid for everything with a date.',
+    detail: `The master calendar: your events colored by series, ⭐ milestones, social posts, RA/Ticketmaster market shows, and days your roster plays elsewhere — with multi-select filters for series, status, venue and artist. Click a day for the full drill-in (lineups included). Below the grid, the tasks board rolls every event's tasks (plus standalone ones) into one filterable, sortable list — quick-add, edit, star a task to make it a milestone. From an event hub you can email the task list to the team as one formatted thread.`,
+    links: [{ t: 'Open Calendar', tab: 'calendar' }] },
   { lane: 'hub', n: 6, ico: '🎉', t: 'Event', where: 'Events',
     short: 'The record everything hangs off.',
     detail: `Create and track the event: series, type (party / Dance Infusion / production / content), date, status. Open any event to reach its hub — overview, people, money, files, social.`,
@@ -11507,6 +11511,10 @@ const WORKFLOW = [
     short: 'The standing audit log — bugs, ideas, hygiene.',
     detail: `Findings from full-site reviews live here as editable rows: bugs (with what was fixed), shipped improvements, data hygiene to decide on, and saved ideas. Flip a status inline or add your own items as you spot them — it's the maintenance backlog for the whole platform.`,
     links: [{ t: 'Open Site Review', tab: 'site-review' }] },
+  { lane: 'kpi', n: 29, ico: '💬', t: 'Team comms', where: 'Chat · Conversations · Users',
+    short: 'Live team chat + every email, logged.',
+    detail: `The 💬 button (any tab) opens team chat: a team-wide channel, DMs and per-event threads, delivered live with unread badges — minimize it to a docked counter. Emailing a teammate from Users mirrors into your DM thread; team broadcasts (like an event's task list) land in # Team as a notice until someone marks them ✓ complete. Every outbound email lives as a Conversations thread — and replies you receive can be logged back in (paste or .eml upload, no mailbox access). Users (master-only) manages logins, module access, aliases and deactivation.`,
+    links: [{ t: 'Open Conversations', tab: 'conversations' }, { t: 'Open Users', tab: 'team' }] },
   { lane: 'mkt', n: 27, ico: '📡', t: 'RA market + radio', where: 'RA Market',
     short: 'Scout the NYC scene; build a radio station.',
     detail: `Pulls ~3 months of public Resident Advisor + Ticketmaster (EDM-only) shows for NYC: which nights have demand vs competition — the Best-Nights score weights the day of week (Fri/Sat up, Mon down) so it never calls a Monday your best night — plus venue + genre benchmarks and RA-picks, with your own attendance alongside. A Watchlist tracks artists/venues/collaborators (multi-reason filter, roster-linked, with each artist's upcoming nights). Plus a Radio station: the SoundCloud profiles of artists playing NYC soon, deduped and playable; build a station and push it to a private playlist in your own SoundCloud (⇪ export) and sync your reordered final cut back in. Your private ticket/revenue data stays in the CSV flow.`,
@@ -11571,7 +11579,7 @@ document.addEventListener('keydown', (e) => {
 const API_CONNECTIONS = [
   { grp: 'established', ico: '▶️', name: 'YouTube Data API', data: 'Subscribers, total views, video count, likes, engagement rate, per-video stats', note: 'LIVE — pull-youtube-stats runs daily (pg_cron) + manual “↻ YouTube” on Strategy. API key + channel set.' },
   { grp: 'established', ico: '✉️', name: 'Resend (Email)', data: 'Outbound email (agreements, campaigns, actor/venue conversations) + delivery / bounce / open webhooks', note: 'LIVE — comewith.org verified as a sender, webhook wired, conversations + campaigns running.' },
-  { grp: 'established', ico: '🗄️', name: 'Supabase', data: 'Database, auth, storage, edge functions — the whole backend', note: 'LIVE — the platform everything runs on.' },
+  { grp: 'established', ico: '🗄️', name: 'Supabase', data: 'Database, auth, storage, edge functions, realtime — the whole backend', note: 'LIVE — the platform everything runs on. Realtime (postgres_changes) streams team chat live to every signed-in staffer, RLS-filtered, with a polling fallback.' },
   { grp: 'established', ico: '🎬', name: 'YouTube + SoundCloud embeds', data: 'Recap videos / audio play on the site (homepage Recent Rooms, Watch page, artist profiles)', note: 'LIVE — embed-only (no API key / no data pulled in). Paste a YouTube or SoundCloud link on an event’s Recent Rooms and it plays in a pop-up; YouTube also supplies the card thumbnail.' },
   { grp: 'pending', ico: '📸', name: 'Instagram Graph API', data: 'Follower count, reach, impressions, profile views, per-post insights', note: 'PLAN #1 — biggest payoff for least work; the code is DONE. Your part (~1 hr, one-time): 1) switch IG to Business/Creator + link a Facebook Page, 2) create a Meta developer app, 3) generate a long-lived token, 4) add IG_USER_ID + IG_ACCESS_TOKEN secrets. Then pull-instagram-stats goes live like YouTube — nightly follower/reach snapshots feeding Strategy.' },
   { grp: 'established', ico: '📡', name: 'Resident Advisor — public data', data: 'Upcoming NYC events, RSVP/interested counts, venues, genres, RA-picks, artist lineups + SoundCloud', note: 'LIVE (public data only, via ra.co’s undocumented GraphQL). Powers the RA Market screen (best nights, venue/genre benchmarks) + the Radio station (upcoming artists’ SoundCloud). pull-ra-market caches ~3 months of shows on demand (paginates to the full window) and is source-tagged so it coexists with Ticketmaster. Unofficial + could change without notice — a resilient read, not a dependency.' },

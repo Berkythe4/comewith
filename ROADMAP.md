@@ -200,6 +200,55 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-07-18 (Modular nav + master Calendar & Tasks + team chat)
+
+> Migrations **096–098 APPLIED to prod**; `send-actor-email` **redeployed**; `dashboard.html`
+> pushed (Netlify live, commits a4f2920…af5acd1). Theme: reshape the dashboard into **sellable
+> product modules** and add the cross-cutting Calendar + team-communication layer.
+
+### ✅ Modular product nav (096, 098)
+- `module_registry` regrouped into product-shaped, collapsible sidebar groups: **Pinned (Calendar)
+  · Workflow · Finance · Marketing · Venues · Artists · Radio · Team HQ** (Site Editor/Review moved
+  into Team HQ in 098). Collapse state remembered; active group auto-opens; `actors` relabeled
+  "People & Orgs". Groups map 1:1 to what could be sold per-subscriber later — the existing
+  built/signed-off/per-user access system already gates them.
+
+### ✅ Master Calendar & Tasks (new pinned module)
+- Month grid + agenda: our events (series-colored, day drill-in w/ lineups), **⭐ milestones**
+  (`tasks.milestone`, 096 — the only tasks on the grid), social posts, RA/TM market shows,
+  roster-artists-playing-elsewhere (name-matched vs `ra_events.lineup`). Multi-select filters:
+  series / status / venue / artist + layer toggles.
+- **Tasks board** below the grid: first cross-event task view (search, status chips,
+  event/assignee/priority/due filters, sort, quick-add, ⭐ toggle) + shared **openEditTask** modal
+  (all fields + assignees) reachable from the board, milestone chips, and event-hub task rows.
+- Event hub: **"✉ Email task list"** — inline-styled team email (overdue/status sections, message
+  intro, live preview, include-done toggle).
+
+### ✅ Team chat + comms (097)
+- `chat_channels/members/messages` (team / DM / event threads), member-only DM privacy, **first
+  Realtime use** (postgres_changes on `chat_messages`, RLS-filtered) + poll fallback. 💬 on every
+  tab; minimize → docked unread pill. Users tab: per-user ✉/💬, multi-select "Email selected",
+  teammate emails mirror into the DM thread.
+- **Single-thread broadcasts**: `send-actor-email single_thread` mode — one conversation, all
+  recipients on one To line; the broadcast posts a notice into # Team chat with "Open thread →" /
+  "✓ Complete" (complete removes it from chat; the conversation is permanent).
+- Conversations: **"📥 Log received email"** — paste or .eml upload parsed client-side
+  (multipart/QP/base64/RFC2047), logged as a real inbound message. No mailbox access.
+
+### ✅ User deactivation (098)
+- Master-only Deactivate/Reactivate on Users; `is_admin()/is_master_admin()/user_can_access_module()`
+  treat `profiles.deleted_at` as no-role → instant full revoke (verified on prod by impersonation).
+
+### 📌 Lessons banked
+- **INSERT..RETURNING enforces the SELECT policy mid-statement** — a security-definer helper that
+  re-queries the table can't see the new row; put `created_by = auth.uid()` directly in the policy.
+- **Any author CSS `display` beats the `[hidden]` attribute** — reassert `[hidden]{display:none}`
+  for styled panels (bit the chat panel/dock/badges).
+- RLS is smoke-testable on prod via the Management API: `set_config('request.jwt.claims',…)` +
+  `set local role authenticated` inside BEGIN..ROLLBACK.
+
+---
+
 ## Current state — reconciled 2026-07-10 (RA Market data completeness + Watchlist + SoundCloud station)
 
 > Migrations **088–089 APPLIED to prod**; edge functions **pull-ra-market / pull-ticketmaster /
