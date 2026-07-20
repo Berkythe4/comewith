@@ -8845,7 +8845,8 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows]')) return;
+  if (t.closest('[data-ra-refreshshows]')) { raRefreshShowInfo(t.closest('[data-ra-refreshshows]')); return; }
   if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
   if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
   if (t.closest('[data-ra-mixupload]')) { raMixUpload(t.closest('[data-ra-mixupload]')); return; }
@@ -9094,6 +9095,7 @@ function raRenderPlaylist() {
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
         ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back into the tool (after you reorder it there). Songs you removed there are logged as passed + carried to next week.">↺ Sync order from SoundCloud</button>' : ''}
+        ${tracks.length ? '<button class="hub-btn ghost" data-ra-refreshshows title="Re-match every track to the latest RA/Ticketmaster pull — fills in missing show dates, venues, prices and genres (also fixes sync-added and carried tracks, which start blank)">↻ Show info</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
         <button class="hub-btn" data-ra-export title="Step ① — push this to a private playlist in your SoundCloud for test listening">${exportLabel}</button>
@@ -9112,7 +9114,7 @@ function raRenderPlaylist() {
     </div>
     ${pipeline}${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${show ? '<br>' + show : ''}</div></div>
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
         ${isWorking ? `<button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
@@ -9176,6 +9178,7 @@ async function raAddTrack(scTrackId) {
     permalink_url: t.permalink_url, duration_ms: t.duration_ms, playback_count: t.playback_count, artwork_url: t.artwork_url, sort,
     show_date: show.next_event_date || null, show_venue: show.next_venue || null,
     show_cost: raCost(show.next_cost), show_url: show.next_event_url || null,
+    genres: (show.genres || []).slice(0, 3),
   });
   if (error) { toast(error.code === '23505' ? 'Already in your station' : error.message, 'err'); return; }
   // Permanent song memory: record that this song was considered (re-adds bump the count).
@@ -9465,6 +9468,41 @@ async function raDoFinalize() {
     raState.viewPlaylistId = null;
     await raLoadPlaylist(); renderRaMarket();
   } catch (e) { toast('Finalize failed: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '🚀 Go live'; }
+}
+// Re-match every station track to the CURRENT ra_artists pull and refresh the
+// show snapshot (date/venue/price/link) + genres. Fixes tracks that never got
+// one (added via SoundCloud sync-back or carry-over) and fills prices RA has
+// since published. Match: artist_name → sc_artist_cache.username → soundcloud
+// profile → ra_artists; falls back to a plain name match.
+async function raRefreshShowInfo(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = '↻ Refreshing…'; }
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const [{ data: arts }, { data: cache }] = await Promise.all([
+      sb.from('ra_artists').select('name,soundcloud,genres,next_event_date,next_venue,next_cost,next_event_url').gte('next_event_date', today).order('next_event_date'),
+      sb.from('sc_artist_cache').select('soundcloud,username').not('username', 'is', null),
+    ]);
+    const byUser = {}; (cache || []).forEach(c => { byUser[c.username.toLowerCase()] = raKey(c.soundcloud); });
+    const bySc = {}, byName = {};
+    (arts || []).forEach(a => {
+      if (a.soundcloud && !bySc[raKey(a.soundcloud)]) bySc[raKey(a.soundcloud)] = a;   // soonest show wins
+      if (a.name && !byName[a.name.toLowerCase()]) byName[a.name.toLowerCase()] = a;
+    });
+    let updated = 0;
+    for (const t of raState.playlist.tracks) {
+      const an = (t.artist_name || '').toLowerCase();
+      const a = bySc[byUser[an]] || byName[an];
+      if (!a) continue;
+      await sb.from('sc_playlist_tracks').update({
+        show_date: a.next_event_date || null, show_venue: a.next_venue || null,
+        show_cost: raCost(a.next_cost), show_url: a.next_event_url || null,
+        genres: (a.genres || []).slice(0, 3),
+      }).eq('id', t.id);
+      updated++;
+    }
+    toast(`Show info refreshed — ${updated}/${raState.playlist.tracks.length} tracks matched to the current pull`, 'ok');
+    await raLoadPlaylist(); renderRaMarket();
+  } catch (e) { toast('Refresh failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Show info'; } }
 }
 // Show/hide a live episode's public page (SoundCloud untouched).
 async function raSetPublished(on) {

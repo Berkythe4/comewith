@@ -177,8 +177,8 @@ function downloadCsv(name,rows){
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();URL.revokeObjectURL(a.href);
 }
 function episodeCsv(){
-  const rows=[['#','Title','Artist','BPM','Key','Camelot','Minutes','SoundCloud link','Show date','Venue','Price','Show link','Episode','Published']];
-  tracks.forEach((t,i)=>rows.push([i+1,t.title||'',t.artist_name||'',t.bpm||'',t.song_key||'',t.camelot||'',t.duration_ms?Math.round(t.duration_ms/60000):'',t.permalink_url||'',t.show_date||'',t.show_venue||'',t.show_cost||'',t.show_url||'',(station?.station_no!=null?'EP '+station.station_no+' — ':'')+(station?.name||''),station?.published_at?String(station.published_at).slice(0,10):'']));
+  const rows=[['#','Title','Artist','Genre','BPM','Key','Camelot','Minutes','SoundCloud link','Show date','Venue','Price','Show link','Episode','Published']];
+  tracks.forEach((t,i)=>rows.push([i+1,t.title||'',t.artist_name||'',(t.genres||[]).join(' / '),t.bpm||'',t.song_key||'',t.camelot||'',t.duration_ms?Math.round(t.duration_ms/60000):'',t.permalink_url||'',t.show_date||'',t.show_venue||'',t.show_cost||'',t.show_url||'',(station?.station_no!=null?'EP '+station.station_no+' — ':'')+(station?.name||''),station?.published_at?String(station.published_at).slice(0,10):'']));
   downloadCsv('come-with-radio-'+(station?.slug||'episode')+'.csv',rows);
 }
 
@@ -313,7 +313,7 @@ function render(){
     (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
     `<div class="label" style="margin:8px 0 2px">Tracklist · every artist is playing NYC soon</div>`+
     '<div>'+tr.map((t,i)=>{
-      const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):''].filter(Boolean).join(' · ');
+      const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):'',(t.genres&&t.genres.length)?esc(t.genres.slice(0,2).join(' / ')):''].filter(Boolean).join(' · ');
       const show=[t.show_date?'🗓 '+fmtShow(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
       const isSaved=saved.has(t.permalink_url);
       return `<div class="tk"><div class="num">${i+1}</div><div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>

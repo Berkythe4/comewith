@@ -16,7 +16,7 @@ const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 
 const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, sc_playlist_url, mix_sc_track_url, mix_youtube_url, cover_url";
-const TRACK_COLS = "title, artist_name, permalink_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, sort";
+const TRACK_COLS = "title, artist_name, permalink_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, sort";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
