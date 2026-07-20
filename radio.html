@@ -287,6 +287,10 @@ async function loadHub(){
   $('#sub').textContent='Mixes built from artists playing NYC in the coming weeks — every track is a show you can catch.';
   let j={};try{j=await (await fetch(FN+'?list=1',{headers:H})).json();}catch(_){}
   const eps=j.stations||[];
+  if(j.next_drop&&j.next_drop.drop_date){
+    const d=new Date(j.next_drop.drop_date+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+    $('#preview').innerHTML='<span class="banner" style="background:var(--lime);color:#180c12">Next episode · EP '+esc(j.next_drop.station_no??'')+' drops '+esc(d)+'</span>';
+  }
   if(!eps.length){$('#root').innerHTML='<div class="state">First episode coming soon — check back, or follow <a href="https://instagram.com/comewithnyc" target="_blank" rel="noopener">@comewithnyc</a>.</div>';return;}
   $('#root').innerHTML='<div class="epgrid">'+eps.map(e=>`<article class="ep" data-slug="${esc(e.slug||'')}">
       <div class="art" ${e.artwork_url?`style="background-image:url('${esc(e.artwork_url)}')"`:''}><span class="no">EP ${e.station_no??'—'}${e.published_at?' · '+fmtDate(e.published_at):''}</span></div>

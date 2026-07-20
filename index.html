@@ -176,6 +176,9 @@
     <div class="info"><div class="label" style="margin-bottom:4px">Next up</div><div class="n" id="nsN">—</div><div class="sub" id="nsV" style="color:var(--dim);font-family:'DM Mono';font-size:.85rem">—</div></div>
     <a class="btn primary" id="nsBtn" href="#" target="_blank" rel="noopener">Get tickets ↗</a>
   </div>
+  <a id="radioPill" href="radio.html" hidden style="margin-top:14px;display:inline-flex;align-items:center;gap:10px;border:1px solid var(--lime-dk);border-radius:999px;background:var(--panel);padding:10px 18px;font-family:'DM Mono',monospace;font-size:.82rem;transition:.18s">
+    <span>📻</span><span id="radioPillTxt"></span><span style="color:var(--lime)">→</span>
+  </a>
 </div></header>
 
 <div class="strip"><div class="run" id="strip"></div></div>
@@ -405,7 +408,17 @@ async function loadImpactReport(){
     ? '<a class="btn gold" href="events/dance-infusion/di-02-2026-05/reports/impact-report.html" style="width:100%;justify-content:center">Read the #2 Impact Report →</a>'
     : '';
 }
-loadContent();loadEvents();loadCollective();loadImpactReport();
+// Come With Radio pill: teases the next scheduled drop; once an episode is
+// live it flips to "New — listen". Hidden when there's nothing to say.
+async function loadRadioPill(){
+  const el=$('#radioPill');if(!el)return;
+  let j={};try{const r=await fetch(CWURL+'/functions/v1/get-station?list=1',{headers:CWH});j=await r.json();}catch(_){return;}
+  const nd=j.next_drop,ep=(j.stations||[])[0];
+  const dropFmt=s=>new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
+  if(nd&&nd.drop_date){$('#radioPillTxt').textContent='Come With Radio · EP '+(nd.station_no??'')+' drops '+dropFmt(nd.drop_date);el.hidden=false;}
+  else if(ep){$('#radioPillTxt').textContent='New on Come With Radio · EP '+(ep.station_no??'')+(ep.name?(' — '+ep.name):'');if(ep.slug)el.href='radio.html?s='+encodeURIComponent(ep.slug);el.hidden=false;}
+}
+loadContent();loadEvents();loadCollective();loadImpactReport();loadRadioPill();
 </script>
 </body>
 </html>

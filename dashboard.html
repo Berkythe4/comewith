@@ -8553,7 +8553,7 @@ async function loadRaMarket() {
 // server-side with carried-over songs). The switcher can view any past station.
 // raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
 // carried marks when researching future stations + the 📜 History view).
-const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at';
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at';
 async function raLoadPlaylist() {
   const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
   raState.stations = all || [];
@@ -8892,6 +8892,7 @@ document.addEventListener('click', async (e) => {
 })();
 $('panel-ra-market').addEventListener('change', async (e) => {
   const ps = e.target.closest('[data-ra-plselect]'); if (ps) { raState.viewPlaylistId = ps.value; await raLoadPlaylist(); renderRaMarket(); return; }
+  const dd = e.target.closest('[data-ra-dropdate]'); if (dd) { await sb.from('sc_playlists').update({ drop_date: dd.value || null, updated_at: new Date().toISOString() }).eq('id', raState.playlist.id); raState.playlist.drop_date = dd.value || null; toast(dd.value ? 'Drop date set — teased on the site until you go live' : 'Drop date cleared', 'ok'); return; }
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
   const ve = e.target.closest('[data-ra-venue]'); if (ve) { raState.venue = ve.value; renderRaMarket(); return; }
@@ -9102,6 +9103,7 @@ function raRenderPlaylist() {
   return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
       <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-rename title="Rename station">✎</button>' : ''} ${statusChip}
+      ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'EP drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
       ${switcher}
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
       <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>

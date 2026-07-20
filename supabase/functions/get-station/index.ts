@@ -15,7 +15,7 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 
-const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, sc_playlist_url, mix_sc_track_url, mix_youtube_url, cover_url";
+const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, sc_playlist_url, mix_sc_track_url, mix_youtube_url, cover_url";
 const TRACK_COLS = "title, artist_name, permalink_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, sort";
 
 Deno.serve(async (req) => {
@@ -47,6 +47,11 @@ Deno.serve(async (req) => {
           a.n++; a.ms += t.duration_ms || 0; if (!a.art && t.artwork_url) a.art = t.artwork_url;
         }
       }
+      // Tease the next scheduled drop (drops are dated in advance): the nearest
+      // future-dated station that isn't live yet. Number + date + name only.
+      const today = new Date().toISOString().slice(0, 10);
+      const { data: nd } = await admin.from("sc_playlists").select("station_no, name, drop_date")
+        .eq("published", false).gte("drop_date", today).order("drop_date").limit(1).maybeSingle();
       return new Response(JSON.stringify({
         stations: (pls || []).map(({ id, ...p }) => ({
           ...p,
@@ -54,6 +59,7 @@ Deno.serve(async (req) => {
           total_min: Math.round((agg[id]?.ms || 0) / 60000),
           artwork_url: p.cover_url || agg[id]?.art || null,
         })),
+        next_drop: nd || null,
       }), { headers: JH });
     }
 

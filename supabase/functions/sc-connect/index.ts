@@ -358,6 +358,18 @@ Deno.serve(async (req) => {
       }
     } catch (e) { console.error("finalize next-station:", e instanceof Error ? e.message : String(e)); }
 
+    // Drop a "posted" card on the social calendar so releases show up alongside
+    // the rest of the content plan. Best-effort — never blocks going live.
+    try {
+      await admin.from("social_posts").insert({
+        title: `📻 Come With Radio EP ${pl.station_no ?? ""} — ${pl.name || ""}`.trim(),
+        caption: (descSc || "").slice(0, 1000) || null,
+        channels: ["other"], series: "Come With Radio", content_pillar: "radio episode",
+        stage: "posted", scheduled_for: nowIso, posted_at: nowIso,
+        link_url: `${SITE}/radio.html?s=${slug}`,
+      });
+    } catch (e) { console.error("finalize social post:", e instanceof Error ? e.message : String(e)); }
+
     return ok({ success: true, slug, page_url: `${SITE}/radio.html?s=${slug}`, sc_url: pl.mix_sc_track_url, sc_warning: scWarning, next: nextInfo });
   }
 
