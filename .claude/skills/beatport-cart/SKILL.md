@@ -75,6 +75,18 @@ Keith. Say plainly which mode happened.
 - Optional: offer to write matches back to `sc_song_log` (a `beatport_url`
   column does not exist yet — offer, don't assume).
 
+## 5 · Open the cart
+
+When at least one track was added to the cart, open it in Keith's default
+browser: `powershell -c "start https://www.beatport.com/cart"`. Skip this in
+link-fallback mode (the links are in the report instead).
+
+## Headless note
+
+This skill also runs via "Build Beatport Cart.bat" (repo root) → `claude -p`.
+In that mode there's no back-and-forth: if the token file is missing, print the
+bootstrap steps clearly and exit — don't wait for input.
+
 ## Cautions
 
 - Read-only + Keith's-own-cart writes ONLY. Never touch checkout/payment.
