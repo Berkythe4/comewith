@@ -80,6 +80,35 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
+
+    // Deep price check: { prices: [ra_event_id, …] } → { costs: { id: "from $20" } }.
+    // The listings query's `cost` is usually empty, but the event-detail tickets
+    // (queryType: AVAILABLE) are public — cheapest still-on-sale tier wins.
+    // Used by the dashboard "↻ Show info" pass right before an episode publishes.
+    if (Array.isArray(b.prices)) {
+      const ids = b.prices.map((x: unknown) => String(x)).filter((x: string) => /^\d+$/.test(x)).slice(0, 40);
+      const costs: Record<string, string | null> = {};
+      const fmt = (n: number) => "$" + (Number.isInteger(n) ? n : n.toFixed(2));
+      for (const id of ids) {
+        try {
+          const res = await fetch(RA_URL, {
+            method: "POST", headers: RA_HEADERS,
+            body: JSON.stringify({
+              query: "query($id: ID!) { event(id: $id) { id tickets(queryType: AVAILABLE) { priceRetail validType onSaleUntil } } }",
+              variables: { id },
+            }),
+          });
+          const j = await res.json().catch(() => ({}));
+          const tiers = (j?.data?.event?.tickets || []) as { priceRetail?: number; validType?: string }[];
+          const valid = tiers.filter((t) => t.validType === "VALID" && typeof t.priceRetail === "number");
+          costs[id] = valid.length
+            ? (valid.length > 1 ? "from " : "") + fmt(Math.min(...valid.map((t) => t.priceRetail!)))
+            : null;
+        } catch { costs[id] = null; }
+      }
+      return new Response(JSON.stringify({ costs }), { headers: JH });
+    }
+
     let area = Number(b.area) || 0;
     if (!area) {
       const { data: s } = await admin.from("site_content").select("value").eq("key", "ops.ra_area_id").maybeSingle();

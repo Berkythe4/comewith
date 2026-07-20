@@ -9500,7 +9500,25 @@ async function raRefreshShowInfo(btn) {
       }).eq('id', t.id);
       updated++;
     }
-    toast(`Show info refreshed — ${updated}/${raState.playlist.tracks.length} tracks matched to the current pull`, 'ok');
+    // Deep price pass: for tracks STILL missing a cost but linked to an RA event,
+    // pull the event's public ticket tiers → "from $X" (cheapest on-sale tier).
+    // External-ticketing events (Dice/venue sites) have no RA tiers and stay blank.
+    await raLoadPlaylist();
+    const need = {};
+    for (const t of raState.playlist.tracks) {
+      const m = !t.show_cost && /ra\.co\/events\/(\d+)/.exec(t.show_url || '');
+      if (m) (need[m[1]] ||= []).push(t.id);
+    }
+    let priced = 0;
+    const ids = Object.keys(need);
+    if (ids.length) {
+      const { data: pr } = await sb.functions.invoke('pull-ra-market', { body: { prices: ids } });
+      for (const [eid, cost] of Object.entries(pr?.costs || {})) {
+        if (!cost) continue;
+        for (const tid of need[eid]) { await sb.from('sc_playlist_tracks').update({ show_cost: cost }).eq('id', tid); priced++; }
+      }
+    }
+    toast(`Show info refreshed — ${updated}/${raState.playlist.tracks.length} matched${priced ? ` · ${priced} price${priced === 1 ? '' : 's'} found on the RA event pages` : ''}`, 'ok');
     await raLoadPlaylist(); renderRaMarket();
   } catch (e) { toast('Refresh failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Show info'; } }
 }
