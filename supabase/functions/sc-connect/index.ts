@@ -1,10 +1,19 @@
 // sc-connect  (ADMIN — verify_jwt on)
 //
 // Admin-side SoundCloud actions:
-//   action=status → { configured, connected, username }
-//   action=start  → { authorize_url }  (generates PKCE state+verifier, stores them)
-//   action=export → creates/updates a real SoundCloud playlist from an in-app
-//                    station's tracks; refreshes the access token if expired.
+//   action=status     → { configured, connected, username }
+//   action=start      → { authorize_url }  (generates PKCE state+verifier, stores them)
+//   action=export     → creates/updates a real SoundCloud playlist from an in-app
+//                       station's tracks; refreshes the access token if expired.
+//   action=sync       → pulls the exported playlist's final track order back in.
+//   action=upload_mix → attach the recorded MIX to a station as a SoundCloud track:
+//                       either resolve a pasted track link (recommended for big
+//                       HQ files uploaded via SoundCloud's own uploader), or
+//                       stream the mix file from the radio-mixes bucket to
+//                       POST /tracks (private) — the API-upload path.
+//   action=finalize   → go live: slug + descriptions + published on the station,
+//                       and push the short description (with the site link) to
+//                       the SoundCloud mix track + flip it public.
 // The public sc-oauth function handles the browser redirect + token exchange.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -22,6 +31,7 @@ const b64url = (buf: ArrayBuffer | Uint8Array) => {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
   return btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 };
+const SC_ACCEPT = "application/json; charset=utf-8";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
@@ -29,6 +39,7 @@ Deno.serve(async (req) => {
 
   const SUPA = Deno.env.get("SUPABASE_URL")!;
   const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const SITE = (Deno.env.get("SITE_URL") || "https://comewith.org").replace(/\/+$/, "");
   const admin = createClient(SUPA, SRK);
 
   // Admin auth.
@@ -49,6 +60,25 @@ Deno.serve(async (req) => {
   const action = (body.action || "status").toString();
 
   const { data: row } = await admin.from("sc_oauth").select("*").eq("id", "singleton").maybeSingle();
+
+  // Valid access token, refreshing when within a minute of expiry (refresh
+  // tokens are single-use). Returns null when the connection is dead.
+  async function freshToken(): Promise<string | null> {
+    if (!row?.access_token) return null;
+    if (!(row.expires_at && new Date(row.expires_at).getTime() < Date.now() + 60000 && row.refresh_token)) return row.access_token;
+    const rr = await fetch("https://secure.soundcloud.com/oauth/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded", "accept": SC_ACCEPT },
+      body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId!, client_secret: clientSecret!, refresh_token: row.refresh_token }),
+    });
+    const rt = await rr.json();
+    if (rr.ok && rt.access_token) {
+      await admin.from("sc_oauth").update({ access_token: rt.access_token, refresh_token: rt.refresh_token || row.refresh_token, expires_at: new Date(Date.now() + (rt.expires_in || 3600) * 1000).toISOString(), updated_at: new Date().toISOString() }).eq("id", "singleton");
+      return rt.access_token;
+    }
+    console.error("sc refresh:", JSON.stringify(rt).slice(0, 160));
+    return null;
+  }
 
   if (action === "status") {
     return ok({ configured: !!(clientId && clientSecret), connected: !!row?.access_token, username: row?.sc_username || null });
@@ -71,20 +101,8 @@ Deno.serve(async (req) => {
     const playlistId = (body.playlist_id || "").toString();
     if (!playlistId) return err(400, "playlist_id required");
 
-    // Refresh the access token if it's within a minute of expiry (refresh tokens are single-use).
-    let token = row.access_token;
-    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now() + 60000 && row.refresh_token) {
-      const rr = await fetch("https://secure.soundcloud.com/oauth/token", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded", "accept": "application/json; charset=utf-8" },
-        body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, client_secret: clientSecret, refresh_token: row.refresh_token }),
-      });
-      const rt = await rr.json();
-      if (rr.ok && rt.access_token) {
-        token = rt.access_token;
-        await admin.from("sc_oauth").update({ access_token: rt.access_token, refresh_token: rt.refresh_token || row.refresh_token, expires_at: new Date(Date.now() + (rt.expires_in || 3600) * 1000).toISOString(), updated_at: new Date().toISOString() }).eq("id", "singleton");
-      } else { console.error("sc refresh:", JSON.stringify(rt).slice(0, 160)); return err(401, "SoundCloud connection expired — reconnect."); }
-    }
+    const token = await freshToken();
+    if (!token) return err(401, "SoundCloud connection expired — reconnect.");
 
     const { data: pl } = await admin.from("sc_playlists").select("id, name, sc_playlist_id").eq("id", playlistId).single();
     if (!pl) return err(404, "playlist not found");
@@ -99,7 +117,7 @@ Deno.serve(async (req) => {
     // rest instead of failing the whole export.
     const checks = await Promise.all(wanted.map(async (t) => {
       try {
-        const cr = await fetch(`https://api.soundcloud.com/tracks/${t.id}`, { headers: { "Authorization": "OAuth " + token, "accept": "application/json; charset=utf-8" } });
+        const cr = await fetch(`https://api.soundcloud.com/tracks/${t.id}`, { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
         const tj = cr.ok ? await cr.json().catch(() => ({})) : {};
         // Reject deleted/private (non-200) and tracks explicitly blocked from embedding.
         return { ...t, okTrack: cr.ok && tj.embeddable_by !== "none" };
@@ -121,7 +139,7 @@ Deno.serve(async (req) => {
     const isUpdate = !!pl.sc_playlist_id;
     const scRes = await fetch(`https://api.soundcloud.com/playlists${isUpdate ? "/" + pl.sc_playlist_id : ""}`, {
       method: isUpdate ? "PUT" : "POST",
-      headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": "application/json; charset=utf-8" },
+      headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": SC_ACCEPT },
       body: form.toString(),
     });
     const j = await scRes.json().catch(() => ({}));
@@ -142,22 +160,14 @@ Deno.serve(async (req) => {
     if (!row?.access_token) return err(400, "Connect SoundCloud first.");
     const playlistId = (body.playlist_id || "").toString();
     if (!playlistId) return err(400, "playlist_id required");
-    const { data: pl } = await admin.from("sc_playlists").select("id, sc_playlist_id").eq("id", playlistId).single();
+    const { data: pl } = await admin.from("sc_playlists").select("id, sc_playlist_id, station_no").eq("id", playlistId).single();
     if (!pl?.sc_playlist_id) return err(400, "Export this station to SoundCloud first, then reorder it there and sync.");
 
-    let token = row.access_token;
-    if (row.expires_at && new Date(row.expires_at).getTime() < Date.now() + 60000 && row.refresh_token) {
-      const rr = await fetch("https://secure.soundcloud.com/oauth/token", {
-        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", "accept": "application/json; charset=utf-8" },
-        body: new URLSearchParams({ grant_type: "refresh_token", client_id: clientId, client_secret: clientSecret, refresh_token: row.refresh_token }),
-      });
-      const rt = await rr.json();
-      if (rr.ok && rt.access_token) { token = rt.access_token; await admin.from("sc_oauth").update({ access_token: rt.access_token, refresh_token: rt.refresh_token || row.refresh_token, expires_at: new Date(Date.now() + (rt.expires_in || 3600) * 1000).toISOString() }).eq("id", "singleton"); }
-      else return err(401, "SoundCloud connection expired — reconnect.");
-    }
+    const token = await freshToken();
+    if (!token) return err(401, "SoundCloud connection expired — reconnect.");
 
     const scRes = await fetch(`https://api.soundcloud.com/playlists/${pl.sc_playlist_id}?access=playable,preview,blocked`, {
-      headers: { "Authorization": "OAuth " + token, "accept": "application/json; charset=utf-8" },
+      headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT },
     });
     if (!scRes.ok) { if (scRes.status === 401) return err(401, "SoundCloud connection expired — reconnect."); return err(502, "Couldn't read the playlist from SoundCloud."); }
     const j = await scRes.json().catch(() => ({}));
@@ -171,7 +181,7 @@ Deno.serve(async (req) => {
     const trackCount = typeof j.track_count === "number" ? j.track_count : scTracks.length;
     const complete = scTracks.length >= trackCount;
 
-    const { data: existing } = await admin.from("sc_playlist_tracks").select("id, sc_track_id").eq("playlist_id", playlistId);
+    const { data: existing } = await admin.from("sc_playlist_tracks").select("id, sc_track_id, title, artist_name, permalink_url, artwork_url, duration_ms").eq("playlist_id", playlistId);
     const byId: Record<string, string> = {}; (existing || []).forEach((t) => { byId[t.sc_track_id] = t.id; });
     const scIds = new Set<string>();
     let pos = 0, added = 0;
@@ -188,10 +198,167 @@ Deno.serve(async (req) => {
         });
       }
     }
-    // Only remove locally when the snapshot is trustworthy (complete).
-    const toRemove = complete ? (existing || []).filter((t) => !scIds.has(t.sc_track_id)).map((t) => t.id) : [];
-    if (toRemove.length) await admin.from("sc_playlist_tracks").delete().in("id", toRemove);
-    return ok({ success: true, tracks: scIds.size, added, removed: toRemove.length, incomplete: !complete });
+    // Only remove locally when the snapshot is trustworthy (complete). A track
+    // cut on SoundCloud while test-listening = "considered and PASSED" — log it
+    // in the permanent song memory so it (a) shows a ✋ mark when researching
+    // future stations and (b) auto-carries into next week's station at finalize.
+    const cut = complete ? (existing || []).filter((t) => !scIds.has(t.sc_track_id)) : [];
+    if (cut.length) {
+      const now = new Date().toISOString();
+      for (const t of cut) {
+        await admin.from("sc_song_log").upsert({
+          sc_track_id: t.sc_track_id, title: t.title, artist_name: t.artist_name,
+          permalink_url: t.permalink_url, artwork_url: t.artwork_url, duration_ms: t.duration_ms,
+          passed_playlist_id: playlistId, passed_station_no: pl.station_no ?? null, passed_at: now, updated_at: now,
+        }, { onConflict: "sc_track_id" });
+      }
+      await admin.from("sc_playlist_tracks").delete().in("id", cut.map((t) => t.id));
+    }
+    return ok({ success: true, tracks: scIds.size, added, removed: cut.length, incomplete: !complete });
+  }
+
+  // Attach the recorded mix to a station as a SoundCloud TRACK. Two paths:
+  //  - body.track_url: Keith uploaded the mix with SoundCloud's own uploader
+  //    (best for big high-quality files) — resolve the link to a track id.
+  //  - stored file: stream the mix from the radio-mixes bucket to POST /tracks
+  //    as a PRIVATE track (flips public at finalize).
+  if (action === "upload_mix") {
+    if (!row?.access_token) return err(400, "Connect SoundCloud first.");
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const { data: pl } = await admin.from("sc_playlists").select("id, name, status, mix_file_path").eq("id", playlistId).single();
+    if (!pl) return err(404, "station not found");
+
+    const token = await freshToken();
+    if (!token) return err(401, "SoundCloud connection expired — reconnect.");
+
+    const trackUrl = (body.track_url || "").toString().trim();
+    let tj: any = null;
+    if (trackUrl) {
+      const r = await fetch(`https://api.soundcloud.com/resolve?url=${encodeURIComponent(trackUrl)}`, { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
+      tj = await r.json().catch(() => ({}));
+      if (!r.ok || tj.kind !== "track") return err(400, "That link doesn't resolve to a SoundCloud track — paste the track's own page URL.");
+    } else {
+      if (!pl.mix_file_path) return err(400, "Upload the mix file first, or paste the SoundCloud track link instead.");
+      const dl = await admin.storage.from("radio-mixes").download(pl.mix_file_path);
+      if (!dl.data) return err(400, "Couldn't read the uploaded mix from storage" + (dl.error ? `: ${dl.error.message}` : "."));
+      const fname = pl.mix_file_path.split("/").pop() || "mix.mp3";
+      const fd = new FormData();
+      fd.set("track[title]", `${pl.name || "Come With station"} — Come With Radio`);
+      fd.set("track[sharing]", "private");
+      fd.set("track[asset_data]", new File([dl.data], fname));
+      const up = await fetch("https://api.soundcloud.com/tracks", {
+        method: "POST", headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT }, body: fd,
+      });
+      tj = await up.json().catch(() => ({}));
+      if (!up.ok) {
+        console.error("sc track upload:", up.status, JSON.stringify(tj).slice(0, 300));
+        if (up.status === 401) return err(401, "SoundCloud connection expired — reconnect.");
+        const scMsg = (tj?.errors?.[0]?.error_message || tj?.error || tj?.message || "").toString().slice(0, 200);
+        return err(502, "SoundCloud rejected the upload" + (scMsg ? ": " + scMsg : " — you can upload it on soundcloud.com and paste the track link instead."));
+      }
+    }
+    await admin.from("sc_playlists").update({
+      mix_sc_track_id: tj.id != null ? String(tj.id) : null,
+      mix_sc_track_url: tj.permalink_url || trackUrl || null,
+      cover_url: tj.artwork_url || null,
+      status: pl.status === "building" ? "testing" : pl.status,
+      updated_at: new Date().toISOString(),
+    }).eq("id", playlistId);
+    return ok({ success: true, url: tj.permalink_url || trackUrl, id: tj.id != null ? String(tj.id) : null, source: trackUrl ? "link" : "upload" });
+  }
+
+  // Go live: slug + descriptions + published flag on the station, then push the
+  // short description (with the episode page link) to the SoundCloud mix track
+  // and flip it public. SoundCloud failures don't block the page going live —
+  // they come back as sc_warning.
+  if (action === "finalize") {
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const { data: pl } = await admin.from("sc_playlists").select("id, name, slug, status, station_no, published_at, mix_sc_track_id, mix_sc_track_url").eq("id", playlistId).single();
+    if (!pl) return err(404, "station not found");
+    const { data: plTracks } = await admin.from("sc_playlist_tracks").select("sc_track_id, title, artist_name, permalink_url, artwork_url, duration_ms").eq("playlist_id", playlistId).order("sort");
+    if (!plTracks?.length) return err(400, "This station has no tracks — nothing to publish.");
+
+    const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60);
+    let slug = slugify((body.slug || "").toString()) || pl.slug || (slugify(pl.name || "station") + "-" + new Date().toISOString().slice(0, 10));
+    const descPublic = (body.desc_public || "").toString().slice(0, 8000) || null;
+    const descSc = (body.desc_sc || "").toString().slice(0, 4000) || null;
+    const youtube = (body.youtube_url || "").toString().trim() || null;
+
+    // Claim the slug; on a collision (another episode owns it) suffix -2, -3…
+    const base = slug;
+    for (let i = 0; i < 5; i++) {
+      const { error } = await admin.from("sc_playlists").update({
+        slug, desc_public: descPublic, desc_sc: descSc, mix_youtube_url: youtube,
+        published: true, status: "live",
+        published_at: pl.published_at || new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", playlistId);
+      if (!error) break;
+      if (error.code !== "23505" || i === 4) return err(500, "Couldn't publish: " + error.message);
+      slug = `${base}-${i + 2}`;
+    }
+
+    let scWarning: string | null = null;
+    if (pl.mix_sc_track_id) {
+      const token = await freshToken();
+      if (!token) scWarning = "SoundCloud connection expired — page is live, but the mix description wasn't pushed. Reconnect and finalize again.";
+      else {
+        const form = new URLSearchParams();
+        if (descSc) form.set("track[description]", descSc);
+        form.set("track[sharing]", "public");
+        const r = await fetch(`https://api.soundcloud.com/tracks/${pl.mix_sc_track_id}`, {
+          method: "PUT", headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": SC_ACCEPT },
+          body: form.toString(),
+        });
+        if (!r.ok) {
+          const j = await r.json().catch(() => ({}));
+          console.error("sc finalize track:", r.status, JSON.stringify(j).slice(0, 200));
+          scWarning = "Page is live, but SoundCloud rejected the track update — set the description/public flag on soundcloud.com manually.";
+        }
+      }
+    } else {
+      scWarning = "No SoundCloud mix track linked yet — the page is live without one.";
+    }
+
+    // Permanent song memory: everything in a live episode is PLAYED (in EP n, on
+    // this date). Clears nothing else — a song's earlier passed history stays.
+    const nowIso = new Date().toISOString();
+    for (const t of plTracks) {
+      await admin.from("sc_song_log").upsert({
+        sc_track_id: t.sc_track_id, title: t.title, artist_name: t.artist_name,
+        permalink_url: t.permalink_url, artwork_url: t.artwork_url, duration_ms: t.duration_ms,
+        played_playlist_id: playlistId, played_station_no: pl.station_no ?? null, played_at: nowIso, updated_at: nowIso,
+      }, { onConflict: "sc_track_id" });
+    }
+
+    // Start next week's station (next number) and auto-carry every song that was
+    // considered + passed but never played and never carried before. carried_to
+    // is set once, so cutting a carried song again won't resurrect it forever.
+    let nextInfo: { id: string; station_no: number; carried: number } | null = null;
+    try {
+      const { data: maxRow } = await admin.from("sc_playlists").select("station_no").not("station_no", "is", null).order("station_no", { ascending: false }).limit(1).maybeSingle();
+      const nextNo = (maxRow?.station_no || 0) + 1;
+      const { data: next } = await admin.from("sc_playlists").insert({ name: "Weekly station", station_no: nextNo }).select("id, station_no").single();
+      if (next) {
+        const { data: carry } = await admin.from("sc_song_log").select("sc_track_id, title, artist_name, permalink_url, artwork_url, duration_ms, passed_station_no")
+          .not("passed_at", "is", null).is("played_at", null).is("carried_to", null).order("passed_at");
+        let pos = 0;
+        for (const c of carry || []) {
+          pos += 10;
+          const ins = await admin.from("sc_playlist_tracks").insert({
+            playlist_id: next.id, sc_track_id: c.sc_track_id, title: c.title, artist_name: c.artist_name,
+            permalink_url: c.permalink_url, artwork_url: c.artwork_url, duration_ms: c.duration_ms,
+            sort: pos, carried_from: c.passed_station_no ?? null,
+          });
+          if (!ins.error) await admin.from("sc_song_log").update({ carried_to: next.id, updated_at: nowIso }).eq("sc_track_id", c.sc_track_id);
+        }
+        nextInfo = { id: next.id, station_no: next.station_no, carried: (carry || []).length };
+      }
+    } catch (e) { console.error("finalize next-station:", e instanceof Error ? e.message : String(e)); }
+
+    return ok({ success: true, slug, page_url: `${SITE}/radio.html?s=${slug}`, sc_url: pl.mix_sc_track_url, sc_warning: scWarning, next: nextInfo });
   }
 
   return err(400, "unknown action");

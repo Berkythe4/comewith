@@ -8508,7 +8508,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0 };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '' };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -8547,12 +8547,32 @@ async function loadRaMarket() {
   await raLoadWatch();
   renderRaMarket();
 }
-// The single working playlist (auto-created). Tracks ordered by sort.
+// Stations are numbered (EP 1, 2, …) and all persist. The WORKING station is
+// the building/testing row (auto-created with the next number when everything's
+// live — i.e. right after an episode goes live you get a fresh one, pre-seeded
+// server-side with carried-over songs). The switcher can view any past station.
+// raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
+// carried marks when researching future stations + the 📜 History view).
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at';
 async function raLoadPlaylist() {
-  let { data: pl } = await sb.from('sc_playlists').select('id,name,sc_playlist_url,public_token,published').order('created_at').limit(1).maybeSingle();
-  if (!pl) { const ins = await sb.from('sc_playlists').insert({ name: 'Weekly station' }).select('id,name,sc_playlist_url,public_token,published').single(); pl = ins.data; }
-  const { data: tracks } = await sb.from('sc_playlist_tracks').select('*').eq('playlist_id', pl.id).order('sort');
+  const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
+  raState.stations = all || [];
+  let pl = raState.viewPlaylistId ? raState.stations.find(p => p.id === raState.viewPlaylistId) : null;
+  if (!pl) pl = raState.stations.find(p => p.status === 'building' || p.status === 'testing') || null;
+  if (!pl) {
+    const nextNo = raState.stations.reduce((m, p) => Math.max(m, p.station_no || 0), 0) + 1;
+    const ins = await sb.from('sc_playlists').insert({ name: 'Weekly station', station_no: nextNo }).select(RA_PL_COLS).single();
+    pl = ins.data;
+    // One-building unique guard: if another tab won the race, use its row.
+    if (!pl) { const again = await sb.from('sc_playlists').select(RA_PL_COLS).in('status', ['building', 'testing']).limit(1).maybeSingle(); pl = again.data; }
+    if (pl) raState.stations.unshift(pl);
+  }
+  const [{ data: tracks }, { data: log }] = await Promise.all([
+    sb.from('sc_playlist_tracks').select('*').eq('playlist_id', pl.id).order('sort'),
+    sb.from('sc_song_log').select('*'),
+  ]);
   raState.playlist = { ...pl, tracks: tracks || [] };
+  raState.songLog = {}; (log || []).forEach(r => { raState.songLog[r.sc_track_id] = r; });
 }
 // Artist Radio panel = just the radio UI now (market intel moved to its own module).
 function renderRaMarket() {
@@ -8825,8 +8845,16 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub]')) return;
   if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
+  if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
+  if (t.closest('[data-ra-mixupload]')) { raMixUpload(t.closest('[data-ra-mixupload]')); return; }
+  if (t.closest('[data-ra-mixlink]')) { raMixLink(t.closest('[data-ra-mixlink]')); return; }
+  if (t.closest('[data-ra-history]')) { raOpenHistory(); return; }
+  const hf = t.closest('[data-ra-histfilter]'); if (hf) { raState.histFilter = hf.dataset.raHistfilter; const w = $('raHistWrap'); if (w) { w.innerHTML = raHistHtml(); raHistWireSearch(); } return; }
+  if (t.closest('[data-ra-hideplayed]')) { raState.hidePlayed = !raState.hidePlayed; renderRaMarket(); return; }
+  if (t.closest('[data-ra-unpub]')) { if (confirm('Hide this episode\'s public page? The link will stop working until you publish it again.')) raSetPublished(false); return; }
+  if (t.closest('[data-ra-repub]')) { raSetPublished(true); return; }
   if (t.closest('[data-ra-sync]')) { raSyncFromSc(t.closest('[data-ra-sync]')); return; }
   if (t.closest('[data-ra-publish]')) { raPublishTracklist(); return; }
   if (t.closest('[data-ra-copytracklist]')) { navigator.clipboard.writeText(raFmtTracklist()).then(() => toast('Tracklist copied', 'ok'), () => toast('Copy failed', 'err')); return; }
@@ -8862,7 +8890,8 @@ document.addEventListener('click', async (e) => {
   if (msg) setTimeout(() => toast(msg[0], msg[1]), 800);
   history.replaceState(null, '', location.pathname); // strip the param
 })();
-$('panel-ra-market').addEventListener('change', (e) => {
+$('panel-ra-market').addEventListener('change', async (e) => {
+  const ps = e.target.closest('[data-ra-plselect]'); if (ps) { raState.viewPlaylistId = ps.value; await raLoadPlaylist(); renderRaMarket(); return; }
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
   const ve = e.target.closest('[data-ra-venue]'); if (ve) { raState.venue = ve.value; renderRaMarket(); return; }
@@ -9000,11 +9029,22 @@ function raRenderArtistTracks(key) {
     ? (b.playback_count || 0) - (a.playback_count || 0)
     : (b.created_at || '').localeCompare(a.created_at || '')); // recent
   const sortBtn = (v, l) => `<button class="hub-mini" data-ra-songsort="${v}" style="${raState.songSort === v ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  // Song-memory marks: ✓ played (in a live episode) / ✋ passed (cut while
+  // testing) — so you always know what you already used when researching.
+  const played = songs.filter(t => raState.songLog?.[t.sc_track_id]?.played_at).length;
+  const visible = raState.hidePlayed ? songs.filter(t => !raState.songLog?.[t.sc_track_id]?.played_at) : songs;
+  const songMark = (t) => {
+    const l = raState.songLog?.[t.sc_track_id]; if (!l) return '';
+    if (l.played_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;background:var(--green,#1f7a1f);color:#fff;" title="Played on Come With Radio EP ${l.played_station_no ?? '?'} · ${fmtDate(l.played_at)}">✓ played EP ${l.played_station_no ?? '?'}</span>`;
+    if (l.passed_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Considered and passed on EP ${l.passed_station_no ?? '?'} · ${fmtDate(l.passed_at)}${l.carried_to ? ' — auto-carried to a later station' : ''}">✋ passed${l.passed_station_no != null ? ' EP ' + l.passed_station_no : ''}</span>`;
+    return '';
+  };
   return `<div style="border-left:2px solid var(--border-strong);padding-left:10px;">
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><span class="li-sub">Sort:</span>${sortBtn('recent', 'Recent')}${sortBtn('popular', 'Popular')}
+      ${played ? `<button class="hub-mini" data-ra-hideplayed style="${raState.hidePlayed ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}" title="Hide songs you already played on the radio">${raState.hidePlayed ? '👁 show' : '🙈 hide'} ${played} played</button>` : ''}
       <span class="li-sub" style="margin-left:auto;">${songs.length} songs</span></div>
-    ${songs.map(t => `<div class="hub-li" style="padding:5px 0;">
-      <div class="li-main"><span>${escapeHtml(t.title)}</span>
+    ${visible.map(t => `<div class="hub-li" style="padding:5px 0;">
+      <div class="li-main"><span>${escapeHtml(t.title)}${songMark(t)}</span>
         <div class="li-sub">${Math.round(t.duration_ms / 60000)}min · ${fmtNum(t.playback_count)} plays · ${escapeHtml((t.created_at || '').slice(0, 10))}</div></div>
       <span style="display:flex;gap:6px;">
         <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
@@ -9021,28 +9061,62 @@ function raRenderPlaylist() {
   const totalMin = Math.round(tracks.reduce((s, t) => s + (t.duration_ms || 0), 0) / 60000);
   const sc = raState.sc || {};
   const exportLabel = !sc.configured ? '⇪ To SoundCloud' : !sc.connected ? '🔗 Connect SoundCloud' : '⇪ To SoundCloud';
-  return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
-      <strong>🎧 ${escapeHtml(pl.name)}</strong> <button class="hub-mini" data-ra-rename title="Rename station">✎</button>
-      <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
-      ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
-      <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+  const isWorking = pl.status === 'building' || pl.status === 'testing';
+  const statusChip = pl.status === 'live'
+    ? `<span class="role-chip" style="cursor:default;background:${pl.published ? 'var(--green,#1f7a1f)' : 'var(--mid,#888)'};color:#fff;">${pl.published ? 'LIVE' : 'LIVE · page hidden'}</span>`
+    : pl.status === 'archived' ? '<span class="role-chip" style="cursor:default;">ARCHIVED</span>'
+      : pl.status === 'testing'
+        ? '<span class="role-chip" style="cursor:default;background:var(--amber,#b58900);color:#fff;" title="Mix linked — reorder/test, then Go live">TESTING</span>'
+        : '<span class="role-chip" style="cursor:default;" title="Building the tracklist">BUILDING</span>';
+  // Numbered-station switcher — all playlists are saved; flip between them here.
+  const switcher = (raState.stations || []).length > 1 ? `<select class="modal-select" data-ra-plselect style="max-width:220px;">
+      ${(raState.stations || []).map(p => `<option value="${p.id}"${p.id === pl.id ? ' selected' : ''}>EP ${p.station_no ?? '—'} · ${escapeHtml(p.name)} (${p.status})</option>`).join('')}
+    </select>` : '';
+  // Release pipeline: ① push the tracklist to SoundCloud (private) → ② reorder it
+  // there while test-listening, sync the order back (cut songs are logged as
+  // "passed" and auto-carry into next week's station) → ③ attach the recorded
+  // mix, write descriptions, GO LIVE (public page + SC push).
+  const stepStyle = (done) => `font-family:'DM Mono',monospace;font-size:.72rem;padding:3px 9px;border-radius:999px;border:1px solid ${done ? 'var(--green,#1f7a1f)' : 'var(--border-strong)'};color:${done ? 'var(--green,#1f7a1f)' : 'var(--mid,#888)'};`;
+  const pipeline = isWorking && tracks.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <span style="${stepStyle(!!pl.sc_playlist_url)}">${pl.sc_playlist_url ? '✓' : '①'} Test push to SoundCloud</span><span class="li-sub">→</span>
+      <span style="${stepStyle(false)}">② Reorder there · sync back</span><span class="li-sub">→</span>
+      <span style="${stepStyle(pl.status === 'testing')}">${pl.status === 'testing' ? '✓ Mix linked' : '③ Mix'} · go live</span>
+    </div>` : '';
+  const liveLinks = pl.status === 'live' ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      ${pl.slug ? `<a class="hub-mini" href="${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(pl.slug)}" target="_blank">🌐 Episode page ↗</a>` : ''}
+      ${pl.mix_sc_track_url ? `<a class="hub-mini" href="${escapeHtml(pl.mix_sc_track_url)}" target="_blank">☁ Mix on SoundCloud ↗</a>` : ''}
+      ${pl.mix_youtube_url ? `<a class="hub-mini" href="${escapeHtml(pl.mix_youtube_url)}" target="_blank">▶ YouTube ↗</a>` : ''}
+      ${pl.published ? '<button class="hub-mini" data-ra-unpub title="Hide the public episode page (SoundCloud is untouched)">🙈 Unpublish page</button>' : '<button class="hub-mini" data-ra-repub>👁 Publish page</button>'}
+      <span class="li-sub">${pl.published_at ? 'Published ' + fmtDate(pl.published_at) : ''}</span>
+    </div>` : '';
+  const actions = isWorking ? `
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
-        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back into the tool (after you reorder it there)">↺ Sync order from SoundCloud</button>' : ''}
+        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back into the tool (after you reorder it there). Songs you removed there are logged as passed + carried to next week.">↺ Sync order from SoundCloud</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
-        <button class="hub-btn" data-ra-export title="Push this to a real playlist in your SoundCloud">${exportLabel}</button>
-      </span>
+        <button class="hub-btn" data-ra-export title="Step ① — push this to a private playlist in your SoundCloud for test listening">${exportLabel}</button>
+        ${tracks.length ? '<button class="hub-btn" data-ra-finalize style="background:var(--green,#1f7a1f);color:#fff;border-color:var(--green,#1f7a1f);" title="Step ③ — attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`
+    : `${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
+       ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}`;
+  return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
+      <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-rename title="Rename station">✎</button>' : ''} ${statusChip}
+      ${switcher}
+      <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
+      <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
+      ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
+      <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">${actions}</span>
     </div>
+    ${pipeline}${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${show ? '<br>' + show : ''}</div></div>
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
-        <button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
+        ${isWorking ? `<button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
         <button class="hub-mini" data-ra-plmove="${t.id}:down" title="down">↓</button>
-        <button class="hub-mini" data-ra-removetrack="${t.id}">✕</button>
-      </span></div>`; }).join('')}</div>` : '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>'}
+        <button class="hub-mini" data-ra-removetrack="${t.id}" title="Remove — logged as passed in the song history">✕</button>` : ''}
+      </span></div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
@@ -9102,6 +9176,15 @@ async function raAddTrack(scTrackId) {
     show_cost: raCost(show.next_cost), show_url: show.next_event_url || null,
   });
   if (error) { toast(error.code === '23505' ? 'Already in your station' : error.message, 'err'); return; }
+  // Permanent song memory: record that this song was considered (re-adds bump the count).
+  try {
+    const ex = raState.songLog[t.sc_track_id];
+    if (ex) { await sb.from('sc_song_log').update({ add_count: (ex.add_count || 1) + 1, updated_at: new Date().toISOString() }).eq('sc_track_id', t.sc_track_id); ex.add_count = (ex.add_count || 1) + 1; }
+    else {
+      const { data: lr } = await sb.from('sc_song_log').insert({ sc_track_id: t.sc_track_id, title: t.title, artist_name: c.username || t.artist_name, permalink_url: t.permalink_url, artwork_url: t.artwork_url, duration_ms: t.duration_ms }).select().maybeSingle();
+      if (lr) raState.songLog[t.sc_track_id] = lr;
+    }
+  } catch (_) { /* memory write is best-effort */ }
   await raLoadPlaylist(); toast('Added to station', 'ok'); renderRaMarket();
 }
 // A shareable, human-readable tracklist annotated with each artist's upcoming show.
@@ -9151,7 +9234,20 @@ async function raScan() {
   renderRaMarket();
 }
 async function raRemoveTrack(id) {
+  const t = (raState.playlist?.tracks || []).find(x => x.id === id);
   await sb.from('sc_playlist_tracks').delete().eq('id', id);
+  // Removing = considered and PASSED → permanent song memory (marks it when
+  // researching later + auto-carries it into the next station at finalize).
+  if (t) {
+    const now = new Date().toISOString();
+    try {
+      await sb.from('sc_song_log').upsert({
+        sc_track_id: t.sc_track_id, title: t.title, artist_name: t.artist_name, permalink_url: t.permalink_url,
+        artwork_url: t.artwork_url, duration_ms: t.duration_ms,
+        passed_playlist_id: raState.playlist.id, passed_station_no: raState.playlist.station_no ?? null, passed_at: now, updated_at: now,
+      }, { onConflict: 'sc_track_id' });
+    } catch (_) { /* best-effort */ }
+  }
   await raLoadPlaylist(); renderRaMarket();
 }
 async function raMoveTrack(id, dir) {
@@ -9264,6 +9360,152 @@ async function raSyncFromSc(btn) {
     else toast(`Synced ${data.tracks} tracks from SoundCloud${data.added ? ` · +${data.added} added` : ''}${data.removed ? ` · −${data.removed} removed` : ''}`, 'ok');
     renderRaMarket();
   } catch (e) { toast('Sync failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↺ Sync order from SoundCloud'; } }
+}
+// ---- Stage ③: mix + finalize (go live) ----------------------------------------
+// The mix is ONE SoundCloud track (the recorded set). Two ways to attach it:
+// upload the file here (stored in our radio-mixes bucket, ≤50MB, then created as
+// a private SC track via the API) or paste the link of a track uploaded with
+// SoundCloud's own uploader (best for big high-quality files).
+const raSlugify = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+function raOpenFinalize() {
+  const pl = raState.playlist; const tr = pl.tracks || [];
+  if (!tr.length) { toast('Add some songs first', 'err'); return; }
+  if (!raState.sc?.connected) { toast('Connect SoundCloud first (⇪ To SoundCloud)', 'err'); return; }
+  const slugProp = pl.slug || (raSlugify(pl.name) + '-' + new Date().toISOString().slice(0, 10));
+  const pageUrl = 'https://comewith.org/radio.html?s=' + slugProp;
+  const descPub = pl.desc_public || pl.note || 'Every artist in this mix is playing NYC in the coming weeks — each track shows the date, venue and price of their show. Come dance.';
+  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}\n\n${tr.map((t, i) => `${i + 1}. ${t.artist_name || ''} — ${t.title}`).join('\n')}`;
+  const mixDone = !!(pl.mix_sc_track_url || pl.mix_sc_track_id);
+  openKpi('🚀 Finalize & go live', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${tr.length} tracks`, `
+    <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-bottom:10px;">
+      <strong style="font-size:.9rem;">1 · The mix</strong>
+      ${mixDone ? `<div class="kpi-hint" style="margin:6px 0 0;">✓ Mix track linked: <a href="${escapeHtml(pl.mix_sc_track_url || '#')}" target="_blank">${escapeHtml(pl.mix_sc_track_url || pl.mix_sc_track_id)}</a> — you can re-link below to replace it.</div>` : ''}
+      <div class="kpi-hint" style="margin:6px 0;">Upload the recorded mix (≤50MB — export a 128kbps MP3 for this; it's archived in your storage) and we create it as a <strong>private</strong> SoundCloud track:</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="file" name="mix_file" accept="audio/*" class="modal-input" style="max-width:280px;">
+        <button type="button" class="hub-btn ghost" data-ra-mixupload>⬆ Upload & create track</button>
+      </div>
+      <div class="kpi-hint" style="margin:8px 0 6px;">…or (best for big HQ files) upload on <a href="https://soundcloud.com/upload" target="_blank">soundcloud.com/upload</a> as private and paste the track link:</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input name="mix_url" class="modal-input" placeholder="https://soundcloud.com/you/your-mix" style="max-width:280px;">
+        <button type="button" class="hub-btn ghost" data-ra-mixlink>🔗 Link track</button>
+      </div>
+    </div>
+    <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
+      <strong style="font-size:.9rem;">2 · Publish</strong>
+      <div class="form-row" style="margin-top:6px;"><label>Page address (slug)</label>
+        <input name="slug" class="modal-input" value="${escapeHtml(slugProp)}">
+        <div class="kpi-hint" style="margin:2px 0 8px;">comewith.org/radio.html?s=<span id="raSlugEcho">${escapeHtml(slugProp)}</span></div></div>
+      <div class="form-row"><label>Page description (shown on the episode page)</label>
+        <textarea name="desc_public" class="modal-textarea" rows="3">${escapeHtml(descPub)}</textarea></div>
+      <div class="form-row"><label>SoundCloud description (short — pushed to the mix track, links back to the page)</label>
+        <textarea name="desc_sc" class="modal-textarea" rows="7" style="font-family:monospace;font-size:.8rem;">${escapeHtml(descSc)}</textarea></div>
+      <div class="form-row"><label>YouTube link (optional — until auto-posting lands in 1.1, paste the video URL if you posted one)</label>
+        <input name="youtube_url" class="modal-input" value="${escapeHtml(pl.mix_youtube_url || '')}" placeholder="https://youtube.com/watch?v=…"></div>
+      <div class="kpi-hint">Go live = the episode page appears on comewith.org/radio.html, the mix track flips <strong>public</strong> on SoundCloud with the description above, every track is logged as <strong>played</strong> in the song history, and a fresh EP ${(raState.stations || []).reduce((m, p) => Math.max(m, p.station_no || 0), 0) + 1} station opens pre-loaded with the songs you cut this cycle.</div>
+    </div>`,
+    () => raDoFinalize(), '🚀 Go live');
+  setTimeout(() => {
+    const s = document.querySelector('#kpiModalBody [name="slug"]');
+    if (s) s.addEventListener('input', () => { const e = $('raSlugEcho'); if (e) e.textContent = raSlugify(s.value) || '…'; });
+  }, 90);
+}
+async function raMixUpload(btn) {
+  const f = document.querySelector('#kpiModalBody [name="mix_file"]')?.files?.[0];
+  if (!f) { toast('Choose an audio file first', 'err'); return; }
+  if (f.size > 49 * 1024 * 1024) { toast('Over the 50MB storage cap — upload it on soundcloud.com instead and paste the track link below', 'err'); return; }
+  btn.disabled = true; btn.textContent = '⬆ Uploading…';
+  try {
+    const path = raState.playlist.id + '/' + Date.now() + '_' + f.name.replace(/[^\w.\-]+/g, '_');
+    const { error } = await sb.storage.from('radio-mixes').upload(path, f, { upsert: true, contentType: f.type || 'audio/mpeg' });
+    if (error) throw error;
+    await sb.from('sc_playlists').update({ mix_file_path: path, updated_at: new Date().toISOString() }).eq('id', raState.playlist.id);
+    raState.playlist.mix_file_path = path;
+    btn.textContent = '☁ Creating SoundCloud track…';
+    const { data, error: e2 } = await sb.functions.invoke('sc-connect', { body: { action: 'upload_mix', playlist_id: raState.playlist.id } });
+    if (e2) throw new Error((await fnErrorDetail(e2)) || e2.message);
+    if (data?.error) throw new Error(data.error);
+    raState.playlist.mix_sc_track_url = data.url; raState.playlist.mix_sc_track_id = data.id;
+    if (raState.playlist.status === 'building') raState.playlist.status = 'testing';
+    toast('Mix uploaded — private SoundCloud track created', 'ok');
+    raOpenFinalize();
+  } catch (e) { toast('Mix upload failed: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '⬆ Upload & create track'; }
+}
+async function raMixLink(btn) {
+  const url = (document.querySelector('#kpiModalBody [name="mix_url"]')?.value || '').trim();
+  if (!url) { toast('Paste the SoundCloud track link first', 'err'); return; }
+  btn.disabled = true; btn.textContent = '🔗 Linking…';
+  try {
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'upload_mix', playlist_id: raState.playlist.id, track_url: url } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error) throw new Error(data.error);
+    raState.playlist.mix_sc_track_url = data.url; raState.playlist.mix_sc_track_id = data.id;
+    if (raState.playlist.status === 'building') raState.playlist.status = 'testing';
+    toast('Mix track linked', 'ok');
+    raOpenFinalize();
+  } catch (e) { toast('Link failed: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '🔗 Link track'; }
+}
+async function raDoFinalize() {
+  const pl = raState.playlist;
+  if (!pl.mix_sc_track_id && !pl.mix_sc_track_url && !confirm('No mix track is linked yet — publish the episode page WITHOUT a mix on SoundCloud?')) return;
+  const btn = $('kpiModalSubmit'); btn.disabled = true; btn.textContent = 'Publishing…';
+  try {
+    const { data, error } = await sb.functions.invoke('sc-connect', {
+      body: { action: 'finalize', playlist_id: pl.id, slug: kpiVal('slug'), desc_public: kpiVal('desc_public'), desc_sc: kpiVal('desc_sc'), youtube_url: kpiVal('youtube_url') },
+    });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error) throw new Error(data.error);
+    closeKpi();
+    toast(`📻 EP ${pl.station_no ?? ''} is LIVE`, 'ok');
+    if (data.sc_warning) toast(data.sc_warning, 'warn');
+    if (data.next?.carried) toast(`EP ${data.next.station_no} started with ${data.next.carried} carried-over song${data.next.carried === 1 ? '' : 's'}`, 'ok');
+    if (data.page_url) window.open(data.page_url, '_blank');
+    raState.viewPlaylistId = null;
+    await raLoadPlaylist(); renderRaMarket();
+  } catch (e) { toast('Finalize failed: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '🚀 Go live'; }
+}
+// Show/hide a live episode's public page (SoundCloud untouched).
+async function raSetPublished(on) {
+  await sb.from('sc_playlists').update({ published: on, updated_at: new Date().toISOString() }).eq('id', raState.playlist.id);
+  await raLoadPlaylist(); renderRaMarket();
+  toast(on ? 'Episode page is visible again' : 'Episode page hidden (link now 404s)', 'ok');
+}
+// ---- 📜 Song history — the permanent memory, filterable -----------------------
+function raHistRows() {
+  let rows = Object.values(raState.songLog || {});
+  const f = raState.histFilter || 'all';
+  if (f === 'played') rows = rows.filter(r => r.played_at);
+  else if (f === 'passed') rows = rows.filter(r => r.passed_at && !r.played_at);
+  else if (f === 'carried') rows = rows.filter(r => r.carried_to);
+  const q = (raState.histSearch || '').toLowerCase();
+  if (q) rows = rows.filter(r => (r.title || '').toLowerCase().includes(q) || (r.artist_name || '').toLowerCase().includes(q));
+  rows.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+  if (!rows.length) return '<div class="hub-empty">Nothing here yet — songs land in the history when you add, cut or play them.</div>';
+  return rows.map(r => {
+    const st = r.played_at
+      ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">✓ played EP ${r.played_station_no ?? '?'} · ${fmtDate(r.played_at)}</span>`
+      : r.passed_at
+        ? `<span class="role-chip" style="cursor:default;">✋ passed${r.passed_station_no != null ? ' EP ' + r.passed_station_no : ''} · ${fmtDate(r.passed_at)}${r.carried_to ? ' · ↩ carried forward' : ''}</span>`
+        : '<span class="role-chip" style="cursor:default;">🕐 considered</span>';
+    return `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(r.title || '')}</strong> <span class="li-sub">· ${escapeHtml(r.artist_name || '')}</span>
+      <div class="li-sub" style="margin-top:2px;">${st}${(r.add_count || 1) > 1 ? ` <span class="li-sub">· added ${r.add_count}×</span>` : ''}</div></div>
+      <span style="display:flex;gap:4px;">${r.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(r.permalink_url)}" data-ra-name="${escapeHtml(r.title || '')}">▶</button><a class="hub-mini" href="${escapeHtml(r.permalink_url)}" target="_blank" title="Open on SoundCloud">☁</a>` : ''}</span></div>`;
+  }).join('');
+}
+function raHistHtml() {
+  const chip = (v, l) => `<button type="button" class="hub-mini" data-ra-histfilter="${v}" style="${(raState.histFilter || 'all') === v ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  return `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      ${chip('all', 'All')}${chip('played', '✓ Played')}${chip('passed', '✋ Passed')}${chip('carried', '↩ Carried')}
+      <input class="modal-input" data-ra-histsearch placeholder="Search song / artist…" value="${escapeHtml(raState.histSearch || '')}" style="max-width:190px;margin-left:auto;"></div>
+    <div id="raHistBody" style="max-height:52vh;overflow:auto;">${raHistRows()}</div>`;
+}
+function raHistWireSearch() {
+  const s = document.querySelector('#kpiModalBody [data-ra-histsearch]');
+  if (s) s.addEventListener('input', () => { raState.histSearch = s.value; const b = $('raHistBody'); if (b) b.innerHTML = raHistRows(); });
+}
+function raOpenHistory() {
+  openKpi('📜 Song history', 'Everything ever considered for the radio — what played when, what you passed on', `<div id="raHistWrap">${raHistHtml()}</div>`, () => closeKpi(), 'Close');
+  setTimeout(raHistWireSearch, 90);
 }
 
 // ===================== PRICING TOOL (Sales) =====================

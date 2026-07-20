@@ -249,6 +249,37 @@ preview — no build step required.
 
 ---
 
+## Current state — 2026-07-20 (Come With Radio: release pipeline + public episode pages)
+
+> Migration **099 APPLIED to prod**; **get-station / sc-connect redeployed**. Public
+> **radio.html** rebuilt (hub + episode pages), Radio link added to the homepage nav.
+
+### ✅ Radio release pipeline (099)
+- Stations are **numbered episodes** (`sc_playlists.station_no`, EP 1, 2, …) with a
+  lifecycle: `building → testing → live` (+`archived`); one 'building' row enforced by
+  a partial unique index (kills the old duplicate-row race). Dashboard has a station
+  **switcher** to flip between all saved playlists.
+- **Flow:** ① export tracklist to a private SC playlist (test listening) → ② reorder on
+  SoundCloud, `sync` pulls the order back — songs cut there are logged as **passed** →
+  ③ 🚀 **Go live** modal: attach the recorded mix (file upload ≤50MB to the public
+  `radio-mixes` bucket → API `POST /tracks` private, **or paste a track link** —
+  resolve path verified live), slug + page/SoundCloud descriptions, finalize pushes
+  the short description + `sharing=public` to the mix track, publishes the episode
+  page, and opens the next EP **pre-seeded with carried-over songs**.
+- **Song memory** `sc_song_log`: permanent played/passed/carried record per song;
+  ✓/✋ marks + "hide played" in the Artist Radio browser; 📜 History modal (filter +
+  search). Manual ✕ removals also log as passed.
+- **Public radio.html**: episode hub + per-episode pages (slug URLs; token = unlisted
+  preview), mix embed, YouTube button (1.1: manual URL until upload API), tracklist
+  with show info/tickets, **CSV export**, and **listener accounts** (magic link →
+  `customer` role): ♡ personal playlist + CSV export + listening history
+  (`listener_*` tables, owner-RLS, anon-revoked, INSERT..RETURNING-safe). Gentle
+  sign-up nudges (first-visit pill + export modal) — never blocking.
+- **Phase 2 later:** YouTube auto-post at finalize; Spotify/Apple Music if it makes
+  sense (mixes of others' tracks generally can't be posted there — reassess).
+
+---
+
 ## Current state — reconciled 2026-07-10 (RA Market data completeness + Watchlist + SoundCloud station)
 
 > Migrations **088–089 APPLIED to prod**; edge functions **pull-ra-market / pull-ticketmaster /

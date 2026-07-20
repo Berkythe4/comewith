@@ -3,70 +3,355 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Come With Radio</title>
-<meta name="robots" content="noindex,nofollow">
-<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;900&family=DM+Sans:wght@400;500;700&family=DM+Mono&display=swap" rel="stylesheet">
+<title>Come With Radio — mixes from artists playing NYC soon</title>
+<meta name="description" content="Come With Radio: DJ mixes built from artists playing NYC in the coming weeks. Every track is a show you can catch — full tracklists, dates, venues and tickets.">
+<meta property="og:title" content="Come With Radio">
+<meta property="og:description" content="Mixes from artists playing NYC soon — every track is a show you can catch.">
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--hot:#ff5ca8}
+  :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;--gold:#e9b949}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.5;padding:0 0 60px}
-  .wrap{max-width:760px;margin:0 auto;padding:0 20px}
-  header{padding:38px 0 14px}
-  .k{font-family:'DM Mono';font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
-  h1{font-family:'Archivo';font-weight:900;text-transform:uppercase;font-size:clamp(1.9rem,6vw,3rem);margin:8px 0 6px;line-height:1}
-  .sub{color:var(--dim)}
-  .banner{background:var(--hot);color:#180c12;font-family:'DM Mono';font-size:.74rem;letter-spacing:.06em;text-transform:uppercase;padding:7px 12px;border-radius:8px;display:inline-block;margin:10px 0}
-  .scbtn{display:inline-flex;align-items:center;gap:8px;font-family:'DM Mono';font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;padding:11px 18px;border-radius:999px;background:var(--lime);color:#180c12;text-decoration:none;font-weight:700;margin-top:8px}
-  .tk{display:flex;gap:14px;align-items:flex-start;padding:14px 0;border-bottom:1px solid var(--line)}
-  .art{width:56px;height:56px;border-radius:8px;background:var(--bg2) center/cover;flex:0 0 auto}
-  .num{font-family:'Archivo';font-weight:900;color:var(--dim);min-width:22px;text-align:right}
-  .tt{font-weight:700}
-  .who{color:var(--dim);font-size:.92rem}
-  .meta{font-family:'DM Mono';font-size:.72rem;color:var(--dim);margin-top:4px;display:flex;flex-wrap:wrap;gap:4px 12px}
-  .meta .hot{color:var(--lime)}
-  .show{margin-top:5px;font-size:.86rem}
-  .show a{color:var(--cream)}
-  .play{color:var(--lime);text-decoration:none;font-family:'DM Mono';font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
-  .state{text-align:center;color:var(--dim);font-family:'DM Mono';padding:50px 0}
-  #player{position:sticky;bottom:0;background:var(--panel);border-top:1px solid var(--line);margin-top:14px}
-  footer{color:var(--dim);font-size:.8rem;text-align:center;padding:26px 0}
-  a{color:var(--lime)}
+  body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.55;padding-bottom:70px}
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:900px;margin:0 auto;padding:0 20px}
+  .label{font-family:'DM Mono',monospace;font-size:.72rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime)}
+  h1,h2,h3{font-family:'Archivo',sans-serif;font-weight:900;line-height:1;letter-spacing:-.02em;text-transform:uppercase}
+  nav{position:sticky;top:0;z-index:50;background:rgba(20,10,23,.85);backdrop-filter:blur(12px);border-bottom:1px solid var(--line)}
+  nav .wrap{display:flex;align-items:center;justify-content:space-between;height:60px;gap:10px}
+  .brand{font-family:'Archivo';font-weight:900;font-size:1.1rem}.brand b{color:var(--lime)}
+  .navr{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .chip{font-family:'DM Mono';font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;border:1px solid var(--line);border-radius:999px;padding:7px 14px;background:var(--panel);cursor:pointer;color:var(--cream);transition:.15s;display:inline-flex;align-items:center;gap:6px}
+  .chip:hover{border-color:var(--lime-dk)}
+  .chip.primary{background:var(--lime);color:#180c12;border-color:var(--lime);font-weight:700}
+  header.hero{padding:34px 0 10px}
+  .hero h1{font-size:clamp(1.9rem,6vw,3.4rem);margin:8px 0 8px}
+  .hero .sub{color:var(--dim);max-width:60ch}
+  .banner{background:var(--hot);color:#180c12;font-family:'DM Mono';font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;padding:6px 12px;border-radius:8px;display:inline-block;margin:10px 0 0}
+  .epgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;margin:22px 0}
+  .ep{border:1px solid var(--line);border-radius:16px;background:var(--panel);overflow:hidden;display:flex;flex-direction:column;transition:.18s;cursor:pointer}
+  .ep:hover{border-color:var(--lime-dk);transform:translateY(-3px)}
+  .ep .art{height:140px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;display:flex;align-items:flex-end;padding:12px}
+  .ep .art .no{font-family:'DM Mono';font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:#fff;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px}
+  .ep .bd{padding:14px 16px;display:flex;flex-direction:column;gap:5px;flex:1}
+  .ep h3{font-size:1.05rem}
+  .ep .meta{font-family:'DM Mono';font-size:.72rem;color:var(--dim)}
+  .ep .blurb{font-size:.87rem;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .actions{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0}
+  .mixbox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);margin:6px 0 18px}
+  .mixbox iframe{display:block;width:100%;height:166px;border:0}
+  .desc{color:var(--dim);max-width:70ch;white-space:pre-line;margin:4px 0 8px}
+  .tk{display:flex;gap:13px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}
+  .tk .num{font-family:'Archivo';font-weight:900;color:var(--dim);min-width:24px;text-align:right;padding-top:4px}
+  .tk .art{width:52px;height:52px;border-radius:8px;background:var(--bg2) center/cover;flex:0 0 auto}
+  .tk .tt{font-weight:700}
+  .tk .who{color:var(--dim);font-size:.9rem}
+  .tk .meta{font-family:'DM Mono';font-size:.7rem;color:var(--dim);margin-top:3px;display:flex;flex-wrap:wrap;gap:3px 12px}
+  .tk .meta .hot{color:var(--lime)}
+  .tk .show{margin-top:4px;font-size:.85rem}
+  .tk .show a{color:var(--cream);border-bottom:1px dotted var(--lime-dk)}
+  .tk .btns{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+  .mini{font-family:'DM Mono';font-size:.7rem;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--line);border-radius:999px;padding:6px 11px;background:none;color:var(--cream);cursor:pointer;transition:.15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+  .mini:hover{border-color:var(--lime-dk)}
+  .mini.on{background:var(--hot);border-color:var(--hot);color:#180c12;font-weight:700}
+  .state{text-align:center;color:var(--dim);font-family:'DM Mono';padding:56px 0}
+  #player{position:fixed;left:0;right:0;bottom:0;background:var(--panel);border-top:1px solid var(--line);z-index:60;display:none}
+  #player.show{display:block}
+  #player .bar{display:flex;align-items:center;gap:8px;padding:4px 10px 0;font-family:'DM Mono';font-size:.7rem;color:var(--dim)}
+  #player .bar span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #player iframe{display:block;width:100%;height:96px;border:0}
+  footer{color:var(--dim);font-size:.8rem;text-align:center;padding:30px 0}
+  footer a{color:var(--lime)}
+  /* modal + drawer */
+  .ov{position:fixed;inset:0;background:rgba(10,5,12,.82);display:none;align-items:center;justify-content:center;z-index:100;padding:18px}
+  .ov.show{display:flex}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;width:100%;max-width:430px;position:relative}
+  .box h3{font-size:1.3rem;margin-bottom:8px}
+  .box p{color:var(--dim);font-size:.92rem;margin-bottom:14px}
+  .box .x{position:absolute;top:12px;right:16px;background:none;border:none;color:var(--dim);font-size:1.3rem;cursor:pointer}
+  .box input[type=email]{width:100%;background:var(--bg2);border:1px solid var(--line);border-radius:10px;padding:13px 14px;color:var(--cream);font-family:'DM Sans';font-size:1rem;margin-bottom:10px}
+  .box input[type=email]:focus{outline:none;border-color:var(--lime)}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;font-family:'DM Mono';font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;padding:13px 20px;border-radius:999px;border:1.5px solid var(--cream);color:var(--cream);cursor:pointer;background:none;transition:.15s;width:100%}
+  .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime);font-weight:700}
+  .btn.ghost{border-color:var(--line);color:var(--dim)}
+  .btn+.btn{margin-top:8px}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:min(430px,94vw);background:var(--bg2);border-left:1px solid var(--line);z-index:90;transform:translateX(102%);transition:.25s;display:flex;flex-direction:column}
+  .drawer.show{transform:none}
+  .drawer .hd{display:flex;align-items:center;gap:10px;padding:18px 20px;border-bottom:1px solid var(--line)}
+  .drawer .hd h3{font-size:1.1rem;flex:1}
+  .drawer .list{flex:1;overflow:auto;padding:8px 20px}
+  .drawer .ft{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:8px}
+  .nudge{position:fixed;left:50%;transform:translateX(-50%);bottom:14px;z-index:80;background:var(--panel);border:1px solid var(--lime-dk);border-radius:999px;padding:9px 10px 9px 18px;display:none;align-items:center;gap:12px;box-shadow:0 10px 34px rgba(0,0,0,.5);max-width:94vw}
+  .nudge.show{display:flex}
+  .nudge span{font-size:.86rem}
+  .nudge .x{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1rem;padding:4px}
+  .toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%) translateY(200%);background:var(--lime);color:#180c12;font-family:'DM Mono';font-size:.82rem;padding:12px 20px;border-radius:999px;transition:.3s;z-index:120;max-width:92vw;text-align:center}
+  .toast.show{transform:translateX(-50%) translateY(0)}
+  @media(max-width:640px){.tk{flex-wrap:wrap}.tk .btns{width:100%;justify-content:flex-start;margin-top:4px}}
 </style>
 </head>
 <body>
+<nav><div class="wrap">
+  <a class="brand" href="https://comewith.org">COME<b>·</b>WITH <span style="color:var(--lime)">RADIO</span></a>
+  <div class="navr">
+    <a class="chip" href="radio.html" id="allEps" style="display:none">📻 All episodes</a>
+    <button class="chip" id="myBtn" style="display:none">♡ My playlist <span id="myCount"></span></button>
+    <button class="chip primary" id="authBtn">Sign in</button>
+  </div>
+</div></nav>
+
 <div class="wrap">
-  <header><div class="k">Come With · Radio</div><h1 id="hd">Loading…</h1><div class="sub" id="sub"></div></header>
-  <div id="root"><div class="state">Loading station…</div></div>
+  <header class="hero">
+    <div class="label">Come With · Radio</div>
+    <h1 id="hd">Loading…</h1>
+    <div class="sub" id="sub"></div>
+    <div id="preview"></div>
+  </header>
+  <div id="root"><div class="state">Loading…</div></div>
 </div>
-<div id="player"></div>
+
 <footer>Come With — Brooklyn parties that give back · <a href="https://comewith.org">comewith.org</a><br>BPM &amp; key data from <a href="https://getsongbpm.com" target="_blank" rel="noopener">GetSongBPM</a></footer>
-<script>
+
+<div id="player"><div class="bar"><span id="pTitle"></span><button class="mini" id="pClose">✕ close</button></div><div id="pFrame"></div></div>
+
+<!-- Sign in / sign up -->
+<div class="ov" id="authOv"><div class="box">
+  <button class="x" data-close>✕</button>
+  <h3 id="authTitle">Join Come With Radio</h3>
+  <p id="authWhy">Free account: your listening history is saved, you can ♡ songs into your own playlist, and export any tracklist whenever you want.</p>
+  <div id="authForm">
+    <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email">
+    <button class="btn primary" id="authSend">Email me a sign-in link</button>
+    <p style="margin:10px 0 0;font-size:.8rem" id="authMsg"></p>
+  </div>
+</div></div>
+
+<!-- Export nudge (signed-out) -->
+<div class="ov" id="expOv"><div class="box">
+  <button class="x" data-close>✕</button>
+  <h3>Take the tracklist with you</h3>
+  <p>Your CSV is ready. With a free account it's saved to your profile — plus you can ♡ songs into your own playlist and export those anytime.</p>
+  <button class="btn primary" id="expSignup">Sign up &amp; download</button>
+  <button class="btn ghost" id="expJust">Just download the CSV</button>
+</div></div>
+
+<!-- My playlist drawer -->
+<div class="drawer" id="drawer">
+  <div class="hd"><h3>♡ My playlist</h3><button class="mini" id="dExport">⬇ CSV</button><button class="mini" id="dClose">✕</button></div>
+  <div class="list" id="dList"></div>
+  <div class="ft"><span style="font-size:.8rem;color:var(--dim)">Songs you ♡ from any episode land here.</span></div>
+</div>
+
+<div class="nudge" id="nudge">
+  <span>🎧 Free account: listening history, your own playlist, exports.</span>
+  <button class="chip primary" id="nudgeGo" style="padding:6px 12px">Sign up</button>
+  <button class="x" id="nudgeX" aria-label="Dismiss">✕</button>
+</div>
+<div class="toast" id="toast"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
 const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const sb=createClient(CWURL,CWKEY);
 const $=s=>document.querySelector(s);
-const TOKEN=new URLSearchParams(location.search).get('t')||new URLSearchParams(location.search).get('token')||'';
+const qs=new URLSearchParams(location.search);
+const TOKEN=(qs.get('t')||qs.get('token')||'').trim();
+const SLUG=(qs.get('s')||qs.get('slug')||'').trim().toLowerCase();
+const FN=CWURL+'/functions/v1/get-station';
+const H={apikey:CWKEY,Authorization:'Bearer '+CWKEY};
+let user=null,myPlaylist=null,saved=new Map(),station=null,tracks=[];
+
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fmtDate(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
-function play(url){$('#player').innerHTML='<iframe width="100%" height="120" scrolling="no" frameborder="no" allow="autoplay" src="https://w.soundcloud.com/player/?url='+encodeURIComponent(url)+'&color=%23a7e02e&auto_play=true&hide_related=true&visual=false"></iframe>';}
-(async function(){
-  if(!TOKEN){$('#root').innerHTML='<div class="state">This radio link is missing its code.</div>';$('#hd').textContent='Come With Radio';return;}
+function fmtDate(s){if(!s)return'';const d=new Date(String(s).length>10?s:(s+'T00:00:00'));return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+function fmtShow(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
+function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}
+function scEmbed(u,visual){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play='+(visual?'false':'true')+'&hide_related=true&show_comments=false&visual='+(visual?'true':'false');}
+function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');}
+$('#pClose').onclick=()=>{$('#player').classList.remove('show');$('#pFrame').innerHTML='';};
+
+/* ---------- CSV (BOM so Excel opens it clean) ---------- */
+function csvCell(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
+function downloadCsv(name,rows){
+  const csv='﻿'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));a.download=name;a.click();URL.revokeObjectURL(a.href);
+}
+function episodeCsv(){
+  const rows=[['#','Title','Artist','BPM','Key','Camelot','Minutes','SoundCloud link','Show date','Venue','Price','Show link','Episode','Published']];
+  tracks.forEach((t,i)=>rows.push([i+1,t.title||'',t.artist_name||'',t.bpm||'',t.song_key||'',t.camelot||'',t.duration_ms?Math.round(t.duration_ms/60000):'',t.permalink_url||'',t.show_date||'',t.show_venue||'',t.show_cost||'',t.show_url||'',(station?.station_no!=null?'EP '+station.station_no+' — ':'')+(station?.name||''),station?.published_at?String(station.published_at).slice(0,10):'']));
+  downloadCsv('come-with-radio-'+(station?.slug||'episode')+'.csv',rows);
+}
+
+/* ---------- Auth (magic link) ---------- */
+async function refreshAuth(){
+  const {data:{session}}=await sb.auth.getSession();
+  user=session?.user||null;
+  $('#authBtn').textContent=user?(user.email||'Account'):'Sign in';
+  $('#authBtn').classList.toggle('primary',!user);
+  $('#myBtn').style.display=user?'':'none';
+  if(user){await loadMine();if(station&&(station.slug||SLUG))logVisit();}
+}
+sb.auth.onAuthStateChange(()=>{refreshAuth();});
+function openAuth(why){$('#authWhy').textContent=why||$('#authWhy').textContent;$('#authOv').classList.add('show');setTimeout(()=>$('#authEmail').focus(),60);}
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>b.closest('.ov').classList.remove('show'));
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('show');}));
+$('#authBtn').onclick=async()=>{
+  if(!user)return openAuth();
+  if(confirm('Sign out of Come With Radio?')){await sb.auth.signOut();saved=new Map();myPlaylist=null;render();toast('Signed out');}
+};
+$('#authSend').onclick=async()=>{
+  const email=$('#authEmail').value.trim();
+  if(!email.includes('@')){$('#authMsg').textContent='Enter a valid email.';return;}
+  $('#authSend').disabled=true;$('#authSend').textContent='Sending…';
+  const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+location.search}});
+  $('#authSend').disabled=false;$('#authSend').textContent='Email me a sign-in link';
+  $('#authMsg').textContent=error?('Hmm: '+error.message):'Check your inbox — tap the link to finish signing in. ✉️';
+};
+
+/* ---------- Personal playlist ---------- */
+async function loadMine(){
+  const {data:pls}=await sb.from('listener_playlists').select('id,name').order('created_at').limit(1);
+  myPlaylist=pls&&pls[0]||null;
+  saved=new Map();
+  if(myPlaylist){
+    const {data:ts}=await sb.from('listener_playlist_tracks').select('*').eq('playlist_id',myPlaylist.id).order('added_at',{ascending:false});
+    (ts||[]).forEach(t=>saved.set(t.permalink_url,t));
+  }
+  $('#myCount').textContent=saved.size?('('+saved.size+')'):'';
+  render();
+}
+async function ensureMyPlaylist(){
+  if(myPlaylist)return myPlaylist;
+  const {data,error}=await sb.from('listener_playlists').insert({user_id:user.id,name:'My tracks'}).select('id,name').single();
+  if(error){toast('Could not create your playlist: '+error.message);return null;}
+  myPlaylist=data;return data;
+}
+async function toggleSave(t){
+  if(!user){openAuth('Sign up free to ♡ songs into your own playlist — and export it anytime.');return;}
+  const pl=await ensureMyPlaylist();if(!pl)return;
+  if(saved.has(t.permalink_url)){
+    await sb.from('listener_playlist_tracks').delete().eq('playlist_id',pl.id).eq('permalink_url',t.permalink_url);
+    saved.delete(t.permalink_url);toast('Removed from your playlist');
+  }else{
+    const row={playlist_id:pl.id,title:t.title,artist_name:t.artist_name,permalink_url:t.permalink_url,artwork_url:t.artwork_url||null,bpm:t.bpm||null,song_key:t.song_key||null,camelot:t.camelot||null,station_slug:station?.slug||null,station_name:station?(station.station_no!=null?'EP '+station.station_no+' — '+station.name:station.name):null};
+    const {data,error}=await sb.from('listener_playlist_tracks').insert(row).select().maybeSingle();
+    if(error&&error.code!=='23505'){toast('Could not save: '+error.message);return;}
+    saved.set(t.permalink_url,data||row);toast('♡ Saved to your playlist');
+  }
+  $('#myCount').textContent=saved.size?('('+saved.size+')'):'';
+  render();renderDrawer();
+}
+function renderDrawer(){
+  const items=[...saved.values()];
+  $('#dList').innerHTML=items.length?items.map(t=>`<div class="tk" style="padding:10px 0">
+      <div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>
+      <div style="flex:1;min-width:0"><div class="tt" style="font-size:.94rem">${esc(t.title||'')}</div><div class="who" style="font-size:.84rem">${esc(t.artist_name||'')}${t.station_name?` · <span style="font-family:'DM Mono';font-size:.7rem">${esc(t.station_name)}</span>`:''}</div></div>
+      <div class="btns"><button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title||'')}">▶</button><button class="mini" data-unsave="${esc(t.permalink_url)}">✕</button></div>
+    </div>`).join(''):'<div class="state" style="padding:30px 0">Nothing saved yet — tap ♡ on any track.</div>';
+}
+$('#myBtn').onclick=()=>{renderDrawer();$('#drawer').classList.add('show');};
+$('#dClose').onclick=()=>$('#drawer').classList.remove('show');
+$('#dExport').onclick=()=>{
+  const items=[...saved.values()];
+  if(!items.length){toast('Nothing saved yet');return;}
+  const rows=[['Title','Artist','BPM','Key','Camelot','SoundCloud link','From episode','Saved']];
+  items.forEach(t=>rows.push([t.title||'',t.artist_name||'',t.bpm||'',t.song_key||'',t.camelot||'',t.permalink_url||'',t.station_name||'',t.added_at?String(t.added_at).slice(0,10):'']));
+  downloadCsv('my-comewith-radio-tracks.csv',rows);
+};
+$('#dList').addEventListener('click',e=>{
+  const p=e.target.closest('[data-play]');if(p){play(p.dataset.play,p.dataset.title);return;}
+  const u=e.target.closest('[data-unsave]');if(u){const t=saved.get(u.dataset.unsave);if(t)toggleSave(t);}
+});
+
+/* ---------- Listening history ---------- */
+async function logVisit(){
+  if(!user||!station)return;
+  const slug=station.slug||('preview:'+(TOKEN||'').slice(0,8));if(!slug)return;
+  const name=(station.station_no!=null?'EP '+station.station_no+' — ':'')+(station.name||'');
+  const {data:ex}=await sb.from('listener_station_history').select('visits').eq('user_id',user.id).eq('station_slug',slug).maybeSingle();
+  if(ex)await sb.from('listener_station_history').update({last_seen_at:new Date().toISOString(),visits:(ex.visits||1)+1,station_name:name}).eq('user_id',user.id).eq('station_slug',slug);
+  else await sb.from('listener_station_history').insert({user_id:user.id,station_slug:slug,station_name:name});
+}
+
+/* ---------- First-visit nudge ---------- */
+function maybeNudge(){
+  if(user||localStorage.getItem('cwr_nudge'))return;
+  setTimeout(()=>{if(!user)$('#nudge').classList.add('show');},2500);
+}
+$('#nudgeX').onclick=()=>{localStorage.setItem('cwr_nudge','1');$('#nudge').classList.remove('show');};
+$('#nudgeGo').onclick=()=>{localStorage.setItem('cwr_nudge','1');$('#nudge').classList.remove('show');openAuth();};
+
+/* ---------- Views ---------- */
+async function loadHub(){
+  $('#hd').textContent='Come With Radio';
+  $('#sub').textContent='Mixes built from artists playing NYC in the coming weeks — every track is a show you can catch.';
+  let j={};try{j=await (await fetch(FN+'?list=1',{headers:H})).json();}catch(_){}
+  const eps=j.stations||[];
+  if(!eps.length){$('#root').innerHTML='<div class="state">First episode coming soon — check back, or follow <a href="https://instagram.com/comewithnyc" target="_blank" rel="noopener">@comewithnyc</a>.</div>';return;}
+  $('#root').innerHTML='<div class="epgrid">'+eps.map(e=>`<article class="ep" data-slug="${esc(e.slug||'')}">
+      <div class="art" ${e.artwork_url?`style="background-image:url('${esc(e.artwork_url)}')"`:''}><span class="no">EP ${e.station_no??'—'}${e.published_at?' · '+fmtDate(e.published_at):''}</span></div>
+      <div class="bd"><h3>${esc(e.name)}</h3>
+      <div class="meta">${e.track_count} tracks · ${e.total_min} min${e.mix_sc_track_url?' · mix on SoundCloud':''}</div>
+      ${e.desc_public?`<div class="blurb">${esc(e.desc_public)}</div>`:''}
+      <div style="margin-top:auto;padding-top:8px"><span class="mini">Open episode →</span></div></div>
+    </article>`).join('')+'</div>';
+  $('#root').querySelectorAll('[data-slug]').forEach(el=>el.onclick=()=>{if(el.dataset.slug)location.href='radio.html?s='+encodeURIComponent(el.dataset.slug);});
+}
+function render(){
+  if(!station){return;}
+  const tr=tracks;
+  const scBtn=station.mix_sc_track_url?`<a class="chip" href="${esc(station.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Listen on SoundCloud ↗</a>`:(station.soundcloud_url?`<a class="chip" href="${esc(station.soundcloud_url)}" target="_blank" rel="noopener">☁ Playlist on SoundCloud ↗</a>`:'');
+  const ytBtn=station.mix_youtube_url?`<a class="chip" href="${esc(station.mix_youtube_url)}" target="_blank" rel="noopener">▶ Watch on YouTube ↗</a>`:'';
+  const embedUrl=station.mix_sc_track_url||station.soundcloud_url;
+  $('#root').innerHTML=
+    (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
+    `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
+    (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
+    `<div class="label" style="margin:8px 0 2px">Tracklist · every artist is playing NYC soon</div>`+
+    '<div>'+tr.map((t,i)=>{
+      const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):''].filter(Boolean).join(' · ');
+      const show=[t.show_date?'🗓 '+fmtShow(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
+      const isSaved=saved.has(t.permalink_url);
+      return `<div class="tk"><div class="num">${i+1}</div><div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>
+        <div style="flex:1;min-width:0">
+          <div class="tt">${esc(t.title)}</div><div class="who">${esc(t.artist_name||'')}</div>
+          ${key?`<div class="meta">${key}</div>`:''}
+          ${show?`<div class="show">${t.show_url?`<a href="${esc(t.show_url)}" target="_blank" rel="noopener">${show} — tickets ↗</a>`:show}</div>`:''}
+        </div>
+        <div class="btns">
+          <button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title)}">▶ play</button>
+          ${t.permalink_url?`<a class="mini" href="${esc(t.permalink_url)}" target="_blank" rel="noopener" title="Open on SoundCloud">☁</a>`:''}
+          <button class="mini ${isSaved?'on':''}" data-save="${i}" title="${isSaved?'In your playlist — tap to remove':'Save to my playlist'}">${isSaved?'♥':'♡'}</button>
+        </div></div>`;
+    }).join('')+'</div>';
+  $('#csvBtn').onclick=()=>{if(user){episodeCsv();}else{$('#expOv').classList.add('show');}};
+  $('#shareBtn').onclick=()=>{const u=station.slug?(location.origin+location.pathname+'?s='+station.slug):location.href;navigator.clipboard.writeText(u).then(()=>toast('Link copied'),()=>toast('Copy failed'));};
+  $('#root').querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>play(b.dataset.play,b.dataset.title));
+  $('#root').querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>toggleSave(tracks[Number(b.dataset.save)]));
+}
+$('#expSignup').onclick=()=>{$('#expOv').classList.remove('show');openAuth('Sign up free — your exports and ♡ playlist save to your profile.');};
+$('#expJust').onclick=()=>{$('#expOv').classList.remove('show');episodeCsv();};
+
+async function loadEpisode(){
   let j;
-  try{const r=await fetch(CWURL+'/functions/v1/get-station?t='+encodeURIComponent(TOKEN),{headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY}});j=await r.json();if(!r.ok)throw new Error(j.error||'error');}
-  catch(e){$('#root').innerHTML='<div class="state">'+esc(e.message||'Could not load this station.')+'</div>';$('#hd').textContent='Come With Radio';return;}
-  const st=j.station,tr=j.tracks||[];
-  $('#hd').textContent=st.name||'Come With Radio';
-  $('#sub').innerHTML=(tr.length+' tracks from artists playing NYC soon.')+(st.published?'':' <span class="banner">Preview · unlisted</span>');
-  const scBtn=st.soundcloud_url?`<a class="scbtn" href="${esc(st.soundcloud_url)}" target="_blank">▶ Open in SoundCloud</a>`:'';
-  $('#root').innerHTML=(st.note?`<p class="sub" style="margin-bottom:8px">${esc(st.note)}</p>`:'')+scBtn+'<div style="margin-top:14px">'+tr.map((t,i)=>{
-    const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):''].filter(Boolean).join(' · ');
-    const show=[t.show_date?'🗓 '+fmtDate(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
-    const art=t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:'';
-    return `<div class="tk"><div class="num">${i+1}</div><div class="art" ${art}></div><div style="flex:1;min-width:0">
-      <div class="tt">${esc(t.title)}</div><div class="who">${esc(t.artist_name||'')}</div>
-      ${key?`<div class="meta">${key}</div>`:''}
-      ${show?`<div class="show">${t.show_url?`<a href="${esc(t.show_url)}" target="_blank">${show}</a>`:show}</div>`:''}
-      </div><a class="play" href="#" data-p="${esc(t.permalink_url)}">▶ play</a></div>`;
-  }).join('')+'</div>';
-  $('#root').addEventListener('click',e=>{const a=e.target.closest('[data-p]');if(a){e.preventDefault();play(a.dataset.p);}});
+  try{
+    const q=TOKEN?('?t='+encodeURIComponent(TOKEN)):('?s='+encodeURIComponent(SLUG));
+    const r=await fetch(FN+q,{headers:H});j=await r.json();if(!r.ok)throw new Error(j.error||'error');
+  }catch(e){$('#hd').textContent='Come With Radio';$('#root').innerHTML='<div class="state">'+esc(e.message||'Could not load this station.')+' · <a href="radio.html">All episodes →</a></div>';return;}
+  station=j.station;tracks=j.tracks||[];
+  document.title=(station.station_no!=null?('EP '+station.station_no+' — '):'')+(station.name||'Come With Radio')+' · Come With Radio';
+  $('#allEps').style.display='';
+  $('#hd').textContent=(station.station_no!=null?('EP '+station.station_no+' · '):'')+(station.name||'Come With Radio');
+  $('#sub').textContent=(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
+  if(!station.published)$('#preview').innerHTML='<span class="banner">Preview · unlisted — only people with this link can see it</span>';
+  render();
+  if(user)logVisit();
+}
+
+(async function(){
+  await refreshAuth();
+  if(TOKEN||SLUG)await loadEpisode();else await loadHub();
+  maybeNudge();
 })();
 </script>
 </body>
