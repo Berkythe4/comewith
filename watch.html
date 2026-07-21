@@ -32,8 +32,10 @@
   .vid{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);transition:.2s;cursor:pointer}
   .vid:hover{transform:translateY(-4px);border-color:var(--hot)}
   .vid .thumb{aspect-ratio:16/9;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-position:center;position:relative;display:flex;align-items:center;justify-content:center}
-  .vid .thumb.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
-  .vid .thumb.audio{background:linear-gradient(135deg,#2a1640,#1f4d52)}
+  /* Override only the image layer — the `background:` shorthand would reset
+     background-size:cover/position:center and break hero photos on these tiles. */
+  .vid .thumb.benefit{background-image:linear-gradient(135deg,#5b2746,#b6446e)}
+  .vid .thumb.audio{background-image:linear-gradient(135deg,#2a1640,#1f4d52)}
   .vid .thumb .pl{width:62px;height:62px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.5rem}
   .vid .bd{padding:16px 18px}.vid h2{font-size:1.2rem;margin-bottom:4px}
   .vid .meta{font-family:'DM Mono';font-size:.76rem;color:var(--dim)}.vid .blurb{font-size:.9rem;color:var(--cream);margin-top:6px}

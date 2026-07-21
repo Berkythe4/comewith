@@ -79,7 +79,9 @@
   .recap{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);transition:.2s}
   .recap:hover{transform:translateY(-3px);border-color:var(--hot)}
   .recap .ph{height:180px;background:linear-gradient(135deg,#3a1c30,#5d6b21);background-size:cover;background-repeat:no-repeat;background-position:center;position:relative;display:flex;align-items:flex-end;padding:14px}
-  .recap .ph.benefit{background:linear-gradient(135deg,#5b2746,#b6446e)}
+  /* Only override the image layer — using the `background:` shorthand here would
+     reset background-size/position/repeat and break hero photos on benefit tiles. */
+  .recap .ph.benefit{background-image:linear-gradient(135deg,#5b2746,#b6446e)}
   /* Hero photos: show the WHOLE picture (no crop) on a dark backdrop. Video
      thumbnails keep cover so the 16:9 frame fills cleanly. */
   .recap .ph.photo{background-color:#160b1b;background-size:contain}
