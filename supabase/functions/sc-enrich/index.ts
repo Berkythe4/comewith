@@ -78,8 +78,19 @@ Deno.serve(async (req) => {
         if (!r.ok) { rows.push({ soundcloud: url, ok: false, is_producer: false, song_count: 0, set_count: 0, songs: [], scanned_at: new Date().toISOString() }); continue; }
         const u = await r.json();
         if (u?.kind !== "user" || !u.id) { rows.push({ soundcloud: url, ok: false, scanned_at: new Date().toISOString() }); continue; }
-        const tr = await (await call(`/users/${u.id}/tracks?limit=50`)).json();
-        const all = (tr.collection || []) as any[];
+        // api-v2 pages are UNRELIABLY sized: a page can return 1 item with a
+        // next_href even at limit=50 (policy/geo thinning). Follow next_href
+        // until we have the profile's tracks (bounded) — without this, artists
+        // like Enamour showed 1 song out of 75 uploads.
+        let all: any[] = [];
+        let next: string | null = `${api}/users/${u.id}/tracks?limit=50`;
+        for (let p = 0; p < 8 && next && all.length < 200; p++) {
+          const rr = await fetch(next.includes("client_id=") ? next : `${next}${next.includes("?") ? "&" : "?"}client_id=${cid}`, { headers: { "User-Agent": UA } });
+          if (!rr.ok) break;
+          const j = await rr.json();
+          all = all.concat((j.collection || []) as any[]);
+          next = j.next_href || null;
+        }
         const isSong = (t: any) => t.kind === "track" && (t.duration || 0) >= minMs && (t.duration || 0) <= maxMs && t.streamable !== false;
         const songsRaw = all.filter(isSong);
         const setCount = all.filter((t) => t.kind === "track" && (t.duration || 0) > maxMs).length;
