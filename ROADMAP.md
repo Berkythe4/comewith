@@ -249,10 +249,11 @@ preview — no build step required.
 
 ---
 
-## Current state — 2026-07-20 (Come With Radio: release pipeline + public episode pages)
+## Current state — reconciled 2026-07-21 (Come With Radio: full release pipeline, scheduled drops, Beatport, media-link hardening)
 
-> Migration **099 APPLIED to prod**; **get-station / sc-connect redeployed**. Public
-> **radio.html** rebuilt (hub + episode pages), Radio link added to the homepage nav.
+> Migrations **099 · 100 · 101 APPLIED to prod**; edge fns **get-station · sc-connect ·
+> sc-enrich · pull-ra-market · resolve-media** deployed. Public **radio.html** rebuilt
+> (hub + episode pages), Radio in the homepage nav + ticker. All pushed + Netlify-live.
 
 ### ✅ Radio release pipeline (099)
 - Stations are **numbered episodes** (`sc_playlists.station_no`, EP 1, 2, …) with a
@@ -277,6 +278,53 @@ preview — no build step required.
   sign-up nudges (first-visit pill + export modal) — never blocking.
 - **Phase 2 later:** YouTube auto-post at finalize; Spotify/Apple Music if it makes
   sense (mixes of others' tracks generally can't be posted there — reassess).
+
+### ✅ Scheduled drops + site presence (100)
+- `sc_playlists.drop_date` = radio's OWN release tracker (decision: radio stays OUT of
+  the `events`/series system — the placeholder "Come With Radio Episode 1" event is
+  superseded). EP 1 drops **2026-07-23**. Dashboard has a per-station drop-date picker.
+- get-station `?list=1` returns `next_drop`; homepage **pill** under Next Up teases the
+  scheduled drop then flips to "New — listen" once live; radio hub shows a drop banner;
+  ticker (`strip.items`) includes "Come With Radio". Finalize also drops a `stage=posted`
+  card on the social calendar (`social_posts`, series 'Come With Radio').
+
+### ✅ Genres + real prices on tracks (101)
+- `sc_playlist_tracks.genres` (snapshotted at add; shown on episode page + CSV + dashboard).
+- **"↻ Show info"** re-matches every track to the current pull (fills date/venue/price/
+  genre — fixes sync-added + carried tracks that start blank), then a **deep price pass**:
+  `pull-ra-market {prices:[ids]}` reads each RA event's public `tickets(queryType:AVAILABLE)`
+  → cheapest on-sale tier as "from $X". External-ticketing events have no RA tiers → stay blank.
+
+### ✅ Scan fix — artists showed only 1 song (sc-enrich)
+- SoundCloud api-v2 pages are unreliably sized (a `limit=50` call can return 1 track + a
+  `next_href`); the scanner trusted page 1. Now follows `next_href` (≤8 pages/200 tracks).
+  Re-scanned all 361 cached artists w/ upcoming shows (Enamour 1→27; avg producer 8.1 songs).
+
+### ✅ Media-link hardening — root cause of "I pasted a URL and it doesn't show" (resolve-media)
+- The site rendered any pasted recap URL and **failed silently** when SoundCloud/YouTube
+  wouldn't embed it. Two symptoms fixed: **DI#1** (share short-links `on.soundcloud.com/…`
+  the embed player can't follow → resolved to canonical URLs) and **DI#2** (a private/wrong
+  `/sets/` URL — oembed 404s; needs Berky to make it public — can't auto-fix).
+- **`resolve-media`** edge fn: follows short links, strips utm_*/si, verifies PUBLIC
+  embeddability via provider oembed. Event editor auto-normalizes good links on save +
+  **blocks** silent failures (flagged w/ reason, "save anyway" override) + a "✓ Check &
+  clean links" button. Sweep of 12 existing recap links: only DI#2 bad.
+- **CSS bug fixed:** benefit recap tiles (`.ph.benefit`/`.thumb.benefit`/`.thumb.audio`)
+  used the `background:` shorthand → reset size/position/repeat → hero photo rendered
+  zoomed top-left. Now `background-image:` only (index.html + watch.html).
+
+### ✅ Radio dashboard UX
+- Sticky filter/search toolbar (always reachable while scrolling the artist list) +
+  **collapsible** station builder (default collapsed) so the searchable artist list sits
+  under the filters; default sort **Artist A–Z**; scroll preserved on expand-songs/add-track.
+
+### ✅ Beatport — on-demand cart (skill, no always-on integration)
+- No self-serve Beatport API + no purchase API (verified): pattern = Keith's own login
+  token + the Beatport docs-frontend public client_id. **`/beatport-cart` project skill**
+  (`.claude/skills/beatport-cart/`) matches a station's tracklist on Beatport → adds to
+  Keith's cart (introspect-first internal `/v4/my/cart`) → fallback buy links. Token in
+  gitignored `.beatport_token.json` (NEVER site_content — anon-readable). Runs from Claude
+  Code, headless **`Build Beatport Cart.bat`**, or a desktop shortcut. Cart→checkout only.
 
 ---
 

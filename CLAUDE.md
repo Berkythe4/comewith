@@ -63,6 +63,35 @@ segment. Public signup widgets pass the brand segment (`come_with` on the
 homepage; DI pages must pass `dance_infusion`). Never re-subscribe an
 unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 
+## Come With Radio (episodes live outside `events`)
+
+- **Radio episodes are numbered stations in `sc_playlists`** (`station_no`,
+  lifecycle `building → testing → live → archived`), **NOT rows in `events`**.
+  Do not create an event for an episode. The scheduled release date lives on
+  `sc_playlists.drop_date` (radio's own tracker); the site teases the next drop
+  via `get-station ?list=1 → next_drop`. Only one `building` row exists at a time
+  (partial unique index) — auto-created with the next number when all are live.
+- **Song memory `sc_song_log`** is the permanent played/passed/carried record —
+  finalize logs played, sync/remove logs passed, finalize carries passed-not-
+  played songs into the next station. Keep it in sync when touching station tracks.
+- **Listener accounts** are `customer`-role auth users; `listener_*` tables are
+  owner-RLS'd + anon-revoked. Never grant anon on them.
+- **Phase 1.1/2 pending:** YouTube auto-post at finalize; Beatport buying is the
+  on-demand `/beatport-cart` skill only (no always-on integration; token in
+  gitignored `.beatport_token.json`, NEVER `site_content` — that's anon-readable).
+
+## Media / recap links (must be publicly embeddable)
+
+- **Validate every recap/media URL through `resolve-media` before storing.**
+  SoundCloud share short-links (`on.soundcloud.com/…`) are redirects the embed
+  player can't follow, and private/secret/wrong tracks oembed-404 — both fail
+  **silently** on the site. The event editor already does this on save (resolves
+  short links, strips `utm_*`/`si`, verifies oembed). Store only canonical,
+  public URLs. `mediaKind()` matching "soundcloud.com" is NOT proof it embeds.
+- **CSS: never use the `background:` shorthand on a variant/state class** (e.g.
+  `.benefit`, `.audio`) layered over a base that set `background-size/position/
+  repeat` — the shorthand resets them and breaks hero photos. Use `background-image:`.
+
 ## Scope
 
 - This codebase is **Come With only**. Do **not** add anything Come With Fitness
