@@ -4616,15 +4616,53 @@ function recapVidRows(list) {
   try { arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []); } catch (_) { arr = []; }
   return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id)).join('');
 }
-// Add / remove rows (delegated, attached once).
+// Add / remove rows + on-demand link check (delegated, attached once).
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-add-recap-vid]')) {
     const list = $('recapVidList'); if (list) list.insertAdjacentHTML('beforeend', recapVidRow('Watch the recap', ''));
     return;
   }
   const del = e.target.closest('[data-del-recap-vid]');
-  if (del) { del.closest('.recap-vid-row')?.remove(); }
+  if (del) { del.closest('.recap-vid-row')?.remove(); return; }
+  const chk = e.target.closest('[data-check-recap-vids]');
+  if (chk) { checkRecapVids(chk); return; }
 });
+// Validate/normalize media URLs via the resolve-media edge fn (follows short
+// links, strips tracking params, verifies public embeddability via oembed).
+// Returns the results array, or null if the check itself failed (transient
+// outage → don't block saving on it).
+async function resolveMediaUrls(urls) {
+  try {
+    const { data, error } = await sb.functions.invoke('resolve-media', { body: { urls } });
+    if (error) return null;
+    return (data && data.results) || null;
+  } catch (_) { return null; }
+}
+// "Check & clean links" button: normalize good URLs in place + mark bad ones,
+// so bad recap links are caught in the editor instead of failing silently live.
+async function checkRecapVids(btn) {
+  const rows = [...document.querySelectorAll('#recapVidList .recap-vid-row')];
+  const inputs = rows.map(r => r.querySelector('.recap-vid-url')).filter(i => i && i.value.trim());
+  if (!inputs.length) { toast('Add a link first', 'err'); return; }
+  btn.disabled = true; const orig = btn.textContent; btn.textContent = 'Checking…';
+  const results = await resolveMediaUrls(inputs.map(i => i.value.trim()));
+  btn.disabled = false; btn.textContent = orig;
+  if (!results) { toast("Couldn't reach the link checker — try again", 'err'); return; }
+  let okN = 0, badN = 0;
+  inputs.forEach((inp, i) => {
+    const r = results[i]; if (!r) return;
+    const row = inp.closest('.recap-vid-row');
+    row.querySelector('[data-vid-status]')?.remove();
+    if (r.ok && r.url) {
+      inp.value = r.url; inp.style.borderColor = 'var(--green,#1f7a1f)'; okN++;
+      row.insertAdjacentHTML('beforeend', `<span data-vid-status class="li-sub" style="flex:0 0 100%;color:var(--green,#1f7a1f);">✓ ${escapeHtml(r.title || 'plays')}</span>`);
+    } else {
+      inp.style.borderColor = 'var(--danger,#ff5ca8)'; badN++;
+      row.insertAdjacentHTML('beforeend', `<span data-vid-status class="li-sub" style="flex:0 0 100%;color:var(--danger,#ff5ca8);">✗ ${escapeHtml(r.reason || "won't embed")}</span>`);
+    }
+  });
+  toast(`${okN} ok${badN ? ` · ${badN} won't play` : ' — all good'}`, badN ? 'warn' : 'ok');
+}
 
 // ---- Edit + soft-delete events (Phase 13 — Part D) ----
 // Scope: edits the event CORE (name, series, date, capacity, attendance, status)
@@ -4688,7 +4726,11 @@ async function openEditEvent(id) {
     <div class="modal-form-row"><label class="modal-label">Recap videos & audio</label>
       <div class="kpi-hint" style="margin:-2px 0 8px;">Paste a YouTube or SoundCloud link. The "label" is the text shown on the link (e.g. "Watch the recap", "Kristen's set", "Listen on SoundCloud"). The first YouTube video's thumbnail becomes the card picture when there's no hero photo.</div>
       <div id="recapVidList">${recapVidRows(ev.recap_videos)}</div>
-      <button type="button" class="hub-btn ghost" data-add-recap-vid style="margin-top:4px;font-size:0.78rem;padding:6px 12px;">+ Add video</button></div>
+      <div style="display:flex;gap:8px;margin-top:4px;flex-wrap:wrap;">
+        <button type="button" class="hub-btn ghost" data-add-recap-vid style="font-size:0.78rem;padding:6px 12px;">+ Add video</button>
+        <button type="button" class="hub-btn ghost" data-check-recap-vids style="font-size:0.78rem;padding:6px 12px;" title="Confirm each link is public and will play on the site — resolves share/short links + strips tracking bits">✓ Check &amp; clean links</button>
+      </div>
+      <div class="kpi-hint" style="margin-top:4px;">Links are auto-checked when you save too — a link SoundCloud/YouTube won't embed (private, secret, or wrong) is flagged so it never fails silently on the site.</div></div>
     <div class="modal-form-row"><label class="modal-label">Hero photo</label>
       <div id="evHeroPreviewWrap" style="margin-bottom:8px;">${ev.hero_image_path ? `<img src="${SUPABASE_URL}/storage/v1/object/public/event-photos/${escapeHtml(ev.hero_image_path)}" alt="current hero" style="max-width:260px;width:100%;border:1px solid var(--border-strong);border-radius:8px;display:block;"><label class="modal-label" style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-top:8px;font-weight:400;"><input type="checkbox" id="evHeroRemove" style="width:auto;margin:0;"> Remove this photo</label>` : '<div class="kpi-hint" style="margin:0;">No photo yet.</div>'}</div>
       <input class="modal-input" type="file" id="evHeroFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif">
@@ -4754,6 +4796,25 @@ async function submitEditEvent(id) {
     if (aid) o.artist_id = aid;   // tags this content to an artist's profile
     return o;
   }).filter(v => v.url);
+  // Root-cause guard: only publicly-embeddable links get saved. Normalizes good
+  // ones in place (resolves share/short links, strips tracking params) and blocks
+  // silent failures — a private/secret/wrong SoundCloud or YouTube link is flagged
+  // with the reason so it never renders as a blank tile on the live site.
+  if (recapVideos.length) {
+    const results = await resolveMediaUrls(recapVideos.map(v => v.url));
+    if (results) {
+      const bad = [];
+      recapVideos.forEach((v, i) => {
+        const r = results[i];
+        if (r && r.ok && r.url) v.url = r.url;
+        else if (r && !r.ok) bad.push(`• "${v.label || 'recap'}": ${r.reason}`);
+      });
+      if (bad.length && !confirm(`These recap links won't play on the website:\n\n${bad.join('\n\n')}\n\nSave anyway? They'll be stored but stay hidden on the site until fixed.`)) {
+        const b = $('kpiModalSubmit'); if (b) { b.disabled = false; b.textContent = 'Save changes'; }
+        return;
+      }
+    }
+  }
   patch.recap_videos = recapVideos;
   // Back-compat: youtube_url holds the first YOUTUBE link (SoundCloud links live
   // only in recap_videos). Used for the card thumbnail.
