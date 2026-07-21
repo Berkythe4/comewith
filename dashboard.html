@@ -8508,7 +8508,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'soon', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '' };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -8845,7 +8845,10 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters]')) return;
+  if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
+  if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
+  if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
   if (t.closest('[data-ra-refreshshows]')) { raRefreshShowInfo(t.closest('[data-ra-refreshshows]')); return; }
   if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
   if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
@@ -9004,21 +9007,33 @@ function renderRaRadio() {
     ? `<div class="kpi-hint" style="margin:0;display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Scanning SoundCloud ${raState.scanDone}/${raState.scanTotal}… <button class="hub-mini" data-ra-scancancel>stop</button></div>`
     : `<button class="hub-btn" data-ra-scan title="Check each artist's SoundCloud to find who produces original music">${scanned ? '↻ ' : ''}Scan${unscanned ? ` ${unscanned} new` : ''} for producers</button>`;
 
+  const anyFilter = raState.search || raState.genre || raState.venue;
+  // Sticky toolbar: pins to the top of the panel so search + filters are always
+  // reachable while you scroll the artist list (no scrolling back up past the
+  // station box). Row 1 = find (search + how to sort/narrow); row 2 = window + scan.
   return `
-    <div class="hub-sec-bar" style="margin-top:22px;"><h3>📻 Radio — incoming artists</h3></div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-      <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
-      ${[2, 3, 4, 6].map(weekBtn).join('')}
-      <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}">🎛 Producers only</button>
-      <select class="modal-select" data-ra-genre style="max-width:150px;"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
-      <select class="modal-select" data-ra-venue style="max-width:160px;"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
-      <select class="modal-select" data-ra-sort style="max-width:150px;">${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}${sortOpt('name', 'Name A–Z')}</select>
-      <input class="modal-input" data-ra-search placeholder="Search artist / venue…" style="max-width:170px;" value="${escapeHtml(raState.search)}">
-      ${scanBar}
+    <div class="ra-toolbar" style="position:sticky;top:0;z-index:6;background:var(--bg);padding:10px 0 9px;margin-bottom:8px;border-bottom:1px solid var(--border);">
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <div style="position:relative;flex:1 1 240px;min-width:200px;">
+          <span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.55;pointer-events:none;">🔎</span>
+          <input class="modal-input" data-ra-search placeholder="Search by artist or venue…" style="width:100%;padding-left:32px;${raState.search ? 'padding-right:32px;' : ''}" value="${escapeHtml(raState.search)}">
+          ${raState.search ? '<button class="hub-mini" data-ra-clearsearch title="Clear search" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:2px 7px;">✕</button>' : ''}
+        </div>
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('name', 'Artist A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
+        <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
+        <select class="modal-select" data-ra-venue style="max-width:160px;" title="Filter by venue"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
+        <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
+        ${anyFilter ? '<button class="hub-mini" data-ra-clearfilters title="Reset search, genre and venue">✕ clear filters</button>' : ''}
+        <span style="margin-left:auto;">${scanBar}</span>
+      </div>
     </div>
-    <div class="kpi-hint" style="margin-bottom:8px;">${windowArtists.length} artists on SoundCloud in the next ${raState.radioWeeks} weeks · <strong>${producers} producers</strong> found${unscanned ? ` · ${unscanned} not yet scanned` : ' · all scanned'}. “Producers only” hides DJs who don’t post original songs. Expand <strong>🎵 songs</strong> to add tracks to your station.</div>
     ${raRenderPlaylist()}
-    <div class="hub-list">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
+    <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}</span></h3></div>
+    <div class="hub-list" id="raArtistList">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
 function raRenderArtistTracks(key) {
   const c = raState.cache[key];
@@ -9102,8 +9117,27 @@ function raRenderPlaylist() {
         ${tracks.length ? '<button class="hub-btn" data-ra-finalize style="background:var(--green,#1f7a1f);color:#fff;border-color:var(--green,#1f7a1f);" title="Step ③ — attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`
     : `${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
        ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}`;
+  // Collapsible: default collapsed so the searchable artist list sits right
+  // under the sticky filters. Click the bar (or chevron) to open the full
+  // builder — adding tracks from artist cards works either way.
+  const open = raState.stationOpen;
+  const chev = `<button class="hub-mini" data-ra-stationtoggle title="${open ? 'Collapse the station builder' : 'Open the station builder'}" style="padding:2px 8px;">${open ? '▾' : '▸'}</button>`;
+  if (!open) {
+    return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:9px 12px;background:var(--surface-2);margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      ${chev}
+      <strong data-ra-stationtoggle style="cursor:pointer;">🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${statusChip}
+      <span class="li-sub" data-ra-stationtoggle style="cursor:pointer;">${tracks.length} song${tracks.length === 1 ? '' : 's'} · ${totalMin} min</span>
+      ${switcher}
+      <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
+        ${pl.status === 'live' && pl.slug ? `<a class="hub-mini" href="${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(pl.slug)}" target="_blank">🌐 Page ↗</a>` : ''}
+        <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried">📜 History</button>
+        <button class="hub-btn ghost" data-ra-stationtoggle>Open builder →</button>
+      </span>
+    </div>`;
+  }
   return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
+      ${chev}
       <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-rename title="Rename station">✎</button>' : ''} ${statusChip}
       ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'EP drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
       ${switcher}
@@ -9139,11 +9173,14 @@ async function raPlay(scUrl, name) {
 }
 // Expand an artist's songs. If not cached yet, scan just this one on the fly.
 async function raToggleSongs(scUrl) {
+  // Preserve scroll + the active search/filters so drilling into an artist's
+  // tracks never loses your place in the list.
+  const y = window.scrollY;
   const key = raKey(scUrl);
-  if (raState.openArtist === key) { raState.openArtist = null; renderRaMarket(); return; }
+  if (raState.openArtist === key) { raState.openArtist = null; renderRaMarket(); window.scrollTo(0, y); return; }
   raState.openArtist = key;
   if (!raState.cache[key]) {
-    renderRaMarket();
+    renderRaMarket(); window.scrollTo(0, y);
     try {
       const { data, error } = await sb.functions.invoke('sc-enrich', { body: { urls: [key], maxMinutes: raState.maxMin } });
       if (error) throw error;
@@ -9151,7 +9188,7 @@ async function raToggleSongs(scUrl) {
       if (rows && rows[0]) raState.cache[key] = rows[0];
     } catch (_) { raState.cache[key] = { ok: false, songs: [] }; }
   }
-  renderRaMarket();
+  renderRaMarket(); window.scrollTo(0, y);
 }
 // Normalize RA's free-text cost ("30" → "$30", "$20+" as-is, "" → null).
 function raCost(c) { c = (c || '').trim(); if (!c) return null; if (/^(0|0\.00|free)$/i.test(c)) return 'Free'; return /^\d/.test(c) ? '$' + c : c; }
@@ -9181,6 +9218,7 @@ async function raAddTrack(scTrackId) {
     genres: (show.genres || []).slice(0, 3),
   });
   if (error) { toast(error.code === '23505' ? 'Already in your station' : error.message, 'err'); return; }
+  const _y = window.scrollY; // keep your place in the artist list after the re-render
   // Permanent song memory: record that this song was considered (re-adds bump the count).
   try {
     const ex = raState.songLog[t.sc_track_id];
@@ -9190,7 +9228,7 @@ async function raAddTrack(scTrackId) {
       if (lr) raState.songLog[t.sc_track_id] = lr;
     }
   } catch (_) { /* memory write is best-effort */ }
-  await raLoadPlaylist(); toast('Added to station', 'ok'); renderRaMarket();
+  await raLoadPlaylist(); toast('Added to station', 'ok'); renderRaMarket(); window.scrollTo(0, _y);
 }
 // A shareable, human-readable tracklist annotated with each artist's upcoming show.
 function raFmtTracklist() {
