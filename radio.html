@@ -304,9 +304,13 @@ async function loadHub(){
 function render(){
   if(!station){return;}
   const tr=tracks;
-  const scBtn=station.mix_sc_track_url?`<a class="chip" href="${esc(station.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Listen on SoundCloud ↗</a>`:(station.soundcloud_url?`<a class="chip" href="${esc(station.soundcloud_url)}" target="_blank" rel="noopener">☁ Playlist on SoundCloud ↗</a>`:'');
+  // Listeners get the FINISHED SET only — the recorded mix on SoundCloud and/or
+  // YouTube. The working playlist Keith pushes to SoundCloud while building the
+  // episode is never linked or embedded here (get-station doesn't even send it):
+  // to get the songs you come to this page and export the tracklist.
+  const scBtn=station.mix_sc_track_url?`<a class="chip" href="${esc(station.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Listen on SoundCloud ↗</a>`:'';
   const ytBtn=station.mix_youtube_url?`<a class="chip" href="${esc(station.mix_youtube_url)}" target="_blank" rel="noopener">▶ Watch on YouTube ↗</a>`:'';
-  const embedUrl=station.mix_sc_track_url||station.soundcloud_url;
+  const embedUrl=station.mix_sc_track_url;
   $('#root').innerHTML=
     (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
     `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
@@ -315,7 +319,10 @@ function render(){
     '<div>'+tr.map((t,i)=>{
       const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):'',(t.genres&&t.genres.length)?esc(t.genres.slice(0,2).join(' / ')):''].filter(Boolean).join(' · ');
       const show=[t.show_date?'🗓 '+fmtShow(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
-      const isSaved=saved.has(t.permalink_url);
+      // A bought/promo track can have no public link (added by hand in the
+      // dashboard). It still belongs in the tracklist — just with no player and
+      // nothing to save, since the saved-playlist row keys on permalink_url.
+      const isSaved=!!t.permalink_url&&saved.has(t.permalink_url);
       return `<div class="tk"><div class="num">${i+1}</div><div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>
         <div style="flex:1;min-width:0">
           <div class="tt">${esc(t.title)}</div><div class="who">${esc(t.artist_name||'')}</div>
@@ -323,9 +330,10 @@ function render(){
           ${show?`<div class="show">${t.show_url?`<a href="${esc(t.show_url)}" target="_blank" rel="noopener">${show} — tickets ↗</a>`:show}</div>`:''}
         </div>
         <div class="btns">
-          <button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title)}">▶ play</button>
-          ${t.permalink_url?`<a class="mini" href="${esc(t.permalink_url)}" target="_blank" rel="noopener" title="Open on SoundCloud">☁</a>`:''}
-          <button class="mini ${isSaved?'on':''}" data-save="${i}" title="${isSaved?'In your playlist — tap to remove':'Save to my playlist'}">${isSaved?'♥':'♡'}</button>
+          ${t.permalink_url?`<button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title)}">▶ play</button>
+          <a class="mini" href="${esc(t.permalink_url)}" target="_blank" rel="noopener" title="Open on SoundCloud">☁</a>
+          <button class="mini ${isSaved?'on':''}" data-save="${i}" title="${isSaved?'In your playlist — tap to remove':'Save to my playlist'}">${isSaved?'♥':'♡'}</button>`
+            :`<span class="meta" title="Not streaming anywhere public — it's in the mix">in the mix</span>`}
         </div></div>`;
     }).join('')+'</div>';
   $('#csvBtn').onclick=()=>{if(user){episodeCsv();}else{$('#expOv').classList.add('show');}};

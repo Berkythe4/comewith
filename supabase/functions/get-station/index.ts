@@ -15,7 +15,12 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 
-const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, sc_playlist_url, mix_sc_track_url, mix_youtube_url, cover_url";
+// NOTE: sc_playlist_url (the private test-listening playlist Keith pushes in
+// step ①) is deliberately NOT selected. The public page must never link the
+// SOURCE PLAYLIST — the only SoundCloud/YouTube links a listener gets are the
+// FINAL MIX (mix_sc_track_url / mix_youtube_url). To get the songs themselves
+// they come to the episode page and export the tracklist.
+const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_youtube_url, cover_url";
 const TRACK_COLS = "title, artist_name, permalink_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, sort";
 
 Deno.serve(async (req) => {
@@ -75,7 +80,7 @@ Deno.serve(async (req) => {
 
     const { id: _id, ...station } = pl;
     return new Response(JSON.stringify({
-      station: { ...station, soundcloud_url: pl.sc_playlist_url },
+      station,
       tracks: tracks || [],
     }), { headers: JH });
   } catch (e) {

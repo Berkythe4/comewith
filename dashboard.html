@@ -8906,7 +8906,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -8942,6 +8942,10 @@ document.addEventListener('click', async (e) => {
   const at = t.closest('[data-ra-addtrack]'); if (at) { raAddTrack(at.dataset.raAddtrack); return; }
   const rt = t.closest('[data-ra-removetrack]'); if (rt) { raRemoveTrack(rt.dataset.raRemovetrack); return; }
   const mv = t.closest('[data-ra-plmove]'); if (mv) { const [id, dir] = mv.dataset.raPlmove.split(':'); raMoveTrack(id, dir); return; }
+  if (t.closest('[data-ra-rekordbox]')) { raOpenImport(); return; }
+  if (t.closest('[data-ra-addmanual]')) { raOpenTrackEdit(null); return; }
+  if (t.closest('[data-ra-sources]')) { raCheckSources(); return; }
+  const et = t.closest('[data-ra-edittrack]'); if (et) { raOpenTrackEdit(et.dataset.raEdittrack); return; }
   if (t.closest('[data-ra-playstation]')) { raPlayStation(); return; }
   if (t.closest('[data-ra-copytracks]')) { raCopyTracks(); return; }
   if (t.closest('[data-ra-clearpl]')) { raClearPlaylist(); return; }
@@ -9150,14 +9154,17 @@ function raRenderPlaylist() {
   const switcher = (raState.stations || []).length > 1 ? `<select class="modal-select" data-ra-plselect style="max-width:220px;">
       ${(raState.stations || []).map(p => `<option value="${p.id}"${p.id === pl.id ? ' selected' : ''}>EP ${p.station_no ?? '—'} · ${escapeHtml(p.name)} (${p.status})</option>`).join('')}
     </select>` : '';
-  // Release pipeline: ① push the tracklist to SoundCloud (private) → ② reorder it
-  // there while test-listening, sync the order back (cut songs are logged as
-  // "passed" and auto-carry into next week's station) → ③ attach the recorded
-  // mix, write descriptions, GO LIVE (public page + SC push).
+  // Release pipeline: ① build the tracklist here (SoundCloud research + hand-added
+  // buys) → ② buy the songs and arrange the set in Rekordbox, then import that
+  // order back (songs you dropped are logged as "passed" and auto-carry into next
+  // week's station) → ③ attach the recorded mix, write descriptions, GO LIVE.
+  // The old "reorder on SoundCloud + sync back" path still exists (↺ button) but
+  // Rekordbox is the real arrangement tool now — SoundCloud isn't record-quality.
   const stepStyle = (done) => `font-family:'DM Mono',monospace;font-size:.72rem;padding:3px 9px;border-radius:999px;border:1px solid ${done ? 'var(--green,#1f7a1f)' : 'var(--border-strong)'};color:${done ? 'var(--green,#1f7a1f)' : 'var(--mid,#888)'};`;
+  const arranged = tracks.some(t => t.source && t.source !== 'soundcloud');
   const pipeline = isWorking && tracks.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-      <span style="${stepStyle(!!pl.sc_playlist_url)}">${pl.sc_playlist_url ? '✓' : '①'} Test push to SoundCloud</span><span class="li-sub">→</span>
-      <span style="${stepStyle(false)}">② Reorder there · sync back</span><span class="li-sub">→</span>
+      <span style="${stepStyle(tracks.length > 0)}">✓ ① Build the tracklist</span><span class="li-sub">→</span>
+      <span style="${stepStyle(arranged)}">${arranged ? '✓' : '②'} Buy · arrange in Rekordbox · import order</span><span class="li-sub">→</span>
       <span style="${stepStyle(pl.status === 'testing')}">${pl.status === 'testing' ? '✓ Mix linked' : '③ Mix'} · go live</span>
     </div>` : '';
   const liveLinks = pl.status === 'live' ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
@@ -9168,9 +9175,12 @@ function raRenderPlaylist() {
       <span class="li-sub">${pl.published_at ? 'Published ' + fmtDate(pl.published_at) : ''}</span>
     </div>` : '';
   const actions = isWorking ? `
+        <button class="hub-btn" data-ra-rekordbox title="Step ② — drop your Rekordbox playlist export here to put the station in the order you actually arranged, pull BPM/key across, and add any bought songs that aren't in here yet">🎛 Import Rekordbox order</button>
+        <button class="hub-btn ghost" data-ra-addmanual title="Add a song by hand — bought on Beatport, a promo, or anything not on SoundCloud">＋ Add song</button>
+        ${tracks.length ? '<button class="hub-btn ghost" data-ra-sources title="Check every track against Beatport and Bandcamp — where you can buy it, what it costs, and fill in any missing BPM/key">🛒 Where to buy</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
-        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back into the tool (after you reorder it there). Songs you removed there are logged as passed + carried to next week.">↺ Sync order from SoundCloud</button>' : ''}
+        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Legacy path: pull your latest SoundCloud order back into the tool (after you reorder it there). Songs you removed there are logged as passed + carried to next week.">↺ Sync order from SoundCloud</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-refreshshows title="Re-match every track to the latest RA/Ticketmaster pull — fills in missing show dates, venues, prices and genres (also fixes sync-added and carried tracks, which start blank)">↻ Show info</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
         ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
@@ -9209,13 +9219,15 @@ function raRenderPlaylist() {
     </div>
     ${pipeline}${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min · ${fmtNum(t.playback_count || 0)} plays${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${show ? '<br>' + show : ''}</div></div>
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
-        <button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>
-        ${isWorking ? `<button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
+        ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>` : ''}
+        ${t.buy_url || t.beatport_url || t.bandcamp_url ? `<a class="hub-mini" href="${escapeHtml(t.buy_url || t.beatport_url || t.bandcamp_url)}" target="_blank" rel="noopener" title="${t.buy_url ? 'Where you bought it' : 'Buy it — found by “Where to buy”' + (t.beatport_price ? ' · ' + t.beatport_price : '')} (private — never shown on the site)">🛒</a>` : ''}
+        ${isWorking ? `<button class="hub-mini" data-ra-edittrack="${t.id}" title="Edit — BPM, key, links, where you bought it, show info">✎</button>
+        <button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
         <button class="hub-mini" data-ra-plmove="${t.id}:down" title="down">↓</button>
         <button class="hub-mini" data-ra-removetrack="${t.id}" title="Remove — logged as passed in the song history">✕</button>` : ''}
-      </span></div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
+      </span></div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
@@ -9337,21 +9349,25 @@ async function raScan() {
   toast(raState.scanCancel ? `Stopped — scanned ${raState.scanDone}` : `Scan complete — ${Object.values(raState.cache).filter(c => c.is_producer).length} producers found`, 'ok');
   renderRaMarket();
 }
+// Dropping a song = considered and PASSED → permanent song memory (marks it when
+// researching later + auto-carries it into the next station at finalize). Shared
+// by the ✕ button and the Rekordbox import's "drop the songs I left out".
+async function raLogPassed(t) {
+  if (!t) return;
+  const now = new Date().toISOString();
+  try {
+    await sb.from('sc_song_log').upsert({
+      sc_track_id: t.sc_track_id, title: t.title, artist_name: t.artist_name, permalink_url: t.permalink_url,
+      artwork_url: t.artwork_url, duration_ms: t.duration_ms, source: t.source || 'soundcloud',
+      buy_url: t.buy_url || null, label: t.label || null,
+      passed_playlist_id: raState.playlist.id, passed_station_no: raState.playlist.station_no ?? null, passed_at: now, updated_at: now,
+    }, { onConflict: 'sc_track_id' });
+  } catch (_) { /* best-effort */ }
+}
 async function raRemoveTrack(id) {
   const t = (raState.playlist?.tracks || []).find(x => x.id === id);
   await sb.from('sc_playlist_tracks').delete().eq('id', id);
-  // Removing = considered and PASSED → permanent song memory (marks it when
-  // researching later + auto-carries it into the next station at finalize).
-  if (t) {
-    const now = new Date().toISOString();
-    try {
-      await sb.from('sc_song_log').upsert({
-        sc_track_id: t.sc_track_id, title: t.title, artist_name: t.artist_name, permalink_url: t.permalink_url,
-        artwork_url: t.artwork_url, duration_ms: t.duration_ms,
-        passed_playlist_id: raState.playlist.id, passed_station_no: raState.playlist.station_no ?? null, passed_at: now, updated_at: now,
-      }, { onConflict: 'sc_track_id' });
-    } catch (_) { /* best-effort */ }
-  }
+  await raLogPassed(t);
   await raLoadPlaylist(); renderRaMarket();
 }
 async function raMoveTrack(id, dir) {
@@ -9367,6 +9383,426 @@ async function raClearPlaylist() {
   if (!confirm('Clear all songs from your station?')) return;
   await sb.from('sc_playlist_tracks').delete().eq('playlist_id', raState.playlist.id);
   await raLoadPlaylist(); renderRaMarket();
+}
+
+// ============================================================================
+// REKORDBOX ORDER IMPORT + MANUAL SONGS
+// SoundCloud isn't record-quality, so the set gets bought and arranged in
+// Rekordbox. That makes Rekordbox — not the SoundCloud playlist — the source of
+// truth for ORDER, and it means a station holds songs that were never in the
+// SoundCloud pull. Those get a synthetic sc_track_id ('man_…') so the unique
+// dedupe, the sc_song_log memory and the carry-over at finalize all still work
+// (see migration 102).
+// ============================================================================
+const PITCH_NAME = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const CAMELOT_TO_KEY = {};
+Object.entries(CAMELOT_MAJ).forEach(([p, c]) => { CAMELOT_TO_KEY[c] = PITCH_NAME[p]; });
+Object.entries(CAMELOT_MIN).forEach(([p, c]) => { CAMELOT_TO_KEY[c] = PITCH_NAME[p] + 'm'; });
+// Rekordbox shows key EITHER musically ("F#m") or as Camelot ("8A") depending on
+// your preference — accept both and fill the other side in.
+function raKeyFields(k) {
+  k = String(k || '').trim();
+  if (!k) return null;
+  const cm = k.match(/^(\d{1,2})\s*([ABab])$/);
+  if (cm) { const c = Number(cm[1]) + cm[2].toUpperCase(); return { camelot: c, song_key: CAMELOT_TO_KEY[c] || null }; }
+  return { song_key: k, camelot: keyToCamelot(k) };
+}
+const raManualId = () => 'man_' + ((crypto.randomUUID && crypto.randomUUID().replace(/-/g, '').slice(0, 16)) || (Date.now().toString(36) + Math.random().toString(36).slice(2, 8)));
+// Built with the RegExp constructor so the combining-mark range stays readable
+// as escapes in this file (a literal U+0300–U+036F class is invisible in source).
+const RA_DIACRITICS = new RegExp('[\\u0300-\\u036f]', 'g');
+const RA_BOM = new RegExp('^\\uFEFF');
+// Matching normalization: case/accents/punctuation-insensitive, "&"→"and", and
+// the noise that differs between a SoundCloud upload title and a store's tags
+// (feat. credits, "Original Mix", bracketed free-download tags) stripped out.
+// Remix credits are NOT stripped — a remix is a different song.
+function raNorm(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(RA_DIACRITICS, '')
+    .replace(/&/g, ' and ')
+    .replace(/\((?:original|extended|radio|club|dub|vocal|instrumental)\s*(?:mix|edit|version|cut)?\)/g, ' ')
+    .replace(/\[(?:free|free\s*dl|free\s*download|premiere|out\s*now|forthcoming)[^\]]*\]/g, ' ')
+    .replace(/\b(?:feat|ft|featuring)\b.*$/, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+}
+// 0–1 similarity: exact → 1, containment → .92, otherwise Dice on word sets.
+function raSim(a, b) {
+  a = raNorm(a); b = raNorm(b);
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  if (a.includes(b) || b.includes(a)) return 0.92;
+  const A = new Set(a.split(' ')), B = new Set(b.split(' '));
+  let inter = 0; A.forEach(t => { if (B.has(t)) inter++; });
+  return (2 * inter) / (A.size + B.size);
+}
+// Title carries the weight; artist breaks ties. Try the swapped orientation too,
+// because a plain "X - Y" line is ambiguous about which side is the artist.
+function raRowScore(row, t) {
+  const straight = 0.72 * raSim(row.title, t.title) + 0.28 * raSim(row.artist, t.artist_name);
+  const swapped = 0.72 * raSim(row.artist, t.title) + 0.28 * raSim(row.title, t.artist_name);
+  return Math.max(straight, swapped);
+}
+const RA_MATCH_MIN = 0.62;
+
+// ---- Parsing -----------------------------------------------------------------
+// Rekordbox "Export a playlist to a file" writes UTF-16 tab-separated text whose
+// columns follow whatever you have visible in the app, so columns are located by
+// HEADER NAME rather than position. .m3u8, CSV and plain numbered lists (incl.
+// our own 📋 Publish tracklist output) are accepted as fallbacks.
+const RB_COLS = {
+  title: ['tracktitle', 'title', 'trackname', 'name', 'song', 'songtitle'],
+  artist: ['artist', 'artists', 'artistname', 'albumartist'],
+  bpm: ['bpm', 'tempo'],
+  key: ['key', 'tonality', 'initialkey'],
+  time: ['time', 'duration', 'length', 'tracktime'],
+  mix: ['mixname', 'mix', 'version'],
+  label: ['label', 'recordlabel'],
+};
+function raColIdx(headers) {
+  const norm = headers.map(h => String(h || '').toLowerCase().replace(/[^a-z0-9]/g, ''));
+  const idx = {};
+  for (const k of Object.keys(RB_COLS)) {
+    for (const n of RB_COLS[k]) { const i = norm.indexOf(n); if (i >= 0) { idx[k] = i; break; } }
+  }
+  return idx;
+}
+function raTimeMs(s) {
+  s = String(s || '').trim(); if (!s) return null;
+  const m = s.match(/^(\d+):(\d{1,2})(?:[.,]\d+)?$/);
+  if (m) return (Number(m[1]) * 60 + Number(m[2])) * 1000;
+  const n = Number(s.replace(/[^\d.]/g, ''));
+  return n > 0 ? Math.round(n * 1000) : null;
+}
+function raSplitCsv(line) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (q) { if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; } else if (c === '"') q = false; else cur += c; }
+    else if (c === '"') q = true;
+    else if (c === ',') { out.push(cur); cur = ''; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map(c => c.trim());
+}
+// "12. Artist — “Title”" / "Artist - Title" / bare title.
+function raSplitDash(s) {
+  const x = String(s || '').trim().replace(/^\d+\s*[.)\]:-]\s*/, '').trim();
+  const parts = x.split(/\s+[-–—]\s+/);
+  let artist = '', title = x;
+  if (parts.length >= 2) { artist = parts[0]; title = parts.slice(1).join(' - '); }
+  const dequote = (v) => v.trim().replace(/^["'“”‘’]+|["'“”‘’]+$/g, '').trim();
+  return { artist: dequote(artist), title: dequote(title) };
+}
+function raParseTracklist(text) {
+  const lines = String(text || '').replace(/\r\n?/g, '\n').split('\n').map(l => l.replace(RA_BOM, '')).filter(l => l.trim());
+  if (!lines.length) return [];
+  // M3U/M3U8 — "#EXTINF:243,Artist - Title"
+  if (lines.some(l => /^#EXT(M3U|INF)/i.test(l))) {
+    const out = [];
+    for (const l of lines) {
+      const m = l.match(/^#EXTINF:\s*(-?\d+)\s*,\s*(.+)$/i); if (!m) continue;
+      const secs = Number(m[1]); const p = raSplitDash(m[2]);
+      if (p.title) out.push({ title: p.title, artist: p.artist, durationMs: secs > 0 ? secs * 1000 : null });
+    }
+    if (out.length) return out;
+  }
+  // Delimited with a header row
+  const delim = lines[0].includes('\t') ? '\t' : (raSplitCsv(lines[0]).length > 2 ? ',' : null);
+  if (delim) {
+    const cells = (l) => (delim === '\t' ? l.split('\t').map(c => c.trim()) : raSplitCsv(l));
+    const idx = raColIdx(cells(lines[0]));
+    if (idx.title != null) {
+      const at = (c, k) => (idx[k] != null ? (c[idx[k]] || '').trim() : '');
+      const rows = lines.slice(1).map(l => {
+        const c = cells(l);
+        const mix = at(c, 'mix');
+        let title = at(c, 'title');
+        // "Mix Name" is a separate Rekordbox column ("Extended Mix") — fold it back
+        // into the title so a hand-added track reads the way you'd expect.
+        if (mix && !raNorm(title).includes(raNorm(mix)) && !/^original(\s*mix)?$/i.test(mix)) title += ` (${mix})`;
+        const bpm = Math.round(Number(at(c, 'bpm').replace(',', '.')) || 0);
+        return { title, artist: at(c, 'artist'), bpm: bpm > 0 ? bpm : null, key: at(c, 'key') || null, durationMs: raTimeMs(at(c, 'time')), label: at(c, 'label') || null };
+      }).filter(r => r.title);
+      if (rows.length) return rows;
+    }
+  }
+  // Plain numbered/dashed lines. Drop the decoration our own tracklist export adds
+  // (bare URLs, the 🗓/📍/🎟 show line, the header lines).
+  return lines
+    .filter(l => !/^https?:\/\//i.test(l.trim()) && !/^[🗓📍🎟🎧]/u.test(l.trim()) && !/^tracks from artists/i.test(l.trim()))
+    .map(l => { const p = raSplitDash(l); return { title: p.title, artist: p.artist }; })
+    .filter(r => r.title && r.title.length > 1);
+}
+async function raReadTextFile(file) {
+  const buf = await file.arrayBuffer(); const b = new Uint8Array(buf);
+  let enc = 'utf-8';
+  if (b[0] === 0xFF && b[1] === 0xFE) enc = 'utf-16le';
+  else if (b[0] === 0xFE && b[1] === 0xFF) enc = 'utf-16be';
+  else if (b.length > 4 && b[1] === 0 && b[3] === 0) enc = 'utf-16le'; // UTF-16 without a BOM
+  return new TextDecoder(enc).decode(buf).replace(RA_BOM, '');
+}
+
+// ---- Import flow -------------------------------------------------------------
+function raOpenImport() {
+  const pl = raState.playlist;
+  if (!pl || (pl.status !== 'building' && pl.status !== 'testing')) { toast('Only the working station can be reordered', 'err'); return; }
+  openKpi('🎛 Import order from Rekordbox', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${(pl.tracks || []).length} songs in the station`, `
+    <div class="kpi-hint">In Rekordbox: right-click the playlist → <strong>Export a playlist to a file</strong> → save as <strong>.txt</strong>. Drop it here and the station gets put in that exact order, with BPM and key pulled across. Anything in the file that isn't in the station yet (songs you bought outside the SoundCloud pull) can be added in the same pass. Also accepts .m3u8, CSV, or any pasted numbered tracklist.</div>
+    <div id="raRbDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drop the Rekordbox export here — or click to browse</div>
+    <input type="file" id="raRbFile" accept=".txt,.csv,.m3u,.m3u8,.tsv,text/plain" style="display:none">
+    <div class="form-row"><label>…or paste the tracklist</label>
+      <textarea id="raRbText" class="modal-textarea" rows="8" placeholder="1. Kettama - Sunburst&#10;2. Bad Boombox - Rio Grande&#10;…" style="font-family:monospace;font-size:.8rem;"></textarea></div>
+    <div class="li-sub" id="raRbStatus"></div>`,
+    () => raImportParse($('raRbText') ? $('raRbText').value : ''), 'Match →');
+  setTimeout(() => {
+    const drop = $('raRbDrop'), input = $('raRbFile');
+    if (!drop || !input) return;
+    drop.addEventListener('click', () => input.click());
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent, #5b7fb3)'; });
+    drop.addEventListener('dragleave', () => { drop.style.borderColor = ''; });
+    drop.addEventListener('drop', async (e) => {
+      e.preventDefault(); drop.style.borderColor = '';
+      const f = (e.dataTransfer && e.dataTransfer.files || [])[0]; if (!f) return;
+      raImportParse(await raReadTextFile(f), f.name);
+    });
+    input.addEventListener('change', async () => { const f = input.files[0]; if (f) raImportParse(await raReadTextFile(f), f.name); });
+  }, 80);
+}
+// Match the parsed file against the station and show what WILL happen before
+// anything is written. Greedy best-match in file order; each station track can
+// only be claimed once.
+function raImportParse(text, fileName) {
+  const rows = raParseTracklist(text);
+  if (!rows.length) { toast("Couldn't read a tracklist out of that — check it's the .txt export, or paste the lines", 'err'); return; }
+  const tracks = (raState.playlist.tracks || []).slice();
+  const claimed = new Set();
+  const match = rows.map(row => {
+    let best = null, bestScore = 0;
+    for (const t of tracks) {
+      if (claimed.has(t.id)) continue;
+      const s = raRowScore(row, t);
+      if (s > bestScore) { bestScore = s; best = t; }
+    }
+    if (best && bestScore >= RA_MATCH_MIN) { claimed.add(best.id); return { id: best.id, track: best, score: bestScore }; }
+    return null;
+  });
+  const extras = tracks.filter(t => !claimed.has(t.id));
+  raState.rbPlan = { rows, match, extras };
+  const matched = match.filter(Boolean).length;
+  const missing = rows.length - matched;
+
+  const line = (n, main, sub, extra) => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><span>${n}. ${main}</span><div class="li-sub">${sub}</div></div>${extra || ''}</div>`;
+  const orderList = rows.map((r, i) => {
+    const m = match[i];
+    if (m) return line(i + 1, escapeHtml(m.track.title), `${escapeHtml(m.track.artist_name || '')} <span style="color:var(--green,#1f7a1f);">✓ matched${m.score < 0.9 ? ' (close)' : ''}</span>${r.bpm || r.key ? ' · from Rekordbox: ' + [r.bpm ? r.bpm + ' BPM' : '', r.key || ''].filter(Boolean).join(' · ') : ''}`);
+    return line(i + 1, escapeHtml(r.title), `${escapeHtml(r.artist || 'unknown artist')} · <span style="color:var(--amber,#b58900);">not in the station</span>${r.bpm || r.key ? ' · ' + [r.bpm ? r.bpm + ' BPM' : '', r.key || ''].filter(Boolean).join(' · ') : ''}`,
+      `<label class="li-sub" style="display:flex;align-items:center;gap:5px;white-space:nowrap;"><input type="checkbox" data-rb-new="${i}" checked> add it</label>`);
+  }).join('');
+
+  openKpi('🎛 Import order from Rekordbox', `${fileName ? fileName + ' · ' : ''}${rows.length} lines · ${matched} matched${missing ? ` · ${missing} new` : ''}`, `
+    <div class="kpi-hint">This is the order the station will be saved in. Matched songs keep everything they already have (show info, genres, links) and get Rekordbox's BPM + key. Unchecked new songs are skipped entirely.</div>
+    <div class="hub-list" style="max-height:340px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">${orderList}</div>
+    ${raState.rbPlan.extras.length ? `<div style="margin-top:10px;border:1px solid var(--border-strong);border-radius:8px;padding:9px 11px;">
+      <strong style="font-size:.85rem;">${raState.rbPlan.extras.length} song${raState.rbPlan.extras.length === 1 ? '' : 's'} in the station aren't in the Rekordbox file</strong>
+      <div class="hub-list">${raState.rbPlan.extras.map(t => `<div class="li-sub">· ${escapeHtml(t.title)} — ${escapeHtml(t.artist_name || '')}</div>`).join('')}</div>
+      <label class="li-sub" style="display:flex;align-items:center;gap:6px;margin-top:7px;"><input type="checkbox" id="raRbDropExtras" checked> Drop them from the station — logged as <strong>passed</strong> in the song history and auto-carried into next week's station</label>
+      <div class="kpi-hint" style="margin:4px 0 0;">Leave it unchecked to keep them, parked at the end of the tracklist.</div>
+    </div>` : ''}`,
+    () => raApplyImport(), `Apply order${missing ? ' + add songs' : ''}`);
+}
+async function raApplyImport() {
+  const plan = raState.rbPlan; if (!plan) return;
+  const pl = raState.playlist;
+  const addSet = new Set([...document.querySelectorAll('#kpiModalBody [data-rb-new]:checked')].map(c => Number(c.dataset.rbNew)));
+  const dropExtras = !!($('raRbDropExtras') && $('raRbDropExtras').checked);
+  const btn = $('kpiModalSubmit'); btn.disabled = true; btn.textContent = 'Applying…';
+  try {
+    let sort = 10, reordered = 0, added = 0, dropped = 0;
+    for (let i = 0; i < plan.rows.length; i++) {
+      const row = plan.rows[i], m = plan.match[i];
+      if (m) {
+        const patch = { sort };
+        if (row.bpm) patch.bpm = row.bpm;
+        const kf = raKeyFields(row.key);
+        if (kf) { patch.song_key = kf.song_key; patch.camelot = kf.camelot; }
+        const { error } = await sb.from('sc_playlist_tracks').update(patch).eq('id', m.id);
+        if (error) throw error;
+        reordered++; sort += 10;
+      } else if (addSet.has(i)) {
+        const kf = raKeyFields(row.key);
+        await raInsertTrack({
+          title: row.title, artist_name: row.artist || null, bpm: row.bpm || null,
+          song_key: kf ? kf.song_key : null, camelot: kf ? kf.camelot : null,
+          duration_ms: row.durationMs || null, label: row.label || null, sort, source: 'rekordbox',
+        });
+        added++; sort += 10;
+      }
+    }
+    for (const t of plan.extras) {
+      if (dropExtras) {
+        const { error } = await sb.from('sc_playlist_tracks').delete().eq('id', t.id);
+        if (error) throw error;
+        await raLogPassed(t); dropped++;
+      } else {
+        await sb.from('sc_playlist_tracks').update({ sort }).eq('id', t.id); sort += 10;
+      }
+    }
+    await sb.from('sc_playlists').update({ updated_at: new Date().toISOString() }).eq('id', pl.id);
+    raState.rbPlan = null;
+    closeKpi();
+    await raLoadPlaylist(); renderRaMarket();
+    toast(`Order applied — ${reordered} reordered${added ? ` · +${added} added` : ''}${dropped ? ` · ${dropped} dropped (logged as passed)` : ''}`, 'ok');
+  } catch (e) {
+    toast('Import failed: ' + (e.message || e), 'err');
+    btn.disabled = false; btn.textContent = 'Apply order';
+  }
+}
+
+// ---- Where to buy (Beatport / Bandcamp) --------------------------------------
+// Before a buy run: which of these songs actually exist in a store, what do they
+// cost, and can the store fill in BPM/key we don't have yet. Beatport is a real
+// API (confident matches + metadata); Bandcamp has no official API, so it's
+// best-effort and reported as "couldn't reach" rather than "not available" when
+// their endpoint doesn't answer — a scrape outage must never read as a verdict.
+async function raCheckSources() {
+  const pl = raState.playlist; const n = (pl.tracks || []).length;
+  if (!n) return;
+  openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name} · checking ${n} track${n === 1 ? '' : 's'}`, `
+    <div class="kpi-hint" style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Asking Beatport and Bandcamp about each track — about ${Math.max(1, Math.round(n * 0.6))}s. Missing BPM/key gets filled in from Beatport where we don't already have it (your Rekordbox values are never overwritten).</div>`,
+    () => closeKpi(), 'Close');
+  try {
+    const { data, error } = await sb.functions.invoke('track-sources', { body: { playlist_id: pl.id, apply_bpm_key: true } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.error && !data.results?.length) throw new Error(data.error);
+    const res = data.results || [];
+    const onBp = res.filter(r => r.beatport).length, onBc = res.filter(r => r.bandcamp).length;
+    const money = res.reduce((s, r) => s + (Number(String(r.beatport?.price || '').replace(/[^\d.]/g, '')) || 0), 0);
+    const rows = res.map((r, i) => {
+      const bp = r.beatport, bc = r.bandcamp;
+      const bits = [];
+      if (bp) bits.push(`<a href="${escapeHtml(bp.url || '#')}" target="_blank" rel="noopener" style="color:var(--green,#1f7a1f);">Beatport${bp.price ? ' · ' + escapeHtml(bp.price) : ''} ↗</a>${bp.score < 0.85 ? ' <span title="Close match — check it\'s the right mix before buying">(close match)</span>' : ''}`);
+      if (bc) bits.push(`<a href="${escapeHtml(bc.url || '#')}" target="_blank" rel="noopener" style="color:var(--green,#1f7a1f);">Bandcamp ↗</a>`);
+      if (!bits.length) bits.push('<span style="color:var(--mid,#888);">not found in either store</span>');
+      const meta = bp && (bp.bpm || bp.camelot) ? ` · <span class="li-sub">${[bp.bpm ? bp.bpm + ' BPM' : '', bp.camelot || '', bp.label || ''].filter(Boolean).join(' · ')}</span>` : '';
+      return `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><span>${i + 1}. ${escapeHtml(r.title)}</span>
+        <div class="li-sub">${escapeHtml(r.artist || '')} · ${bits.join(' · ')}${meta}</div></div></div>`;
+    }).join('');
+    openKpi('🛒 Where to buy', `${onBp} on Beatport · ${onBc} on Bandcamp · ${res.length - res.filter(r => r.beatport || r.bandcamp).length} not found`, `
+      ${data.error ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Beatport: ${escapeHtml(data.error)} — Bandcamp results below are unaffected. Re-paste a token and run it again for prices and BPM/key.</div>` : ''}
+      ${data.bandcamp_ok === false ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Bandcamp didn't answer (they have no official API, so this happens). "Not found" below reflects Beatport only — it does <strong>not</strong> mean the song isn't on Bandcamp.</div>` : ''}
+      <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}${data.applied ? `Filled in BPM/key on <strong>${data.applied}</strong> track${data.applied === 1 ? '' : 's'} that didn't have it. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
+      <div class="hub-list" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">${rows}</div>
+      <div class="kpi-hint" style="margin-top:8px;">To actually fill a cart, run <code>/beatport-cart</code> — it adds the matches to your Beatport cart in one go.</div>`,
+      () => closeKpi(), 'Close');
+    await raLoadPlaylist(); renderRaMarket();
+  } catch (e) {
+    openKpi('🛒 Where to buy', 'Check failed', `<div class="kpi-hint">${escapeHtml(e.message || String(e))}</div>
+      <div class="kpi-hint">If it's a Beatport token problem: log in at beatport.com → DevTools → Network → filter <code>token</code> → copy the JSON from <code>/v4/auth/o/token/</code>, and I'll set the refresh token as a project secret.</div>`,
+      () => closeKpi(), 'Close');
+  }
+}
+
+// ---- Manual songs ------------------------------------------------------------
+// Insert a station track that didn't come from the SoundCloud pull, and mirror it
+// into the permanent song memory the same way raAddTrack does.
+async function raInsertTrack(fields) {
+  const sc_track_id = raManualId();
+  const row = { playlist_id: raState.playlist.id, sc_track_id, source: 'manual', ...fields };
+  const { error } = await sb.from('sc_playlist_tracks').insert(row);
+  if (error) throw error;
+  try {
+    const { data: lr } = await sb.from('sc_song_log').insert({
+      sc_track_id, title: row.title, artist_name: row.artist_name, permalink_url: row.permalink_url || null,
+      duration_ms: row.duration_ms || null, source: row.source, buy_url: row.buy_url || null, label: row.label || null,
+    }).select().maybeSingle();
+    if (lr) raState.songLog[sc_track_id] = lr;
+  } catch (_) { /* memory write is best-effort */ }
+  return sc_track_id;
+}
+// Add-by-hand / edit-any-track. Same form both ways: an existing SoundCloud track
+// can be edited here too (fix a BPM, attach where you bought it) — its title,
+// artist and SoundCloud link are left alone unless you change them.
+function raOpenTrackEdit(id) {
+  const pl = raState.playlist;
+  if (!pl || (pl.status !== 'building' && pl.status !== 'testing')) { toast('Only the working station can be edited', 'err'); return; }
+  const t = id ? (pl.tracks || []).find(x => x.id === id) : null;
+  if (id && !t) return;
+  const mmss = t && t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.round((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : '';
+  const v = (x) => escapeHtml(x == null ? '' : String(x));
+  openKpi(t ? '✎ Edit song' : '＋ Add song', t ? (t.title || '') : `EP ${pl.station_no ?? '—'} · ${pl.name} — added to the end of the tracklist`, `
+    <div class="kpi-hint">For songs you bought or were sent — anything that never came through the SoundCloud pull. Only the title is required.</div>
+    <div class="form-row"><label>Title *</label><input name="title" class="modal-input" value="${t ? v(t.title) : ''}" placeholder="Sunburst (Extended Mix)"></div>
+    <div class="form-row"><label>Artist</label><input name="artist_name" class="modal-input" value="${t ? v(t.artist_name) : ''}" placeholder="Kettama"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="form-row" style="flex:1 1 100px;"><label>BPM</label><input name="bpm" class="modal-input" inputmode="numeric" value="${t ? v(t.bpm) : ''}" placeholder="132"></div>
+      <div class="form-row" style="flex:1 1 100px;"><label>Key</label><input name="song_key" class="modal-input" value="${t ? v(t.song_key || t.camelot) : ''}" placeholder="F#m or 11A"></div>
+      <div class="form-row" style="flex:1 1 100px;"><label>Length</label><input name="len" class="modal-input" value="${mmss}" placeholder="6:42"></div>
+    </div>
+    <div class="kpi-hint" style="margin:-4px 0 8px;">Key accepts musical (<code>F#m</code>) or Camelot (<code>11A</code>) — the other one is filled in for you.</div>
+    <div class="form-row"><label>Listen link (optional)</label><input name="permalink_url" class="modal-input" value="${t ? v(t.permalink_url) : ''}" placeholder="https://soundcloud.com/… or a YouTube link">
+      <div class="kpi-hint" style="margin:2px 0 0;">Checked for public embeddability before it saves. Leave blank and the song still appears in the published tracklist — just as a text row with no player.</div></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div class="form-row" style="flex:2 1 220px;"><label>Where you bought it</label><input name="buy_url" class="modal-input" value="${t ? v(t.buy_url) : ''}" placeholder="https://beatport.com/track/…"></div>
+      <div class="form-row" style="flex:1 1 140px;"><label>Label</label><input name="label" class="modal-input" value="${t ? v(t.label) : ''}" placeholder="Steel City Dance Discs"></div>
+    </div>
+    <div class="kpi-hint" style="margin:-4px 0 10px;">Purchase info is private — it's for your records and the Beatport cart, never shown on the episode page.</div>
+    <div style="border:1px solid var(--border-strong);border-radius:8px;padding:9px 11px;">
+      <strong style="font-size:.85rem;">Artist's upcoming show</strong>
+      <div class="kpi-hint" style="margin:3px 0 7px;">Shown next to the track in the published tracklist. Leave blank — “↻ Show info” fills it automatically if this artist is in the RA/Ticketmaster pull.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <div class="form-row" style="flex:1 1 140px;"><label>Date</label><input type="date" name="show_date" class="modal-input" value="${t ? v(t.show_date) : ''}"></div>
+        <div class="form-row" style="flex:2 1 180px;"><label>Venue</label><input name="show_venue" class="modal-input" value="${t ? v(t.show_venue) : ''}"></div>
+        <div class="form-row" style="flex:1 1 90px;"><label>Price</label><input name="show_cost" class="modal-input" value="${t ? v(t.show_cost) : ''}" placeholder="$20"></div>
+      </div>
+      <div class="form-row"><label>Ticket link</label><input name="show_url" class="modal-input" value="${t ? v(t.show_url) : ''}" placeholder="https://ra.co/events/…"></div>
+    </div>`,
+    () => raSaveTrackEdit(id), t ? 'Save' : '＋ Add to station');
+}
+async function raSaveTrackEdit(id) {
+  const title = kpiVal('title');
+  if (!title) { toast('Give it a title', 'err'); return; }
+  const btn = $('kpiModalSubmit'); btn.disabled = true; btn.textContent = 'Saving…';
+  const restore = (label) => { btn.disabled = false; btn.textContent = label; };
+  try {
+    const t = id ? (raState.playlist.tracks || []).find(x => x.id === id) : null;
+    const bpm = Math.round(Number(kpiVal('bpm')) || 0);
+    const kf = raKeyFields(kpiVal('song_key'));
+    const lenMs = raTimeMs(kpiVal('len'));
+    let link = kpiVal('permalink_url');
+    // Never store a link the embed can't follow — short links get resolved, private
+    // or wrong ones are rejected with the reason instead of failing silently live.
+    if (link && (!t || link !== (t.permalink_url || ''))) {
+      btn.textContent = 'Checking link…';
+      const res = await resolveMediaUrls([link]);
+      if (res && res[0]) {
+        if (!res[0].ok) { toast('Link rejected: ' + (res[0].reason || "it isn't publicly embeddable") + ' — fix it or clear the field', 'err'); restore(id ? 'Save' : '＋ Add to station'); return; }
+        link = res[0].url || link;
+      }
+    }
+    const fields = {
+      title, artist_name: kpiVal('artist_name') || null,
+      bpm: bpm > 0 ? bpm : null, song_key: kf ? kf.song_key : null, camelot: kf ? kf.camelot : null,
+      duration_ms: lenMs, permalink_url: link || null,
+      buy_url: kpiVal('buy_url') || null, label: kpiVal('label') || null,
+      show_date: kpiVal('show_date') || null, show_venue: kpiVal('show_venue') || null,
+      show_cost: kpiVal('show_cost') || null, show_url: kpiVal('show_url') || null,
+    };
+    if (id) {
+      const { error } = await sb.from('sc_playlist_tracks').update(fields).eq('id', id);
+      if (error) throw error;
+      // Keep the song memory's purchase info in step with the track.
+      if (t) { try { await sb.from('sc_song_log').update({ buy_url: fields.buy_url, label: fields.label, updated_at: new Date().toISOString() }).eq('sc_track_id', t.sc_track_id); } catch (_) { /* best-effort */ } }
+    } else {
+      const sort = ((raState.playlist.tracks || []).length + 1) * 10;
+      await raInsertTrack({ ...fields, sort });
+    }
+    closeKpi();
+    await raLoadPlaylist(); renderRaMarket();
+    toast(id ? 'Song updated' : 'Added to station', 'ok');
+  } catch (e) {
+    toast('Save failed: ' + (e.message || e), 'err');
+    restore(id ? 'Save' : '＋ Add to station');
+  }
 }
 async function raPlayStation() {
   const tracks = raState.playlist.tracks; if (!tracks.length) return;

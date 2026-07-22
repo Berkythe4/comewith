@@ -75,10 +75,42 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   finalize logs played, sync/remove logs passed, finalize carries passed-not-
   played songs into the next station. Keep it in sync when touching station tracks.
 - **Listener accounts** are `customer`-role auth users; `listener_*` tables are
-  owner-RLS'd + anon-revoked. Never grant anon on them.
-- **Phase 1.1/2 pending:** YouTube auto-post at finalize; Beatport buying is the
-  on-demand `/beatport-cart` skill only (no always-on integration; token in
-  gitignored `.beatport_token.json`, NEVER `site_content` — that's anon-readable).
+  owner-RLS'd + anon-revoked. Never grant anon on them. `sc_playlists` /
+  `sc_playlist_tracks` were also anon-revoked in **103** — they had carried
+  table-level anon grants since 079 (RLS was blocking the rows, so an anon GET
+  returned `200 []`, never data; now it's `401`). Public station reads are
+  function-only through `get-station` (service role).
+- **Rekordbox is the arrangement tool, not SoundCloud** (decided 2026-07-22).
+  The set is bought and arranged in Rekordbox because SoundCloud isn't
+  record-quality. The ① test push to SoundCloud + ↺ sync-back still exist for the
+  first pass, but the **Rekordbox import owns final order**: dashboard
+  "🎛 Import Rekordbox order" parses the playlist export (UTF-16 tab TSV, columns
+  located BY HEADER NAME; also .m3u8/CSV/pasted lists), fuzzy-matches to the
+  station, applies the order and pulls BPM/key. A station therefore holds songs
+  that never came from SoundCloud — see `source` in migration 102 and the
+  synthetic `man_…` `sc_track_id`.
+- **Store metadata never overwrites Rekordbox.** `track-sources` only FILLS IN a
+  missing bpm/song_key/camelot. Your own analysis of the file you own beats a
+  store's tags. Matching must keep the **remix guard**: if either side names a
+  remix/edit, the remixer has to match too, or the original mix matches
+  "(X Remix)" and you buy the wrong track.
+- **Beatport IS an always-on integration now** (reversed 2026-07-22; was
+  skill-only). `track-sources` edge fn backs the "🛒 Where to buy" button.
+  Beatport ROTATES its refresh token on every use, so tokens live in
+  `public.beatport_oauth` (admin-RLS'd, anon-revoked, service-role written) —
+  an env secret can't be rewritten at runtime. `BEATPORT_CLIENT_ID` +
+  `BEATPORT_REFRESH_TOKEN` secrets seed it. Still NEVER `site_content` (that's
+  anon-readable). `/beatport-cart` remains the way to actually fill a cart.
+- **Bandcamp has no official API.** The autocomplete endpoint `track-sources`
+  uses is unofficial and best-effort. When it fails, report "couldn't reach
+  Bandcamp" — never let an outage render as a definitive "not available".
+- **The public page never links the source playlist.** `get-station` deliberately
+  does not select `sc_playlist_url`. Listeners get the FINAL MIX only
+  (`mix_sc_track_url` / `mix_youtube_url`); to get the songs they come to the
+  episode page and export the tracklist. Per-track links are fine. Don't
+  "helpfully" re-add a playlist link.
+- **Phase 1.1/2 pending:** YouTube auto-post at finalize; listener "export my
+  saved playlist to my own SoundCloud" (OAuth per listener — designed, not built).
 
 ## Media / recap links (must be publicly embeddable)
 
