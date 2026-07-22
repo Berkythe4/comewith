@@ -1609,7 +1609,10 @@ function activateTab(key) {
 }
 
 // ---- Team management (master_admin only) ----------------------------------
-const STAFF_ROLE_OPTS = ['operations', 'marketing', 'full'];
+// 'partners' (104): sees every module EXCEPT the master_only ones — income,
+// expenses, strategy and Users. That master_only flag IS the financial wall, so
+// partners never touch company money regardless of what's in default_roles.
+const STAFF_ROLE_OPTS = ['operations', 'marketing', 'partners', 'full'];
 async function loadTeam() {
   const body = $('teamBody');
   if (!ME.isMaster) { body.innerHTML = '<div class="placeholder">Master admin only.</div>'; return; }
