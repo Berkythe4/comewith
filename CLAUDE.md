@@ -94,13 +94,27 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   store's tags. Matching must keep the **remix guard**: if either side names a
   remix/edit, the remixer has to match too, or the original mix matches
   "(X Remix)" and you buy the wrong track.
-- **Beatport IS an always-on integration now** (reversed 2026-07-22; was
-  skill-only). `track-sources` edge fn backs the "🛒 Where to buy" button.
-  Beatport ROTATES its refresh token on every use, so tokens live in
-  `public.beatport_oauth` (admin-RLS'd, anon-revoked, service-role written) —
-  an env secret can't be rewritten at runtime. `BEATPORT_CLIENT_ID` +
-  `BEATPORT_REFRESH_TOKEN` secrets seed it. Still NEVER `site_content` (that's
-  anon-readable). `/beatport-cart` remains the way to actually fill a cart.
+- **Beatport = PASTE-A-TOKEN, not a stored credential** (settled 2026-07-22 after
+  testing against the live API). Hard facts, verified — don't re-litigate:
+  - Access tokens live **600 seconds** (`exp - iat` on a real token). Ten minutes.
+  - The **refresh token is unreachable from the browser**: not in localStorage
+    (which holds only `token-refresh-result` → `{accessToken,…}`), and their site
+    refreshes via a cookie JS can't read. Watching the Network tab for 30 min
+    produced nothing; background tabs throttle the auto-refresh timer anyway.
+  - `client_id` is in the **JWT payload** (`client_id` claim) — no hunting needed.
+    `BEATPORT_CLIENT_ID` is set as a project secret.
+  - So: a bookmarklet copies the current token from beatport.com, the "🛒 Where to
+    buy" modal takes a paste, and `track-sources` caches it in
+    `public.beatport_oauth` **only until its own JWT `exp`**. No standing
+    credential at rest. Never `site_content` (anon-readable).
+  - API shape confirmed: `tracks[]`, `key.camelot_number`/`camelot_letter`,
+    `release.label.name`, `slug`+`id` → `beatport.com/track/<slug>/<id>`, and
+    **`price.value` is in DOLLARS (1.49) not cents** — do not divide by 100.
+  - Search "artist title" then **retry on title alone whenever nothing clears the
+    match threshold** (not only on zero results): "Deeper Purpose Cigarettes"
+    returns three confident-looking wrong hits, so a zero-results guard never
+    fires and the real release is never searched for.
+  `/beatport-cart` remains the way to actually fill a cart.
 - **Bandcamp has no official API.** `track-sources` uses the endpoint their own
   search box calls: `POST bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic`
   with `{search_text, search_filter:"t", full_page:false, fan_id:null}`. The older
