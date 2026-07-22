@@ -38,6 +38,12 @@ Deno.serve(async (req) => {
 
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
+    // Show-level artwork ("Come With Radio" itself). Used for any episode that
+    // hasn't set its own cover, so a new episode is never artwork-less.
+    const { data: artRow } = await admin.from("site_content")
+      .select("value").eq("key", "ops.radio_artwork").maybeSingle();
+    const stationArt = (artRow?.value || "").toString().trim() || null;
+
     // Hub: every live episode, newest first.
     if (list) {
       const { data: pls } = await admin.from("sc_playlists").select(STATION_COLS)
@@ -62,7 +68,7 @@ Deno.serve(async (req) => {
           ...p,
           track_count: agg[id]?.n || 0,
           total_min: Math.round((agg[id]?.ms || 0) / 60000),
-          artwork_url: p.cover_url || agg[id]?.art || null,
+          artwork_url: p.cover_url || agg[id]?.art || stationArt,
         })),
         next_drop: nd || null,
       }), { headers: JH });
@@ -80,7 +86,7 @@ Deno.serve(async (req) => {
 
     const { id: _id, ...station } = pl;
     return new Response(JSON.stringify({
-      station,
+      station: { ...station, station_artwork: stationArt },
       tracks: tracks || [],
     }), { headers: JH });
   } catch (e) {

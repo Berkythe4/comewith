@@ -8650,10 +8650,12 @@ async function raLoadPlaylist() {
     if (!pl) { const again = await sb.from('sc_playlists').select(RA_PL_COLS).in('status', ['building', 'testing']).limit(1).maybeSingle(); pl = again.data; }
     if (pl) raState.stations.unshift(pl);
   }
-  const [{ data: tracks }, { data: log }] = await Promise.all([
+  const [{ data: tracks }, { data: log }, { data: art }] = await Promise.all([
     sb.from('sc_playlist_tracks').select('*').eq('playlist_id', pl.id).order('sort'),
     sb.from('sc_song_log').select('*'),
+    sb.from('site_content').select('value').eq('key', 'ops.radio_artwork').maybeSingle(),
   ]);
+  raState.radioArt = (art && art.value) || '';
   raState.playlist = { ...pl, tracks: tracks || [] };
   raState.songLog = {}; (log || []).forEach(r => { raState.songLog[r.sc_track_id] = r; });
 }
@@ -9728,7 +9730,17 @@ function raOpenEpisodeDetails() {
       <div class="kpi-hint" style="margin:2px 0 0;">Shown on the homepage teaser and the episode page${pl.slug ? '' : ', and it becomes your public web address'}:
         comewith.org/radio.html?s=<span id="raEpSlugEcho">${v(pl.slug || raSlugify(pl.name))}</span>
         ${pl.slug ? ' <strong>(already set — renaming won\'t move it)</strong>' : ''}</div></div>
-    <div class="form-row"><label>Cover image</label>
+    <div class="form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;">
+      <label style="font-size:.86rem;">📻 Come With Radio — station artwork</label>
+      <div class="kpi-hint" style="margin:2px 0 8px;">The show's own thumbnail, used for <strong>every</strong> episode that doesn't set its own cover, and on the radio hub. Set this once.</div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <div id="raStationArtPrev" style="width:82px;height:82px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-2) center/cover no-repeat;${raState.radioArt ? `background-image:url('${v(raState.radioArt)}');` : ''}"></div>
+        <div style="flex:1 1 220px;">
+          <input type="file" name="station_art" accept="image/*,.heic,.heif" class="modal-input">
+          <div class="kpi-hint" style="margin:3px 0 0;">Square, 1400px or larger. ${raState.radioArt ? 'Uploading replaces the current one.' : 'Not set yet.'}</div>
+        </div>
+      </div></div>
+    <div class="form-row"><label>This episode's cover <span class="li-sub">— optional, overrides the station artwork above</span></label>
       <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
         <div id="raCoverPrev" style="width:82px;height:82px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-2) center/cover no-repeat;${pl.cover_url ? `background-image:url('${v(pl.cover_url)}');` : ''}"></div>
         <div style="flex:1 1 220px;">
@@ -9768,6 +9780,20 @@ async function raSaveEpisodeDetails() {
       desc_sc: kpiVal('ep_desc_sc') || null,
       updated_at: new Date().toISOString(),
     };
+    // Station-level artwork lives in site_content (the established in-app-settings
+    // pattern) — it's a public image URL, so anon-readable is fine.
+    const artFile = document.querySelector('#kpiModalBody [name="station_art"]')?.files?.[0];
+    if (artFile) {
+      btn.textContent = 'Uploading station artwork…';
+      const small = await downscaleImage(artFile, 1400, 0.88);
+      const path = `brand/station-artwork_${Date.now()}.jpg`;
+      const { error: aErr } = await sb.storage.from('radio-mixes').upload(path, small, { upsert: true, contentType: small.type || 'image/jpeg' });
+      if (aErr) throw aErr;
+      const url = sb.storage.from('radio-mixes').getPublicUrl(path).data.publicUrl;
+      const { error: scErr } = await sb.from('site_content').upsert({ key: 'ops.radio_artwork', value: url }, { onConflict: 'key' });
+      if (scErr) throw scErr;
+      raState.radioArt = url;
+    }
     const file = document.querySelector('#kpiModalBody [name="ep_cover"]')?.files?.[0];
     if (file) {
       btn.textContent = 'Uploading cover…';

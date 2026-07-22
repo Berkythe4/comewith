@@ -499,7 +499,9 @@ function render(){
   $('#root').innerHTML=
     // The cover only ever showed on the hub card; on the episode page itself
     // there was nothing visual above the tracklist.
-    (station.cover_url?`<div class="epcover"><img src="${esc(station.cover_url)}" alt="${esc(station.name||'Episode artwork')}" loading="lazy"></div>`:'')+
+    // This episode's own cover if it has one, otherwise the show's artwork, so a
+    // new episode is never blank up top.
+    ((station.cover_url||station.station_artwork)?`<div class="epcover"><img src="${esc(station.cover_url||station.station_artwork)}" alt="${esc(station.name||'Episode artwork')}" loading="lazy"></div>`:'')+
     (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
     `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="saveAllBtn">♡ Save all</button><button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
     (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
