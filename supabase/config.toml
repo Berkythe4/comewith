@@ -1,0 +1,133 @@
+
+[functions.send-agreement]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-agreement/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-agreement/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-agreement/*.html" ]
+
+[functions.get-agreement-by-token]
+enabled = true
+verify_jwt = false
+import_map = "./functions/get-agreement-by-token/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/get-agreement-by-token/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/get-agreement-by-token/*.html" ]
+
+[functions.mark-signed]
+enabled = true
+verify_jwt = false
+import_map = "./functions/mark-signed/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/mark-signed/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/mark-signed/*.html" ]
+
+[functions.inquiry-notify]
+enabled = true
+verify_jwt = false
+import_map = "./functions/inquiry-notify/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/inquiry-notify/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/inquiry-notify/*.html" ]
+
+[functions.get-event-hub]
+enabled = true
+verify_jwt = false
+import_map = "./functions/get-event-hub/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/get-event-hub/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/get-event-hub/*.html" ]
+
+[functions.subscribe]
+enabled = true
+verify_jwt = false
+import_map = "./functions/subscribe/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/subscribe/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/subscribe/*.html" ]
+
+[functions.confirm-subscription]
+enabled = true
+verify_jwt = false
+import_map = "./functions/confirm-subscription/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/confirm-subscription/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/confirm-subscription/*.html" ]
+
+[functions.unsubscribe]
+enabled = true
+verify_jwt = false
+import_map = "./functions/unsubscribe/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/unsubscribe/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/unsubscribe/*.html" ]
+
+[functions.send-campaign]
+enabled = true
+verify_jwt = false
+import_map = "./functions/send-campaign/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/send-campaign/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/send-campaign/*.html" ]
+
+[functions.resend-webhook]
+enabled = true
+verify_jwt = false
+import_map = "./functions/resend-webhook/deno.json"
+# Uncomment to specify a custom file path to the entrypoint.
+# Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
+entrypoint = "./functions/resend-webhook/index.ts"
+# Specifies static files to be bundled with the function. Supports glob patterns.
+# For example, if you want to serve static HTML pages in your function:
+# static_files = [ "./functions/resend-webhook/*.html" ]
+
+# --- Radio ---------------------------------------------------------------------
+# These were deployed by hand and were NOT recorded here, which is a trap: a
+# plain `supabase functions deploy get-station` defaults verify_jwt to TRUE and
+# would make the public episode page start demanding a login. Pinned now.
+# (No import_map: these functions have no deno.json — the CLI defaults the
+# entrypoint to ./functions/<name>/index.ts.)
+
+[functions.get-station]
+enabled = true
+verify_jwt = false          # PUBLIC — serves radio.html to signed-out listeners
+
+[functions.sc-oauth]
+enabled = true
+verify_jwt = false          # PUBLIC — it is SoundCloud's OAuth redirect target
+
+[functions.listener-shows]
+enabled = true
+verify_jwt = true           # any signed-in listener; identity comes from the JWT
+
+[functions.track-sources]
+enabled = true
+verify_jwt = true           # admin-only (role re-checked inside the function)
