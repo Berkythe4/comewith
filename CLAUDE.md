@@ -101,9 +101,22 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   an env secret can't be rewritten at runtime. `BEATPORT_CLIENT_ID` +
   `BEATPORT_REFRESH_TOKEN` secrets seed it. Still NEVER `site_content` (that's
   anon-readable). `/beatport-cart` remains the way to actually fill a cart.
-- **Bandcamp has no official API.** The autocomplete endpoint `track-sources`
-  uses is unofficial and best-effort. When it fails, report "couldn't reach
-  Bandcamp" — never let an outage render as a definitive "not available".
+- **Bandcamp has no official API.** `track-sources` uses the endpoint their own
+  search box calls: `POST bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic`
+  with `{search_text, search_filter:"t", full_page:false, fan_id:null}`. The older
+  `fuzzysearch/1/autocomplete_elastic` path is DEAD — and it answers **HTTP 200**
+  with `{"error":true,"error_message":"bad function"}`, so checking `r.ok` alone
+  silently reported every track as "not on Bandcamp". **Validate the payload, not
+  the status**, and throw so the caller can say "couldn't reach Bandcamp" — never
+  let an outage render as a definitive "not available".
+- **Store matching is adversarial** — Bandcamp is full of DJ rips, bootlegs and
+  flips of the track you actually want. Three guards, all regression-tested:
+  (1) remix words are detected **anywhere**, not just in brackets ("Artist. Title.
+  Pat Lok Flip." has none); (2) `(Radio Edit)`/`(Extended Mix)` are standard
+  qualifiers, NOT remixes, and must still match their own release; (3) substring
+  containment is **length-aware** — a flat score let "If U Need It" match
+  "Sammy Virji: If U Need It (Callto Speed Garage Dub)". Returning "not found"
+  beats sending Keith to buy the wrong file.
 - **The public page never links the source playlist.** `get-station` deliberately
   does not select `sc_playlist_url`. Listeners get the FINAL MIX only
   (`mix_sc_track_url` / `mix_youtube_url`); to get the songs they come to the

@@ -54,7 +54,14 @@ function sim(a: string, b: string): number {
   const x = norm(a), y = norm(b);
   if (!x || !y) return 0;
   if (x === y) return 1;
-  if (x.includes(y) || y.includes(x)) return 0.92;
+  // Containment must be LENGTH-AWARE. A flat 0.92 meant "If U Need It" scored
+  // 0.92 against "Sammy Virji: If U Need It (Callto Speed Garage Dub)" purely
+  // because the words appear inside it — so a bootleg dub outscored the real
+  // release. The more extra material the container carries, the less it means.
+  if (x.includes(y) || y.includes(x)) {
+    const ratio = Math.min(x.length, y.length) / Math.max(x.length, y.length);
+    return 0.92 * ratio;
+  }
   const A = new Set(x.split(" ")), B = new Set(y.split(" "));
   let inter = 0;
   for (const t of A) if (B.has(t)) inter++;
@@ -62,28 +69,64 @@ function sim(a: string, b: string): number {
 }
 // A remix is a DIFFERENT SONG: if either side names a remix/edit, both must agree
 // on the remixer, otherwise the original mix would happily match "(X Remix)".
+// "(Radio Edit)" / "(Extended Mix)" describe the ORIGINAL release, so strip those
+// standard qualifiers before looking for a remixer — otherwise every radio edit
+// gets treated as somebody's remix and never matches its own release.
+const STD_QUALIFIER = /\((?:original|extended|radio|club|vocal|instrumental|album|single)\s*(?:mix|edit|version|cut)?\)/gi;
 function remixTag(s: string): string {
-  const m = String(s || "").match(/[([]([^)\]]*\b(?:remix|rmx|edit|bootleg|flip|refix)\b[^)\]]*)[)\]]/i);
+  const cleaned = String(s || "").replace(STD_QUALIFIER, " ");
+  const m = cleaned.match(/[([]([^)\]]*\b(?:remix|rmx|edit|bootleg|flip|refix|vip|rework)\b[^)\]]*)[)\]]/i);
   return m ? norm(m[1]) : "";
 }
+// Bracket-only detection isn't enough: uploaders write "Sammy Virji. If U Need
+// It. Pat Lok Flip." with no brackets at all, which sailed past the guard and
+// matched the ORIGINAL — i.e. it would send you to buy the wrong track. So also
+// look for the giveaway word anywhere in the string. "edit"/"vip" stay
+// bracket-only because "Radio Edit" is a normal thing to call an original.
+const REMIX_ANY = /\b(?:remix|rmx|bootleg|flip|refix|mashup)\b/i;
+const isRemix = (s: string) => REMIX_ANY.test(String(s || "")) || remixTag(s) !== "";
 function score(title: string, artist: string, candTitle: string, candArtist: string): number {
+  // One is a remix and the other isn't → different songs, full stop.
+  if (isRemix(title) !== isRemix(candTitle)) return 0;
   const rA = remixTag(title), rB = remixTag(candTitle);
-  if ((rA || rB) && sim(rA, rB) < 0.6) return 0;
+  if (rA && rB && sim(rA, rB) < 0.6) return 0;
   return 0.68 * sim(title, candTitle) + 0.32 * sim(artist, candArtist);
 }
 const MIN_SCORE = 0.62;
 
+// SoundCloud upload titles are messy in ways that wreck a store search: promo
+// junk ("[Free Download]", "(Beatport link in bio)"), and the artist name
+// repeated INSIDE the title ("Deeper Purpose - Cigarettes" by Deeper Purpose).
+// Searching those verbatim is why a track that IS in the store comes back empty.
+function searchTerms(title: string, artist: string) {
+  let t = String(title || "")
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\([^)]*\b(?:free|download|out now|link in bio|premiere|forthcoming|buy now|support)\b[^)]*\)/gi, " ")
+    .replace(/\b(?:free\s*d\/?l|free\s*download|out\s*now|premiere)\b/gi, " ");
+  const cleanArtist = String(artist || "").replace(/^[\s"'“”‘’]+|[\s"'“”‘’]+$/g, "").trim();
+  const a = norm(cleanArtist);
+  if (a) {
+    const parts = t.split(/\s+[-–—]\s+/);
+    if (parts.length >= 2 && norm(parts[0]) === a) t = parts.slice(1).join(" - ");
+  }
+  t = t.replace(/\s{2,}/g, " ").trim();
+  return { title: t || String(title || ""), artist: cleanArtist };
+}
+
 // ---- Beatport ---------------------------------------------------------------
-async function bpToken(admin: any): Promise<{ token?: string; error?: string }> {
+// `needsSetup` distinguishes "Beatport was never connected" from "the token chain
+// broke" — they read very differently to the person clicking the button, and
+// telling someone to RE-paste a token they never pasted is just confusing.
+async function bpToken(admin: any): Promise<{ token?: string; error?: string; needsSetup?: boolean }> {
   const { data: row } = await admin.from("beatport_oauth").select("*").eq("id", "singleton").maybeSingle();
   const clientId = Deno.env.get("BEATPORT_CLIENT_ID");
-  if (!clientId) return { error: "BEATPORT_CLIENT_ID secret isn't set on the project." };
+  if (!clientId) return { needsSetup: true, error: "Beatport isn't connected yet." };
 
   if (row?.access_token && row.expires_at && new Date(row.expires_at).getTime() > Date.now() + 60_000) {
     return { token: row.access_token };
   }
   const refresh = row?.refresh_token || Deno.env.get("BEATPORT_REFRESH_TOKEN");
-  if (!refresh) return { error: "No Beatport refresh token — paste a fresh one (see the Beatport button's help text)." };
+  if (!refresh) return { needsSetup: true, error: "Beatport isn't connected yet." };
 
   const body = new URLSearchParams({ grant_type: "refresh_token", refresh_token: refresh, client_id: clientId });
   const r = await fetch(BP_TOKEN_URL, {
@@ -157,19 +200,34 @@ async function bpSearch(token: string, title: string, artist: string) {
 }
 
 // ---- Bandcamp (unofficial, best-effort) --------------------------------------
+// Bandcamp has no official API. This is the endpoint their own search box uses.
+// It answers HTTP 200 with {"error":true,"error_message":"bad function"} when the
+// path is wrong, so status alone is NOT proof of success — an earlier version of
+// this checked only r.ok and therefore reported every track as "not on Bandcamp"
+// when in fact nothing was ever searched. Validate the PAYLOAD and throw
+// otherwise, so the caller can say "couldn't reach Bandcamp" instead of lying.
 async function bcSearch(title: string, artist: string) {
-  const r = await fetch("https://bandcamp.com/api/fuzzysearch/1/autocomplete_elastic", {
+  const r = await fetch("https://bandcamp.com/api/bcsearch_public_api/1/autocomplete_elastic", {
     method: "POST",
     headers: { "Content-Type": "application/json", "User-Agent": UA },
-    body: JSON.stringify({ search_text: `${artist} ${title}`.trim(), search_filter: "t", fuzziness: 0 }),
+    body: JSON.stringify({ search_text: `${artist} ${title}`.trim(), search_filter: "t", full_page: false, fan_id: null }),
   });
   if (!r.ok) throw new Error(`bandcamp ${r.status}`);
   const j = await r.json();
-  const items = (j.auto?.results || []) as any[];
+  if (j?.error || !j?.auto || !Array.isArray(j.auto.results)) throw new Error(`bandcamp: ${j?.error_message || "unexpected response"}`);
+  const items = j.auto.results as any[];
   let best: any = null, bestScore = 0;
   for (const c of items) {
     if (c.type && c.type !== "t") continue;
-    const s = score(title, artist, c.name || "", c.band_name || "");
+    // Bandcamp's `name` is usually "ARTIST - TITLE" and `band_name` is whoever
+    // uploaded it (often a label or the remixer, not the original artist), so
+    // compare both readings and keep the better one.
+    const nm = String(c.name || "");
+    const parts = nm.split(/\s+[-–—]\s+/);
+    const alt = parts.length >= 2
+      ? score(title, artist, parts.slice(1).join(" - "), parts[0])
+      : 0;
+    const s = Math.max(score(title, artist, nm, c.band_name || ""), alt);
     if (s > bestScore) { bestScore = s; best = c; }
   }
   if (!best || bestScore < MIN_SCORE) return null;
@@ -210,11 +268,12 @@ Deno.serve(async (req) => {
     // beats speed here — a burst is what gets an unofficial endpoint to start 429ing.
     for (const t of tracks) {
       const title = t.title || "", artist = t.artist_name || "";
+      const q = searchTerms(title, artist);
       let beatport = null, bandcamp = null;
       if (tk.token) {
-        try { beatport = await bpSearch(tk.token, title, artist); } catch (_) { /* leave null */ }
+        try { beatport = await bpSearch(tk.token, q.title, q.artist); } catch (_) { /* leave null */ }
       }
-      try { bandcamp = await bcSearch(title, artist); } catch (_) { bandcampFails++; }
+      try { bandcamp = await bcSearch(q.title, q.artist); } catch (_) { bandcampFails++; }
 
       const patch: Record<string, unknown> = {
         beatport_url: beatport?.url || null,
@@ -242,6 +301,7 @@ Deno.serve(async (req) => {
       beatport_ok: !!tk.token,
       // Distinguish "checked, genuinely not on Bandcamp" from "Bandcamp didn't answer".
       bandcamp_ok: bandcampFails < tracks.length,
+      beatport_needs_setup: !!tk.needsSetup,
       error: tk.error || null,
     }), { headers: JH });
   } catch (e) {
