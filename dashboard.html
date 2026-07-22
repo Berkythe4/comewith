@@ -10198,7 +10198,13 @@ function raOpenFinalize() {
   const slugProp = pl.slug || (raSlugify(pl.name) + '-' + new Date().toISOString().slice(0, 10));
   const pageUrl = 'https://comewith.org/radio.html?s=' + slugProp;
   const descPub = pl.desc_public || pl.note || 'Every artist in this mix is playing NYC in the coming weeks — each track shows the date, venue and price of their show. Come dance.';
-  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}\n\n${tr.map((t, i) => `${i + 1}. ${t.artist_name || ''} — ${t.title}`).join('\n')}`;
+  // DELIBERATELY NO TRACKLIST on the public SoundCloud track (decision 2026-07-22).
+  // The tracklist is the reason to come to the site — that's where the dates,
+  // venues, prices, ticket links, saving and export live, and where people sign
+  // up. Printing it in the SoundCloud description gives it away and removes the
+  // reason to click through. The TEST push still carries the full list, because
+  // that one is private and only Keith reads it.
+  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\n\nEvery artist in this mix is playing NYC in the next couple of weeks.\nFull tracklist with dates, venues, door prices and tickets:\n${pageUrl}\n\nCome With — Brooklyn parties that give back.`;
   const mixDone = !!(pl.mix_sc_track_url || pl.mix_sc_track_id);
   openKpi('🚀 Finalize & go live', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${tr.length} tracks`, `
     <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-bottom:10px;">
@@ -10223,6 +10229,7 @@ function raOpenFinalize() {
       <div class="form-row"><label>Page description (shown on the episode page)</label>
         <textarea name="desc_public" class="modal-textarea" rows="3">${escapeHtml(descPub)}</textarea></div>
       <div class="form-row"><label>SoundCloud description (short — pushed to the mix track, links back to the page)</label>
+        <div class="kpi-hint" style="margin:2px 0 6px;">⚠ Keep the tracklist <strong>out</strong> of this. The tracklist is the reason to visit the site — dates, venues, ticket links, saving and export all live there, and that's where people sign up. Give it away here and there's no reason to click through.</div>
         <textarea name="desc_sc" class="modal-textarea" rows="7" style="font-family:monospace;font-size:.8rem;">${escapeHtml(descSc)}</textarea></div>
       <div class="form-row"><label>YouTube link (optional — until auto-posting lands in 1.1, paste the video URL if you posted one)</label>
         <input name="youtube_url" class="modal-input" value="${escapeHtml(pl.mix_youtube_url || '')}" placeholder="https://youtube.com/watch?v=…"></div>
