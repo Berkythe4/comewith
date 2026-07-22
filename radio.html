@@ -76,6 +76,31 @@
   .btn.primary{background:var(--lime);color:#180c12;border-color:var(--lime);font-weight:700}
   .btn.ghost{border-color:var(--line);color:var(--dim)}
   .btn+.btn{margin-top:8px}
+  .optin{display:flex;gap:9px;align-items:flex-start;margin:2px 0 14px;font-size:.85rem;color:var(--dim);cursor:pointer;line-height:1.45}
+  .optin input{margin-top:2px;width:17px;height:17px;accent-color:var(--lime);flex:0 0 auto}
+  .optin b{color:var(--cream);font-weight:600}
+  .fine{font-size:.78rem!important;color:var(--dim);margin:12px 0 0!important}
+  /* The guide is the one place we explain the account in plain words, so it gets
+     room to breathe and scrolls on short screens rather than clipping. */
+  .box.guide{max-width:560px;max-height:88vh;overflow:auto}
+  .steps{list-style:none;counter-reset:s;margin:4px 0 16px;padding:0}
+  .steps li{counter-increment:s;position:relative;padding:0 0 15px 44px}
+  .steps li::before{content:counter(s);position:absolute;left:0;top:-2px;width:29px;height:29px;border-radius:50%;background:var(--lime);color:#180c12;font-family:'Archivo';font-weight:900;font-size:.92rem;display:flex;align-items:center;justify-content:center}
+  .steps li b{display:block;font-size:1.02rem;margin-bottom:3px}
+  .steps li span{color:var(--dim);font-size:.9rem;line-height:1.5;display:block}
+  .guide-ml{border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:14px;font-size:.88rem;color:var(--dim)}
+  .guide-ml b{color:var(--cream)}
+  .guide-ml .btn{margin-top:10px}
+  .shows{border:1px solid var(--lime-dk);border-radius:12px;padding:12px 14px;margin:0 0 12px}
+  .shows h4{font-size:.95rem;margin-bottom:2px}
+  .shows .sh{display:flex;gap:10px;align-items:baseline;padding:7px 0;border-top:1px solid var(--line);font-size:.87rem;flex-wrap:wrap}
+  .shows .sh:first-of-type{border-top:none}
+  .shows .sh b{color:var(--cream)}
+  .shows .sh span{color:var(--dim);font-family:'DM Mono';font-size:.74rem}
+  .shows .sh a{color:var(--lime);margin-left:auto;white-space:nowrap}
+  .sortbar{display:flex;gap:6px;align-items:center;padding:8px 20px 0;flex-wrap:wrap}
+  .sortbar .mini{padding:5px 10px;font-size:.66rem}
+  .sortbar .mini.on{background:var(--lime);border-color:var(--lime);color:#180c12}
   .drawer{position:fixed;top:0;right:0;bottom:0;width:min(430px,94vw);background:var(--bg2);border-left:1px solid var(--line);z-index:90;transform:translateX(102%);transition:.25s;display:flex;flex-direction:column}
   .drawer.show{transform:none}
   .drawer .hd{display:flex;align-items:center;gap:10px;padding:18px 20px;border-bottom:1px solid var(--line)}
@@ -96,6 +121,9 @@
   <a class="brand" href="https://comewith.org">COME<b>·</b>WITH <span style="color:var(--lime)">RADIO</span></a>
   <div class="navr">
     <a class="chip" href="radio.html" id="allEps" style="display:none">📻 All episodes</a>
+    <!-- Always visible, signed in or out: the plain-English "what is this account
+         for" page. Before signup it's the pitch; after signup it's the manual. -->
+    <button class="chip" id="guideBtn" title="What a free account gets you">❔ What you get</button>
     <button class="chip" id="myBtn" style="display:none">♡ My playlist <span id="myCount"></span></button>
     <button class="chip primary" id="authBtn">Sign in</button>
   </div>
@@ -122,9 +150,33 @@
   <p id="authWhy">Free account: your listening history is saved, you can ♡ songs into your own playlist, and export any tracklist whenever you want.</p>
   <div id="authForm">
     <input type="email" id="authEmail" placeholder="you@email.com" autocomplete="email">
+    <!-- Come With brand segment ONLY. Dance Infusion is a separate list and must
+         never be opted into from here (brand delineation, see CLAUDE.md). The
+         subscribe fn is double opt-in, so nothing is added until they click the
+         confirm email — this box just asks. -->
+    <label class="optin"><input type="checkbox" id="authList" checked>
+      <span>Email me about new episodes and Come With parties. <b>No more than a few a month</b>, and one click unsubscribes.</span></label>
     <button class="btn primary" id="authSend">Email me a sign-in link</button>
     <p style="margin:10px 0 0;font-size:.8rem" id="authMsg"></p>
+    <p class="fine">We email you a link instead of a password. Nothing to remember, nothing to leak.</p>
   </div>
+</div></div>
+
+<!-- What you get: the always-available, plain-English guide -->
+<div class="ov" id="guideOv"><div class="box guide">
+  <button class="x" data-close>✕</button>
+  <h3 id="guideTitle">What a free account gets you</h3>
+  <p id="guideLede">Come With Radio is a monthly mix of artists who are about to play in New York. The account is free, takes one tap, and there's no password.</p>
+  <ol class="steps">
+    <li><b>♡ Tap the heart on any song</b><span>It goes into your playlist. That's the whole thing — no folders, no setup.</span></li>
+    <li><b>Your playlist is always here</b><span>Open <b>♡ My playlist</b> at the top of any page. Every song keeps its link to SoundCloud, so you can go play it, follow the artist, or buy it.</span></li>
+    <li><b>We tell you when your artists play New York</b><span>Save a song, and when that artist books a NYC show, it shows up in your playlist with the date, venue, price and ticket link.</span></li>
+    <li><b>Take it with you, anytime</b><span>Export your saved songs — or any episode's full tracklist — as a spreadsheet with BPM and key. Works in Rekordbox, Serato and Excel.</span></li>
+    <li><b>Sort it like a DJ</b><span>Order your saves by BPM or Camelot key when you're planning a set.</span></li>
+  </ol>
+  <div class="guide-ml" id="guideMl"></div>
+  <p class="fine">We never post anything, never share your email, and never charge for this. Unsubscribe or delete anytime.</p>
+  <button class="btn primary" id="guideGo">Get my free account</button>
 </div></div>
 
 <!-- Export nudge (signed-out) -->
@@ -138,13 +190,24 @@
 
 <!-- My playlist drawer -->
 <div class="drawer" id="drawer">
-  <div class="hd"><h3>♡ My playlist</h3><button class="mini" id="dExport">⬇ CSV</button><button class="mini" id="dClose">✕</button></div>
+  <div class="hd"><h3>♡ My playlist</h3><button class="mini" id="dClose">✕</button></div>
+  <div class="sortbar">
+    <span style="font-size:.7rem;color:var(--dim);font-family:'DM Mono'">Sort</span>
+    <button class="mini on" data-sort="recent">Recent</button>
+    <button class="mini" data-sort="artist">Artist</button>
+    <button class="mini" data-sort="bpm">BPM</button>
+    <button class="mini" data-sort="key">Key</button>
+  </div>
   <div class="list" id="dList"></div>
-  <div class="ft"><span style="font-size:.8rem;color:var(--dim)">Songs you ♡ from any episode land here.</span></div>
+  <div class="ft" style="flex-direction:column;align-items:stretch;gap:8px">
+    <div style="display:flex;gap:8px"><button class="mini" id="dExport" style="flex:1">⬇ Export CSV</button><button class="mini" id="dCopy" style="flex:1">🔗 Copy all links</button></div>
+    <span style="font-size:.78rem;color:var(--dim)">Songs you ♡ from any episode land here. Each keeps its SoundCloud link.</span>
+  </div>
 </div>
 
 <div class="nudge" id="nudge">
-  <span>🎧 Free account: listening history, your own playlist, exports.</span>
+  <span>🎧 Free account: ♡ save songs, export them, get told when those artists play NYC.</span>
+  <button class="chip" id="nudgeWhat" style="padding:6px 12px">What's this?</button>
   <button class="chip primary" id="nudgeGo" style="padding:6px 12px">Sign up</button>
   <button class="x" id="nudgeX" aria-label="Dismiss">✕</button>
 </div>
@@ -189,6 +252,9 @@ async function refreshAuth(){
   $('#authBtn').textContent=user?(user.email||'Account'):'Sign in';
   $('#authBtn').classList.toggle('primary',!user);
   $('#myBtn').style.display=user?'':'none';
+  // If the guide is open when auth flips (they just signed in), re-render it in
+  // place so it turns from a pitch into their manual without a reload.
+  if($('#guideOv').classList.contains('show'))renderGuide();
   if(user){await loadMine();if(station&&(station.slug||SLUG))logVisit();}
 }
 sb.auth.onAuthStateChange(()=>{refreshAuth();});
@@ -199,14 +265,57 @@ $('#authBtn').onclick=async()=>{
   if(!user)return openAuth();
   if(confirm('Sign out of Come With Radio?')){await sb.auth.signOut();saved=new Map();myPlaylist=null;render();toast('Signed out');}
 };
+/* The mailing list is SEPARATE from the account — signing in does not subscribe
+   you. Radio is a Come With property, so it only ever passes the `come_with`
+   brand segment; Dance Infusion is its own list and is never opted into here.
+   `subscribe` is double opt-in, so this only ever sends a confirm email. */
+async function joinList(email,source){
+  try{
+    const r=await fetch(CWURL+'/functions/v1/subscribe',{method:'POST',headers:{...H,'Content-Type':'application/json'},
+      body:JSON.stringify({email,segment:'come_with',source:source||'radio'})});
+    const j=await r.json().catch(()=>({}));
+    return r.ok&&!j.error;
+  }catch(_){return false;}
+}
 $('#authSend').onclick=async()=>{
   const email=$('#authEmail').value.trim();
   if(!email.includes('@')){$('#authMsg').textContent='Enter a valid email.';return;}
   $('#authSend').disabled=true;$('#authSend').textContent='Sending…';
+  const wantsList=$('#authList')&&$('#authList').checked;
   const {error}=await sb.auth.signInWithOtp({email,options:{emailRedirectTo:location.origin+location.pathname+location.search}});
+  // Fire the list signup regardless of what the auth call did — they asked for it,
+  // and it's confirmed separately. Never block sign-in on the mailing list.
+  if(wantsList)joinList(email,'radio-signup');
   $('#authSend').disabled=false;$('#authSend').textContent='Email me a sign-in link';
-  $('#authMsg').textContent=error?('Hmm: '+error.message):'Check your inbox — tap the link to finish signing in. ✉️';
+  $('#authMsg').textContent=error?('Hmm: '+error.message)
+    :('Check your inbox — tap the link to finish signing in. ✉️'+(wantsList?' You\'ll get a second email to confirm the mailing list.':''));
 };
+
+/* ---------- The guide ---------- */
+// Same panel before and after signup, but it re-reads as a manual once you're in.
+function renderGuide(){
+  const inUser=!!user;
+  $('#guideTitle').textContent=inUser?'Your account — what you can do':'What a free account gets you';
+  $('#guideLede').textContent=inUser
+    ?'You\'re signed in'+(user.email?' as '+user.email:'')+'. Here\'s everything this account does — this page is always in the menu if you forget.'
+    :'Come With Radio is a monthly mix of artists who are about to play in New York. The account is free, takes one tap, and there\'s no password.';
+  $('#guideMl').innerHTML=inUser
+    ?`<b>✉️ Come With emails</b><br>New episodes and party announcements — a few a month, never more. Dance Infusion has its own separate list.
+      <button class="btn ghost" id="guideJoin">Add me to the Come With list</button>`
+    :`<b>✉️ You can also get the emails</b><br>New episodes and party announcements — a few a month. There's a checkbox when you sign up, and you can add it later from here.`;
+  $('#guideGo').style.display=inUser?'none':'';
+  const j=$('#guideJoin');
+  if(j)j.onclick=async()=>{
+    const email=user&&user.email;if(!email)return;
+    j.disabled=true;j.textContent='Sending…';
+    const ok=await joinList(email,'radio-guide');
+    j.textContent=ok?'✓ Check your email to confirm':'Couldn\'t do that — try again later';
+    if(ok)toast('Almost there — confirm it from your inbox');
+  };
+}
+function openGuide(){renderGuide();$('#guideOv').classList.add('show');}
+$('#guideBtn').onclick=openGuide;
+$('#guideGo').onclick=()=>{$('#guideOv').classList.remove('show');openAuth();};
 
 /* ---------- Personal playlist ---------- */
 async function loadMine(){
@@ -241,15 +350,80 @@ async function toggleSave(t){
   $('#myCount').textContent=saved.size?('('+saved.size+')'):'';
   render();renderDrawer();
 }
-function renderDrawer(){
+/* Camelot "8A"/"11B" sorts as a number + letter, not as text — otherwise 10A
+   lands between 1A and 2A and the harmonic ordering is useless. */
+function camelotRank(c){const m=String(c||'').match(/^(\d{1,2})\s*([AB])$/i);return m?Number(m[1])*2+(m[2].toUpperCase()==='B'?1:0):999;}
+let dSort='recent',myShowsHtml='';
+function sortedSaves(){
   const items=[...saved.values()];
-  $('#dList').innerHTML=items.length?items.map(t=>`<div class="tk" style="padding:10px 0">
-      <div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>
-      <div style="flex:1;min-width:0"><div class="tt" style="font-size:.94rem">${esc(t.title||'')}</div><div class="who" style="font-size:.84rem">${esc(t.artist_name||'')}${t.station_name?` · <span style="font-family:'DM Mono';font-size:.7rem">${esc(t.station_name)}</span>`:''}</div></div>
-      <div class="btns"><button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title||'')}">▶</button><button class="mini" data-unsave="${esc(t.permalink_url)}">✕</button></div>
-    </div>`).join(''):'<div class="state" style="padding:30px 0">Nothing saved yet — tap ♡ on any track.</div>';
+  if(dSort==='artist')return items.sort((a,b)=>String(a.artist_name||'').localeCompare(String(b.artist_name||''))||String(a.title||'').localeCompare(String(b.title||'')));
+  if(dSort==='bpm')return items.sort((a,b)=>(a.bpm||9999)-(b.bpm||9999));
+  if(dSort==='key')return items.sort((a,b)=>camelotRank(a.camelot)-camelotRank(b.camelot)||(a.bpm||0)-(b.bpm||0));
+  return items.sort((a,b)=>String(b.added_at||'').localeCompare(String(a.added_at||'')));
 }
-$('#myBtn').onclick=()=>{renderDrawer();$('#drawer').classList.add('show');};
+/* One tap for the whole episode instead of twenty. Skips what's already saved and
+   anything with no public link (bought/promo tracks live only in the mix — the
+   saved-playlist row keys on permalink_url, which is NOT NULL). */
+async function saveAll(){
+  if(!user){openAuth('Sign up free to save this whole episode to your playlist — then export it whenever you want.');return;}
+  const pl=await ensureMyPlaylist();if(!pl)return;
+  const todo=tracks.filter(t=>t.permalink_url&&!saved.has(t.permalink_url));
+  if(!todo.length){toast(tracks.some(t=>t.permalink_url)?'Already saved every track here ♥':'Nothing here can be saved');return;}
+  const btn=$('#saveAllBtn');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  const rows=todo.map(t=>({playlist_id:pl.id,title:t.title,artist_name:t.artist_name,permalink_url:t.permalink_url,artwork_url:t.artwork_url||null,
+    bpm:t.bpm||null,song_key:t.song_key||null,camelot:t.camelot||null,station_slug:station?.slug||null,
+    station_name:station?(station.station_no!=null?'EP '+station.station_no+' — '+station.name:station.name):null}));
+  const {error}=await sb.from('listener_playlist_tracks').upsert(rows,{onConflict:'playlist_id,permalink_url',ignoreDuplicates:true});
+  if(btn){btn.disabled=false;btn.textContent='♡ Save all';}
+  if(error){toast('Could not save: '+error.message);return;}
+  await loadMine();
+  toast('♡ Saved '+todo.length+' track'+(todo.length===1?'':'s')+' to your playlist');
+}
+function renderDrawer(){
+  const items=sortedSaves();
+  const meta=(t)=>[t.bpm?t.bpm+' BPM':'',t.camelot||t.song_key||''].filter(Boolean).join(' · ');
+  $('#dList').innerHTML=(myShowsHtml||'')+(items.length?items.map(t=>`<div class="tk" style="padding:10px 0">
+      <div class="art" ${t.artwork_url?`style="background-image:url('${esc(t.artwork_url)}')"`:''}></div>
+      <div style="flex:1;min-width:0"><div class="tt" style="font-size:.94rem">${esc(t.title||'')}</div><div class="who" style="font-size:.84rem">${esc(t.artist_name||'')}${t.station_name?` · <span style="font-family:'DM Mono';font-size:.7rem">${esc(t.station_name)}</span>`:''}</div>${meta(t)?`<div class="meta">${esc(meta(t))}</div>`:''}</div>
+      <div class="btns">${t.permalink_url?`<button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title||'')}">▶</button>
+        <a class="mini" href="${esc(t.permalink_url)}" target="_blank" rel="noopener" title="Open this song on SoundCloud">☁</a>`:''}<button class="mini" data-unsave="${esc(t.permalink_url)}">✕</button></div>
+    </div>`).join(''):'<div class="state" style="padding:30px 0">Nothing saved yet — tap ♡ on any track.</div>');
+}
+document.querySelectorAll('[data-sort]').forEach(b=>b.onclick=()=>{
+  dSort=b.dataset.sort;
+  document.querySelectorAll('[data-sort]').forEach(x=>x.classList.toggle('on',x===b));
+  renderDrawer();
+});
+/* "The artists you saved are playing NYC soon" — the bit that turns a listen into
+   a ticket. Served by listener-shows so ra_artists stays admin-only; failure is
+   silent because it's a bonus, never the reason the drawer opened. */
+async function loadMyShows(){
+  myShowsHtml='';
+  if(!user||!saved.size)return;
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    if(!session)return;
+    const r=await fetch(CWURL+'/functions/v1/listener-shows',{method:'POST',
+      headers:{apikey:CWKEY,Authorization:'Bearer '+session.access_token,'Content-Type':'application/json'},body:'{}'});
+    if(!r.ok)return;
+    const j=await r.json();
+    const shows=(j.shows||[]).slice(0,8);
+    if(!shows.length)return;
+    myShowsHtml=`<div class="shows"><h4>🎟 Playing New York soon</h4>
+      <p style="font-size:.8rem;color:var(--dim);margin:0 0 4px">Artists you saved, with a show coming up.</p>
+      ${shows.map(s=>`<div class="sh"><b>${esc(s.artist)}</b> <span>${esc(fmtShow(s.date))}${s.venue?' · '+esc(s.venue):''}${s.cost?' · '+esc(s.cost):''}</span>
+        ${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">Tickets ↗</a>`:''}</div>`).join('')}</div>`;
+  }catch(_){/* bonus feature — never surface an error for it */}
+}
+$('#myBtn').onclick=async()=>{
+  renderDrawer();$('#drawer').classList.add('show');
+  await loadMyShows();renderDrawer();
+};
+$('#dCopy').onclick=()=>{
+  const links=sortedSaves().map(t=>t.permalink_url).filter(Boolean);
+  if(!links.length){toast('No links to copy yet');return;}
+  navigator.clipboard.writeText(links.join('\n')).then(()=>toast('Copied '+links.length+' links'),()=>toast('Copy failed'));
+};
 $('#dClose').onclick=()=>$('#drawer').classList.remove('show');
 $('#dExport').onclick=()=>{
   const items=[...saved.values()];
@@ -280,6 +454,7 @@ function maybeNudge(){
 }
 $('#nudgeX').onclick=()=>{localStorage.setItem('cwr_nudge','1');$('#nudge').classList.remove('show');};
 $('#nudgeGo').onclick=()=>{localStorage.setItem('cwr_nudge','1');$('#nudge').classList.remove('show');openAuth();};
+$('#nudgeWhat').onclick=()=>{$('#nudge').classList.remove('show');openGuide();};
 
 /* ---------- Views ---------- */
 async function loadHub(){
@@ -313,7 +488,7 @@ function render(){
   const embedUrl=station.mix_sc_track_url;
   $('#root').innerHTML=
     (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
-    `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
+    `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="saveAllBtn">♡ Save all</button><button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
     (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
     `<div class="label" style="margin:8px 0 2px">Tracklist · every artist is playing NYC soon</div>`+
     '<div>'+tr.map((t,i)=>{
@@ -337,6 +512,7 @@ function render(){
         </div></div>`;
     }).join('')+'</div>';
   $('#csvBtn').onclick=()=>{if(user){episodeCsv();}else{$('#expOv').classList.add('show');}};
+  $('#saveAllBtn').onclick=saveAll;
   $('#shareBtn').onclick=()=>{const u=station.slug?(location.origin+location.pathname+'?s='+station.slug):location.href;navigator.clipboard.writeText(u).then(()=>toast('Link copied'),()=>toast('Copy failed'));};
   $('#root').querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>play(b.dataset.play,b.dataset.title));
   $('#root').querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>toggleSave(tracks[Number(b.dataset.save)]));
