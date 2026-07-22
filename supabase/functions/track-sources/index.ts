@@ -175,20 +175,36 @@ async function bpSearch(token: string, title: string, artist: string) {
     const j = await r.json();
     return (j.tracks || j.results || []) as any[];
   };
+  const rank = (cands: any[]) => {
+    let best: any = null, bestScore = 0;
+    for (const c of cands) {
+      const cTitle = [c.name, c.mix_name && !/^original( mix)?$/i.test(c.mix_name) ? `(${c.mix_name})` : ""].filter(Boolean).join(" ");
+      const cArtist = (c.artists || []).map((a: any) => a.name).join(" ");
+      const s = score(title, artist, cTitle, cArtist);
+      if (s > bestScore) { bestScore = s; best = { ...c, _title: cTitle, _artist: cArtist }; }
+    }
+    return { best, bestScore };
+  };
+
   let cands: any[] = [];
   try { cands = await attempt(`${artist} ${title}`.trim()); } catch (_) { /* fall through */ }
-  if (!cands.length) { try { cands = await attempt(title); } catch (_) { /* give up */ } }
-
-  let best: any = null, bestScore = 0;
-  for (const c of cands) {
-    const cTitle = [c.name, c.mix_name && !/^original( mix)?$/i.test(c.mix_name) ? `(${c.mix_name})` : ""].filter(Boolean).join(" ");
-    const cArtist = (c.artists || []).map((a: any) => a.name).join(" ");
-    const s = score(title, artist, cTitle, cArtist);
-    if (s > bestScore) { bestScore = s; best = { ...c, _title: cTitle, _artist: cArtist }; }
+  let { best, bestScore } = rank(cands);
+  // Retry on the TITLE ALONE when the combined query produced nothing good — not
+  // just when it produced nothing at all. Searching "Deeper Purpose Cigarettes"
+  // returns "Liquor & Cigarettes" and a track literally named "Deeper Purpose";
+  // both are junk, so the old `if (!cands.length)` guard never fired and the real
+  // release was never looked for. The artist still decides the winner.
+  if (bestScore < MIN_SCORE) {
+    try {
+      const alt = rank(await attempt(title));
+      if (alt.bestScore > bestScore) ({ best, bestScore } = alt);
+    } catch (_) { /* keep what we have */ }
   }
   if (!best || bestScore < MIN_SCORE) return null;
   const k = bpKey(best.key);
-  const price = best.price?.display || (best.price?.value != null ? `$${(best.price.value / 100).toFixed(2)}` : null);
+  // price.value is already in DOLLARS (1.49), not cents — dividing by 100 turned
+  // every fallback price into "$0.01". Verified against the live API.
+  const price = best.price?.display || (best.price?.value != null ? `$${Number(best.price.value).toFixed(2)}` : null);
   return {
     url: best.slug && best.id ? `https://www.beatport.com/track/${best.slug}/${best.id}` : null,
     title: best._title, artist: best._artist,
