@@ -127,9 +127,11 @@ function jwtExp(token: string): number | null {
     return typeof json.exp === "number" ? json.exp : null;
   } catch (_) { return null; }
 }
-async function storePastedToken(admin: any, token: string) {
+// Returns the write error instead of swallowing it — a silent upsert failure here
+// looks exactly like "the token never arrived", which cost real debugging time.
+async function storePastedToken(admin: any, token: string): Promise<string | null> {
   const exp = jwtExp(token);
-  await admin.from("beatport_oauth").upsert({
+  const { error } = await admin.from("beatport_oauth").upsert({
     id: "singleton",
     access_token: token,
     // Trust the token's own expiry; fall back to a conservative 9 minutes.
@@ -137,6 +139,7 @@ async function storePastedToken(admin: any, token: string) {
     last_error: null,
     updated_at: new Date().toISOString(),
   });
+  return error ? (error.message || String(error)) : null;
 }
 
 // `needsSetup` distinguishes "Beatport was never connected" from "the token chain
@@ -295,17 +298,41 @@ Deno.serve(async (req) => {
     if (!playlistId) return err(400, "playlist_id required");
     const applyBpmKey = !!b.apply_bpm_key;
     const limit = Math.min(Number(b.limit) || 60, 60);
-    // A token pasted from the browser this run — cached until its own exp.
-    const pasted = (b.access_token || "").toString().trim().replace(/^Bearer\s+/i, "");
+    // A token pasted from the browser — cached until its own exp.
+    const pasted = (b.access_token || "").toString().trim().replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "");
+    let storeErr: string | null = null;
     if (pasted) {
       const exp = jwtExp(pasted);
       if (exp && exp * 1000 < Date.now()) {
         return new Response(JSON.stringify({
-          results: [], applied: 0, beatport_ok: false, bandcamp_ok: true, beatport_expired: true,
+          token_received: true, beatport_expired: true, beatport_ok: false,
+          expired_ago_s: Math.round(Date.now() / 1000 - exp),
           error: "That Beatport token had already expired when it arrived — they only last 10 minutes. Grab a fresh one and paste it again.",
         }), { headers: JH });
       }
-      await storePastedToken(admin, pasted);
+      storeErr = await storePastedToken(admin, pasted);
+    }
+
+    // Explicit "save + verify this token" step. Separating it from the scan means
+    // you get an unambiguous answer about the TOKEN before waiting on 25 tracks.
+    if (b.action === "save_token") {
+      if (!pasted) return new Response(JSON.stringify({ error: "No token arrived — the paste box was empty by the time it reached the server." }), { headers: JH });
+      if (storeErr) return new Response(JSON.stringify({ error: "Could not save the token: " + storeErr }), { headers: JH });
+      const exp = jwtExp(pasted);
+      // Prove it actually works rather than trusting that it parsed.
+      let live = false, detail = "";
+      try {
+        const r = await fetch(`${BP_SEARCH}?q=test&type=tracks&per_page=1`, {
+          headers: { Authorization: `Bearer ${pasted}`, "User-Agent": UA },
+        });
+        live = r.ok;
+        if (!r.ok) detail = `Beatport rejected it (HTTP ${r.status}).`;
+      } catch (e) { detail = e instanceof Error ? e.message : String(e); }
+      return new Response(JSON.stringify({
+        saved: true, live,
+        expires_in_s: exp ? Math.max(0, Math.round(exp - Date.now() / 1000)) : null,
+        error: live ? null : (detail || "Beatport would not accept that token."),
+      }), { headers: JH });
     }
 
     // Cheap "do we have a usable Beatport token right now?" check, so the
