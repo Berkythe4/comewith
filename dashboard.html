@@ -858,6 +858,28 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .hub-mini.danger:hover { border-color: var(--red); color: var(--red); }
 .hub-mini.on { background: var(--green, #2E8E72); color: #fff; border-color: var(--green, #2E8E72); }
 .hub-mini:disabled { opacity: 0.4; cursor: not-allowed; }
+/* Station builder action groups. The buttons ARE the pipeline: each group is one
+   stage of making an episode, in the order you actually do them, colour-coded and
+   numbered. Replaces the separate ①②③ chip strip that only described the stages
+   while the buttons sat in an unordered pile underneath. */
+.ra-grp { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px 4px 6px;
+  border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.ra-grp > .ra-grp-l { font-family: 'DM Mono', monospace; font-size: .62rem; letter-spacing: .1em;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 999px; white-space: nowrap; }
+.ra-grp[data-grp="build"]   { border-color: rgba(125,184,255,.4); }
+.ra-grp[data-grp="build"]   > .ra-grp-l { background: var(--blue-bg);  color: var(--blue); }
+.ra-grp[data-grp="arrange"] { border-color: rgba(233,185,73,.4); }
+.ra-grp[data-grp="arrange"] > .ra-grp-l { background: var(--amber-bg); color: var(--amber); }
+.ra-grp[data-grp="check"]   { border-color: var(--border-strong); }
+.ra-grp[data-grp="check"]   > .ra-grp-l { background: var(--surface-2); color: var(--mid); }
+.ra-grp[data-grp="release"] { border-color: rgba(155,214,74,.5); }
+.ra-grp[data-grp="release"] > .ra-grp-l { background: var(--green-bg); color: var(--green); }
+.ra-grp .hub-btn, .ra-grp .hub-mini { font-size: .72rem; padding: 6px 10px; }
+/* Done-stage tick, so the group row doubles as progress. */
+.ra-grp.done > .ra-grp-l::after { content: ' ✓'; }
+/* Destructive actions live apart from everything else — "Clear" used to sit
+   immediately beside "Go live", which is a bad place for "delete every song". */
+.ra-danger { margin-left: 14px; padding-left: 14px; border-left: 1px dashed var(--border-strong); }
 /* Team management panel */
 .team-card { border: 1px solid var(--border); padding: 12px 14px; margin-top: 12px; }
 .team-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
@@ -9169,13 +9191,10 @@ function raRenderPlaylist() {
   // week's station) → ③ attach the recorded mix, write descriptions, GO LIVE.
   // The old "reorder on SoundCloud + sync back" path still exists (↺ button) but
   // Rekordbox is the real arrangement tool now — SoundCloud isn't record-quality.
-  const stepStyle = (done) => `font-family:'DM Mono',monospace;font-size:.72rem;padding:3px 9px;border-radius:999px;border:1px solid ${done ? 'var(--green,#1f7a1f)' : 'var(--border-strong)'};color:${done ? 'var(--green,#1f7a1f)' : 'var(--mid,#888)'};`;
+  // NOTE: the separate ①②③ chip strip that used to live here is gone — it only
+  // described the stages while the buttons sat in an unordered pile below it.
+  // The grouped action row further down IS the pipeline now.
   const arranged = tracks.some(t => t.source && t.source !== 'soundcloud');
-  const pipeline = isWorking && tracks.length ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-      <span style="${stepStyle(tracks.length > 0)}">✓ ① Build the tracklist</span><span class="li-sub">→</span>
-      <span style="${stepStyle(arranged)}">${arranged ? '✓' : '②'} Buy · arrange in Rekordbox · import order</span><span class="li-sub">→</span>
-      <span style="${stepStyle(pl.status === 'testing')}">${pl.status === 'testing' ? '✓ Mix linked' : '③ Mix'} · go live</span>
-    </div>` : '';
   const liveLinks = pl.status === 'live' ? `<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       ${pl.slug ? `<a class="hub-mini" href="${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(pl.slug)}" target="_blank">🌐 Episode page ↗</a>` : ''}
       ${pl.mix_sc_track_url ? `<a class="hub-mini" href="${escapeHtml(pl.mix_sc_track_url)}" target="_blank">☁ Mix on SoundCloud ↗</a>` : ''}
@@ -9183,20 +9202,30 @@ function raRenderPlaylist() {
       ${pl.published ? '<button class="hub-mini" data-ra-unpub title="Hide the public episode page (SoundCloud is untouched)">🙈 Unpublish page</button>' : '<button class="hub-mini" data-ra-repub>👁 Publish page</button>'}
       <span class="li-sub">${pl.published_at ? 'Published ' + fmtDate(pl.published_at) : ''}</span>
     </div>` : '';
+  // Grouped by the order you actually work: gather songs → put them in order →
+  // look it over → release. Each group is colour-coded and ticks when done, so
+  // this row replaces the old separate ①②③ description strip.
+  const has = tracks.length > 0;
+  const grp = (key, n, label, done, inner) => inner.trim()
+    ? `<span class="ra-grp${done ? ' done' : ''}" data-grp="${key}"><span class="ra-grp-l">${n} ${label}</span>${inner}</span>` : '';
   const actions = isWorking ? `
-        <button class="hub-btn" data-ra-rekordbox title="Step ② — drop your Rekordbox playlist export here to put the station in the order you actually arranged, pull BPM/key across, and add any bought songs that aren't in here yet">🎛 Import Rekordbox order</button>
+      ${grp('build', '①', 'Gather songs', has, `
         <button class="hub-btn ghost" data-ra-addmanual title="Add a song by hand — bought on Beatport, a promo, or anything not on SoundCloud">＋ Add song</button>
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-sources title="Check every track against Beatport and Bandcamp — where you can buy it, what it costs, and fill in any missing BPM/key">🛒 Where to buy</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}
-        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Legacy path: pull your latest SoundCloud order back into the tool (after you reorder it there). Songs you removed there are logged as passed + carried to next week.">↺ Sync order from SoundCloud</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-refreshshows title="Re-match every track to the latest RA/Ticketmaster pull — fills in missing show dates, venues, prices and genres (also fixes sync-added and carried tracks, which start blank)">↻ Show info</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-preview>🌐 Preview page</button>' : ''}
-        ${tracks.length ? '<button class="hub-btn ghost" data-ra-clearpl>Clear</button>' : ''}
-        <button class="hub-btn" data-ra-export title="Step ① — push this to a private playlist in your SoundCloud for test listening">${exportLabel}</button>
-        ${tracks.length ? '<button class="hub-btn" data-ra-finalize style="background:var(--green,#1f7a1f);color:#fff;border-color:var(--green,#1f7a1f);" title="Step ③ — attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`
-    : `${tracks.length ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
-       ${tracks.length ? '<button class="hub-btn ghost" data-ra-publish>📋 Publish tracklist</button>' : ''}`;
+        ${has ? '<button class="hub-btn ghost" data-ra-sources title="Check every track against Beatport and Bandcamp — where you can buy it, what it costs, and fill in any missing BPM/key. Shows the last results and a running total.">🛒 Where to buy</button>' : ''}`)}
+      ${grp('arrange', '②', 'Put in order', arranged, `
+        <button class="hub-btn ghost" data-ra-export title="Push this to a private playlist in your SoundCloud for a first listen-through">${exportLabel}</button>
+        ${pl.sc_playlist_url ? '<button class="hub-btn ghost" data-ra-sync title="Pull your latest SoundCloud order back in, after you reorder it there. Songs you removed there are logged as passed + carried to next week.">↺ Sync from SoundCloud</button>' : ''}
+        ${has ? '<button class="hub-btn" data-ra-rekordbox title="Drop your Rekordbox playlist export here to put the station in the order you actually arranged, pull BPM/key across, and add any bought songs that aren\'t in here yet">🎛 Import Rekordbox order</button>' : ''}`)}
+      ${grp('check', '③', 'Check it', false, `
+        ${has ? '<button class="hub-btn ghost" data-ra-playstation title="Play the station straight through, in order">▶ Play station</button>' : ''}
+        ${has ? '<button class="hub-btn ghost" data-ra-refreshshows title="Re-match every track to the latest RA/Ticketmaster pull — fills in missing show dates, venues, prices and genres (also fixes sync-added and carried tracks, which start blank)">↻ Show info</button>' : ''}
+        ${has ? '<button class="hub-btn ghost" data-ra-preview title="See the public episode page exactly as a listener will">🌐 Preview page</button>' : ''}
+        ${has ? '<button class="hub-btn ghost" data-ra-publish title="Copy the tracklist as text — every song plus where that artist plays next. For your caption, the SoundCloud description, or anywhere you want to share it.">📋 Copy tracklist text</button>' : ''}`)}
+      ${grp('release', '④', 'Release', pl.status === 'testing', `
+        ${has ? '<button class="hub-btn" data-ra-finalize style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`)}
+      ${has ? '<span class="ra-danger"><button class="hub-mini" data-ra-clearpl title="Remove every song from this station. They are logged as passed and carried into next week.">🗑 Clear all songs</button></span>' : ''}`
+    : `${has ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
+       ${has ? '<button class="hub-btn ghost" data-ra-publish title="Copy the tracklist as text — every song plus where that artist plays next.">📋 Copy tracklist text</button>' : ''}`;
   // Collapsible: default collapsed so the searchable artist list sits right
   // under the sticky filters. Click the bar (or chevron) to open the full
   // builder — adding tracks from artist cards works either way.
@@ -9224,9 +9253,11 @@ function raRenderPlaylist() {
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
       <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
       ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
-      <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">${actions}</span>
     </div>
-    ${pipeline}${liveLinks}
+    <!-- Actions get their own full-width row: squeezed onto the end of the header
+         the groups wrapped into an unreadable ribbon. -->
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">${actions}</div>
+    ${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
       <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
@@ -9332,8 +9363,8 @@ function raPublishTracklist() {
   const tr = raState.playlist.tracks || [];
   if (!tr.length) { toast('Add some songs first', 'err'); return; }
   const text = raFmtTracklist();
-  openKpi('Publish tracklist', `${tr.length} songs · with show date, venue & price`, `
-    <div class="kpi-hint">Copy this to share the station as a gig guide — each track links to the song and shows where that artist is playing next. It's also saved as the SoundCloud playlist description when you export.</div>
+  openKpi('📋 Copy tracklist text', `${tr.length} songs · with show date, venue & price`, `
+    <div class="kpi-hint">The whole tracklist as plain text, ready to paste — an Instagram caption, the SoundCloud description, a newsletter, wherever. Each song links out, and each artist shows where they play next, so it reads as a gig guide rather than just a list. <strong>This doesn't publish anything</strong> — it only copies.</div>
     <textarea class="modal-textarea" id="raTracklistTa" rows="14" readonly style="font-family:monospace;font-size:.82rem;">${escapeHtml(text)}</textarea>
     <div style="margin-top:10px;"><button type="button" class="hub-btn" data-ra-copytracklist>📋 Copy tracklist</button></div>`,
     () => closeKpi(), 'Close');
