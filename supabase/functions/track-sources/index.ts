@@ -114,6 +114,31 @@ function searchTerms(title: string, artist: string) {
 }
 
 // ---- Beatport ---------------------------------------------------------------
+// Beatport access tokens live TEN MINUTES and the refresh token is not reachable
+// from the browser (not in localStorage, and their site refreshes via a cookie JS
+// can't read). So the workable model is: paste a fresh access token when you want
+// to run a check. We cache it until its own `exp` so repeat runs inside the same
+// ten minutes don't need another paste, and we never persist anything longer-lived.
+function jwtExp(token: string): number | null {
+  try {
+    const p = token.split(".")[1];
+    if (!p) return null;
+    const json = JSON.parse(atob(p.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((p.length + 3) % 4)));
+    return typeof json.exp === "number" ? json.exp : null;
+  } catch (_) { return null; }
+}
+async function storePastedToken(admin: any, token: string) {
+  const exp = jwtExp(token);
+  await admin.from("beatport_oauth").upsert({
+    id: "singleton",
+    access_token: token,
+    // Trust the token's own expiry; fall back to a conservative 9 minutes.
+    expires_at: new Date((exp ? exp * 1000 : Date.now() + 9 * 60_000)).toISOString(),
+    last_error: null,
+    updated_at: new Date().toISOString(),
+  });
+}
+
 // `needsSetup` distinguishes "Beatport was never connected" from "the token chain
 // broke" — they read very differently to the person clicking the button, and
 // telling someone to RE-paste a token they never pasted is just confusing.
@@ -270,6 +295,18 @@ Deno.serve(async (req) => {
     if (!playlistId) return err(400, "playlist_id required");
     const applyBpmKey = !!b.apply_bpm_key;
     const limit = Math.min(Number(b.limit) || 60, 60);
+    // A token pasted from the browser this run — cached until its own exp.
+    const pasted = (b.access_token || "").toString().trim().replace(/^Bearer\s+/i, "");
+    if (pasted) {
+      const exp = jwtExp(pasted);
+      if (exp && exp * 1000 < Date.now()) {
+        return new Response(JSON.stringify({
+          results: [], applied: 0, beatport_ok: false, bandcamp_ok: true, beatport_expired: true,
+          error: "That Beatport token had already expired when it arrived — they only last 10 minutes. Grab a fresh one and paste it again.",
+        }), { headers: JH });
+      }
+      await storePastedToken(admin, pasted);
+    }
 
     const { data: tracks } = await admin.from("sc_playlist_tracks")
       .select("id, title, artist_name, bpm, song_key, camelot")

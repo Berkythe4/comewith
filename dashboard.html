@@ -8906,7 +8906,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -8945,6 +8945,13 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-rekordbox]')) { raOpenImport(); return; }
   if (t.closest('[data-ra-addmanual]')) { raOpenTrackEdit(null); return; }
   if (t.closest('[data-ra-sources]')) { raCheckSources(); return; }
+  if (t.closest('[data-ra-bptoken]')) {
+    const el = document.querySelector('#kpiModalBody [name="bp_token"]');
+    const v = (el && el.value || '').trim();
+    if (!v) { toast('Paste the token first', 'err'); return; }
+    raCheckSources(v);
+    return;
+  }
   const et = t.closest('[data-ra-edittrack]'); if (et) { raOpenTrackEdit(et.dataset.raEdittrack); return; }
   if (t.closest('[data-ra-playstation]')) { raPlayStation(); return; }
   if (t.closest('[data-ra-copytracks]')) { raCopyTracks(); return; }
@@ -9664,14 +9671,35 @@ async function raApplyImport() {
 // API (confident matches + metadata); Bandcamp has no official API, so it's
 // best-effort and reported as "couldn't reach" rather than "not available" when
 // their endpoint doesn't answer — a scrape outage must never read as a verdict.
-async function raCheckSources() {
+// Beatport access tokens last TEN MINUTES and the refresh token isn't reachable
+// from the browser, so there's nothing durable to store. Instead: grab a fresh
+// token in one click, paste, run. The server caches it until its own expiry, so
+// repeat runs in the same ten minutes don't ask again. Nothing long-lived is kept.
+const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var t=JSON.parse(v).accessToken;navigator.clipboard.writeText(t);alert('Beatport token copied \\u2014 paste it into the Come With dashboard now (it expires in 10 minutes).')}catch(e){alert('Could not read the token: '+e.message)}})()";
+function raBeatportPasteBox(msg) {
+  return `<div style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;margin-bottom:10px;">
+    <strong style="font-size:.86rem;">🔑 Beatport token</strong>
+    <div class="kpi-hint" style="margin:4px 0 8px;">${msg} Beatport tokens expire after <strong>10 minutes</strong>, so you grab a fresh one each time you do a buy run — there's nothing to set up and no password stored anywhere.</div>
+    <ol class="kpi-hint" style="margin:0 0 8px 16px;padding:0;">
+      <li>Drag this to your bookmarks bar once → <a href="${escapeHtml(RA_BP_GRAB)}" onclick="return false;" style="border:1px solid var(--border-strong);border-radius:5px;padding:1px 7px;cursor:grab;">🔑 Copy Beatport token</a></li>
+      <li>Open <a href="https://www.beatport.com" target="_blank" rel="noopener">beatport.com</a> (logged in) and click that bookmark — it copies the token.</li>
+      <li>Paste it below and run.</li>
+    </ol>
+    <div class="kpi-hint" style="margin:0 0 8px;">No bookmarks bar? On beatport.com open the console (right-click → Inspect → Console) and run:<br>
+      <code style="user-select:all;">copy(JSON.parse(localStorage['token-refresh-result']).accessToken)</code></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <input name="bp_token" class="modal-input" placeholder="Paste the Beatport token here" style="flex:1 1 240px;font-family:monospace;font-size:.72rem;">
+      <button type="button" class="hub-btn" data-ra-bptoken>Run with this token</button>
+    </div></div>`;
+}
+async function raCheckSources(accessToken) {
   const pl = raState.playlist; const n = (pl.tracks || []).length;
   if (!n) return;
   openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name} · checking ${n} track${n === 1 ? '' : 's'}`, `
     <div class="kpi-hint" style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Asking Beatport and Bandcamp about each track — about ${Math.max(1, Math.round(n * 0.6))}s. Missing BPM/key gets filled in from Beatport where we don't already have it (your Rekordbox values are never overwritten).</div>`,
     () => closeKpi(), 'Close');
   try {
-    const { data, error } = await sb.functions.invoke('track-sources', { body: { playlist_id: pl.id, apply_bpm_key: true } });
+    const { data, error } = await sb.functions.invoke('track-sources', { body: { playlist_id: pl.id, apply_bpm_key: true, access_token: accessToken || undefined } });
     if (error) throw new Error((await fnErrorDetail(error)) || error.message);
     if (data?.error && !data.results?.length) throw new Error(data.error);
     const res = data.results || [];
@@ -9688,8 +9716,9 @@ async function raCheckSources() {
         <div class="li-sub">${escapeHtml(r.artist || '')} · ${bits.join(' · ')}${meta}</div></div></div>`;
     }).join('');
     openKpi('🛒 Where to buy', `${onBp} on Beatport · ${onBc} on Bandcamp · ${res.length - res.filter(r => r.beatport || r.bandcamp).length} not found`, `
-      ${data.beatport_needs_setup ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">🔌 <strong>Beatport isn't connected yet</strong> — so there are no prices or BPM/key below, only Bandcamp. To connect it (one time, ~1 min): log in at <a href="https://www.beatport.com" target="_blank" rel="noopener">beatport.com</a> → DevTools (F12) → <strong>Network</strong> tab → filter <code>token</code> → click the <code>/v4/auth/o/token/</code> request → copy the whole JSON response → send it to Claude and it gets set as a project secret.</div>`
-        : data.error ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Beatport: ${escapeHtml(data.error)} — Bandcamp results below are unaffected. The saved token has stopped working; grab a fresh one the same way you set it up.</div>` : ''}
+      ${!data.beatport_ok ? raBeatportPasteBox(data.beatport_expired
+        ? '⚠ That token had already expired when it arrived — grab a fresh one.'
+        : 'No Beatport prices or BPM/key below, only Bandcamp — paste a token and run again to get them.') : ''}
       ${data.bandcamp_ok === false ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Bandcamp didn't answer (they have no official API, so this happens). "Not found" below reflects Beatport only — it does <strong>not</strong> mean the song isn't on Bandcamp.</div>` : ''}
       <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}${data.applied ? `Filled in BPM/key on <strong>${data.applied}</strong> track${data.applied === 1 ? '' : 's'} that didn't have it. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
       <div class="hub-list" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">${rows}</div>
@@ -9698,7 +9727,7 @@ async function raCheckSources() {
     await raLoadPlaylist(); renderRaMarket();
   } catch (e) {
     openKpi('🛒 Where to buy', 'Check failed', `<div class="kpi-hint">${escapeHtml(e.message || String(e))}</div>
-      <div class="kpi-hint">If it's a Beatport token problem: log in at beatport.com → DevTools → Network → filter <code>token</code> → copy the JSON from <code>/v4/auth/o/token/</code>, and I'll set the refresh token as a project secret.</div>`,
+      ${raBeatportPasteBox('If this was a Beatport problem, a fresh token usually fixes it.')}`,
       () => closeKpi(), 'Close');
   }
 }
