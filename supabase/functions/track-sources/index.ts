@@ -308,6 +308,17 @@ Deno.serve(async (req) => {
       await storePastedToken(admin, pasted);
     }
 
+    // Cheap "do we have a usable Beatport token right now?" check, so the
+    // dashboard can ask for one BEFORE making you sit through a full scan.
+    if (b.probe) {
+      const probe = await bpToken(admin);
+      return new Response(JSON.stringify({
+        probe: true,
+        beatport_ok: !!probe.token,
+        needs_setup: !!probe.needsSetup,
+      }), { headers: JH });
+    }
+
     const { data: tracks } = await admin.from("sc_playlist_tracks")
       .select("id, title, artist_name, bpm, song_key, camelot")
       .eq("playlist_id", playlistId).order("sort").limit(limit);
