@@ -526,7 +526,7 @@ async function loadHub(){
   $('#root').innerHTML='<div class="epgrid">'+eps.map(e=>`<article class="ep" data-slug="${esc(e.slug||'')}">
       <div class="art" ${e.artwork_url?`style="background-image:url('${esc(e.artwork_url)}')"`:''}><span class="no">EP ${e.station_no??'—'}${e.published_at?' · '+fmtDate(e.published_at):''}</span></div>
       <div class="bd"><h3>${esc(e.name)}</h3>
-      <div class="meta">${e.track_count} tracks · ${e.total_min} min${e.mix_sc_track_url?' · mix on SoundCloud':''}</div>
+      <div class="meta">${e.mix_by?'Mixed by '+esc(e.mix_by)+' · ':''}${e.track_count} tracks · ${e.total_min} min${e.mix_sc_track_url?' · mix on SoundCloud':''}</div>
       ${e.desc_public?`<div class="blurb">${esc(e.desc_public)}</div>`:''}
       <div style="margin-top:auto;padding-top:8px"><span class="mini">Open episode →</span></div></div>
     </article>`).join('')+'</div>';
@@ -591,7 +591,7 @@ async function loadEpisode(){
   document.title=(station.station_no!=null?('EP '+station.station_no+' — '):'')+(station.name||'Come With Radio')+' · Come With Radio';
   $('#allEps').style.display='';
   $('#hd').textContent=(station.station_no!=null?('EP '+station.station_no+' · '):'')+(station.name||'Come With Radio');
-  $('#sub').textContent=(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
+  $('#sub').textContent=(station.mix_by?('Mixed by '+station.mix_by+' · '):'')+(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
   if(!station.published)$('#preview').innerHTML='<span class="banner">Preview · unlisted — only people with this link can see it</span>';
   render();
   if(user)logVisit();

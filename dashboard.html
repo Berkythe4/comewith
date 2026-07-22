@@ -8639,7 +8639,7 @@ async function loadRaMarket() {
 // server-side with carried-over songs). The switcher can view any past station.
 // raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
 // carried marks when researching future stations + the 📜 History view).
-const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url';
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by';
 async function raLoadPlaylist() {
   const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
   raState.stations = all || [];
@@ -9478,6 +9478,15 @@ function raNorm(s) {
     .replace(/\b(?:feat|ft|featuring)\b.*$/, ' ')
     .replace(/[^a-z0-9]+/g, ' ').trim();
 }
+// Split a credit field into individual artists. Rekordbox and hand-entered
+// tracks pack collaborators into one field ("Claude VonStroke, Nala",
+// "Rafael & Adam Ten", "A x B", "A b2b B", "A feat. B"); RA lists each artist
+// on its own, so we have to try them separately to find a show.
+function raArtistTokens(name) {
+  return String(name || '')
+    .split(/\s*(?:,|&|\/|\bx\b|\bvs\.?\b|\bb2b\b|\bversus\b|\bfeat\.?\b|\bft\.?\b|\bwith\b|\bpres\.?\b)\s*/i)
+    .map(s => s.trim()).filter(s => s.length > 1);
+}
 // 0–1 similarity: exact → 1, containment → .92, otherwise Dice on word sets.
 function raSim(a, b) {
   a = raNorm(a); b = raNorm(b);
@@ -9728,6 +9737,9 @@ function raOpenEpisodeDetails() {
   const descScDefault = `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}`;
   openKpi('✎ Episode details', `EP ${pl.station_no ?? '—'} · ${pl.name}`, `
     <div class="kpi-hint">Saved as you go — nothing here publishes anything. Go live picks all of it up.</div>
+    <div class="form-row"><label>Mixed by (DJ)</label>
+      <input name="ep_mix_by" class="modal-input" value="${v(pl.mix_by)}" placeholder="e.g. Berky — who recorded this mix">
+      <div class="kpi-hint" style="margin:2px 0 0;">Shown on the episode page and added to the SoundCloud description. Usually you; guest mixes go here too.</div></div>
     <div class="form-row"><label>Episode name *</label>
       <input name="ep_name" class="modal-input" value="${v(pl.name)}" placeholder="e.g. Heatwave, or Episode 1 — Peak Summer">
       <div class="kpi-hint" style="margin:2px 0 0;">Shown on the homepage teaser and the episode page${pl.slug ? '' : ', and it becomes your public web address'}:
@@ -9779,6 +9791,7 @@ async function raSaveEpisodeDetails() {
   try {
     const patch = {
       name,
+      mix_by: kpiVal('ep_mix_by') || null,
       desc_public: kpiVal('ep_desc_public') || null,
       desc_sc: kpiVal('ep_desc_sc') || null,
       updated_at: new Date().toISOString(),
@@ -10207,7 +10220,7 @@ function raOpenFinalize() {
   // up. Printing it in the SoundCloud description gives it away and removes the
   // reason to click through. The TEST push still carries the full list, because
   // that one is private and only Keith reads it.
-  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\n\nEvery artist in this mix is playing NYC in the next couple of weeks.\nFull tracklist with dates, venues, door prices and tickets:\n${pageUrl}\n\nCome With — Brooklyn parties that give back.`;
+  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.${pl.mix_by ? `\nMixed by ${pl.mix_by}.` : ''}\n\nEvery artist in this mix is playing NYC in the next couple of weeks.\nFull tracklist with dates, venues, door prices and tickets:\n${pageUrl}\n\nCome With — Brooklyn parties that give back.`;
   const mixDone = !!(pl.mix_sc_track_url || pl.mix_sc_track_id);
   openKpi('🚀 Finalize & go live', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${tr.length} tracks`, `
     <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-bottom:10px;">
@@ -10311,17 +10324,38 @@ async function raRefreshShowInfo(btn) {
       sb.from('ra_artists').select('name,soundcloud,genres,next_event_date,next_venue,next_cost,next_event_url').gte('next_event_date', today).order('next_event_date'),
       sb.from('sc_artist_cache').select('soundcloud,username').not('username', 'is', null),
     ]);
-    const byUser = {}; (cache || []).forEach(c => { byUser[c.username.toLowerCase()] = raKey(c.soundcloud); });
+    // Match on a NORMALIZED name (case/accents/punctuation-insensitive, "&"→"and")
+    // instead of a raw lowercase string — otherwise "Artbat" vs "ARTBAT" or an
+    // accented name silently misses.
+    const byUser = {}; (cache || []).forEach(c => { if (c.username) byUser[raNorm(c.username)] = raKey(c.soundcloud); });
     const bySc = {}, byName = {};
     (arts || []).forEach(a => {
-      if (a.soundcloud && !bySc[raKey(a.soundcloud)]) bySc[raKey(a.soundcloud)] = a;   // soonest show wins
-      if (a.name && !byName[a.name.toLowerCase()]) byName[a.name.toLowerCase()] = a;
+      if (a.soundcloud && !bySc[raKey(a.soundcloud)]) bySc[raKey(a.soundcloud)] = a;   // soonest show wins (arts ordered by date)
+      const nn = raNorm(a.name);
+      if (nn && !byName[nn]) byName[nn] = a;
     });
-    let updated = 0;
+    // Resolve an artist FIELD to its soonest RA show. Rekordbox/manual entries
+    // often credit collaborators in one field — "Claude VonStroke, Nala",
+    // "Rafael & Adam Ten", "A b2b B" — which never matches RA's separate per-
+    // artist rows. So try the whole string first, then each named artist, and
+    // keep the earliest-dated hit.
+    const findShow = (name) => {
+      const cands = [];
+      const whole = raNorm(name);
+      const wholeHit = bySc[byUser[whole]] || byName[whole];
+      if (wholeHit) cands.push(wholeHit);
+      for (const tok of raArtistTokens(name)) {
+        const n = raNorm(tok);
+        const hit = bySc[byUser[n]] || byName[n];
+        if (hit) cands.push(hit);
+      }
+      cands.sort((x, y) => (x.next_event_date || '').localeCompare(y.next_event_date || ''));
+      return cands[0] || null;
+    };
+    let updated = 0; const missed = [];
     for (const t of raState.playlist.tracks) {
-      const an = (t.artist_name || '').toLowerCase();
-      const a = bySc[byUser[an]] || byName[an];
-      if (!a) continue;
+      const a = findShow(t.artist_name);
+      if (!a) { if (t.artist_name && !t.show_date) missed.push(t.artist_name); continue; }
       await sb.from('sc_playlist_tracks').update({
         show_date: a.next_event_date || null, show_venue: a.next_venue || null,
         show_cost: raCost(a.next_cost), show_url: a.next_event_url || null,
@@ -10347,7 +10381,14 @@ async function raRefreshShowInfo(btn) {
         for (const tid of need[eid]) { await sb.from('sc_playlist_tracks').update({ show_cost: cost }).eq('id', tid); priced++; }
       }
     }
-    toast(`Show info refreshed — ${updated}/${raState.playlist.tracks.length} matched${priced ? ` · ${priced} price${priced === 1 ? '' : 's'} found on the RA event pages` : ''}`, 'ok');
+    // Name the artists with no upcoming NYC show so it's obvious WHY a track
+    // stayed blank (usually a genuinely-no-show artist, or a title in the artist
+    // field) rather than looking like the refresh silently failed.
+    const uniqMissed = [...new Set(missed)];
+    const missTxt = uniqMissed.length
+      ? ` · no upcoming NYC show for: ${uniqMissed.slice(0, 4).join(', ')}${uniqMissed.length > 4 ? ` +${uniqMissed.length - 4} more` : ''}`
+      : '';
+    toast(`Show info refreshed — ${updated}/${raState.playlist.tracks.length} matched${priced ? ` · ${priced} price${priced === 1 ? '' : 's'} found` : ''}${missTxt}`, uniqMissed.length ? 'warn' : 'ok');
     await raLoadPlaylist(); renderRaMarket();
   } catch (e) { toast('Refresh failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Show info'; } }
 }
