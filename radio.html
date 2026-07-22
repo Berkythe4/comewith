@@ -8,6 +8,14 @@
 <meta property="og:title" content="Come With Radio">
 <meta property="og:description" content="Mixes from artists playing NYC soon — every track is a show you can catch.">
 <meta property="og:type" content="website">
+<meta property="og:url" content="https://comewith.org/radio.html">
+<!-- Static by necessity: social crawlers don't run JS, and this page loads its
+     episode over fetch, so a PER-EPISODE preview image isn't possible without
+     server-rendering. A branded fallback beats a preview card with no image. -->
+<meta property="og:image" content="https://yaytdosxfhcqatmhctzk.supabase.co/storage/v1/object/public/event-photos/site/logo_1782482714674_Come_With.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Come With Radio">
+<meta name="twitter:description" content="Mixes from artists playing NYC soon — every track is a show you can catch.">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -42,6 +50,8 @@
   .mixbox{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);margin:6px 0 18px}
   .mixbox iframe{display:block;width:100%;height:166px;border:0}
   .desc{color:var(--dim);max-width:70ch;white-space:pre-line;margin:4px 0 8px}
+  .epcover{margin:0 0 14px}
+  .epcover img{width:100%;max-width:340px;aspect-ratio:1;object-fit:cover;border-radius:14px;border:1px solid var(--line);display:block}
   .tk{display:flex;gap:13px;align-items:flex-start;padding:13px 0;border-bottom:1px solid var(--line)}
   .tk .num{font-family:'Archivo';font-weight:900;color:var(--dim);min-width:24px;text-align:right;padding-top:4px}
   .tk .art{width:52px;height:52px;border-radius:8px;background:var(--bg2) center/cover;flex:0 0 auto}
@@ -487,6 +497,9 @@ function render(){
   const ytBtn=station.mix_youtube_url?`<a class="chip" href="${esc(station.mix_youtube_url)}" target="_blank" rel="noopener">▶ Watch on YouTube ↗</a>`:'';
   const embedUrl=station.mix_sc_track_url;
   $('#root').innerHTML=
+    // The cover only ever showed on the hub card; on the episode page itself
+    // there was nothing visual above the tracklist.
+    (station.cover_url?`<div class="epcover"><img src="${esc(station.cover_url)}" alt="${esc(station.name||'Episode artwork')}" loading="lazy"></div>`:'')+
     (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
     `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="saveAllBtn">♡ Save all</button><button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
     (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
