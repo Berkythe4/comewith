@@ -121,8 +121,12 @@
   .nudge.show{display:flex}
   .nudge span{font-size:.86rem}
   .nudge .x{background:none;border:none;color:var(--dim);cursor:pointer;font-size:1rem;padding:4px}
-  .toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%) translateY(200%);background:var(--lime);color:#180c12;font-family:'DM Mono';font-size:.82rem;padding:12px 20px;border-radius:999px;transition:.3s;z-index:120;max-width:92vw;text-align:center}
-  .toast.show{transform:translateX(-50%) translateY(0)}
+  /* Hidden state is opacity + visibility, NOT just a transform. Relying on
+     translateY(200%) to push it off-screen only works while it's anchored to the
+     bottom — re-anchoring it to the top (see the phone rules) left an empty lime
+     pill parked on screen as a little green dot. */
+  .toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%) translateY(200%);background:var(--lime);color:#180c12;font-family:'DM Mono';font-size:.82rem;padding:12px 20px;border-radius:999px;transition:.3s;z-index:120;max-width:92vw;text-align:center;opacity:0;visibility:hidden;pointer-events:none}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1;visibility:visible}
   @media(max-width:640px){.tk{flex-wrap:wrap}.tk .btns{width:100%;justify-content:flex-start;margin-top:4px}}
   /* ---- Phones -------------------------------------------------------------
      This page had exactly one mobile rule, which was fine when the nav held two
@@ -144,7 +148,8 @@
     .nudge .chip{flex:1 1 auto;justify-content:center}
     .nudge .x{position:absolute;top:6px;right:8px}
     /* Bottom toasts collided with the fixed player; top is out of the way. */
-    .toast{bottom:auto;top:74px}
+    /* Anchored to the top here, so it must slide UP to hide, not down. */
+    .toast{bottom:auto;top:74px;transform:translateX(-50%) translateY(-200%)}
     .box{padding:20px 17px}
     .box h3{font-size:1.15rem}
     .epcover img{max-width:100%}
