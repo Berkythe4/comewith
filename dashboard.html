@@ -9715,14 +9715,36 @@ async function raCheckSources(accessToken, skipProbe) {
       }
     } catch (_) { /* probe is an optimisation — if it fails just run the check */ }
   }
-  openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name} · checking ${n} track${n === 1 ? '' : 's'}`, `
-    <div class="kpi-hint" style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Asking Beatport and Bandcamp about each track — about ${Math.max(1, Math.round(n * 0.6))}s. Missing BPM/key gets filled in from Beatport where we don't already have it (your Rekordbox values are never overwritten).</div>`,
-    () => closeKpi(), 'Close');
+  const progress = (done, tot) => {
+    const pct = tot ? Math.round((done / tot) * 100) : 0;
+    openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name}`, `
+      <div class="kpi-hint" style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Checking Beatport &amp; Bandcamp — <strong>${done} of ${tot || n}</strong> tracks…</div>
+      <div style="height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-top:8px;">
+        <div style="height:100%;width:${pct}%;background:var(--green,#1f7a1f);transition:width .3s;"></div></div>
+      <div class="kpi-hint" style="margin-top:8px;">Missing BPM/key gets filled in from Beatport where we don't already have it — your Rekordbox values are never overwritten.</div>`,
+      () => closeKpi(), 'Close');
+  };
+  progress(0, n);
   try {
-    const { data, error } = await sb.functions.invoke('track-sources', { body: { playlist_id: pl.id, apply_bpm_key: true, access_token: accessToken || undefined } });
-    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
-    if (data?.error && !data.results?.length) throw new Error(data.error);
-    const res = data.results || [];
+    // Walk the tracklist in small batches. One 26-track request took 25-60s with
+    // no feedback at all, which reads as "nothing happened" — and any hiccup lost
+    // the whole run. Now each batch is a few seconds and progress is visible.
+    const BATCH = 6;
+    let data = null, res = [], off = 0, applied = 0, guard = 0;
+    while (guard++ < 40) {
+      const r = await sb.functions.invoke('track-sources', {
+        body: { playlist_id: pl.id, apply_bpm_key: true, offset: off, limit: BATCH, access_token: accessToken || undefined },
+      });
+      if (r.error) throw new Error((await fnErrorDetail(r.error)) || r.error.message);
+      data = r.data || {};
+      if (data.error && !(data.results || []).length) throw new Error(data.error);
+      res = res.concat(data.results || []);
+      applied += data.applied || 0;
+      off += (data.results || []).length || BATCH;
+      progress(Math.min(off, data.total || n), data.total || n);
+      if (data.done || !(data.results || []).length) break;
+    }
+    data.applied = applied;
     const onBp = res.filter(r => r.beatport).length, onBc = res.filter(r => r.bandcamp).length;
     const money = res.reduce((s, r) => s + (Number(String(r.beatport?.price || '').replace(/[^\d.]/g, '')) || 0), 0);
     const rows = res.map((r, i) => {

@@ -319,25 +319,36 @@ Deno.serve(async (req) => {
       }), { headers: JH });
     }
 
+    // Batched: the dashboard walks through the tracklist a few at a time so it can
+    // show real progress. A single 26-track pass took 25-60s of silent spinner,
+    // which is indistinguishable from "it's broken".
+    const offset = Math.max(0, Number(b.offset) || 0);
+    const { count: total } = await admin.from("sc_playlist_tracks")
+      .select("id", { count: "exact", head: true }).eq("playlist_id", playlistId);
+
     const { data: tracks } = await admin.from("sc_playlist_tracks")
       .select("id, title, artist_name, bpm, song_key, camelot")
-      .eq("playlist_id", playlistId).order("sort").limit(limit);
-    if (!tracks?.length) return new Response(JSON.stringify({ results: [], applied: 0 }), { headers: JH });
+      .eq("playlist_id", playlistId).order("sort").range(offset, offset + limit - 1);
+    if (!tracks?.length) {
+      return new Response(JSON.stringify({ results: [], applied: 0, total: total || 0, offset, done: true }), { headers: JH });
+    }
 
     const tk = await bpToken(admin);
     const results: any[] = [];
     let applied = 0, bandcampFails = 0;
 
-    // Sequential with a small pause: two third-party APIs, ~20-40 tracks. Politeness
-    // beats speed here — a burst is what gets an unofficial endpoint to start 429ing.
+    // One track at a time (politeness — a burst is what makes an unofficial
+    // endpoint start 429ing) but the two stores are queried CONCURRENTLY, which
+    // roughly halves the wall time without adding any burstiness per host.
     for (const t of tracks) {
       const title = t.title || "", artist = t.artist_name || "";
       const q = searchTerms(title, artist);
-      let beatport = null, bandcamp = null;
-      if (tk.token) {
-        try { beatport = await bpSearch(tk.token, q.title, q.artist); } catch (_) { /* leave null */ }
-      }
-      try { bandcamp = await bcSearch(q.title, q.artist); } catch (_) { bandcampFails++; }
+      const [beatport, bcOut] = await Promise.all([
+        tk.token ? bpSearch(tk.token, q.title, q.artist).catch(() => null) : Promise.resolve(null),
+        bcSearch(q.title, q.artist).then((r) => ({ ok: true, r })).catch(() => ({ ok: false, r: null })),
+      ]);
+      const bandcamp = bcOut.r;
+      if (!bcOut.ok) bandcampFails++;
 
       const patch: Record<string, unknown> = {
         beatport_url: beatport?.url || null,
@@ -356,12 +367,15 @@ Deno.serve(async (req) => {
       await admin.from("sc_playlist_tracks").update(patch).eq("id", t.id);
 
       results.push({ track_id: t.id, title, artist, beatport, bandcamp });
-      await new Promise((r) => setTimeout(r, 120));
+      await new Promise((r) => setTimeout(r, 60));
     }
 
     return new Response(JSON.stringify({
       results,
       applied,
+      total: total || tracks.length,
+      offset,
+      done: offset + tracks.length >= (total || tracks.length),
       beatport_ok: !!tk.token,
       // Distinguish "checked, genuinely not on Bandcamp" from "Bandcamp didn't answer".
       bandcamp_ok: bandcampFails < tracks.length,
