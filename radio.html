@@ -124,17 +124,56 @@
   .toast{position:fixed;bottom:112px;left:50%;transform:translateX(-50%) translateY(200%);background:var(--lime);color:#180c12;font-family:'DM Mono';font-size:.82rem;padding:12px 20px;border-radius:999px;transition:.3s;z-index:120;max-width:92vw;text-align:center}
   .toast.show{transform:translateX(-50%) translateY(0)}
   @media(max-width:640px){.tk{flex-wrap:wrap}.tk .btns{width:100%;justify-content:flex-start;margin-top:4px}}
+  /* ---- Phones -------------------------------------------------------------
+     This page had exactly one mobile rule, which was fine when the nav held two
+     chips and the nudge held one button. It doesn't survive four chips and three
+     buttons: nav .wrap has a hard 60px height while .navr wraps, so the extra
+     chips were being CLIPPED, and .nudge is a 999px pill with no wrapping, so on
+     a narrow screen its contents squashed into a blob. */
+  @media(max-width:720px){
+    nav .wrap{height:auto;min-height:56px;padding-top:9px;padding-bottom:9px;gap:8px}
+    .brand{font-size:1rem}
+    .navr{gap:6px}
+    .chip{padding:6px 11px;font-size:.66rem}
+    header.hero{padding:22px 0 6px}
+    /* A full-width card reads far better than a pill crushed to 94vw. */
+    .nudge{left:10px;right:10px;bottom:10px;transform:none;max-width:none;
+      border-radius:16px;padding:12px 14px;flex-wrap:wrap;gap:8px}
+    /* padding-right keeps the copy clear of the absolutely-placed ✕ */
+    .nudge span{flex:1 1 100%;padding-right:22px}
+    .nudge .chip{flex:1 1 auto;justify-content:center}
+    .nudge .x{position:absolute;top:6px;right:8px}
+    /* Bottom toasts collided with the fixed player; top is out of the way. */
+    .toast{bottom:auto;top:74px}
+    .box{padding:20px 17px}
+    .box h3{font-size:1.15rem}
+    .epcover img{max-width:100%}
+    .drawer .list,.drawer .hd,.drawer .ft,.sortbar{padding-left:15px;padding-right:15px}
+  }
+  /* Below ~560px the nav can't hold four labelled chips on one line, so the
+     chips keep their icon and drop the words rather than wrapping to two rows. */
+  @media(max-width:560px){
+    .chip .lbl{display:none}
+    .chip{padding:7px 10px}
+    /* Signed in, this button holds an email address — never let it eat the nav. */
+    #authBtn{max-width:42vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block}
+  }
+  /* The fixed player is ~125px tall and the base 70px of body padding left it
+     sitting on top of the last track. Only reserve the space while it's open. */
+  body.playing{padding-bottom:150px}
+  body.playing .nudge{bottom:134px}
 </style>
 </head>
 <body>
 <nav><div class="wrap">
   <a class="brand" href="https://comewith.org">COME<b>·</b>WITH <span style="color:var(--lime)">RADIO</span></a>
   <div class="navr">
-    <a class="chip" href="radio.html" id="allEps" style="display:none">📻 All episodes</a>
+    <a class="chip" href="radio.html" id="allEps" style="display:none">📻 <span class="lbl">All episodes</span></a>
     <!-- Always visible, signed in or out: the plain-English "what is this account
-         for" page. Before signup it's the pitch; after signup it's the manual. -->
-    <button class="chip" id="guideBtn" title="What a free account gets you">❔ What you get</button>
-    <button class="chip" id="myBtn" style="display:none">♡ My playlist <span id="myCount"></span></button>
+         for" page. Before signup it's the pitch; after signup it's the manual.
+         .lbl is dropped on narrow screens so the nav stays one row. -->
+    <button class="chip" id="guideBtn" title="What a free account gets you">❔ <span class="lbl">What you get</span></button>
+    <button class="chip" id="myBtn" style="display:none">♡ <span class="lbl">My playlist</span> <span id="myCount"></span></button>
     <button class="chip primary" id="authBtn">Sign in</button>
   </div>
 </div></nav>
@@ -240,8 +279,10 @@ function fmtDate(s){if(!s)return'';const d=new Date(String(s).length>10?s:(s+'T0
 function fmtShow(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}
 function scEmbed(u,visual){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play='+(visual?'false':'true')+'&hide_related=true&show_comments=false&visual='+(visual?'true':'false');}
-function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');}
-$('#pClose').onclick=()=>{$('#player').classList.remove('show');$('#pFrame').innerHTML='';};
+// body.playing reserves room for the fixed player, which is ~125px tall and was
+// covering the last track (and the signup nudge) on a phone.
+function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');document.body.classList.add('playing');}
+$('#pClose').onclick=()=>{$('#player').classList.remove('show');$('#pFrame').innerHTML='';document.body.classList.remove('playing');};
 
 /* ---------- CSV (BOM so Excel opens it clean) ---------- */
 function csvCell(v){v=String(v==null?'':v);return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;}
