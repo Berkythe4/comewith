@@ -35,3 +35,7 @@ Radio/render/EP*_cues.csv
 Radio/Documents/EP*_youtube.txt
 Radio/Documents/EP*_buylist.txt
 Radio/Documents/EP*_checklist.md
+Radio/Video/*.mp3
+Radio/Video/*.m4a
+Radio/Video/*.flac
+Radio/Video/*.aac
