@@ -117,7 +117,7 @@ def truncate(draw, text, fnt, maxw):
         text = text[:-1]
     return text + "…"
 
-def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_png):
+def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_png, progress=0.0):
     im = bg.copy()
     d = ImageDraw.Draw(im)
     # header
@@ -148,9 +148,15 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     if keytxt:
         chip(d, chx, chy, keytxt, F_mono(34), accent=True)
 
-    # progress track (empty) — a dim rail; ffmpeg overlays the moving lime fill.
+    # progress rail + lime fill baked in at this track's position (stepped per
+    # track — fast + robust; a per-frame animated bar via ffmpeg geq is far too
+    # slow for an hour-long render).
     d.rounded_rectangle([BAR_X, BAR_Y, BAR_X + BAR_W, BAR_Y + BAR_H],
                         radius=BAR_H // 2, fill=(48, 38, 58))
+    fw = int(BAR_W * max(0.0, min(1.0, progress)))
+    if fw > BAR_H:
+        d.rounded_rectangle([BAR_X, BAR_Y, BAR_X + fw, BAR_Y + BAR_H],
+                            radius=BAR_H // 2, fill=LIME)
     # up next
     up = ("UP NEXT — %s" % nxt) if nxt else "LAST TRACK"
     d.text((BAR_X, BAR_Y + 40), up, font=F_mono(30), fill=FAINT)
@@ -162,7 +168,10 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--cues", required=True)
+    ap.add_argument("--cues", help="cues CSV (idx,start,artist,title,bpm,...)")
+    ap.add_argument("--json", help="tracklist.json from match_mix.py — timing driven ONLY by this")
+    ap.add_argument("--meta", help="optional cues CSV to pull bpm/key from, joined by order")
+    ap.add_argument("--abitrate", default="192k")
     ap.add_argument("--audio", required=True)
     ap.add_argument("--cover", required=True)
     ap.add_argument("--out", required=True)
@@ -171,14 +180,33 @@ def main():
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
 
-    for p in (a.cues, a.audio, a.cover):
-        if not os.path.exists(p):
-            raise SystemExit("Missing file: " + p)
+    for p in ((a.json or a.cues), a.audio, a.cover):
+        if not p or not os.path.exists(p):
+            raise SystemExit("Missing file: " + str(p))
 
-    with open(a.cues, encoding="utf-8-sig") as f:
-        tracks = list(csv.DictReader(f))
+    if a.json:
+        # Timing + tracklist come ONLY from the JSON; bpm/key optionally joined
+        # from --meta by track order. Edit the JSON and re-render — no re-matching.
+        import json as _json
+        data = _json.load(open(a.json, encoding="utf-8"))
+        meta = {}
+        if a.meta and os.path.exists(a.meta):
+            with open(a.meta, encoding="utf-8-sig") as f:
+                for i, r in enumerate(csv.DictReader(f), 1):
+                    meta[i] = r
+        tracks = []
+        for r in data:
+            m = meta.get(r.get("order"), {})
+            tracks.append({"start": str(r.get("start_sec", "")), "artist": r.get("artist", ""),
+                           "title": r.get("title", ""), "bpm": m.get("bpm", ""),
+                           "song_key": m.get("song_key", ""), "camelot": m.get("camelot", "")})
+    else:
+        if not a.cues:
+            raise SystemExit("Give --cues or --json.")
+        with open(a.cues, encoding="utf-8-sig") as f:
+            tracks = list(csv.DictReader(f))
     if not tracks:
-        raise SystemExit("Cues file has no rows.")
+        raise SystemExit("No tracks to render.")
 
     # parse + validate start times
     blanks = []
@@ -210,7 +238,8 @@ def main():
             n = tracks[i + 1]
             nxt = ("%s — %s" % (n.get("artist", ""), n.get("title", ""))).strip(" —")
         png = os.path.join(work, "card_%03d.png" % i)
-        render_card(bg, cover, t, i + 1, len(tracks), a.ep, a.title, nxt, png)
+        render_card(bg, cover, t, i + 1, len(tracks), a.ep, a.title, nxt, png,
+                    progress=starts[i] / total if total else 0)
         dur = max(0.1, ends[i] - starts[i])
         concat.append((png, dur))
 
@@ -221,28 +250,16 @@ def main():
             f.write("duration %.3f\n" % dur)
         f.write("file '%s'\n" % concat[-1][0].replace("\\", "/"))  # concat needs last repeated
 
-    # Moving progress bar: a lime source (BAR_W x BAR_H) whose ALPHA is gated by
-    # time via geq — opaque for x < BAR_W * (t/total), transparent after — then
-    # overlaid on the cards. drawbox can't do this (its `t` is thickness, not
-    # time), so this geq-alpha overlay is the reliable route.
-    bar_src = "color=c=0x%02x%02x%02x:s=%dx%d:d=%.3f:r=30" % (
-        LIME[0], LIME[1], LIME[2], BAR_W, BAR_H, total)
-    # geq needs r/g/b (lime) alongside the time-gated alpha, or it errors.
-    geq_a = "if(lt(X\\,%d*min(T/%.3f\\,1))\\,255\\,0)" % (BAR_W, total)
-    fc = ("[2:v]format=rgba,geq=r='%d':g='%d':b='%d':a='%s'[bar];"
-          "[0:v]fps=30,format=yuv420p[base];"
-          "[base][bar]overlay=%d:%d:format=auto,format=yuv420p[v]"
-          % (LIME[0], LIME[1], LIME[2], geq_a, BAR_X, BAR_Y))
-
+    # Slides concat + audio. The progress bar is baked into each PNG (stepped per
+    # track), so no per-frame video filter is needed — this renders an hour-long
+    # mix in seconds instead of choking a per-pixel geq bar.
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     cmd = ["ffmpeg", "-y",
            "-f", "concat", "-safe", "0", "-i", listfile,
            "-i", a.audio,
-           "-f", "lavfi", "-i", bar_src,
-           "-filter_complex", fc,
-           "-map", "[v]", "-map", "1:a",
+           "-vf", "fps=30,format=yuv420p",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-           "-c:a", "aac", "-b:a", "192k",
+           "-c:a", "aac", "-b:a", a.abitrate,
            "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
     if a.dry:
         cmd += ["-t", "1"]
