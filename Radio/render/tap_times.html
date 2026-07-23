@@ -66,7 +66,13 @@
     <button class="tap" id="tapBtn" disabled>◉ TAP (space)</button>
     <button id="backBtn" disabled>⟲ Undo tap</button>
   </div>
-  <div class="bignote">Tap <b>the moment a new track becomes audible</b> — the first beat/drop of the incoming track, not the blend start. Missed one? <b>Undo tap</b> pulls the last one back. You can also nudge any time with the ± buttons.</div>
+  <input type="range" id="seek" min="0" max="1000" value="0" step="1" disabled
+    style="width:100%;margin:4px 0 2px;accent-color:var(--lime);cursor:pointer">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px">
+    <button id="b30" disabled>« 30s</button><button id="b5b" disabled>« 5s</button>
+    <button id="f5" disabled>5s »</button><button id="f30" disabled>30s »</button>
+  </div>
+  <div class="bignote">Two ways: <b>play it through and tap</b> as each track drops, or <b>scrub</b> — drag the bar / jump 30s at a time, and tap the instant you hear a new track come in. Tap marks the <b>first beat of the incoming track</b>. Missed one? <b>Undo tap</b>. Fine-tune any mark with its ± buttons.</div>
 
   <div class="rows" id="rows"></div>
 
@@ -111,15 +117,17 @@ function parseCsv(txt){
   nextIdx=0;
 }
 function enable(){
-  $('#playBtn').disabled=false; $('#tapBtn').disabled=false;
-  if(!tracks.length){ // no CSV: freeform marks
-    tracks=[]; marks=[];
-  }
+  ['#playBtn','#tapBtn','#seek','#b30','#b5b','#f5','#f30'].forEach(s=>$(s).disabled=false);
+  if(!tracks.length){ tracks=[]; marks=[]; }
   render();
 }
 $('#playBtn').onclick=()=>{ if(audio.paused){audio.play();$('#playBtn').textContent='⏸ Pause';} else {audio.pause();$('#playBtn').textContent='▶ Play';} };
-audio.ontimeupdate=()=>{ $('#cur').textContent=fmt(audio.currentTime); };
+audio.ontimeupdate=()=>{ $('#cur').textContent=fmt(audio.currentTime); if(audio.duration)$('#seek').value=Math.round(audio.currentTime/audio.duration*1000); };
 audio.onended=()=>{ $('#playBtn').textContent='▶ Play'; };
+const seekBy=d=>{ audio.currentTime=Math.min(audio.duration||0,Math.max(0,audio.currentTime+d)); };
+$('#seek').oninput=e=>{ if(audio.duration)audio.currentTime=e.target.value/1000*audio.duration; };
+$('#b30').onclick=()=>seekBy(-30); $('#b5b').onclick=()=>seekBy(-5);
+$('#f5').onclick=()=>seekBy(5); $('#f30').onclick=()=>seekBy(30);
 
 function tap(){
   if(!audio.src)return;
