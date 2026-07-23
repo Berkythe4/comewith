@@ -11,6 +11,12 @@ art and documents — it is **not** what the website serves. See the note below.
 - **Video/** — finished YouTube mix videos (`EP1.mp4`) and any raw ingredients.
 - **Documents/** — anything else radio-related: notes, guest-mix agreements,
   release checklists, drop schedule, etc.
+- **render/** — the tools that build the "Now Playing" YouTube video and the
+  weekly paperwork. See `render/README.md`. The short version:
+  - `python Radio/render/weekly_prep.py` — read-only; writes the cues, the
+    YouTube text + chapters, the buy list, and a release checklist.
+  - `python Radio/render/make_episode.py --audio Radio/Video/EP1_mix.wav` —
+    turns your recorded mix into `Radio/Video/EP1.mp4`. No camera, no editor.
 
 ## Important: this folder does NOT feed the live site
 
