@@ -2588,6 +2588,13 @@ const fmtDate = (s) => {
   return d.toISOString().slice(0, 10);
 };
 
+const fmtDateTime = (s) => {
+  if (!s) return '';
+  const d = new Date(s);
+  if (isNaN(d)) return s;
+  return d.toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
 const truncate = (s, n = 80) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
 
 const escapeHtml = (s) => {
@@ -8639,7 +8646,7 @@ async function loadRaMarket() {
 // server-side with carried-over songs). The switcher can view any past station.
 // raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
 // carried marks when researching future stations + the 📜 History view).
-const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by';
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by,scheduled_go_live';
 async function raLoadPlaylist() {
   const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
   raState.stations = all || [];
@@ -8933,13 +8940,15 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
   if (t.closest('[data-ra-refreshshows]')) { raRefreshShowInfo(t.closest('[data-ra-refreshshows]')); return; }
   if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
   if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
+  if (t.closest('[data-ra-schedule]')) { raScheduleGoLive(); return; }
+  if (t.closest('[data-ra-unschedule]')) { raUnschedule(); return; }
   if (t.closest('[data-ra-mixupload]')) { raMixUpload(t.closest('[data-ra-mixupload]')); return; }
   if (t.closest('[data-ra-mixlink]')) { raMixLink(t.closest('[data-ra-mixlink]')); return; }
   if (t.closest('[data-ra-history]')) { raOpenHistory(); return; }
@@ -9261,7 +9270,7 @@ function raRenderPlaylist() {
   return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
       ${chev}
-      <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-epdetails title="Episode name, cover image and both descriptions — editable any time, saving does not publish anything">✎ Details</button>' : ''} ${statusChip}
+      <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-epdetails title="Episode name, cover image and both descriptions — editable any time, saving does not publish anything">✎ Details</button>' : ''} ${statusChip}${pl.scheduled_go_live ? ` <span class="role-chip" style="cursor:default;background:var(--green-bg);color:var(--green);border:1px solid var(--green);" title="Publishes automatically at this time">⏰ ${escapeHtml(fmtDateTime(pl.scheduled_go_live))}</span>` : ''}
       ${isWorking && (!pl.desc_public || !pl.cover_url || /^weekly station$/i.test(pl.name || '')) ? `<span class="li-sub" style="color:var(--amber);" title="These show publicly the moment you go live">⚠ needs ${[/^weekly station$/i.test(pl.name || '') ? 'a real name' : '', !pl.cover_url ? 'cover' : '', !pl.desc_public ? 'description' : ''].filter(Boolean).join(' · ')}</span>` : ''}
       ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'EP drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
       ${switcher}
@@ -10297,11 +10306,21 @@ function raOpenFinalize() {
       <div class="form-row"><label>SoundCloud description (short — pushed to the mix track, links back to the page)</label>
         <div class="kpi-hint" style="margin:2px 0 6px;">⚠ Keep the tracklist <strong>out</strong> of this. The tracklist is the reason to visit the site — dates, venues, ticket links, saving and export all live there, and that's where people sign up. Give it away here and there's no reason to click through.</div>
         <textarea name="desc_sc" class="modal-textarea" rows="7" style="font-family:monospace;font-size:.8rem;">${escapeHtml(descSc)}</textarea></div>
-      <div class="form-row"><label>YouTube link (optional — until auto-posting lands in 1.1, paste the video URL if you posted one)</label>
+      <div class="form-row"><label>YouTube link (optional — paste the video URL if you posted one)</label>
         <input name="youtube_url" class="modal-input" value="${escapeHtml(pl.mix_youtube_url || '')}" placeholder="https://youtube.com/watch?v=…"></div>
       <div class="kpi-hint">Go live = the episode page appears on comewith.org/radio.html, the mix track flips <strong>public</strong> on SoundCloud with the description above, every track is logged as <strong>played</strong> in the song history, and a fresh EP ${(raState.stations || []).reduce((m, p) => Math.max(m, p.station_no || 0), 0) + 1} station opens pre-loaded with the songs you cut this cycle.</div>
+    </div>
+    <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-top:10px;">
+      <strong style="font-size:.9rem;">⏰ Or schedule it</strong>
+      <div class="kpi-hint" style="margin:6px 0;">Pick a date &amp; time and the <strong>episode page publishes itself</strong> then — you don't have to be here. It also <strong>opens next week's station right now</strong> so you can start building it. <br>Set your YouTube &amp; SoundCloud to release at the same time (the site won't touch those on a schedule).</div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <input type="datetime-local" name="sched_when" class="modal-input" value="${pl.scheduled_go_live ? new Date(new Date(pl.scheduled_go_live).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : ''}" style="max-width:220px;">
+        <button type="button" class="hub-btn" data-ra-schedule>⏰ Schedule &amp; open next</button>
+        ${pl.scheduled_go_live ? '<button type="button" class="hub-mini" data-ra-unschedule>Cancel schedule</button>' : ''}
+      </div>
+      ${pl.scheduled_go_live ? `<div class="kpi-hint" style="margin:6px 0 0;color:var(--green);">✓ Scheduled for ${escapeHtml(fmtDateTime(pl.scheduled_go_live))} — the page publishes automatically.</div>` : ''}
     </div>`,
-    () => raDoFinalize(), '🚀 Go live');
+    () => raDoFinalize(), '🚀 Go live now');
   setTimeout(() => {
     const s = document.querySelector('#kpiModalBody [name="slug"]');
     if (s) s.addEventListener('input', () => { const e = $('raSlugEcho'); if (e) e.textContent = raSlugify(s.value) || '…'; });
@@ -10341,6 +10360,44 @@ async function raMixLink(btn) {
     toast('Mix track linked', 'ok');
     raOpenFinalize();
   } catch (e) { toast('Link failed: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '🔗 Link track'; }
+}
+// Schedule the page to publish itself later (DB-only publish via pg_cron). Also
+// opens next week's station now so you can start on it. YouTube/SoundCloud are
+// scheduled by Keith on those platforms to release at the same time.
+async function raScheduleGoLive() {
+  const pl = raState.playlist;
+  const whenLocal = (document.querySelector('#kpiModalBody [name="sched_when"]')?.value || '').trim();
+  if (!whenLocal) { toast('Pick a date & time first', 'err'); return; }
+  const when = new Date(whenLocal);
+  if (isNaN(when)) { toast('That date/time didn\'t parse', 'err'); return; }
+  if (when.getTime() < Date.now() - 60000) { toast('That time is in the past', 'err'); return; }
+  // Save the descriptions/slug/youtube from the modal first (so the scheduled
+  // publish uses them), then set the schedule.
+  const btn = $('kpiModalSubmit'); if (btn) btn.disabled = true;
+  try {
+    await sb.from('sc_playlists').update({
+      slug: raSlugify(kpiVal('slug')) || pl.slug || null,
+      desc_public: kpiVal('desc_public') || null, desc_sc: kpiVal('desc_sc') || null,
+      mix_youtube_url: kpiVal('youtube_url') || null, updated_at: new Date().toISOString(),
+    }).eq('id', pl.id);
+    const { data, error } = await sb.rpc('radio_schedule_go_live', {
+      p_id: pl.id, p_when: when.toISOString(), p_slug: raSlugify(kpiVal('slug')) || null,
+    });
+    if (error) throw new Error(error.message);
+    closeKpi();
+    await raLoadPlaylist();
+    // jump to the freshly-opened next station so Keith can start building it
+    if (data && data.next_station) { raState.viewPlaylistId = data.next_station; await raLoadPlaylist(); }
+    renderRaMarket();
+    toast('Scheduled for ' + fmtDateTime(when.toISOString()) + ' · next station opened', 'ok');
+  } catch (e) { toast('Couldn\'t schedule: ' + (e.message || e), 'err'); if (btn) btn.disabled = false; }
+}
+async function raUnschedule() {
+  const pl = raState.playlist;
+  await sb.from('sc_playlists').update({ scheduled_go_live: null, updated_at: new Date().toISOString() }).eq('id', pl.id);
+  raState.playlist.scheduled_go_live = null;
+  await raLoadPlaylist(); renderRaMarket();
+  toast('Schedule cancelled', 'ok');
 }
 async function raDoFinalize() {
   const pl = raState.playlist;
