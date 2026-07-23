@@ -29,3 +29,9 @@ Radio/Video/*.mov
 Radio/Video/*.wav
 Radio/Video/*.aiff
 Radio/**/*.wav
+
+# Radio render — generated working files (regenerate with weekly_prep.py)
+Radio/render/EP*_cues.csv
+Radio/Documents/EP*_youtube.txt
+Radio/Documents/EP*_buylist.txt
+Radio/Documents/EP*_checklist.md

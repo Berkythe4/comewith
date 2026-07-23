@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With Radio — Tap the track times</title>
+<style>
+  :root{
+    --bg:#0e0712;--card:#180d1f;--panel:#1c1024;--line:#3a2640;--line2:#4a3252;
+    --cream:#EDE4D3;--dim:#b3a7b8;--faint:#7c7183;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;
+    --mono:ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--cream);font-family:'Helvetica Neue',system-ui,Arial,sans-serif;line-height:1.5;padding:0 18px 60px}
+  .wrap{max-width:760px;margin:0 auto}
+  header{padding:34px 0 18px;border-bottom:1px solid var(--line);margin-bottom:22px}
+  .brand{font-family:var(--mono);font-size:.7rem;letter-spacing:.22em;text-transform:uppercase;color:var(--faint)}
+  .brand b{color:var(--cream)}.brand .d{color:var(--lime)}
+  h1{font-size:1.7rem;font-weight:800;letter-spacing:-.01em;margin:8px 0 6px}
+  .sub{color:var(--dim);font-size:.95rem;max-width:60ch}
+  .step{font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lime);margin:22px 0 8px}
+  label.file{display:block;border:1px dashed var(--line2);border-radius:10px;padding:14px 16px;cursor:pointer;background:var(--card);margin-bottom:10px;font-size:.9rem;color:var(--dim)}
+  label.file b{color:var(--cream)}
+  label.file input{display:none}
+  .transport{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin-bottom:8px}
+  button{font-family:var(--mono);font-size:.8rem;letter-spacing:.04em;text-transform:uppercase;border:1px solid var(--line2);background:none;color:var(--cream);border-radius:999px;padding:10px 16px;cursor:pointer;transition:.12s}
+  button:hover:not(:disabled){border-color:var(--lime-dk)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button.play{background:var(--lime);color:#14100a;border-color:var(--lime);font-weight:700}
+  button.tap{background:var(--hot);color:#14100a;border-color:var(--hot);font-weight:700;font-size:1rem;padding:14px 26px}
+  .clock{font-family:var(--mono);font-size:1.5rem;font-variant-numeric:tabular-nums;color:var(--cream);min-width:5.5em}
+  .clock .tot{color:var(--faint);font-size:1rem}
+  .bignote{background:rgba(255,92,168,.08);border:1px solid var(--hot);border-radius:12px;padding:14px 16px;margin:12px 0;font-size:.92rem}
+  .bignote b{color:var(--hot)}
+  .rows{border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:8px}
+  .row{display:flex;align-items:center;gap:12px;padding:9px 14px;border-top:1px solid var(--line);font-size:.9rem}
+  .row:first-child{border-top:none}
+  .row.next{background:rgba(167,224,46,.09)}
+  .row .n{font-family:var(--mono);font-size:.72rem;color:var(--faint);width:2.4em;flex:0 0 auto}
+  .row .who{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .row .who b{color:var(--cream)}.row .who span{color:var(--faint)}
+  .row .t{font-family:var(--mono);font-variant-numeric:tabular-nums;color:var(--lime);width:5em;text-align:right}
+  .row .t.empty{color:var(--faint)}
+  .row .mini{padding:4px 9px;font-size:.66rem}
+  .foot{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+  .hint{color:var(--faint);font-size:.82rem;margin-top:10px}
+  kbd{font-family:var(--mono);background:var(--panel);border:1px solid var(--line2);border-bottom-width:2px;border-radius:6px;padding:1px 7px;color:var(--cream)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">COME<span class="d">·</span>WITH <b>RADIO</b></div>
+    <h1>Tap the track times</h1>
+    <p class="sub">Play your recorded mix and tap once the instant each track drops. That's the only thing the “Now Playing” video needs from you. Everything happens on this page — nothing is uploaded.</p>
+  </header>
+
+  <div class="step">1 · Load your files</div>
+  <label class="file"><b>🎧 Choose the mix audio</b> — the file you recorded (MP3 / WAV / M4A)<input type="file" id="audioFile" accept="audio/*"></label>
+  <label class="file"><b>📄 Choose the cues CSV</b> (optional) — <code>EP#_cues.csv</code> from make_cues.py, so it shows each track name as you go<input type="file" id="cuesFile" accept=".csv"></label>
+
+  <div class="step">2 · Play &amp; tap</div>
+  <div class="transport">
+    <button class="play" id="playBtn" disabled>▶ Play</button>
+    <div class="clock"><span id="cur">0:00</span> <span class="tot">/ <span id="tot">0:00</span></span></div>
+    <button class="tap" id="tapBtn" disabled>◉ TAP (space)</button>
+    <button id="backBtn" disabled>⟲ Undo tap</button>
+  </div>
+  <div class="bignote">Tap <b>the moment a new track becomes audible</b> — the first beat/drop of the incoming track, not the blend start. Missed one? <b>Undo tap</b> pulls the last one back. You can also nudge any time with the ± buttons.</div>
+
+  <div class="rows" id="rows"></div>
+
+  <div class="step">3 · Export</div>
+  <div class="foot">
+    <button id="exportBtn" disabled>⬇ Download cues CSV</button>
+    <button id="copyBtn" disabled>📋 Copy times</button>
+  </div>
+  <p class="hint">Send the downloaded CSV back and the video gets rendered from it. Keyboard: <kbd>space</kbd> tap · <kbd>K</kbd> play/pause · <kbd>←</kbd>/<kbd>→</kbd> scrub 5s.</p>
+</div>
+
+<script>
+const $=s=>document.querySelector(s);
+let audio=new Audio(), tracks=[], marks=[], nextIdx=0, haveCsv=false;
+
+const fmt=s=>{s=Math.max(0,s);return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');};
+const fmtc=s=>Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0');
+
+$('#audioFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  audio.src=URL.createObjectURL(f);
+  audio.onloadedmetadata=()=>{ $('#tot').textContent=fmt(audio.duration); enable(); };
+};
+$('#cuesFile').onchange=e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const r=new FileReader();
+  r.onload=()=>{ parseCsv(r.result); haveCsv=true; render(); };
+  r.readAsText(f);
+};
+function parseCsv(txt){
+  const lines=txt.replace(/\r/g,'').split('\n').filter(l=>l.trim());
+  const hdr=lines[0].split(',').map(s=>s.trim().toLowerCase());
+  const ai=hdr.indexOf('artist'), ti=hdr.indexOf('title');
+  tracks=lines.slice(1).map(l=>{
+    // minimal CSV split (handles simple quoted fields)
+    const out=[];let cur='',q=false;
+    for(const c of l){ if(q){if(c==='"')q=false;else cur+=c;} else if(c==='"')q=true; else if(c===','){out.push(cur);cur='';} else cur+=c;}
+    out.push(cur);
+    return {artist:(out[ai]||'').trim(), title:(out[ti]||'').trim(), raw:out};
+  });
+  marks=new Array(tracks.length).fill(null);
+  nextIdx=0;
+}
+function enable(){
+  $('#playBtn').disabled=false; $('#tapBtn').disabled=false;
+  if(!tracks.length){ // no CSV: freeform marks
+    tracks=[]; marks=[];
+  }
+  render();
+}
+$('#playBtn').onclick=()=>{ if(audio.paused){audio.play();$('#playBtn').textContent='⏸ Pause';} else {audio.pause();$('#playBtn').textContent='▶ Play';} };
+audio.ontimeupdate=()=>{ $('#cur').textContent=fmt(audio.currentTime); };
+audio.onended=()=>{ $('#playBtn').textContent='▶ Play'; };
+
+function tap(){
+  if(!audio.src)return;
+  const t=audio.currentTime;
+  if(haveCsv){
+    if(nextIdx>=tracks.length)return;
+    marks[nextIdx]=t; nextIdx++;
+  }else{
+    marks.push(t);
+  }
+  updateBtns(); render(); scrollNext();
+}
+function undo(){
+  if(haveCsv){ if(nextIdx>0){nextIdx--; marks[nextIdx]=null;} }
+  else marks.pop();
+  updateBtns(); render();
+}
+$('#tapBtn').onclick=tap;
+$('#backBtn').onclick=undo;
+function nudge(i,d){ if(marks[i]!=null){marks[i]=Math.max(0,marks[i]+d); render();} }
+
+function updateBtns(){
+  const any=haveCsv?nextIdx>0:marks.length>0;
+  $('#backBtn').disabled=!any; $('#exportBtn').disabled=!any; $('#copyBtn').disabled=!any;
+}
+function scrollNext(){ const el=document.querySelector('.row.next'); if(el)el.scrollIntoView({block:'center',behavior:'smooth'}); }
+
+function render(){
+  const rows=$('#rows');
+  if(haveCsv){
+    rows.innerHTML=tracks.map((tr,i)=>{
+      const m=marks[i];
+      const isNext=i===nextIdx;
+      return `<div class="row ${isNext?'next':''}">
+        <span class="n">${String(i+1).padStart(2,'0')}</span>
+        <span class="who"><b>${esc(tr.artist)}</b> <span>— ${esc(tr.title)}</span></span>
+        ${m!=null?`<button class="mini" onclick="nudge(${i},-1)">−1s</button><button class="mini" onclick="nudge(${i},1)">+1s</button>`:''}
+        <span class="t ${m==null?'empty':''}">${m==null?(isNext?'tap →':'—'):fmtc(m)}</span>
+      </div>`;
+    }).join('');
+  }else{
+    rows.innerHTML=marks.length?marks.map((m,i)=>`<div class="row">
+      <span class="n">${String(i+1).padStart(2,'0')}</span>
+      <span class="who"><span>track ${i+1}</span></span>
+      <button class="mini" onclick="nudge(${i},-1)">−1s</button><button class="mini" onclick="nudge(${i},1)">+1s</button>
+      <span class="t">${fmtc(m)}</span></div>`).join('')
+      :'<div class="row"><span class="who"><span>No taps yet — load the cues CSV to see track names, or just tap freely.</span></span></div>';
+  }
+  updateBtns();
+}
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function buildCsv(){
+  if(haveCsv){
+    // rebuild the original CSV with the start column filled
+    return null; // handled in export via raw
+  }
+  return marks.map((m,i)=>`${i+1},${fmtc(m)}`).join('\n');
+}
+$('#exportBtn').onclick=()=>{
+  let csv;
+  if(haveCsv){
+    // read back header from first raw isn't stored; reconstruct standard columns
+    csv='idx,start,artist,title,bpm,song_key,camelot,duration_ms\n'+tracks.map((tr,i)=>{
+      const r=tr.raw.slice();
+      r[1]=marks[i]!=null?fmtc(marks[i]):'';
+      // ensure quoting for fields with commas
+      return r.map(f=>/[",]/.test(f)?'"'+f.replace(/"/g,'""')+'"':f).join(',');
+    }).join('\n');
+  }else{
+    csv='idx,start\n'+buildCsv();
+  }
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  a.download='cues_with_times.csv'; a.click();
+};
+$('#copyBtn').onclick=()=>{
+  const txt=(haveCsv?marks:marks).map((m,i)=>m==null?'':`${i+1}. ${fmtc(m)}`).filter(Boolean).join('\n');
+  navigator.clipboard.writeText(txt);
+};
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT')return;
+  if(e.code==='Space'){e.preventDefault();tap();}
+  else if(e.key==='k'||e.key==='K'){e.preventDefault();$('#playBtn').click();}
+  else if(e.key==='ArrowLeft'){audio.currentTime=Math.max(0,audio.currentTime-5);}
+  else if(e.key==='ArrowRight'){audio.currentTime=Math.min(audio.duration||0,audio.currentTime+5);}
+});
+render();
+</script>
+</body>
+</html>
