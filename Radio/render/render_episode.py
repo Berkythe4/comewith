@@ -213,7 +213,8 @@ def main():
             tracks.append({"start": str(r.get("start_sec", "")), "artist": r.get("artist", ""),
                            "title": r.get("title", ""), "bpm": m.get("bpm", ""),
                            "song_key": m.get("song_key", ""), "camelot": m.get("camelot", ""),
-                           "show_date": m.get("show_date", ""), "show_venue": m.get("show_venue", "")})
+                           "show_date": r.get("show_date") or m.get("show_date", ""),
+                           "show_venue": r.get("show_venue") or m.get("show_venue", "")})
     else:
         if not a.cues:
             raise SystemExit("Give --cues or --json.")

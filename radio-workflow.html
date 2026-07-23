@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Come With Radio — the weekly run</title>
+<meta name="robots" content="noindex">
+<style>
+  :root{
+    --bg:#0e0712;--card:#170d1e;--card2:#1d1226;--line:#33223c;--line2:#4a3252;
+    --cream:#EDE4D3;--dim:#b3a7b8;--faint:#7c7183;
+    --lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;--blue:#7DB8FF;--gold:#e9b949;
+    --disp:800 1em/1 'Archivo','Helvetica Neue',system-ui,sans-serif;
+    --mono:500 1em/1 ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{background:radial-gradient(75% 40% at 88% -5%,rgba(167,224,46,.05),transparent 60%),var(--bg);
+    color:var(--cream);font-family:'Helvetica Neue',system-ui,Arial,sans-serif;line-height:1.5;padding:0 20px 90px}
+  .wrap{max-width:1080px;margin:0 auto}
+  a{color:var(--lime)}
+  header{padding:48px 0 26px;border-bottom:1px solid var(--line);margin-bottom:14px}
+  .brand{font:var(--mono);font-size:.7rem;letter-spacing:.24em;text-transform:uppercase;color:var(--faint);margin-bottom:12px}
+  .brand b{color:var(--cream)}.brand .d{color:var(--lime)}
+  .eyebrow{font:var(--mono);font-size:.72rem;letter-spacing:.28em;text-transform:uppercase;color:var(--lime)}
+  h1{font:var(--disp);font-size:clamp(2rem,5.5vw,3.2rem);letter-spacing:-.02em;line-height:1;margin:6px 0 14px;text-wrap:balance}
+  .lede{color:var(--dim);font-size:clamp(1rem,2.2vw,1.12rem);max-width:64ch}
+
+  .legend{display:flex;gap:8px 20px;flex-wrap:wrap;margin:22px 0 6px;font:var(--mono);font-size:.72rem;letter-spacing:.04em;color:var(--dim)}
+  .legend span{display:inline-flex;align-items:center;gap:7px}
+  .dot{width:11px;height:11px;border-radius:3px;flex:0 0 auto}
+  .d-dash{background:var(--hot)}.d-gear{background:var(--gold)}.d-tool{background:var(--blue)}.d-auto{background:var(--lime)}
+
+  .phase{margin-top:38px}
+  .phase-h{display:flex;align-items:baseline;gap:14px;margin-bottom:4px}
+  .phase-h .pn{font:var(--disp);font-size:1.1rem;color:var(--bg);background:var(--lime);width:1.9em;height:1.9em;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
+  .phase-h h2{font:var(--disp);font-size:1.5rem;letter-spacing:-.01em}
+  .phase-h .where{font:var(--mono);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-left:auto;text-align:right}
+  .phase-sub{color:var(--faint);font-size:.9rem;margin:0 0 16px calc(1.9em + 14px)}
+
+  .steps{display:grid;gap:12px;grid-template-columns:1fr;margin-left:calc(1.9em + 14px)}
+  @media(min-width:680px){.steps{grid-template-columns:1fr 1fr}}
+  .step{position:relative;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 15px 14px 17px;overflow:hidden}
+  .step::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--line2)}
+  .step.dash::before{background:var(--hot)}.step.gear::before{background:var(--gold)}
+  .step.tool::before{background:var(--blue)}.step.auto::before{background:var(--lime)}
+  .step .top{display:flex;align-items:baseline;gap:9px;margin-bottom:5px}
+  .step .ix{font:var(--mono);font-size:.7rem;color:var(--faint)}
+  .step h3{font-size:1rem;font-weight:700;letter-spacing:-.01em}
+  .step .tool-tag{margin-left:auto;font:var(--mono);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;padding:3px 8px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);white-space:nowrap}
+  .step p{color:var(--dim);font-size:.86rem}
+  .step p code{font:var(--mono);font-size:.82em;background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--cream)}
+  .step .auto-badge{display:inline-block;margin-top:8px;font:var(--mono);font-size:.64rem;letter-spacing:.08em;text-transform:uppercase;color:var(--lime);border:1px solid var(--lime-dk);border-radius:999px;padding:3px 9px}
+  .step .flag{display:inline-block;margin-top:8px;font:var(--mono);font-size:.64rem;letter-spacing:.06em;color:var(--gold);border:1px solid var(--gold);border-radius:999px;padding:3px 9px}
+  .step.wide{grid-column:1/-1}
+
+  .callout{margin:14px 0 0 calc(1.9em + 14px);padding:13px 16px;border:1px dashed var(--gold);border-radius:12px;background:rgba(233,185,73,.06);font-size:.88rem;color:var(--cream)}
+  .callout b{color:var(--gold)}
+  .callout code{font:var(--mono);font-size:.82em;background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+
+  .loop{margin:26px 0 0 calc(1.9em + 14px);padding:13px 16px;border:1px dashed var(--lime-dk);border-radius:12px;background:rgba(167,224,46,.05);font-size:.9rem;color:var(--cream)}
+  .loop b{color:var(--lime)}
+
+  .folders{margin-top:44px;padding:22px 24px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+  .folders h2{font:var(--disp);font-size:1.3rem;margin-bottom:6px}
+  .folders>p{color:var(--faint);font-size:.9rem;margin-bottom:14px}
+  .tree{font:var(--mono);font-size:.84rem;line-height:1.85;color:var(--dim);overflow-x:auto}
+  .tree b{color:var(--cream)}.tree .c{color:var(--faint)}.tree .hi{color:var(--lime)}
+
+  footer{margin-top:44px;padding-top:22px;border-top:1px solid var(--line);color:var(--faint);font-size:.86rem;max-width:70ch}
+  footer b{color:var(--dim)}
+  code{font:var(--mono);font-size:.82em;background:var(--card2);border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--cream)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">COME<span class="d">·</span>WITH <b>RADIO</b></div>
+    <div class="eyebrow">The weekly run · end to end</div>
+    <h1>From empty station to live episode.</h1>
+    <p class="lede">Four phases, one loop a week. Each step shows where it happens and whether it's on you or automatic. Green steps are the tools that took manual work off your plate.</p>
+    <div class="legend">
+      <span><i class="dot d-dash"></i> Dashboard</span>
+      <span><i class="dot d-gear"></i> Rekordbox / decks</span>
+      <span><i class="dot d-tool"></i> Render tools</span>
+      <span><i class="dot d-auto"></i> Automatic / new</span>
+    </div>
+  </header>
+
+  <!-- PHASE 1 -->
+  <section class="phase">
+    <div class="phase-h"><span class="pn">1</span><h2>Research &amp; build the tracklist</h2><span class="where">Dashboard · Artist Radio</span></div>
+    <p class="phase-sub">Find who's coming to NYC, pick the tracks, know where to buy them.</p>
+    <div class="steps">
+      <div class="step dash"><div class="top"><span class="ix">1.1</span><h3>Pull shows</h3><span class="tool-tag">↻ Pull shows</span></div><p>RA + Ticketmaster → upcoming NYC lineups.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">1.2</span><h3>Scan for producers</h3><span class="tool-tag">Scan</span></div><p>Find which incoming artists post original music.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">1.3</span><h3>Add tracks</h3><span class="tool-tag">＋ add · ＋ Add song</span></div><p>Pull from artists' SoundCloud, or hand-add anything you bought.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">1.4</span><h3>Where to buy</h3><span class="tool-tag">🛒 · /beatport-cart</span></div><p>Beatport + Bandcamp match → price, buy links, availability.</p></div>
+      <div class="step auto wide"><div class="top"><span class="ix">1.5</span><h3>Fill show info</h3><span class="tool-tag">↻ Show info</span></div><p>Matches every track to its artist's upcoming NYC show (date + venue) — the info that ends up on the video. Splits collab credits and reads remixers, so more tracks fill automatically.</p></div>
+    </div>
+  </section>
+
+  <!-- PHASE 2 -->
+  <section class="phase">
+    <div class="phase-h"><span class="pn">2</span><h2>Buy, arrange &amp; record</h2><span class="where">Beatport · Rekordbox · decks</span></div>
+    <p class="phase-sub">The DJ part. Buy the set, build it, record it — and grab the track times while you're there.</p>
+    <div class="steps">
+      <div class="step gear"><div class="top"><span class="ix">2.1</span><h3>Buy &amp; arrange</h3><span class="tool-tag">Rekordbox</span></div><p>Buy the tracks, order the set the way it actually flows.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">2.2</span><h3>Import the order</h3><span class="tool-tag">🎛 Import Rekordbox</span></div><p>Drop the Rekordbox export → the station takes your exact order. Cut songs carry to next week.</p></div>
+      <div class="step gear"><div class="top"><span class="ix">2.3</span><h3>Record the mix</h3><span class="tool-tag">decks → USB</span></div><p>Record straight through Rekordbox. The <code>.wav</code> lands on disk.</p></div>
+      <div class="step gear"><div class="top"><span class="ix">2.4</span><h3>Export the track times *</h3><span class="tool-tag">Rekordbox History</span></div><p>Right after recording, export that session's <b style="color:var(--cream)">History</b> — it's the list of when each track came in. Do it now, at the decks; it's a separate step from making the video.</p><span class="flag">* finicky — read the note</span></div>
+    </div>
+    <div class="callout">
+      <b>* About the track times.</b> Rekordbox's built-in recording <code>.cue</code> came out <b>empty</b> — no track markers — so it took some digging to get timestamps. Two reliable routes: export the <b>History</b> session (has the times), or if that comes up short, <b>audio-match</b> the recording against your source track files (<code>match_mix.py</code>) or tap them in by ear (<code>tap_times.html</code>). Whichever you use, the times get reviewed and locked into <code>tracklist.json</code> in Phase 3.
+    </div>
+  </section>
+
+  <!-- PHASE 3 -->
+  <section class="phase">
+    <div class="phase-h"><span class="pn">3</span><h2>Make the video</h2><span class="where">Radio/render → Radio/Week N</span></div>
+    <p class="phase-sub">Turn the recording into the Now-Playing YouTube video. No camera, no editor.</p>
+    <div class="steps">
+      <div class="step tool wide"><div class="top"><span class="ix">3.1</span><h3>Save the files into the week folder</h3><span class="tool-tag">Radio/Week N/</span></div><p>Drop the recorded <code>mix.wav</code> and the History export into <code>Radio/Week N/</code> (Week 1, Week 2, …). That folder is the home for the whole episode — audio, times, video, everything.</p></div>
+      <div class="step auto wide"><div class="top"><span class="ix">3.2</span><h3>Run one command → the MP4</h3><span class="tool-tag">make_episode.py</span></div><p>In the project, run:<br><code>python Radio/render/make_episode.py --week N</code><br>It finds the mix + times, pulls the tracklist, and renders <code>CWR_EpN_YouTube.mp4</code> into the week folder — 1080p, per-track slide with cover, date &amp; venue, progress bar. If the times need recovering it tells you exactly how; review/tweak them in <code>tracklist.json</code> and re-run — no re-matching.</p><span class="auto-badge">new · one command</span></div>
+      <div class="step gear"><div class="top"><span class="ix">3.3</span><h3>Upload to YouTube</h3><span class="tool-tag">youtube.com</span></div><p>Upload the MP4; paste <code>youtube_chapters.txt</code> into the description for clickable chapters. Works on every phone + TV.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">3.4</span><h3>Save the YouTube link</h3><span class="tool-tag">✎ Details</span></div><p>Paste the YouTube URL onto the episode — <b style="color:var(--cream)">saves without going live</b>.</p></div>
+    </div>
+  </section>
+
+  <!-- PHASE 4 -->
+  <section class="phase">
+    <div class="phase-h"><span class="pn">4</span><h2>Details &amp; go live</h2><span class="where">Dashboard · Artist Radio</span></div>
+    <p class="phase-sub">Dress the episode and publish it everywhere at once — now, or at a scheduled time.</p>
+    <div class="steps">
+      <div class="step dash"><div class="top"><span class="ix">4.1</span><h3>Episode details</h3><span class="tool-tag">✎ Details</span></div><p>Name, cover, both descriptions, DJ, YouTube link — editable anytime, all in one place, none of it publishes.</p></div>
+      <div class="step dash"><div class="top"><span class="ix">4.2</span><h3>Test push (optional)</h3><span class="tool-tag">⇪ To SoundCloud</span></div><p>Private first-listen playlist on SoundCloud. Or link your own uploaded mix track.</p></div>
+      <div class="step auto wide"><div class="top"><span class="ix">4.3</span><h3>Go live — now or scheduled</h3><span class="tool-tag">🚀 Go live</span></div><p>One button: publishes the episode page, pushes to SoundCloud, logs every track as played, and opens next week's station pre-loaded with the songs you carried. Set a <b style="color:var(--cream)">go-live time</b> and it publishes itself — you don't have to be at the keyboard.</p><span class="auto-badge">one button · schedulable</span></div>
+      <div class="step auto"><div class="top"><span class="ix">4.4</span><h3>Teaser + reach</h3><span class="tool-tag">homepage · mailing</span></div><p>Homepage pill + ticker update automatically; announce to the Come With list.</p></div>
+    </div>
+  </section>
+
+  <div class="loop">↺ <b>The loop:</b> going live auto-creates next week's station, already seeded with the songs you cut this week. You start Phase 1 with a head start every time.</div>
+
+  <!-- FOLDERS -->
+  <section class="folders">
+    <h2>Where everything lives</h2>
+    <p>Each episode gets its own <b>Radio/Week N/</b> folder. The tools and the station artwork stay put.</p>
+    <div class="tree">
+<b>Radio/</b>
+ ├─ <b>Artwork/</b>            <span class="c">the show's cover art (Radio_Thumbnail.jpg)</span>
+ ├─ <b>render/</b>             <span class="c">the tools — scripts, never edited per-episode</span>
+ │   ├─ make_episode.py    <span class="c">one command → the video</span>
+ │   ├─ match_mix.py       <span class="c">audio-match timestamps from source tracks</span>
+ │   ├─ tap_times.html     <span class="c">tap-along timestamps by ear</span>
+ │   └─ weekly_prep.py     <span class="c">cues · chapters · buy list · checklist</span>
+ ├─ <b class="hi">Week 1/</b>             <span class="c">← this episode: everything for it</span>
+ │   ├─ 01 CWR_Ep1_Final.wav        <span class="c">the recorded mix</span>
+ │   ├─ HISTORY ….m3u8              <span class="c">Rekordbox session export</span>
+ │   ├─ tracklist.json              <span class="c">the locked timestamps</span>
+ │   ├─ youtube_chapters.txt        <span class="c">paste into YouTube</span>
+ │   ├─ EP1_cues.csv / _checklist   <span class="c">working files</span>
+ │   └─ CWR_Ep1_YouTube.mp4         <span class="c">the finished video</span>
+ └─ <b>Week 2/</b>             <span class="c">next episode…</span>
+    </div>
+  </section>
+
+  <footer>
+    <b>How the video path got easier:</b> Phase 3 used to be "figure out a video editor." It's now one command with the cover, tracklist and show info pulled for you. The finicky part — recovering track times from a recording whose <code>.cue</code> was empty — is handled by History export, audio-matching, or tap-along, and locked into <code>tracklist.json</code> so you can hand-correct and re-render anytime. Nothing about your recording setup changed.
+  </footer>
+</div>
+</body>
+</html>

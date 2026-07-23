@@ -50,8 +50,12 @@ def q(E, sql):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--station", type=int)
+    ap.add_argument("--week", help="write everything into Radio/Week N/ instead of Documents/ + render/")
     a = ap.parse_args()
     E = env()
+    global DOCS, RENDER
+    if a.week:
+        DOCS = RENDER = os.path.join(ROOT, "Radio", "Week %s" % a.week)
     os.makedirs(DOCS, exist_ok=True)
 
     where = "p.station_no = %d" % a.station if a.station else "p.status in ('building','testing')"

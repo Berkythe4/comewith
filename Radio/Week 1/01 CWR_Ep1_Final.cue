@@ -1,0 +1,5 @@
+REM DATE 2026-07-22 05:02 PM
+REM RECORDED_BY "rekordbox-dj"
+TITLE "CWR_Ep1_Final"
+PERFORMER "Berky"
+FILE "01 CWR_Ep1_Final.wav" WAVE

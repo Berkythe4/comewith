@@ -34,6 +34,14 @@ def run(args):
     if r.returncode != 0:
         raise SystemExit(r.returncode)
 
+def _json_has_times(path):
+    try:
+        import json
+        d = json.load(open(path, encoding="utf-8"))
+        return bool(d) and all(r.get("start_sec") not in (None, "") for r in d)
+    except Exception:
+        return False
+
 def cues_have_times(path):
     if not os.path.exists(path):
         return False
@@ -48,9 +56,18 @@ def station_no_from_cues(path):
     m = re.search(r"EP(\d+)_cues", base)
     return m.group(1) if m else "1"
 
+import glob as _glob
+def _find(folder, patterns):
+    for p in patterns:
+        hits = sorted(_glob.glob(os.path.join(folder, p)), key=os.path.getmtime)
+        if hits:
+            return hits[-1]
+    return None
+
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--audio", required=True)
+    ap.add_argument("--week", help="episode week folder — auto-finds the mix, history, cues in Radio/Week N/ and writes CWR_EpN_YouTube.mp4 there")
+    ap.add_argument("--audio")
     ap.add_argument("--station", type=int)
     ap.add_argument("--cues")
     ap.add_argument("--history")
@@ -59,8 +76,21 @@ def main():
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
 
-    if not os.path.exists(a.audio):
-        raise SystemExit("Missing audio: " + a.audio)
+    # --week: a whole episode lives in Radio/Week N/. Auto-discover its files so
+    # the whole render is just `make_episode.py --week 1`.
+    wk = None
+    if a.week:
+        wk = os.path.join(ROOT, "Radio", "Week %s" % a.week)
+        if not os.path.isdir(wk):
+            raise SystemExit("No folder: " + wk)
+        a.audio = a.audio or _find(wk, ["*.wav", "*.aiff", "*.flac", "*.mp3", "*.m4a"])
+        a.history = a.history or _find(wk, ["*.m3u8", "HISTORY*.txt", "*history*.txt", "*.cue"])
+        a.cues = a.cues or _find(wk, ["EP*_cues.csv", "*_cues.csv"])
+        a.out = a.out or os.path.join(wk, "CWR_Ep%s_YouTube.mp4" % a.week)
+        a.station = a.station or (int(a.week) if str(a.week).isdigit() else None)
+
+    if not a.audio or not os.path.exists(a.audio):
+        raise SystemExit("Missing audio (looked in %s): %s" % (wk or "--audio", a.audio))
 
     # 1) cues
     cues = a.cues
@@ -69,35 +99,45 @@ def main():
         cmd = [PY, os.path.join(HERE, "make_cues.py")]
         if a.station:
             cmd += ["--station", str(a.station)]
+        if wk:
+            cmd += ["--out", os.path.join(wk, "EP%s_cues.csv" % (a.station or a.week))]
         run(cmd)
-        # make_cues names it EP{N}_cues.csv — find the newest one
-        import glob
-        found = sorted(glob.glob(os.path.join(HERE, "EP*_cues.csv")), key=os.path.getmtime)
+        search = wk or HERE
+        found = sorted(_glob.glob(os.path.join(search, "EP*_cues.csv")), key=os.path.getmtime)
         if not found:
             raise SystemExit("Could not find the generated cues CSV.")
         cues = found[-1]
     ep_no = station_no_from_cues(cues)
     ep_label = "EP %s" % ep_no
 
-    # 2) times
-    if a.history:
-        print("== Reading times from history ==")
-        run([PY, os.path.join(HERE, "import_history.py"), "--history", a.history, "--cues", cues, "--write"])
-    if not cues_have_times(cues):
-        print("\nThe cues still need start times before I can render:")
-        print("   " + os.path.relpath(cues, ROOT).replace("\\", "/"))
-        print("Fill them the easy way:")
-        print("   • open Radio/render/tap_times.html, load the mix + this CSV, tap along, export")
-        print("   • or pass --history <your deck's history export>")
-        print("   • or type mm:ss into the `start` column")
-        raise SystemExit(2)
+    # 2) times. A hand-verified tracklist.json (from match_mix + your corrections)
+    # is the source of truth — if it's there with times, use it and skip the
+    # history/cues dance entirely.
+    tl_json = _find(wk, ["tracklist.json"]) if wk else None
+    if not (tl_json and _json_has_times(tl_json)):
+        tl_json = None
+        if a.history:
+            print("== Reading times from history ==")
+            try:
+                run([PY, os.path.join(HERE, "import_history.py"), "--history", a.history, "--cues", cues, "--write"])
+            except SystemExit:
+                print("(history had no usable times — will need tap-along or a tracklist.json)")
+        if not cues_have_times(cues):
+            print("\nNo start times yet. Get them one of these ways, then re-run:")
+            print("   • audio-match:  python Radio/render/match_mix.py --mix <wav> --tracks <folder> --tracklist %s" % os.path.relpath(cues, ROOT).replace("\\", "/"))
+            print("   • tap-along:    open Radio/render/tap_times.html, load the mix + this CSV, export")
+            print("   • or type mm:ss into the `start` column of the cues CSV")
+            raise SystemExit(2)
 
     # 3) render
-    out = a.out or os.path.join(ROOT, "Radio", "Video", "EP%s.mp4" % ep_no)
+    out = a.out or os.path.join(ROOT, "Radio", "Week %s" % ep_no, "CWR_Ep%s_YouTube.mp4" % ep_no)
     print("== Rendering %s ==" % ep_label)
     cmd = [PY, os.path.join(HERE, "render_episode.py"),
-           "--cues", cues, "--audio", a.audio, "--cover", a.cover,
-           "--out", out, "--ep", ep_label]
+           "--audio", a.audio, "--cover", a.cover, "--out", out, "--ep", ep_label, "--abitrate", "320k"]
+    if tl_json:
+        cmd += ["--json", tl_json, "--meta", cues]
+    else:
+        cmd += ["--cues", cues]
     if a.dry:
         cmd.append("--dry")
     run(cmd)

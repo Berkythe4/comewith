@@ -46,6 +46,7 @@ def q(E, sql):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--station", type=int, help="station_no; default = current working station")
+    ap.add_argument("--week", help="write into Radio/Week N/ instead of Radio/render/")
     ap.add_argument("--out", help="output CSV path")
     a = ap.parse_args()
     E = env()
@@ -63,7 +64,13 @@ def main():
         raise SystemExit("No tracks found for that station.")
 
     station_no = rows[0]["station_no"]
-    out = a.out or os.path.join(ROOT, "Radio", "render", "EP%s_cues.csv" % station_no)
+    if a.out:
+        out = a.out
+    elif a.week:
+        wk = os.path.join(ROOT, "Radio", "Week %s" % a.week); os.makedirs(wk, exist_ok=True)
+        out = os.path.join(wk, "EP%s_cues.csv" % station_no)
+    else:
+        out = os.path.join(ROOT, "Radio", "render", "EP%s_cues.csv" % station_no)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot",
