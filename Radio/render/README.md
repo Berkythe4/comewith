@@ -30,7 +30,19 @@ to refresh. It never writes to the DB or the site.
 
 ---
 
-## Making the video (3 steps)
+## Making the video — the one-liner
+
+```
+python Radio/render/make_episode.py --audio "Radio/Video/EP1_mix.wav"
+# with deck history:  --history "Radio/Video/EP1_history.txt"
+```
+
+`make_episode.py` does the whole thing for the working station: pulls the cues,
+takes the times (from `--history`, or the cues if already filled, or stops and
+tells you to tap them in), and renders `Radio/Video/EP{N}.mp4`. If you'd rather
+run the pieces yourself, they're below.
+
+## Making the video — the pieces
 
 **1 · Get the cues (tracklist).** `weekly_prep.py` already wrote
 `Radio/render/EP{N}_cues.csv`. (Or run `make_cues.py` on its own.)
@@ -88,8 +100,19 @@ between the PNG rail and the ffmpeg fill — edit there only.
 ---
 
 ## Files
-- `weekly_prep.py` — the read-only assembler (above)
+- `make_episode.py` — one command: cues → times → render (the one-liner above)
+- `weekly_prep.py` — the read-only paperwork assembler
 - `make_cues.py` — just the cues CSV
+- `import_history.py` — read start times from a Rekordbox/Engine history export
+  (preview-first; never writes without `--write`)
 - `render_episode.py` — the video renderer
 - `tap_times.html` — offline tap-along timestamp tool
 - `EP{N}_cues.csv` — generated; your working file (git-ignored)
+
+## If something goes wrong — revert
+
+Everything here is **new, additive files** — no live app code, no DB, no
+functions were touched by the render tools. To undo the whole render toolkit:
+`git revert <commit>` (or delete `Radio/render/`). Nothing on the site or in the
+dashboard depends on it. The generated `EP*` files are regenerable anytime with
+`weekly_prep.py`, so deleting them is harmless.
