@@ -68,6 +68,17 @@ def parse_start(v):
 def fmt_clock(sec):
     sec = int(round(sec)); return "%d:%02d" % (sec // 60, sec % 60)
 
+def fmt_show_date(s):
+    s = (s or "").strip()
+    if not s:
+        return ""
+    try:
+        from datetime import datetime
+        dt = datetime.strptime(s[:10], "%Y-%m-%d")
+        return "%s  %s %d" % (dt.strftime("%a"), dt.strftime("%b"), dt.day)   # Fri  Jul 31
+    except Exception:
+        return s
+
 def ffprobe_duration(path):
     out = subprocess.check_output(
         ["ffprobe", "-v", "error", "-show_entries", "format=duration",
@@ -140,13 +151,15 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     ttitle = truncate(d, track["title"] or "", F_body(58), mw)
     d.text((mx, cy + 214), ttitle, font=F_body(58), fill=DIM)
 
-    # chips: BPM, key
+    # chips: the artist's upcoming show — date + venue (what viewers care about)
     chx = mx; chy = cy + 300
-    if track.get("bpm"):
-        chx = chip(d, chx, chy, "%s BPM" % track["bpm"], F_mono(34)) + 22
-    keytxt = " · ".join([x for x in [track.get("camelot"), track.get("song_key")] if x])
-    if keytxt:
-        chip(d, chx, chy, keytxt, F_mono(34), accent=True)
+    dt = fmt_show_date(track.get("show_date"))
+    if dt:
+        chx = chip(d, chx, chy, dt, F_mono(34), accent=True) + 22
+    ven = (track.get("show_venue") or "").strip()
+    if ven:
+        ven = truncate(d, ven, F_mono(34), (mx + mw) - chx - 90)
+        chip(d, chx, chy, ven, F_mono(34))
 
     # progress rail + lime fill baked in at this track's position (stepped per
     # track — fast + robust; a per-frame animated bar via ffmpeg geq is far too
@@ -199,7 +212,8 @@ def main():
             m = meta.get(r.get("order"), {})
             tracks.append({"start": str(r.get("start_sec", "")), "artist": r.get("artist", ""),
                            "title": r.get("title", ""), "bpm": m.get("bpm", ""),
-                           "song_key": m.get("song_key", ""), "camelot": m.get("camelot", "")})
+                           "song_key": m.get("song_key", ""), "camelot": m.get("camelot", ""),
+                           "show_date": m.get("show_date", ""), "show_venue": m.get("show_venue", "")})
     else:
         if not a.cues:
             raise SystemExit("Give --cues or --json.")

@@ -55,7 +55,8 @@ def main():
     else:
         where = "p.status in ('building','testing')"
     rows = q(E, """
-        select p.station_no, t.sort, t.artist_name, t.title, t.bpm, t.song_key, t.camelot, t.duration_ms
+        select p.station_no, t.sort, t.artist_name, t.title, t.bpm, t.song_key, t.camelot,
+               t.duration_ms, t.show_date, t.show_venue
         from sc_playlist_tracks t join sc_playlists p on p.id = t.playlist_id
         where %s order by p.station_no desc, t.sort;""" % where)
     if not rows:
@@ -65,10 +66,12 @@ def main():
     out = a.out or os.path.join(ROOT, "Radio", "render", "EP%s_cues.csv" % station_no)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
-        w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot", "duration_ms"])
+        w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot",
+                    "duration_ms", "show_date", "show_venue"])
         for i, r in enumerate(rows, 1):
             w.writerow([i, "", r["artist_name"] or "", r["title"] or "",
-                        r["bpm"] or "", r["song_key"] or "", r["camelot"] or "", r["duration_ms"] or ""])
+                        r["bpm"] or "", r["song_key"] or "", r["camelot"] or "", r["duration_ms"] or "",
+                        r["show_date"] or "", r["show_venue"] or ""])
     print("Wrote %s  (EP %s, %d tracks)" % (out, station_no, len(rows)))
     print("Now fill the `start` column with mm:ss for each track, then run render_episode.py")
 
