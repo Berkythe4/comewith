@@ -21,3 +21,11 @@ venv/
 Thumbs.db
 *.swp
 *~
+
+# Come With Radio working files: keep the folder + docs/art tracked, but not
+# heavy mix masters. Commit finished small covers; keep big audio/video local.
+Radio/Video/*.mp4
+Radio/Video/*.mov
+Radio/Video/*.wav
+Radio/Video/*.aiff
+Radio/**/*.wav
