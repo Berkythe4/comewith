@@ -9275,7 +9275,7 @@ function raRenderPlaylist() {
       ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'EP drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
       ${switcher}
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
-      <a class="hub-mini" href="${ARTIST_ORIGIN}radio-workflow.html" target="_blank" rel="noopener" title="The weekly run, end to end — build → record → video → go live">🗺️ Workflow</a>
+      <a class="hub-mini" href="${ARTIST_ORIGIN}radio-workflow.html" target="_blank" rel="noopener" title="The weekly run, end to end — build → record → video → go live">🗺️ Weekly run</a>
       <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
       ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
     </div>
@@ -12792,10 +12792,10 @@ const WORKFLOW = [
     short: 'Live team chat + every email, logged.',
     detail: `The 💬 button (any tab) opens team chat: a team-wide channel, DMs and per-event threads, delivered live with unread badges — minimize it to a docked counter. Emailing a teammate from Users mirrors into your DM thread; team broadcasts (like an event's task list) land in # Team as a notice until someone marks them ✓ complete. Every outbound email lives as a Conversations thread — and replies you receive can be logged back in (paste or .eml upload, no mailbox access). Users (master-only) manages logins, module access, aliases and deactivation.`,
     links: [{ t: 'Open Conversations', tab: 'conversations' }, { t: 'Open Users', tab: 'team' }] },
-  { lane: 'mkt', n: 27, ico: '📡', t: 'RA market + radio', where: 'RA Market',
-    short: 'Scout the NYC scene; build a radio station.',
-    detail: `Pulls ~3 months of public Resident Advisor + Ticketmaster (EDM-only) shows for NYC: which nights have demand vs competition — the Best-Nights score weights the day of week (Fri/Sat up, Mon down) so it never calls a Monday your best night — plus venue + genre benchmarks and RA-picks, with your own attendance alongside. A Watchlist tracks artists/venues/collaborators (multi-reason filter, roster-linked, with each artist's upcoming nights). Plus a Radio station: the SoundCloud profiles of artists playing NYC soon, deduped and playable; build a station and push it to a private playlist in your own SoundCloud (⇪ export) and sync your reordered final cut back in. Your private ticket/revenue data stays in the CSV flow.`,
-    links: [{ t: 'Open RA Market', tab: 'ra-market' }] },
+  { lane: 'mkt', n: 27, ico: '📡', t: 'RA Market + Radio', where: 'Artist Radio',
+    short: 'Scout the NYC scene; run the weekly radio show.',
+    detail: `Two things live here. RA Market: ~3 months of public Resident Advisor + Ticketmaster (EDM-only) NYC shows — which nights have demand vs competition (the Best-Nights score weights day of week so Monday never tops the list), venue + genre benchmarks, RA-picks, your own attendance alongside, and a Watchlist of artists/venues/collaborators. And Come With Radio, a full weekly show: build a station from artists playing NYC soon, 🛒 check where to buy, buy + arrange + record the mix, auto-render the "Now Playing" YouTube video, and publish the episode page — now or on a schedule — with listener accounts, ♡ saving, and playing-soon alerts. For the whole weekly run, step by step, open the 🗺️ Weekly run map inside Artist Radio (comewith.org/radio-workflow.html).`,
+    links: [{ t: 'Open Artist Radio', tab: 'ra-market' }] },
 ];
 const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
 const WF_ORDER = ['crm', 'hub', 'money', 'mkt', 'kpi'];

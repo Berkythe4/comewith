@@ -249,6 +249,72 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-07-23 (Radio: Rekordbox-first building, listener features, video pipeline, scheduled go-live)
+
+> Migrations **102 · 103 · 104 · 105 · 106 APPLIED to prod**; edge fns
+> **track-sources · listener-shows** deployed, **get-station** redeployed. All pushed +
+> Netlify-live. Video render pipeline lives in-repo under **`Radio/render/`** (local,
+> ffmpeg + Pillow; not deployed). Process map at **comewith.org/radio-workflow.html**.
+
+### ✅ Rekordbox-first station building (102)
+- SoundCloud isn't record-quality, so the set is **bought + arranged in Rekordbox**.
+  `source` on `sc_playlist_tracks`/`sc_song_log` (`soundcloud`/`manual`/`rekordbox`);
+  non-SC tracks get a synthetic `man_…` sc_track_id so dedupe + song memory + carry-over
+  still work. **🎛 Import Rekordbox order** (parses the playlist export by header name,
+  fuzzy-matches, shows the diff, applies order + BPM/key), **＋ Add song** / ✎ edit (buy
+  link + label are private — get-station doesn't select them). SC test-push + ↺ sync KEPT.
+
+### ✅ Where to buy + anon revoke (103)
+- **🛒 Where to buy** = `track-sources` edge fn: Beatport (real v4 API, paste-a-token —
+  10-min tokens, refresh token unreachable from the browser) + Bandcamp (unofficial,
+  best-effort). Fills MISSING bpm/key only; remix/length-aware match guards. `beatport_oauth`
+  token store (admin-RLS'd). **Also revoked anon on `sc_playlists`/`sc_playlist_tracks`**
+  (carried table grants since 079; RLS was blocking rows so it was `200 []` not data → now 401).
+
+### ✅ Partners role + episode DJ (104, 105)
+- **`partners`** staff_role (Henry, Martin, Janelle) = every module EXCEPT master_only
+  (income/expenses/strategy/team = the financial wall). Marketing lost Artist Radio.
+- **`mix_by`** — who DJ'd the episode; shown on the page/hub + SC description.
+
+### ✅ Public page = final mix only (get-station)
+- `get-station` no longer selects `sc_playlist_url`; the public page links the FINAL MIX
+  (SoundCloud/YouTube) only. To get the songs, come to the episode page and export.
+
+### ✅ Listener features (radio.html + listener-shows)
+- ♡ save exposes each track's SC link; **🎟 Playing NYC soon** (artists you saved with an
+  upcoming show — `listener-shows`, server-side so ra_artists stays admin-only); Save all;
+  drawer sort Recent/Artist/BPM/Camelot; copy-all-links. **❔ What you get** guide always in
+  the nav. Signup opt-in = **`come_with` segment only** (DI never opted in from radio).
+  Mobile CSS fixed (nav/nudge/toast). Show-info matching splits collab credits + reads
+  remixers; RA-search in the ✎ track editor to attach a remixer's show by hand.
+
+### ✅ Video pipeline — the "Now Playing" YouTube video (local, `Radio/render/`)
+- rekordbox's recording `.cue` came out EMPTY + History `.m3u8` has full track lengths not
+  mix positions → **`match_mix.py`** recovers timestamps by audio-matching source tracks vs
+  the mix (log-mel cross-corr, ±8% tempo, **Viterbi/DP global monotonic alignment**). Keith
+  reviews + hand-corrects `tracklist.json`. **`render_episode.py`** (Pillow cards + baked
+  progress bar; per-frame ffmpeg geq was too slow for an hour) → per-track slide (cover,
+  artist/title, **show date + venue**, up-next). **`make_episode.py --week N`** = one command.
+  **Weekly folders**: each episode = `Radio/Week N/` (mix, history, tracklist, video, docs);
+  `render/` = tools; heavy media gitignored. EP1 delivered (60:33, 18 tracks).
+
+### ✅ Scheduled go-live (106) + save-YouTube-without-publishing
+- **DB-only scheduled publish**: Keith schedules YouTube+SoundCloud on those platforms; the
+  site flips the page live at the same time via **pg_cron `radio-publish-due` (every 5 min)**.
+  `scheduled_go_live` + `radio_open_next_station()`/`radio_schedule_go_live()` (admin RPC)/
+  `radio_publish_station()` (SQL half of finalize — NO SC API push)/`radio_publish_due()`.
+  **Functions default to EXECUTE for PUBLIC → revoked from PUBLIC** (SECURITY DEFINER hole),
+  verified anon=none. Scheduling **opens next week's station now** (current building→testing
+  keeps the one-building invariant) so Keith works ahead + flips via the switcher. ✎ Details
+  gained a YouTube link field that **saves without publishing**.
+
+### 🗺️ Flowcharts
+- In-dashboard **🗺️ Workflow** (general 5-lane business map) — its radio node now points to
+  the radio-specific flow. **🗺️ Weekly run** (in Artist Radio) = `radio-workflow.html`, the
+  detailed radio weekly run. Distinct labels; consistent content.
+
+---
+
 ## Current state — reconciled 2026-07-21 (Come With Radio: full release pipeline, scheduled drops, Beatport, media-link hardening)
 
 > Migrations **099 · 100 · 101 APPLIED to prod**; edge fns **get-station · sc-connect ·
