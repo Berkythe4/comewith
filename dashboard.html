@@ -1231,6 +1231,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
       <div class="panel" id="panel-calendar"><div id="calBody"><div class="placeholder">Loading calendar…</div></div></div>
 
+      <div class="panel" id="panel-meetings"><div id="meetBody"><div class="placeholder">Loading meetings…</div></div></div>
+
       <div class="panel" id="panel-inquiries">
         <div id="inquiriesBody"></div>
       </div>
@@ -1629,6 +1631,8 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'pricing')) MODULES.push({ key: 'pricing', label: 'Pricing', nav_group: 'Workflow', sort_order: 30, built: true, signed_off: false, master_only: false, default_roles: [] });
   // Same resilience for the Calendar module ahead of migration 096.
   if (!MODULES.some(m => m.key === 'calendar')) MODULES.push({ key: 'calendar', label: 'Calendar & Tasks', nav_group: 'Pinned', sort_order: 1, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
+  // And the Meetings module ahead of migration 114 propagating.
+  if (!MODULES.some(m => m.key === 'meetings')) MODULES.push({ key: 'meetings', label: 'Meetings', nav_group: 'Pinned', sort_order: 2, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -3203,6 +3207,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'income') { await loadIncome(); return; } // custom (inline event + payer assignment)
   if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
   if (tab === 'calendar') { await loadCalendar(); return; } // custom (master calendar + tasks board)
+  if (tab === 'meetings') { await loadMeetings(); return; } // custom (meeting tracker → follow-up tasks)
   if (tab === 'inquiries') { await loadInquiries(); return; } // custom (lead pipeline)
   if (tab === 'agreements') { await loadAgreements(); return; } // custom (contracts)
   if (tab === 'pricing') { await loadPricing(); return; } // custom (event pricing tool)
@@ -12032,6 +12037,336 @@ $('panel-conversations').addEventListener('change', (e) => {
 });
 
 // ============================================================================
+// ============================ MEETINGS + WORKSTREAMS (114/115) ===============
+// Two connected workflows, one screen:
+//   • Meetings — capture notes live; turn any line into a follow-up TASK
+//     (discrete, done-state) or a WORKSTREAM (ongoing thread someone drives).
+//   • Workstreams — "what we're each working on independently that still needs
+//     touch-bases." Owner + status + next check-in + a running update log.
+// Everything is PRIVATE to its creator until "pushed to team". Keith, Martin
+// and Henry each keep their own and share select items. A workstream ties to a
+// strategic PILLAR (content/audience/parties/dance_infusion/radio/ops) so daily
+// work ladders up into the same buckets the Strategy board and vision use.
+const MEET = { tab: 'meetings', list: [], open: null, notes: [], team: [], newKind: 'note', filter: 'mine', ws: [], wsOpen: null, wsUpdates: [] };
+const MEET_KINDS = { note: '📝 Note', decision: '✅ Decision', action: '⚡ Action', question: '❓ Question' };
+const WS_STATUS = { active: 'Active', blocked: 'Blocked', parked: 'Parked', done: 'Done' };
+const WS_PILLARS = ['content', 'audience', 'parties', 'dance_infusion', 'radio', 'ops'];
+const wsPillarColor = (p) => (WORKSTREAM[p]?.color) || (p === 'radio' ? '#B5791F' : p === 'ops' ? '#5b7fb3' : 'var(--mid)');
+const wsPillarLabel = (p) => (WORKSTREAM[p]?.label) || (p === 'radio' ? 'Radio' : p === 'ops' ? 'Operations' : (p || ''));
+
+async function loadMeetings() {
+  const body = $('meetBody');
+  try {
+    const team = await sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true);
+    MEET.team = (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at);
+  } catch (_) { MEET.team = []; }
+  if (MEET.tab === 'workstreams') { await meetLoadWorkstreams(); return; }
+  try {
+    const ms = await sb.from('meetings').select('id,title,meeting_date,attendees,summary,status,visibility,event_id,created_by,created_at').is('deleted_at', null).order('meeting_date', { ascending: false }).limit(200);
+    if (ms.error) throw ms.error;
+    MEET.list = ms.data || [];
+  } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }
+  if (MEET.open) { await meetLoadOne(MEET.open); return; }
+  meetRenderList();
+}
+
+function meetTabs() {
+  const tab = (k, l) => `<button class="cal-chipbtn${MEET.tab === k ? ' on' : ''}" data-meet-tab="${k}">${l}</button>`;
+  return `<div style="display:flex;gap:6px;margin-bottom:12px;">${tab('meetings', '🤝 Meetings')}${tab('workstreams', '🔄 Workstreams')}</div>`;
+}
+const meetMine = (row) => row.created_by === ME.id;
+const visBadge = (v) => v === 'team' ? '<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">👥 team</span>' : '<span class="role-chip" style="cursor:default;">🔒 private</span>';
+
+function meetRenderList() {
+  MEET.open = null; MEET.notes = [];
+  let rows = MEET.list;
+  if (MEET.filter === 'mine') rows = rows.filter(meetMine);
+  else if (MEET.filter === 'team') rows = rows.filter(m => m.visibility === 'team');
+  const card = (m) => `<div class="hub-li" data-meet-open="${m.id}" style="cursor:pointer;">
+    <div class="li-main"><strong>${escapeHtml(m.title)}</strong> ${visBadge(m.visibility)}${m.status === 'closed' ? ' <span class="role-chip" style="cursor:default;">closed</span>' : ''}${!meetMine(m) ? ' <span class="li-sub">· shared with you</span>' : ''}
+      <div class="li-sub">${escapeHtml(fmtDate(m.meeting_date))}${m.attendees ? ' · ' + escapeHtml(m.attendees) : ''}${m.summary ? ' · ' + escapeHtml(m.summary.slice(0, 80)) : ''}</div></div>
+    <span class="li-sub">open →</span></div>`;
+  $('meetBody').innerHTML = meetTabs() + `
+    <div class="hub-sec-bar"><h3>🤝 Meetings</h3><button class="hub-btn" data-meet-new>+ New meeting</button></div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      ${[['mine', 'Mine'], ['team', 'Shared with team'], ['all', 'All I can see']].map(([f, l]) => `<button class="cal-chipbtn${MEET.filter === f ? ' on' : ''}" data-meet-filter="${f}">${l}</button>`).join('')}
+    </div>
+    <div class="hub-list">${rows.map(card).join('') || '<div class="hub-empty">No meetings here yet. “+ New meeting” starts one — jot notes live, then turn any line into a follow-up task or a workstream.</div>'}</div>`;
+}
+
+async function meetLoadOne(id) {
+  MEET.open = id;
+  const { data, error } = await sb.from('meeting_notes')
+    .select('id,body,kind,task_id,workstream_id,sort,created_at,task:tasks(id,status,title),workstream:workstreams(id,title,status)')
+    .eq('meeting_id', id).order('sort').order('created_at');
+  if (error) { toast('Could not load notes: ' + error.message, 'err'); return; }
+  MEET.notes = data || [];
+  meetRenderOne();
+}
+
+function meetRenderOne() {
+  const m = MEET.list.find(x => x.id === MEET.open); if (!m) { meetRenderList(); return; }
+  const mine = meetMine(m);
+  const noteRow = (n) => {
+    const linkTask = n.task_id && n.task, linkWs = n.workstream_id && n.workstream;
+    const links = [
+      linkTask ? `→ task: <a href="#" data-meet-taskopen="${n.task.id}">${escapeHtml(n.task.title)}</a> <span class="role-chip" style="cursor:default;">${escapeHtml(n.task.status)}</span>` : '',
+      linkWs ? `→ workstream: <a href="#" data-meet-wsopen="${n.workstream.id}">${escapeHtml(n.workstream.title)}</a>` : '',
+    ].filter(Boolean).join(' &nbsp; ');
+    return `<div class="hub-li" style="padding:7px 0;align-items:flex-start;">
+      <span class="li-sub" style="min-width:78px;">${MEET_KINDS[n.kind] || n.kind}</span>
+      <div class="li-main"><span>${escapeHtml(n.body)}</span>${links ? `<div class="li-sub">${links}</div>` : ''}</div>
+      ${mine ? `<span style="display:flex;gap:5px;">
+        <select class="hub-status-sel" data-meet-kind="${n.id}" title="Line type">${Object.entries(MEET_KINDS).map(([k, l]) => `<option value="${k}"${n.kind === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+        ${linkTask ? '' : `<button class="hub-mini" data-meet-totask="${n.id}" title="Create a follow-up task from this line">➕ task</button>`}
+        ${linkWs ? '' : `<button class="hub-mini" data-meet-tows="${n.id}" title="Turn this into an ongoing workstream">🔄 workstream</button>`}
+        <button class="hub-mini danger" data-meet-delnote="${n.id}" title="Delete line">✕</button>
+      </span>` : ''}</div>`;
+  };
+  const actionCount = MEET.notes.filter(n => n.kind === 'action' && !n.task_id).length;
+  $('meetBody').innerHTML = meetTabs() + `
+    <div class="hub-sec-bar"><h3><a href="#" data-meet-back style="color:inherit;">🤝 Meetings</a> › ${escapeHtml(m.title)} ${visBadge(m.visibility)}</h3>
+      ${mine ? `<span style="display:flex;gap:6px;">
+        <button class="hub-mini" data-meet-push="${m.visibility === 'team' ? 'private' : 'team'}" title="${m.visibility === 'team' ? 'Make private again' : 'Let the whole team see this meeting'}">${m.visibility === 'team' ? '🔒 Make private' : '👥 Push to team'}</button>
+        <button class="hub-mini" data-meet-edit title="Edit title / date / attendees">✎ edit</button>
+        <button class="hub-mini" data-meet-status="${m.status === 'open' ? 'closed' : 'open'}">${m.status === 'open' ? 'Mark closed' : 'Reopen'}</button>
+      </span>` : '<span class="li-sub">shared with you — read-only</span>'}</div>
+    <div class="li-sub" style="margin-bottom:10px;">${escapeHtml(fmtDate(m.meeting_date))}${m.attendees ? ' · ' + escapeHtml(m.attendees) : ''}${m.summary ? '<br>' + escapeHtml(m.summary) : ''}</div>
+    ${mine && actionCount ? `<div class="kpi-hint" style="margin-bottom:8px;">${actionCount} action line${actionCount === 1 ? '' : 's'} not yet a task. <button class="hub-mini" data-meet-allactions>➕ Make tasks from all actions</button></div>` : ''}
+    <div class="hub-list">${MEET.notes.map(noteRow).join('') || '<div class="hub-empty">No notes yet.</div>'}</div>
+    ${mine ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+      <select class="hub-status-sel" data-meet-newkind>${Object.entries(MEET_KINDS).map(([k, l]) => `<option value="${k}"${MEET.newKind === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <input class="modal-input" data-meet-newnote placeholder="Type a note and press Enter…" style="flex:1 1 320px;" autocomplete="off">
+      <button class="hub-btn" data-meet-addnote>Add line</button>
+    </div>
+    <div class="li-sub" style="margin-top:5px;">⚡ Action → ➕ task (a discrete follow-up). A recurring thread someone drives → 🔄 workstream. Tasks land on the shared board; keep the meeting private and push only what everyone needs.</div>` : ''}`;
+  const inp = document.querySelector('[data-meet-newnote]'); if (inp) inp.focus();
+}
+
+async function meetAddNote() {
+  const inp = document.querySelector('[data-meet-newnote]'); const body = (inp?.value || '').trim();
+  if (!body) return;
+  const sort = (MEET.notes.reduce((mx, n) => Math.max(mx, n.sort || 0), 0)) + 10;
+  const { error } = await sb.from('meeting_notes').insert({ meeting_id: MEET.open, body, kind: MEET.newKind, sort, created_by: ME.id });
+  if (error) { toast('Could not add: ' + error.message, 'err'); return; }
+  await meetLoadOne(MEET.open);
+}
+
+async function meetNoteToTask(noteId) {
+  const n = MEET.notes.find(x => x.id === noteId); if (!n) return;
+  const m = MEET.list.find(x => x.id === MEET.open);
+  const title = n.body.length > 120 ? n.body.slice(0, 119) + '…' : n.body;
+  const { data, error } = await sb.from('tasks').insert({
+    title, description: `From meeting: ${m?.title || ''} (${fmtDate(m?.meeting_date)})`,
+    status: 'todo', source: 'meeting', meeting_id: MEET.open, meeting_note_id: noteId, created_by: ME.id,
+  }).select('id').single();
+  if (error) { toast('Could not create task: ' + error.message, 'err'); return; }
+  await sb.from('meeting_notes').update({ task_id: data.id, kind: 'action', updated_at: new Date().toISOString() }).eq('id', noteId);
+  toast('Follow-up task created — it’s on the shared Tasks board', 'ok');
+  openEditTask(data.id, () => meetLoadOne(MEET.open));
+}
+async function meetAllActionsToTasks() {
+  const pending = MEET.notes.filter(n => n.kind === 'action' && !n.task_id);
+  if (!pending.length) return;
+  const m = MEET.list.find(x => x.id === MEET.open);
+  for (const n of pending) {
+    const title = n.body.length > 120 ? n.body.slice(0, 119) + '…' : n.body;
+    const { data, error } = await sb.from('tasks').insert({
+      title, description: `From meeting: ${m?.title || ''} (${fmtDate(m?.meeting_date)})`,
+      status: 'todo', source: 'meeting', meeting_id: MEET.open, meeting_note_id: n.id, created_by: ME.id,
+    }).select('id').single();
+    if (!error && data) await sb.from('meeting_notes').update({ task_id: data.id }).eq('id', n.id);
+  }
+  toast(`${pending.length} task${pending.length === 1 ? '' : 's'} created`, 'ok');
+  await meetLoadOne(MEET.open);
+}
+// A note line → an ongoing workstream. Opens the workstream editor prefilled and
+// links the note back to it once saved.
+function meetNoteToWorkstream(noteId) {
+  const n = MEET.notes.find(x => x.id === noteId); if (!n) return;
+  meetWsEditModal(null, { title: n.body.length > 120 ? n.body.slice(0, 119) : n.body, fromNote: noteId });
+}
+
+function meetOpenEditModal(existing) {
+  const m = existing || {};
+  openKpi(existing ? 'Edit meeting' : '🤝 New meeting', 'Notes and follow-ups live inside it', `
+    <label class="modal-label">Title *</label>
+    <input class="modal-input" name="mt_title" value="${escapeHtml(m.title || '')}" placeholder="e.g. Janelle sync — comms + roles" style="width:100%;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div><label class="modal-label">Date</label><input class="modal-input" type="date" name="mt_date" value="${escapeHtml(m.meeting_date || calToday())}"></div>
+      <div style="flex:1;min-width:200px;"><label class="modal-label">Attendees</label><input class="modal-input" name="mt_att" value="${escapeHtml(m.attendees || '')}" placeholder="Janelle, Keith…" style="width:100%;"></div>
+    </div>
+    <label class="modal-label" style="margin-top:8px;">Summary / agenda</label>
+    <textarea class="modal-input" name="mt_summary" rows="3" style="width:100%;" placeholder="What this meeting is about (optional)">${escapeHtml(m.summary || '')}</textarea>`,
+    async () => {
+      const title = kpiVal('mt_title'); if (!title) { toast('Title is required', 'err'); return; }
+      const patch = { title, meeting_date: kpiVal('mt_date') || calToday(), attendees: kpiVal('mt_att') || null, summary: kpiVal('mt_summary') || null };
+      if (existing) {
+        const { error } = await sb.from('meetings').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', existing.id);
+        if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+        closeKpi(); await loadMeetings();
+      } else {
+        const { data, error } = await sb.from('meetings').insert({ ...patch, created_by: ME.id }).select('id').single();
+        if (error) { toast('Create failed: ' + error.message, 'err'); return; }
+        closeKpi(); MEET.open = data.id; await loadMeetings();
+      }
+    }, existing ? 'Save' : 'Create meeting');
+}
+
+// ---------------------------- WORKSTREAMS ------------------------------------
+async function meetLoadWorkstreams() {
+  const [ws, upd] = await Promise.all([
+    sb.from('workstreams').select('id,title,owner_actor_id,owner_label,status,visibility,pillar,next_touch,summary,created_by,updated_at,owner:actors!workstreams_owner_actor_id_fkey(display_name)').is('deleted_at', null).order('updated_at', { ascending: false }),
+    sb.from('workstream_updates').select('id,workstream_id,body,created_at').order('created_at', { ascending: false }).limit(400),
+  ]);
+  if (ws.error) { $('meetBody').innerHTML = `<div class="panel-state err">${escapeHtml(ws.error.message)}</div>`; return; }
+  MEET.ws = ws.data || [];
+  const byWs = {}; (upd.data || []).forEach(u => (byWs[u.workstream_id] ||= []).push(u));
+  MEET.wsLatest = byWs;
+  if (MEET.wsOpen) return meetRenderWsOne();
+  meetRenderWsList();
+}
+const wsOwnerName = (w) => w.owner?.display_name || w.owner_label || '—';
+function meetRenderWsList() {
+  MEET.wsOpen = null;
+  const active = MEET.ws.filter(w => w.status !== 'done' && w.status !== 'parked');
+  const rest = MEET.ws.filter(w => w.status === 'done' || w.status === 'parked');
+  const today = calToday();
+  const card = (w) => {
+    const last = (MEET.wsLatest?.[w.id] || [])[0];
+    const due = w.next_touch && w.next_touch <= today;
+    return `<div class="hub-li" data-meet-wsopen="${w.id}" style="cursor:pointer;border-left:3px solid ${wsPillarColor(w.pillar)};padding-left:10px;">
+      <div class="li-main"><strong>${escapeHtml(w.title)}</strong> ${visBadge(w.visibility)} <span class="role-chip" style="cursor:default;">${escapeHtml(WS_STATUS[w.status] || w.status)}</span>
+        <div class="li-sub">👤 ${escapeHtml(wsOwnerName(w))}${w.pillar ? ` · <span style="color:${wsPillarColor(w.pillar)}">${escapeHtml(wsPillarLabel(w.pillar))}</span>` : ''}${w.next_touch ? ` · ${due ? '<span style="color:var(--red)">⏰ touch-base due ' : 'next touch-base '}${escapeHtml(fmtDate(w.next_touch))}${due ? '</span>' : ''}` : ''}${last ? ` · last: ${escapeHtml(last.body.slice(0, 60))}` : ''}</div></div>
+      <span class="li-sub">open →</span></div>`;
+  };
+  $('meetBody').innerHTML = meetTabs() + `
+    <div class="hub-sec-bar"><h3>🔄 Workstreams</h3><button class="hub-btn" data-meet-wsnew>+ New workstream</button></div>
+    <div class="li-sub" style="margin-bottom:10px;">Ongoing threads each person drives between meetings. Every one ladders into a strategic pillar, so the running work rolls up into the same buckets the Strategy board tracks.</div>
+    <div class="hub-list">${active.map(card).join('') || '<div class="hub-empty">No active workstreams. Create one, or spin one off a meeting note with 🔄.</div>'}</div>
+    ${rest.length ? `<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.8rem;">Parked / done</h3></div><div class="hub-list">${rest.map(card).join('')}</div>` : ''}`;
+}
+async function meetLoadWsOne(id) {
+  MEET.wsOpen = id;
+  const { data } = await sb.from('workstream_updates').select('id,body,created_at,meeting_id,meeting:meetings(title)').eq('workstream_id', id).order('created_at', { ascending: false });
+  MEET.wsUpdates = data || [];
+  meetRenderWsOne();
+}
+function meetRenderWsOne() {
+  const w = MEET.ws.find(x => x.id === MEET.wsOpen); if (!w) { meetRenderWsList(); return; }
+  const mine = w.created_by === ME.id;
+  const upd = (u) => `<div class="hub-li" style="padding:6px 0;"><div class="li-main"><span>${escapeHtml(u.body)}</span><div class="li-sub">${escapeHtml(fmtDT(u.created_at))}${u.meeting?.title ? ' · from ' + escapeHtml(u.meeting.title) : ''}</div></div></div>`;
+  $('meetBody').innerHTML = meetTabs() + `
+    <div class="hub-sec-bar"><h3><a href="#" data-meet-wsback style="color:inherit;">🔄 Workstreams</a> › ${escapeHtml(w.title)} ${visBadge(w.visibility)}</h3>
+      ${mine ? `<span style="display:flex;gap:6px;">
+        <button class="hub-mini" data-meet-wspush="${w.visibility === 'team' ? 'private' : 'team'}">${w.visibility === 'team' ? '🔒 Make private' : '👥 Push to team'}</button>
+        <button class="hub-mini" data-meet-wsedit>✎ edit</button>
+      </span>` : '<span class="li-sub">shared with you — read-only</span>'}</div>
+    <div style="border-left:3px solid ${wsPillarColor(w.pillar)};padding-left:12px;margin-bottom:12px;">
+      <div class="li-sub">👤 Owner: <strong>${escapeHtml(wsOwnerName(w))}</strong> · Status:
+        ${mine ? `<select class="hub-status-sel" data-meet-wsstatus>${Object.entries(WS_STATUS).map(([k, l]) => `<option value="${k}"${w.status === k ? ' selected' : ''}>${l}</option>`).join('')}</select>` : escapeHtml(WS_STATUS[w.status] || w.status)}
+        ${w.pillar ? ` · Pillar: <span style="color:${wsPillarColor(w.pillar)}">${escapeHtml(wsPillarLabel(w.pillar))}</span>` : ''}
+        ${w.next_touch ? ` · Next touch-base: ${escapeHtml(fmtDate(w.next_touch))}` : ''}</div>
+      ${w.summary ? `<div class="li-sub" style="margin-top:4px;">${escapeHtml(w.summary)}</div>` : ''}
+      ${mine ? `<button class="hub-mini" data-meet-wstask style="margin-top:6px;">➕ follow-up task</button>` : ''}
+    </div>
+    <div class="section-sub">Touch-base log</div>
+    <div class="hub-list">${MEET.wsUpdates.map(upd).join('') || '<div class="hub-empty">No updates yet.</div>'}</div>
+    ${mine ? `<div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;">
+      <input class="modal-input" data-meet-wsupd placeholder="Add a touch-base update…" style="flex:1 1 320px;" autocomplete="off">
+      <button class="hub-btn" data-meet-wsupdadd>Log update</button></div>` : ''}`;
+}
+async function meetWsAddUpdate() {
+  const inp = document.querySelector('[data-meet-wsupd]'); const body = (inp?.value || '').trim(); if (!body) return;
+  const { error } = await sb.from('workstream_updates').insert({ workstream_id: MEET.wsOpen, body, created_by: ME.id });
+  if (error) { toast('Could not log: ' + error.message, 'err'); return; }
+  await sb.from('workstreams').update({ updated_at: new Date().toISOString() }).eq('id', MEET.wsOpen);
+  await meetLoadWsOne(MEET.wsOpen);
+}
+async function meetWsToTask() {
+  const w = MEET.ws.find(x => x.id === MEET.wsOpen); if (!w) return;
+  const { data, error } = await sb.from('tasks').insert({
+    title: w.title, description: `Workstream follow-up`, status: 'todo', source: 'meeting',
+    workstream_id: w.id, created_by: ME.id,
+  }).select('id').single();
+  if (error) { toast('Could not create task: ' + error.message, 'err'); return; }
+  toast('Task created from workstream', 'ok');
+  openEditTask(data.id, () => meetLoadWsOne(MEET.wsOpen));
+}
+function meetWsEditModal(existing, seed) {
+  const w = existing || seed || {};
+  const ownerOpts = MEET.team.map(a => `<option value="${escapeHtml(a.id)}"${w.owner_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
+  openKpi(existing ? 'Edit workstream' : '🔄 New workstream', 'An ongoing thread with an owner and check-ins', `
+    <label class="modal-label">Title *</label>
+    <input class="modal-input" name="ws_title" value="${escapeHtml(w.title || '')}" style="width:100%;" placeholder="e.g. Green Room — multi-night deal">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div style="flex:1;min-width:180px;"><label class="modal-label">Owner (team)</label><select class="modal-select" name="ws_owner" style="width:100%;"><option value="">—</option>${ownerOpts}</select></div>
+      <div style="flex:1;min-width:140px;"><label class="modal-label">…or name</label><input class="modal-input" name="ws_ownerlabel" value="${escapeHtml(w.owner_label || '')}" placeholder="Janelle / Emma…" style="width:100%;"></div>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div><label class="modal-label">Pillar</label><select class="modal-select" name="ws_pillar"><option value="">—</option>${WS_PILLARS.map(p => `<option value="${p}"${w.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Status</label><select class="modal-select" name="ws_status">${Object.entries(WS_STATUS).map(([k, l]) => `<option value="${k}"${(w.status || 'active') === k ? ' selected' : ''}>${l}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Next touch-base</label><input class="modal-input" type="date" name="ws_touch" value="${escapeHtml(w.next_touch || '')}"></div>
+    </div>
+    <label class="modal-label" style="margin-top:8px;">Summary</label>
+    <textarea class="modal-input" name="ws_summary" rows="2" style="width:100%;">${escapeHtml(w.summary || '')}</textarea>`,
+    async () => {
+      const title = kpiVal('ws_title'); if (!title) { toast('Title is required', 'err'); return; }
+      const patch = {
+        title, owner_actor_id: kpiVal('ws_owner') || null, owner_label: kpiVal('ws_ownerlabel') || null,
+        pillar: kpiVal('ws_pillar') || null, status: kpiVal('ws_status') || 'active',
+        next_touch: kpiVal('ws_touch') || null, summary: kpiVal('ws_summary') || null,
+      };
+      if (existing) {
+        const { error } = await sb.from('workstreams').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', existing.id);
+        if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+        closeKpi(); await meetLoadWorkstreams();
+      } else {
+        const { data, error } = await sb.from('workstreams').insert({ ...patch, created_by: ME.id }).select('id').single();
+        if (error) { toast('Create failed: ' + error.message, 'err'); return; }
+        if (seed?.fromNote) await sb.from('meeting_notes').update({ workstream_id: data.id }).eq('id', seed.fromNote);
+        closeKpi(); MEET.wsOpen = data.id; MEET.tab = 'workstreams';
+        if (seed?.fromNote && MEET.open) await meetLoadOne(MEET.open); else await meetLoadWorkstreams();
+      }
+    }, existing ? 'Save' : 'Create workstream');
+}
+
+$('panel-meetings').addEventListener('click', async (e) => {
+  const tb = e.target.closest('[data-meet-tab]'); if (tb) { MEET.tab = tb.dataset.meetTab; MEET.open = null; MEET.wsOpen = null; await loadMeetings(); return; }
+  // meetings
+  const op = e.target.closest('[data-meet-open]'); if (op) { await meetLoadOne(op.dataset.meetOpen); return; }
+  if (e.target.closest('[data-meet-back]')) { e.preventDefault(); MEET.open = null; meetRenderList(); return; }
+  if (e.target.closest('[data-meet-new]')) { meetOpenEditModal(null); return; }
+  if (e.target.closest('[data-meet-edit]')) { meetOpenEditModal(MEET.list.find(x => x.id === MEET.open)); return; }
+  const fl = e.target.closest('[data-meet-filter]'); if (fl) { MEET.filter = fl.dataset.meetFilter; meetRenderList(); return; }
+  if (e.target.closest('[data-meet-addnote]')) { await meetAddNote(); return; }
+  const tt = e.target.closest('[data-meet-totask]'); if (tt) { await meetNoteToTask(tt.dataset.meetTotask); return; }
+  const tw = e.target.closest('[data-meet-tows]'); if (tw) { meetNoteToWorkstream(tw.dataset.meetTows); return; }
+  if (e.target.closest('[data-meet-allactions]')) { await meetAllActionsToTasks(); return; }
+  const to = e.target.closest('[data-meet-taskopen]'); if (to) { e.preventDefault(); openEditTask(to.dataset.meetTaskopen, () => meetLoadOne(MEET.open)); return; }
+  const dn = e.target.closest('[data-meet-delnote]'); if (dn) { if (!confirm('Delete this line?')) return; await sb.from('meeting_notes').delete().eq('id', dn.dataset.meetDelnote); await meetLoadOne(MEET.open); return; }
+  const st = e.target.closest('[data-meet-status]'); if (st) { await sb.from('meetings').update({ status: st.dataset.meetStatus, updated_at: new Date().toISOString() }).eq('id', MEET.open); await loadMeetings(); return; }
+  const pu = e.target.closest('[data-meet-push]'); if (pu) { await sb.from('meetings').update({ visibility: pu.dataset.meetPush, updated_at: new Date().toISOString() }).eq('id', MEET.open); const m = MEET.list.find(x => x.id === MEET.open); if (m) m.visibility = pu.dataset.meetPush; toast(pu.dataset.meetPush === 'team' ? 'Pushed to team — everyone can see it' : 'Made private', 'ok'); meetRenderOne(); return; }
+  // workstreams
+  const wo = e.target.closest('[data-meet-wsopen]'); if (wo) { e.preventDefault(); MEET.tab = 'workstreams'; await meetLoadWsOne(wo.dataset.meetWsopen); return; }
+  if (e.target.closest('[data-meet-wsback]')) { e.preventDefault(); MEET.wsOpen = null; meetRenderWsList(); return; }
+  if (e.target.closest('[data-meet-wsnew]')) { meetWsEditModal(null); return; }
+  if (e.target.closest('[data-meet-wsedit]')) { meetWsEditModal(MEET.ws.find(x => x.id === MEET.wsOpen)); return; }
+  if (e.target.closest('[data-meet-wsupdadd]')) { await meetWsAddUpdate(); return; }
+  if (e.target.closest('[data-meet-wstask]')) { await meetWsToTask(); return; }
+  const wpu = e.target.closest('[data-meet-wspush]'); if (wpu) { await sb.from('workstreams').update({ visibility: wpu.dataset.meetWspush, updated_at: new Date().toISOString() }).eq('id', MEET.wsOpen); const w = MEET.ws.find(x => x.id === MEET.wsOpen); if (w) w.visibility = wpu.dataset.meetWspush; toast(wpu.dataset.meetWspush === 'team' ? 'Pushed to team' : 'Made private', 'ok'); meetRenderWsOne(); return; }
+});
+$('panel-meetings').addEventListener('change', async (e) => {
+  const nk = e.target.closest('[data-meet-newkind]'); if (nk) { MEET.newKind = nk.value; return; }
+  const ck = e.target.closest('[data-meet-kind]'); if (ck) { await sb.from('meeting_notes').update({ kind: ck.value, updated_at: new Date().toISOString() }).eq('id', ck.dataset.meetKind); const n = MEET.notes.find(x => x.id === ck.dataset.meetKind); if (n) n.kind = ck.value; return; }
+  const ws = e.target.closest('[data-meet-wsstatus]'); if (ws) { await sb.from('workstreams').update({ status: ws.value, updated_at: new Date().toISOString() }).eq('id', MEET.wsOpen); const w = MEET.ws.find(x => x.id === MEET.wsOpen); if (w) w.status = ws.value; return; }
+});
+$('panel-meetings').addEventListener('keydown', (e) => {
+  if (e.key !== 'Enter') return;
+  if (e.target.closest('[data-meet-newnote]')) { e.preventDefault(); meetAddNote(); }
+  else if (e.target.closest('[data-meet-wsupd]')) { e.preventDefault(); meetWsAddUpdate(); }
+});
+
 // Master Calendar & Tasks — pinned 'calendar' module (migration 096).
 // One grid for everything with a date: our events (colored by series, with
 // lineups), ⭐ milestones (tasks.milestone — the ONLY tasks on the grid),
