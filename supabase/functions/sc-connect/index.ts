@@ -86,6 +86,40 @@ Deno.serve(async (req) => {
 
   if (!clientId || !clientSecret) return err(400, "SoundCloud isn't configured yet — the app's Client ID/Secret still need to be set.");
 
+  // Play counts for the finished mixes. SoundCloud has no webhook and nothing
+  // else in the app ever read a track's stats back, so the episode's reach was
+  // invisible — the KPI cards (110) run on what this stores.
+  if (action === "mix_stats") {
+    if (!row?.access_token) return err(400, "Connect SoundCloud first.");
+    const token = await freshToken();
+    if (!token) return err(400, "SoundCloud connection expired — reconnect and try again.");
+    const { data: stations } = await admin.from("sc_playlists")
+      .select("id, station_no, mix_sc_track_id").eq("status", "live").not("mix_sc_track_id", "is", null);
+    if (!stations?.length) return ok({ success: true, updated: 0, note: "No live episode has a SoundCloud mix linked yet." });
+
+    let updated = 0; const failed: number[] = [];
+    for (const s of stations) {
+      const r = await fetch(`https://api.soundcloud.com/tracks/${s.mix_sc_track_id}`, {
+        headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT },
+      });
+      if (!r.ok) { failed.push(s.station_no); continue; }
+      const j = await r.json().catch(() => null);
+      if (!j) { failed.push(s.station_no); continue; }
+      const num = (v: unknown) => (v == null ? null : Number(v));
+      await admin.from("sc_playlists").update({
+        mix_sc_plays: num(j.playback_count),
+        // The API has moved from favoritings_count to likes_count and still
+        // returns the old name on some tracks; take whichever is present.
+        mix_sc_likes: num(j.likes_count ?? j.favoritings_count),
+        mix_sc_reposts: num(j.reposts_count),
+        mix_sc_comments: num(j.comment_count),
+        mix_stats_at: new Date().toISOString(),
+      }).eq("id", s.id);
+      updated++;
+    }
+    return ok({ success: true, updated, failed });
+  }
+
   if (action === "start") {
     const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
     const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));

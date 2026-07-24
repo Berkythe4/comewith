@@ -1184,6 +1184,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <button class="strat-btn primary" data-kpi-open="ig">Log IG</button>
           <button class="strat-btn primary" data-kpi-open="target">Edit target</button>
           <button class="strat-btn" data-yt-refresh title="Pull live subscriber + avg-views from the YouTube API">↻ YouTube</button>
+          <button class="strat-btn" data-mix-refresh title="Pull play / like / repost counts for the finished episode mixes from SoundCloud">↻ Mix plays</button>
           <button class="strat-btn" data-strat-toggle>Manage cards</button>
         </div>
         <div id="strat-state"></div>
@@ -4091,6 +4092,7 @@ const KPI_ORDER = [
   'audience.subscribers', 'audience.subscribers_come_with', 'audience.subscribers_dance_infusion', 'guest.repeat_pct',
   'instagram.followers.comewith', 'instagram.followers.danceinfusion', 'instagram.followers.berky', 'instagram.followers', 'instagram.saves_shares', 'tiktok.followers',
   'radio.listeners', 'radio.episode_visits', 'radio.playlists_saved',
+  'radio.yt_avg_views', 'radio.yt_views_total', 'radio.yt_engagement', 'radio.sc_plays',
   'site.visitors_30d', 'site.views_30d', 'site.clicks_30d',
   'youtube.avg_views', 'youtube.engagement_rate', 'youtube.days_since_upload',
   'youtube.subscribers', 'youtube.total_views', 'youtube.total_likes', 'youtube.videos', 'youtube.watch_hours',
@@ -4124,6 +4126,10 @@ const METRIC_SOURCE = {
   'radio.listeners': 'LIVE — distinct signed-in listeners in listener_station_history, with staff logins and preview: links excluded. Signed-out listening is invisible to this.',
   'radio.episode_visits': 'LIVE — total episode-page visits by those same outside listeners. Your own visits and preview links are excluded.',
   'radio.playlists_saved': 'LIVE — playlists created by listeners (listener_playlists), staff accounts excluded.',
+  'radio.yt_avg_views': 'YOUTUBE API — average views across the episode videos only, matched by pulling the video id out of each live episode’s mix_youtube_url. Episodes whose video isn’t in the channel pull are skipped, not counted as zero.',
+  'radio.yt_views_total': 'YOUTUBE API — views summed across the episode videos only. Other channel uploads (sets, showcases) are not in this number.',
+  'radio.yt_engagement': 'YOUTUBE API — (likes + comments) ÷ views across the episode videos, pooled rather than averaged per episode, so one low-view episode can’t swing it.',
+  'radio.sc_plays': 'SOUNDCLOUD API — plays of the finished mixes on live episodes, refreshed by "↻ Mix plays" on this screen. Blank until that’s run; SoundCloud has no webhook, so it never updates on its own.',
   'site.visitors_30d': 'LIVE — distinct per-tab sessions on pageviews in site_events over 30 days. Cookie-less, so one person on a phone and a laptop counts twice; bots, previews and localhost are never recorded.',
   'site.views_30d': 'LIVE — pageviews logged by the site beacon over the last 30 days, across the public pages only.',
   'site.clicks_30d': 'LIVE — clicks on links and tagged buttons over 30 days, mostly outbound (tickets, SoundCloud, socials).',
@@ -4183,9 +4189,15 @@ const FORMULAS = {
 };
 function infoTip(text) { return ` <span class="info-tip" data-tip="${escapeHtml(text)}">i</span>`; }
 
+// Episode media numbers sit on the radio row (they're audience-building) but
+// they're CONTENT performance, not people we reached — so they carry the
+// Content colour on their edge to read as their own bucket in the row.
+const KPI_MEDIA_KEY = /^radio\.(yt_|sc_)/;
 function kpiCardHtml(c) {
   const t = trendFor(c);
-  const color = WORKSTREAM[c.workstream]?.color || 'var(--mid)';
+  const color = KPI_MEDIA_KEY.test(c.metric_key)
+    ? WORKSTREAM.content.color
+    : (WORKSTREAM[c.workstream]?.color || 'var(--mid)');
   // The tooltip explains the SOURCE, not the arithmetic of the progress bar —
   // knowing a bar is current÷target never told anyone anything.
   const tip = METRIC_SOURCE[c.metric_key]
@@ -4409,10 +4421,22 @@ async function refreshYoutube() {
   toast(`YouTube: ${fmtNum(data.subscribers)} subs · ${fmtNum(data.avg_views)} avg views`, 'ok');
   refreshStratIfActive();
 }
-// Manage-cards toggle + YouTube refresh
+// SoundCloud publishes no webhook and nothing else reads a track's stats back,
+// so mix plays only move when this is run.
+async function refreshMixStats() {
+  toast('Pulling SoundCloud mix stats…', 'ok');
+  const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'mix_stats' } });
+  if (error) { toast('Mix stats failed: ' + await fnErrorDetail(error), 'err'); return; }
+  if (data?.error) { toast('Mix stats failed: ' + data.error, 'err'); return; }
+  const failed = (data?.failed || []).length;
+  toast(data?.note || `Mix stats updated for ${data.updated} episode${data.updated === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
+  refreshStratIfActive();
+}
+// Manage-cards toggle + YouTube / mix refresh
 $('panel-strategy').addEventListener('click', (e) => {
   if (e.target.closest('[data-strat-toggle]')) { $('strat-manage').classList.toggle('show'); return; }
   if (e.target.closest('[data-yt-refresh]')) { refreshYoutube(); return; }
+  if (e.target.closest('[data-mix-refresh]')) { refreshMixStats(); return; }
 });
 // Persist hide/show to the shared dashboard_prefs row
 $('strat-manage-list').addEventListener('change', async (e) => {
