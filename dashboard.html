@@ -8899,7 +8899,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -9239,7 +9239,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -9286,6 +9286,14 @@ document.addEventListener('click', async (e) => {
     const v = (el && el.value || '').trim();
     if (!v) { toast('Paste the token first', 'err'); return; }
     raSaveBeatportToken(v, t.closest('[data-ra-bptoken]'));
+    return;
+  }
+  const bpc = t.closest('[data-ra-bpcat]'); if (bpc) { raArtistCatalog(bpc.dataset.raBpcat, bpc.dataset.raBpkey); return; }
+  if (t.closest('[data-ra-bpcattoken]')) {
+    const el = document.querySelector('#kpiModalBody [name="bp_token"]');
+    const v = (el && el.value || '').trim();
+    if (!v) { toast('Paste the token first', 'err'); return; }
+    raArtistCatalogWithToken(v, t.closest('[data-ra-bpcattoken]'));
     return;
   }
   if (t.closest('[data-ra-copybuy]')) { raCopyBuyList(); return; }
@@ -9488,6 +9496,7 @@ function raRenderArtistTracks(key) {
   return `<div style="border-left:2px solid var(--border-strong);padding-left:10px;">
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><span class="li-sub">Sort:</span>${sortBtn('recent', 'Recent')}${sortBtn('popular', 'Popular')}
       ${played ? `<button class="hub-mini" data-ra-hideplayed style="${raState.hidePlayed ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}" title="Hide songs you already played on the radio">${raState.hidePlayed ? '👁 show' : '🙈 hide'} ${played} played</button>` : ''}
+      <button class="hub-mini" data-ra-bpcat="${escapeHtml(c.username || '')}" data-ra-bpkey="${escapeHtml(key)}" title="Ask Beatport what this artist has released — catches the label releases SoundCloud won't serve">🛒 Beatport catalogue</button>
       <span class="li-sub" style="margin-left:auto;"${shortfall ? ` title="SoundCloud's profile says ${c.sc_track_count} tracks, but it only serves ${songs.length + (c.set_count || 0)} to a logged-out reader — the rest are label-restricted or region-locked and no amount of paging reaches them. Not a bug on our side; check Beatport for the full catalogue."` : ''}>${songs.length} songs${shortfall ? ` <span style="color:var(--gold,#B5791F)">· SoundCloud lists ${c.sc_track_count}</span>` : ''}</span></div>
     <!-- Song rows get their own .ra-zebra container so the stripe counts songs
          only — inside the outer div the sort bar would be child 1 and offset
@@ -9504,6 +9513,7 @@ function raRenderArtistTracks(key) {
           : `<button class="hub-mini" data-ra-repost="${escapeHtml(t.sc_track_id)}" data-ra-name="${escapeHtml(t.title)}" title="Repost to your SoundCloud followers">↻ repost</button>`}
         <button class="hub-mini" data-ra-addtrack="${escapeHtml(t.sc_track_id)}" ${inPl.has(t.sc_track_id) ? 'disabled title="Already in station"' : ''}>${inPl.has(t.sc_track_id) ? '✓' : '+ add'}</button>
       </span></div>`).join('')}</div>
+    ${raBpCatalogHtml(key, c)}
   </div>`;
 }
 function raRenderPlaylist() {
@@ -10201,6 +10211,62 @@ async function raSaveEpisodeDetails() {
 // token in one click, paste, run. The server caches it until its own expiry, so
 // repeat runs in the same ten minutes don't ask again. Nothing long-lived is kept.
 const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var t=JSON.parse(v).accessToken;navigator.clipboard.writeText(t);alert('Beatport token copied \\u2014 paste it into the Come With dashboard now (it expires in 10 minutes).')}catch(e){alert('Could not read the token: '+e.message)}})()";
+// ---- Beatport catalogue for one artist (112) --------------------------------
+// SoundCloud can't be trusted to list a label artist's full output, so this is
+// the second source. Cached in raState.bpCatalog per artist key.
+function raBpCatalogHtml(key, c) {
+  const cat = raState.bpCatalog?.[key];
+  if (!cat) return '';
+  if (!cat.tracks?.length) return `<div class="li-sub" style="margin-top:8px;">Beatport returned nothing for ${escapeHtml(cat.artist || '')} — the name may differ there.</div>`;
+  // Anything already on SoundCloud is redundant here; show what SoundCloud missed.
+  const have = new Set((c.songs || []).map(s => (s.title || '').toLowerCase().replace(/[^a-z0-9]/g, '')));
+  const rows = cat.tracks.map(t => {
+    const full = [t.title, t.mix_name && !/^original( mix)?$/i.test(t.mix_name) ? `(${t.mix_name})` : ''].filter(Boolean).join(' ');
+    const dupe = have.has(full.toLowerCase().replace(/[^a-z0-9]/g, ''));
+    const meta = [t.label, t.release_date ? String(t.release_date).slice(0, 10) : '', t.bpm ? t.bpm + ' BPM' : '', t.camelot, t.price != null ? '$' + t.price : ''].filter(Boolean).join(' · ');
+    return `<div class="hub-li" style="padding:5px 6px;${dupe ? 'opacity:.45;' : ''}">
+      <div class="li-main"><span>${escapeHtml(full)}${dupe ? ' <span class="li-sub">· already on SoundCloud</span>' : ''}</span>
+        <div class="li-sub">${escapeHtml((t.artists || []).join(', '))}${meta ? ' · ' + escapeHtml(meta) : ''}</div></div>
+      <span style="display:flex;gap:6px;">${t.url ? `<a class="hub-mini" href="${escapeHtml(t.url)}" target="_blank" rel="noopener" title="Open on Beatport">🛒</a>` : ''}</span></div>`;
+  }).join('');
+  const fresh = cat.tracks.filter(t => !have.has((`${t.title}${t.mix_name && !/^original( mix)?$/i.test(t.mix_name) ? `(${t.mix_name})` : ''}`).toLowerCase().replace(/[^a-z0-9]/g, ''))).length;
+  return `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
+    <div class="kpi-label">🛒 Beatport catalogue · ${cat.tracks.length} release${cat.tracks.length === 1 ? '' : 's'} · ${fresh} not on SoundCloud
+      ${infoTip(`Read from Beatport via the ${cat.method === 'artist_id' ? 'artist catalogue endpoint' : 'catalogue search, filtered to tracks credited to this artist'}. Beatport is a RELEASE catalogue: promos, edits and unreleased material won't be here, and a name that differs on Beatport can under-match.`)}</div>
+    <div class="ra-zebra">${rows}</div></div>`;
+}
+async function raArtistCatalog(name, key, token) {
+  if (!name) { toast('No artist name to look up', 'err'); return; }
+  raState.bpCatKey = key; raState.bpCatName = name;
+  toast('Asking Beatport about ' + name + '…', 'ok');
+  try {
+    const { data, error } = await sb.functions.invoke('track-sources', { body: { action: 'artist_catalog', artist: name } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (data?.needsToken) {
+      openKpi('🛒 Beatport catalogue — ' + name, 'Beatport needs a fresh token (they expire after 10 minutes)',
+        raBeatportPasteBox('Paste a token and I’ll pull this artist’s releases.').replace('data-ra-bptoken>Run with this token', 'data-ra-bpcattoken>Run with this token'),
+        () => closeKpi(), 'Close');
+      return;
+    }
+    if (data?.error) throw new Error(data.error);
+    (raState.bpCatalog ||= {})[key] = data;
+    closeKpi();
+    renderRaMarket();
+    toast(`Beatport: ${data.count} release${data.count === 1 ? '' : 's'} for ${name}`, 'ok');
+  } catch (e) { toast('Beatport catalogue failed: ' + (e.message || e), 'err'); }
+}
+async function raArtistCatalogWithToken(token, btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'Checking token…'; }
+  try {
+    const { data, error } = await sb.functions.invoke('track-sources', { body: { action: 'save_token', access_token: token } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (!data || data.error) throw new Error((data && data.error) || 'Beatport would not accept that token');
+    await raArtistCatalog(raState.bpCatName, raState.bpCatKey);
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Run with this token'; }
+    toast('Token problem: ' + (e.message || e), 'err');
+  }
+}
 function raBeatportPasteBox(msg) {
   return `<div style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;margin-bottom:10px;">
     <strong style="font-size:.86rem;">🔑 Beatport token</strong>

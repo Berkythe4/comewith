@@ -315,6 +315,92 @@ Deno.serve(async (req) => {
 
     // Explicit "save + verify this token" step. Separating it from the scan means
     // you get an unambiguous answer about the TOKEN before waiting on 25 tracks.
+    // ---------------------------------------------------------------------
+    // artist_catalog — everything Beatport has released BY an artist.
+    //
+    // Exists because SoundCloud under-serves label artists: Claude VonStroke's
+    // profile declares 147 tracks and hands an anonymous client 27, and no
+    // paging strategy reaches the rest (verified). Beatport is where those
+    // releases actually live.
+    //
+    // Two routes, because only the SEARCH endpoint is proven against the live
+    // API (it's what "Where to buy" has always used). The artist-id route is
+    // the better one if Beatport exposes it as documented, so we try it first
+    // and fall back automatically — and REPORT which route answered, so a
+    // silent fallback never masquerades as a complete catalogue.
+    // ---------------------------------------------------------------------
+    if (b.action === "artist_catalog") {
+      const artist = (b.artist || "").toString().trim();
+      if (!artist) return new Response(JSON.stringify({ error: "artist required" }), { headers: JH });
+      const t = await bpToken(admin);
+      if (!t.token) return new Response(JSON.stringify({ error: t.error || "No Beatport token", needsToken: true }), { headers: JH });
+      const token = t.token;
+      const H = { Authorization: `Bearer ${token}`, "User-Agent": UA };
+      const wanted = norm(artist);
+      const mine = (tr: any) => (tr.artists || []).some((a: any) => {
+        const n = norm(a.name || "");
+        return n === wanted || n.includes(wanted) || wanted.includes(n);
+      });
+      const map = (tr: any) => {
+        const k = bpKey(tr.key || {});
+        return {
+          bp_id: tr.id, title: tr.name || null,
+          mix_name: tr.mix_name || null,
+          artists: (tr.artists || []).map((a: any) => a.name).filter(Boolean),
+          label: tr.release?.label?.name || null,
+          release_date: tr.publish_date || tr.new_release_date || null,
+          bpm: tr.bpm ?? null, song_key: k.song_key, camelot: k.camelot,
+          length_ms: tr.length_ms ?? null,
+          price: tr.price?.value ?? null,           // DOLLARS, not cents
+          url: tr.slug && tr.id ? `https://www.beatport.com/track/${tr.slug}/${tr.id}` : null,
+        };
+      };
+
+      const out = new Map<number, any>();
+      let method = "search", bpArtistId: number | null = null, note: string | null = null;
+
+      // Route 1: resolve the artist, then read their tracks.
+      try {
+        const ar = await fetch(`https://api.beatport.com/v4/catalog/artists/?name=${encodeURIComponent(artist)}&per_page=10`, { headers: H });
+        if (ar.ok) {
+          const aj = await ar.json();
+          const cands = (aj.results || aj.artists || []) as any[];
+          const hit = cands.find((a) => norm(a.name || "") === wanted) || cands[0];
+          if (hit?.id) {
+            bpArtistId = hit.id;
+            for (let page = 1; page <= 5; page++) {
+              const tr = await fetch(`https://api.beatport.com/v4/catalog/artists/${hit.id}/tracks/?per_page=100&page=${page}`, { headers: H });
+              if (!tr.ok) break;
+              const tj = await tr.json();
+              const items = (tj.results || tj.tracks || []) as any[];
+              for (const it of items) if (it?.id) out.set(it.id, map(it));
+              if (!tj.next || items.length === 0) break;
+            }
+            if (out.size) method = "artist_id";
+          }
+        }
+      } catch (e) { note = "artist route failed: " + (e instanceof Error ? e.message : String(e)); }
+
+      // Route 2 (proven): search by name, keep only tracks credited to them.
+      if (!out.size) {
+        for (let page = 1; page <= 5; page++) {
+          const r = await fetch(`${BP_SEARCH}?q=${encodeURIComponent(artist)}&type=tracks&per_page=100&page=${page}`, { headers: H });
+          if (!r.ok) { if (page === 1) return new Response(JSON.stringify({ error: `Beatport refused the search (HTTP ${r.status}).` }), { headers: JH }); break; }
+          const j = await r.json();
+          const items = (j.tracks || j.results || []) as any[];
+          if (!items.length) break;
+          for (const it of items) if (it?.id && mine(it)) out.set(it.id, map(it));
+        }
+      }
+
+      const tracks = [...out.values()].sort((a, b) => String(b.release_date || "").localeCompare(String(a.release_date || "")));
+      await admin.from("bp_artist_catalog").upsert({
+        artist_key: wanted, artist_name: artist, bp_artist_id: bpArtistId,
+        tracks, track_count: tracks.length, method, fetched_at: new Date().toISOString(),
+      }, { onConflict: "artist_key" });
+      return new Response(JSON.stringify({ artist, count: tracks.length, method, bp_artist_id: bpArtistId, note, tracks }), { headers: JH });
+    }
+
     if (b.action === "save_token") {
       if (!pasted) return new Response(JSON.stringify({ error: "No token arrived — the paste box was empty by the time it reached the server." }), { headers: JH });
       if (storeErr) return new Response(JSON.stringify({ error: "Could not save the token: " + storeErr }), { headers: JH });
