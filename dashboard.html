@@ -427,7 +427,8 @@ body::before {
   background: var(--ink); color: var(--bg); padding: 8px 11px;
   font-family: 'Inconsolata', monospace; font-style: normal; font-size: 0.66rem;
   letter-spacing: 0.01em; line-height: 1.5; text-align: left;
-  width: max-content; max-width: 250px; white-space: normal;
+  /* 250px cut the source notes off mid-sentence. */
+  width: max-content; max-width: 320px; white-space: normal;
   z-index: 60; pointer-events: none; box-shadow: 0 3px 12px rgba(26,20,16,0.25);
 }
 /* Per-event money panel (Phase 13 — step 5) */
@@ -4068,15 +4069,73 @@ const WORKSTREAM = {
 };
 const WS_ORDER = ['content', 'audience', 'parties', 'dance_infusion'];
 // Sub-groups inside a workstream, in display order. Cards sort by these and a
-// hairline breaks the grid between them — mailing list, then social, then the
-// radio, then the site, then everything else.
+// hairline breaks the grid between them.
+//   Audience: mailing list · social · radio · site
+//   Content:  per-video performance · whole-channel totals
+// Numbers repeat across workstreams — grouping only ever applies within one.
+const KPI_VIDEO_KEYS = new Set(['youtube.avg_views', 'youtube.engagement_rate', 'youtube.days_since_upload']);
 function kpiSubgroup(k) {
-  if (k === 'audience.subscribers' || k.startsWith('audience.subscribers_')) return 1;
+  if (KPI_VIDEO_KEYS.has(k)) return 1;                 // Content — how a video does
+  if (k.startsWith('youtube.')) return 2;              // Content — channel-wide totals
+  // Repeat attendees sits on the mailing row by request: it's the other
+  // "are they coming back" number, even though it comes from attendance.
+  if (k === 'audience.subscribers' || k.startsWith('audience.subscribers_') || k === 'guest.repeat_pct') return 1;
   if (k.startsWith('instagram.') || k.startsWith('tiktok.')) return 2;
   if (k.startsWith('radio.')) return 3;
   if (k.startsWith('site.')) return 4;
   return 5;
 }
+// Explicit order within a sub-group. v_kpi_dashboard has no ORDER BY, so
+// without this the cards sit wherever Postgres hands them back.
+const KPI_ORDER = [
+  'audience.subscribers', 'audience.subscribers_come_with', 'audience.subscribers_dance_infusion', 'guest.repeat_pct',
+  'instagram.followers.comewith', 'instagram.followers.danceinfusion', 'instagram.followers.berky', 'instagram.followers', 'instagram.saves_shares', 'tiktok.followers',
+  'radio.listeners', 'radio.episode_visits', 'radio.playlists_saved',
+  'site.visitors_30d', 'site.views_30d', 'site.clicks_30d',
+  'youtube.avg_views', 'youtube.engagement_rate', 'youtube.days_since_upload',
+  'youtube.subscribers', 'youtube.total_views', 'youtube.total_likes', 'youtube.videos', 'youtube.watch_hours',
+  'parties.sell_through', 'parties.net_pl', 'parties.net_pl_total', 'parties.presale_velocity',
+  'di.attendance', 'di.raised_per_event', 'di.cost_to_raise', 'di.to_ms_total',
+];
+const kpiRank = (k) => { const i = KPI_ORDER.indexOf(k); return i === -1 ? 999 : i; };
+// What the number IS and where it comes from — the only thing worth putting in
+// a tooltip. "Live" = recomputed from the database on every load; "logged" =
+// a reading in metric_snapshots, so it's only as fresh as the last entry.
+const METRIC_SOURCE = {
+  'audience.subscribers': 'LIVE — everyone in the subscribers table with status "subscribed". Unsubscribe is global (one master list), so opt-outs are already out.',
+  'audience.subscribers_come_with': 'LIVE — subscribed people carrying the come_with brand segment. A subscriber can hold both brands, so this and Dance Infusion overlap and add up to more than the overall list.',
+  'audience.subscribers_dance_infusion': 'LIVE — subscribed people carrying the dance_infusion brand segment. Overlaps with Come With; the two are not exclusive.',
+  'guest.repeat_pct': 'LIVE — guests who attended 2+ events ÷ guests with any attendance on record. Built from ticket and attendance records, not the mailing list.',
+  'audience.follower_ticket': 'LOGGED BY HAND — no API behind it. Nothing computes this; it shows the last value you entered.',
+  'instagram.followers': 'LOGGED BY HAND — the Instagram Graph API is scaffolded but not connected (see the APIs screen). This is the older combined reading.',
+  'instagram.followers.comewith': 'LOGGED BY HAND from the @comewithnyc profile. No API connected yet — the date under the number is when it was last entered.',
+  'instagram.followers.danceinfusion': 'LOGGED BY HAND from the Dance Infusion profile. No API connected yet.',
+  'instagram.followers.berky': 'LOGGED BY HAND from Berky’s profile. No API connected yet.',
+  'instagram.saves_shares': 'LOGGED BY HAND per post. Nothing has been entered yet, so the card is blank.',
+  'tiktok.followers': 'LOGGED BY HAND. No TikTok API connected.',
+  'youtube.subscribers': 'YOUTUBE API — the channel’s subscriberCount, snapshotted each time you hit "↻ YouTube".',
+  'youtube.total_views': 'YOUTUBE API — the channel’s lifetime viewCount across every video.',
+  'youtube.videos': 'YOUTUBE API — the channel’s videoCount (everything public on the channel).',
+  'youtube.avg_views': 'YOUTUBE API — lifetime channel views ÷ number of videos. An all-time average across every upload, so it moves slowly and is NOT a read on recent performance.',
+  'youtube.total_likes': 'YOUTUBE API — likes summed across the videos pulled, capped at the 300 most recent uploads.',
+  'youtube.engagement_rate': 'YOUTUBE API — (total likes + comments) ÷ total channel views × 100, from the same pull.',
+  'youtube.days_since_upload': 'YOUTUBE API — days since the publish date of the newest video on the channel.',
+  'youtube.watch_hours': 'NOT PULLED — watch time only exists in the YouTube Analytics API, which needs OAuth and isn’t connected. Stays blank unless entered by hand.',
+  'radio.listeners': 'LIVE — distinct signed-in listeners in listener_station_history, with staff logins and preview: links excluded. Signed-out listening is invisible to this.',
+  'radio.episode_visits': 'LIVE — total episode-page visits by those same outside listeners. Your own visits and preview links are excluded.',
+  'radio.playlists_saved': 'LIVE — playlists created by listeners (listener_playlists), staff accounts excluded.',
+  'site.visitors_30d': 'LIVE — distinct per-tab sessions on pageviews in site_events over 30 days. Cookie-less, so one person on a phone and a laptop counts twice; bots, previews and localhost are never recorded.',
+  'site.views_30d': 'LIVE — pageviews logged by the site beacon over the last 30 days, across the public pages only.',
+  'site.clicks_30d': 'LIVE — clicks on links and tagged buttons over 30 days, mostly outbound (tickets, SoundCloud, socials).',
+  'parties.sell_through': 'LIVE — average of tickets sold ÷ venue capacity across COMPLETED events with series "Come With Parties". Events still upcoming are excluded.',
+  'parties.net_pl': 'LIVE — average net P&L per completed party: tickets + other income + donations + sponsor cash − expenses.',
+  'parties.net_pl_total': 'LIVE — the same net P&L summed across every completed party, not averaged.',
+  'parties.presale_velocity': 'LOGGED BY HAND — nothing entered yet, so the card is blank.',
+  'di.attendance': 'LIVE — average total_attendance across COMPLETED Dance Infusion events.',
+  'di.raised_per_event': 'LIVE — average raised per completed DI event: tickets + other income + donations + sponsor cash + sponsor in-kind.',
+  'di.cost_to_raise': 'LIVE — expenses ÷ total raised, averaged over completed DI events. Lower is better.',
+  'di.to_ms_total': 'LIVE — net P&L summed across completed DI events; what actually went to the MS Society.',
+};
 const strat = { cards: [], hidden: new Set(), parties: null, di: null, traffic: null };
 
 const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
@@ -4112,22 +4171,25 @@ function setStratState(kind, msg) {
 }
 
 // Plain-language formulas for every computed metric — one source, reused by infoTip().
+// Same rule as the KPI cards: say where the number comes from, not just the
+// arithmetic. These read one event out of the per-event KPI views.
 const FORMULAS = {
-  sell_through: 'Sell-through = tickets sold ÷ capacity × 100',
-  net_pl: 'Net P&L = tickets + other income (bar/vendor/merch) + donations + sponsor cash − expenses',
-  total_raised: 'Total raised = tickets + other income + donations + sponsor cash + sponsor in-kind',
-  cost_to_raise: 'Cost to raise $1 = expenses ÷ total raised',
-  tickets_cap: 'Tickets sold (sum of tier quantities) vs venue capacity',
-  attendance: 'Total attendance recorded for the event',
+  sell_through: 'LIVE for this event — ticketing rows (sum of tier quantities) ÷ the capacity on the venue record, × 100. Blank if the venue has no capacity set.',
+  net_pl: 'LIVE for this event — income rows (tickets + bar/vendor/merch) + third-party donations + sponsor cash, minus every expense row logged against it.',
+  total_raised: 'LIVE for this event — everything that came in: tickets + other income + donations + sponsor cash + sponsor in-kind. Expenses are not subtracted here.',
+  cost_to_raise: 'LIVE for this event — expense rows ÷ total raised. What it cost to bring in a dollar; lower is better.',
+  tickets_cap: 'LIVE — tickets sold comes from the ticketing table (sum of tier quantities); capacity comes from the venue record.',
+  attendance: 'The total_attendance field on the event — entered by hand or set from door scan data on import. Not derived from tickets sold.',
 };
 function infoTip(text) { return ` <span class="info-tip" data-tip="${escapeHtml(text)}">i</span>`; }
 
 function kpiCardHtml(c) {
   const t = trendFor(c);
   const color = WORKSTREAM[c.workstream]?.color || 'var(--mid)';
-  const tip = c.comparison === 'lte'
-    ? 'Progress = target ÷ current (lower is better). Trend = change vs last reading; ▼ down is good.'
-    : 'Progress = current ÷ target. Trend = change vs last reading; ▲ up is good.';
+  // The tooltip explains the SOURCE, not the arithmetic of the progress bar —
+  // knowing a bar is current÷target never told anyone anything.
+  const tip = METRIC_SOURCE[c.metric_key]
+    || 'No source note written for this metric yet. It reads either a live database view or the latest hand-logged reading in metric_snapshots.';
   return `<div class="kpi-card${c.current_value == null ? ' no-data' : ''}" style="--ws-color:${color}">
     <div class="kpi-label">${escapeHtml(c.label)}${infoTip(tip)}</div>
     <div class="kpi-value">${fmtMetric(c.current_value, c.unit)}</div>
@@ -4243,7 +4305,9 @@ function renderStrategy() {
   let groups = '';
   for (const ws of WS_ORDER) {
     const cards = strat.cards.filter(c => c.workstream === ws && !strat.hidden.has(c.metric_key))
-      .sort((a, b) => kpiSubgroup(a.metric_key) - kpiSubgroup(b.metric_key));
+      .sort((a, b) => kpiSubgroup(a.metric_key) - kpiSubgroup(b.metric_key)
+        || kpiRank(a.metric_key) - kpiRank(b.metric_key)
+        || (a.label || '').localeCompare(b.label || ''));
     if (!cards.length) continue;
     let prevSub = null;
     const cells = cards.map(c => {
