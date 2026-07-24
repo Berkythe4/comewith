@@ -12096,8 +12096,11 @@ function meetRenderList() {
 
 async function meetLoadOne(id) {
   MEET.open = id;
+  // Disambiguate the embeds: meeting_notes↔tasks has TWO fks (the note's
+  // task_id, and the task's meeting_note_id back-reference), so PostgREST needs
+  // the fk named or it errors "more than one relationship was found".
   const { data, error } = await sb.from('meeting_notes')
-    .select('id,body,kind,task_id,workstream_id,sort,created_at,task:tasks(id,status,title),workstream:workstreams(id,title,status)')
+    .select('id,body,kind,task_id,workstream_id,sort,created_at,task:tasks!meeting_notes_task_id_fkey(id,status,title),workstream:workstreams!meeting_notes_workstream_id_fkey(id,title,status)')
     .eq('meeting_id', id).order('sort').order('created_at');
   if (error) { toast('Could not load notes: ' + error.message, 'err'); return; }
   MEET.notes = data || [];
