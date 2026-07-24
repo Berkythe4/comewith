@@ -818,19 +818,20 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   border-bottom: 1px solid var(--border); font-size: 0.84rem;
 }
 .hub-li:last-child { border-bottom: none; }
-/* Incoming-artists zebra: a row runs artist → venue → date → action buttons, so
-   you need to track one line across the full width. A neutral overlay (not a
-   var) so it reads the same barely-there in both themes — it darkens a light
-   surface and lightens a dark one. Kept under 5% on purpose: enough to follow,
-   not enough to look like a highlighted/selected row. */
-#raArtistList > .hub-li:nth-child(even) { background: rgba(128, 128, 128, 0.045); }
+/* Zebra rows: a row runs artist → venue → date → action buttons (or song →
+   plays → date → buttons), so you need to track one line across the full width.
+   A neutral overlay (not a var) so it reads the same barely-there in both
+   themes — it darkens a light surface and lightens a dark one. Kept under 5% on
+   purpose: enough to follow, not enough to look like a selected row. Opt in by
+   putting .ra-zebra on a container whose direct children are the rows. */
+.ra-zebra > .hub-li:nth-child(even) { background: rgba(128, 128, 128, 0.045); }
 /* Now playing in the bottom-right dock. Lime tint only — a left bar sat inside
    the row's left padding, which the artist rows have (14px) but the song and
-   station-track rows don't (padding:5px 0), so it landed on their text. Listed
-   with the zebra selector so it outranks it — an id beats a class, so a plain
-   .ra-playing rule would lose on every even row. */
+   station-track rows don't (padding:5px 0), so it landed on their text. The
+   second selector has to out-specify the zebra rule above, or the stripe wins
+   on every even row. */
 .hub-li.ra-playing,
-#raArtistList > .hub-li.ra-playing:nth-child(even) {
+.ra-zebra > .hub-li.ra-playing:nth-child(even) {
   background: rgba(167, 224, 46, 0.11);
 }
 .hub-li .li-main { flex: 1 1 auto; min-width: 0; }
@@ -9175,7 +9176,7 @@ function renderRaRadio() {
     </div>
     ${raRenderPlaylist()}
     <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}</span></h3></div>
-    <div class="hub-list" id="raArtistList">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
+    <div class="hub-list ra-zebra" id="raArtistList">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
 function raRenderArtistTracks(key) {
   const c = raState.cache[key];
@@ -9202,7 +9203,12 @@ function raRenderArtistTracks(key) {
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><span class="li-sub">Sort:</span>${sortBtn('recent', 'Recent')}${sortBtn('popular', 'Popular')}
       ${played ? `<button class="hub-mini" data-ra-hideplayed style="${raState.hidePlayed ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}" title="Hide songs you already played on the radio">${raState.hidePlayed ? '👁 show' : '🙈 hide'} ${played} played</button>` : ''}
       <span class="li-sub" style="margin-left:auto;">${songs.length} songs</span></div>
-    ${visible.map(t => `<div class="hub-li" style="padding:5px 0;">
+    <!-- Song rows get their own .ra-zebra container so the stripe counts songs
+         only — inside the outer div the sort bar would be child 1 and offset
+         every stripe by one. The rows carry 6px of side padding (they had none)
+         so the tint doesn't run flush against the text, and the container pulls
+         back 6px to keep them aligned with the sort bar above. -->
+    <div class="ra-zebra" style="margin-left:-6px;">${visible.map(t => `<div class="hub-li" style="padding:5px 6px;">
       <div class="li-main"><span>${escapeHtml(t.title)}${songMark(t)}</span>
         <div class="li-sub">${Math.round(t.duration_ms / 60000)}min · ${fmtNum(t.playback_count)} plays · ${escapeHtml((t.created_at || '').slice(0, 10))}</div></div>
       <span style="display:flex;gap:6px;">
@@ -9211,7 +9217,7 @@ function raRenderArtistTracks(key) {
           ? `<button class="hub-mini" data-ra-unrepost="${escapeHtml(t.sc_track_id)}" data-ra-name="${escapeHtml(t.title)}" title="Reposted — click to undo" style="background:var(--green,#1f7a1f);color:#fff;">✓ reposted</button>`
           : `<button class="hub-mini" data-ra-repost="${escapeHtml(t.sc_track_id)}" data-ra-name="${escapeHtml(t.title)}" title="Repost to your SoundCloud followers">↻ repost</button>`}
         <button class="hub-mini" data-ra-addtrack="${escapeHtml(t.sc_track_id)}" ${inPl.has(t.sc_track_id) ? 'disabled title="Already in station"' : ''}>${inPl.has(t.sc_track_id) ? '✓' : '+ add'}</button>
-      </span></div>`).join('')}
+      </span></div>`).join('')}</div>
   </div>`;
 }
 function raRenderPlaylist() {
