@@ -378,6 +378,10 @@ body::before {
   content: ''; width: 11px; height: 11px; border-radius: 2px; background: var(--ws-color, var(--mid));
 }
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+/* Audience covers four unrelated things — the mailing list, social, the radio,
+   the site. A full-width hairline forces the next sub-group onto its own row so
+   they don't read as one undifferentiated wall of numbers. */
+.kpi-break { grid-column: 1 / -1; height: 1px; background: var(--border); margin: 2px 0; }
 .kpi-card {
   background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--ws-color, var(--mid));
   padding: 15px 17px; display: flex; flex-direction: column; gap: 9px;
@@ -1196,6 +1200,11 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <div class="section-label">Latest event</div>
             <div id="strat-parties"></div>
             <div id="strat-di" style="margin-top:14px;"></div>
+          </div>
+          <div>
+            <div class="section-label">Site traffic</div>
+            <div class="section-sub">Last 30 days, first-party — no cookies, no third party. Counts real visitors only: bots, unfurlers, localhost and Netlify previews never reach the table.</div>
+            <div id="strat-traffic"></div>
           </div>
           <div>
             <div class="section-label">Trends</div>
@@ -4058,7 +4067,17 @@ const WORKSTREAM = {
   dance_infusion: { label: 'Dance Infusion', color: '#8362A8' },
 };
 const WS_ORDER = ['content', 'audience', 'parties', 'dance_infusion'];
-const strat = { cards: [], hidden: new Set(), parties: null, di: null };
+// Sub-groups inside a workstream, in display order. Cards sort by these and a
+// hairline breaks the grid between them — mailing list, then social, then the
+// radio, then the site, then everything else.
+function kpiSubgroup(k) {
+  if (k === 'audience.subscribers' || k.startsWith('audience.subscribers_')) return 1;
+  if (k.startsWith('instagram.') || k.startsWith('tiktok.')) return 2;
+  if (k.startsWith('radio.')) return 3;
+  if (k.startsWith('site.')) return 4;
+  return 5;
+}
+const strat = { cards: [], hidden: new Set(), parties: null, di: null, traffic: null };
 
 const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
 function fmtMetric(v, unit) {
@@ -4136,6 +4155,56 @@ function sparkline(points, { w = 260, h = 46, color = '#2E8E72' } = {}) {
     <polyline points="${poly}" fill="none" stroke="${color}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     <circle cx="${lastX}" cy="${lastY}" r="2.8" fill="${color}"/></svg>`;
 }
+// Site traffic detail. The cards answer "how many"; this answers "which pages,
+// which links, and where from" — the part you actually act on.
+function renderStratTraffic() {
+  const t = strat.traffic;
+  const el = $('strat-traffic'); if (!el) return;
+  if (!t) { el.innerHTML = '<div class="li-sub">Loading…</div>'; return; }
+  const color = WORKSTREAM.audience.color;
+  const nice = (p) => p === '/' || p === '/index.html' ? 'Home' : p.replace(/^\//, '').replace(/\.html/, '');
+  // The radio line answers a specific question: are these outside people?
+  const rl = t.listeners || [];
+  const ext = rl.filter(r => r.is_external), int = rl.filter(r => !r.is_external);
+  const sum = (rows, k) => rows.reduce((s, r) => s + Number(r[k] || 0), 0);
+  const radioLine = rl.length
+    ? `<div class="kpi-hint" style="margin:0 0 12px;"><strong>Radio listeners:</strong> ${ext.length} outside ${ext.length === 1 ? 'person' : 'people'} · ${fmtNum(sum(ext, 'visits'))} episode visit${sum(ext, 'visits') === 1 ? '' : 's'}${int.length ? ` — <span class="muted">${fmtNum(sum(int, 'visits'))} more from ${int.length} staff login${int.length === 1 ? '' : 's'}, excluded from the cards</span>` : ''}</div>`
+    : '';
+
+  if (!t.daily.length && !t.pages.length) {
+    el.innerHTML = radioLine + `<div class="hub-empty">No site traffic recorded yet. The beacon counts from the moment it went live — check back after the next visit.</div>`;
+    return;
+  }
+  const days = t.daily.slice(-30);
+  const chart = days.length > 1
+    ? `<div class="kpi-label" style="display:flex;justify-content:space-between;"><span>Page views / day</span>
+         <span class="li-sub">${fmtNum(days.reduce((s, d) => s + Number(d.views || 0), 0))} views · ${fmtNum(days.reduce((s, d) => s + Number(d.clicks || 0), 0))} clicks over ${days.length} day${days.length === 1 ? '' : 's'}</span></div>
+       ${sparkline(days.map(d => Number(d.views || 0)), { color })}`
+    : '';
+  const table = (title, rows, cols) => `<div class="section-sub" style="margin-top:14px;">${title}</div>` + (rows.length
+    ? `<table class="data-table"><thead><tr>${cols.map(c => `<th${c.num ? ' class="num"' : ''}>${escapeHtml(c.h)}</th>`).join('')}</tr></thead>
+       <tbody>${rows.map(r => `<tr>${cols.map(c => `<td${c.num ? ' class="num"' : ''}>${c.f(r)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
+    : '<div class="li-sub">Nothing yet.</div>');
+
+  el.innerHTML = radioLine + chart
+    // A page with clicks but no views isn't a visited page — it would sort into
+    // the list on zero and look like a bug.
+    + table('Most-visited pages', t.pages.filter(p => Number(p.views) > 0).slice(0, 10), [
+      { h: 'Page', f: r => `<strong>${escapeHtml(nice(r.path))}</strong><div class="li-sub">${escapeHtml(r.path)}</div>` },
+      { h: 'Views', num: true, f: r => fmtNum(r.views) },
+      { h: 'Visitors', num: true, f: r => fmtNum(r.visitors) },
+    ])
+    + table('Most-clicked links', t.links.slice(0, 10), [
+      { h: 'Link', f: r => `<strong>${escapeHtml(r.label || r.link_url)}</strong><div class="li-sub">${r.outbound ? '↗ ' : ''}<a href="${escapeHtml(r.link_url)}" target="_blank" rel="noopener">${escapeHtml((r.link_url || '').slice(0, 70))}</a></div>` },
+      { h: 'Clicks', num: true, f: r => fmtNum(r.clicks) },
+      { h: 'People', num: true, f: r => fmtNum(r.clickers) },
+    ])
+    + table('Where they came from', t.referrers.slice(0, 10), [
+      { h: 'Source', f: r => escapeHtml(r.referrer) },
+      { h: 'Views', num: true, f: r => fmtNum(r.views) },
+      { h: 'Visitors', num: true, f: r => fmtNum(r.visitors) },
+    ]);
+}
 function renderStratTrends() {
   const igColor = WORKSTREAM.audience.color;
   const igRows = IG_ACCOUNTS.map(a => {
@@ -4173,11 +4242,19 @@ function renderStratTrends() {
 function renderStrategy() {
   let groups = '';
   for (const ws of WS_ORDER) {
-    const cards = strat.cards.filter(c => c.workstream === ws && !strat.hidden.has(c.metric_key));
+    const cards = strat.cards.filter(c => c.workstream === ws && !strat.hidden.has(c.metric_key))
+      .sort((a, b) => kpiSubgroup(a.metric_key) - kpiSubgroup(b.metric_key));
     if (!cards.length) continue;
+    let prevSub = null;
+    const cells = cards.map(c => {
+      const sub = kpiSubgroup(c.metric_key);
+      const brk = prevSub !== null && sub !== prevSub ? '<div class="kpi-break"></div>' : '';
+      prevSub = sub;
+      return brk + kpiCardHtml(c);
+    }).join('');
     groups += `<div class="strat-group">
       <div class="strat-group-title" style="--ws-color:${WORKSTREAM[ws].color}">${escapeHtml(WORKSTREAM[ws].label)}</div>
-      <div class="kpi-grid">${cards.map(kpiCardHtml).join('')}</div>
+      <div class="kpi-grid">${cells}</div>
     </div>`;
   }
   $('strat-cards').innerHTML = groups || `<div class="panel-state">All cards hidden. Use “Manage cards” to show some.</div>`;
@@ -4207,6 +4284,7 @@ function renderStrategy() {
       `<label><input type="checkbox" data-metric="${escapeHtml(c.metric_key)}"${strat.hidden.has(c.metric_key) ? '' : ' checked'}> ${escapeHtml(WORKSTREAM[ws].label)} · ${escapeHtml(c.label)}</label>`
     )
   ).join('');
+  renderStratTraffic();
   renderStratTrends();
 }
 
@@ -4214,7 +4292,7 @@ async function loadStrategy() {
   setStratState('loading', 'Loading strategy…');
   $('refreshBtn').disabled = true;
   try {
-    const [dash, parties, di, prefs, igHist, att, ytVids] = await Promise.all([
+    const [dash, parties, di, prefs, igHist, att, ytVids, tDaily, tPages, tLinks, tRefs, tListeners] = await Promise.all([
       sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
       sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
       sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, net_pl, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
@@ -4222,6 +4300,12 @@ async function loadStrategy() {
       sb.from('metric_snapshots').select('metric_key, value, captured_on').in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null).order('captured_on'),
       sb.from('events').select('name, event_date, total_attendance').is('deleted_at', null).not('total_attendance', 'is', null).order('event_date'),
       sb.from('youtube_videos').select('title, views, likes, comments, published_at').order('views', { ascending: false }).limit(6),
+      // Traffic rollups (109). Views, not raw rows — the table gets long fast.
+      sb.from('v_site_traffic_daily').select('day, views, visitors, clicks').order('day'),
+      sb.from('v_site_top_pages').select('path, views, visitors, clicks').order('views', { ascending: false }).limit(25),
+      sb.from('v_site_top_links').select('link_url, label, outbound, clicks, clickers').order('clicks', { ascending: false }).limit(25),
+      sb.from('v_site_referrers').select('referrer, views, visitors').order('views', { ascending: false }).limit(25),
+      sb.from('v_radio_listeners').select('role, is_external, visits, episodes_seen'),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
     if (err) {
@@ -4236,6 +4320,13 @@ async function loadStrategy() {
     strat.igHistory = {}; (igHist.data || []).forEach(s => { (strat.igHistory[s.metric_key] = strat.igHistory[s.metric_key] || []).push(s); });
     strat.attendance = att.data || [];
     strat.ytVideos = ytVids.data || [];
+    // Traffic is supplementary — a failure here (view missing on an older
+    // deploy) must not take the whole Strategy screen down with it.
+    strat.traffic = {
+      daily: tDaily?.data || [], pages: tPages?.data || [],
+      links: tLinks?.data || [], referrers: tRefs?.data || [],
+      listeners: tListeners?.data || [],
+    };
     renderStrategy();
     setStratState('hidden');
     setLastRefreshed();
