@@ -316,6 +316,16 @@ Deno.serve(async (req) => {
           const j = await r.json().catch(() => ({}));
           console.error("sc finalize track:", r.status, JSON.stringify(j).slice(0, 200));
           scWarning = "Page is live, but SoundCloud rejected the track update — set the description/public flag on soundcloud.com manually.";
+        } else {
+          // The URL we stored at upload time is the PRIVATE share link
+          // (.../<track>/s-XXXX) — the embed widget 404s on that shape. Flipping
+          // the track public changes its permalink to the clean canonical one,
+          // so re-capture it here or the episode page keeps a broken player.
+          const tj = await r.json().catch(() => ({} as Record<string, unknown>));
+          const fresh = typeof tj?.permalink_url === "string" ? tj.permalink_url : "";
+          if (fresh && fresh !== pl.mix_sc_track_url) {
+            await admin.from("sc_playlists").update({ mix_sc_track_url: fresh, updated_at: new Date().toISOString() }).eq("id", playlistId);
+          }
         }
       }
     } else {

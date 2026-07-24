@@ -283,7 +283,24 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','
 function fmtDate(s){if(!s)return'';const d=new Date(String(s).length>10?s:(s+'T00:00:00'));return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function fmtShow(s){if(!s)return'';const d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
 function toast(m){const t=$('#toast');t.textContent=m;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),3400);}
-function scEmbed(u,visual){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play='+(visual?'false':'true')+'&hide_related=true&show_comments=false&visual='+(visual?'true':'false');}
+// A private/unlisted SoundCloud track shares as .../<track>/s-XXXX (plus utm
+// noise). The widget answers 404 on that shape — the secret has to ride as its
+// own `secret_token` param, and the tracking params have to go. The anchor
+// button still works, so this fails as a silent broken player only (EP1: the
+// share link was captured while the mix was still private, before finalize
+// flipped it public).
+function scNorm(u){
+  try{
+    const url=new URL(u);
+    ['utm_source','utm_medium','utm_campaign','utm_term','utm_content','si','ref'].forEach(p=>url.searchParams.delete(p));
+    let secret=url.searchParams.get('secret_token')||'';
+    url.searchParams.delete('secret_token');
+    const seg=url.pathname.split('/').filter(Boolean);
+    if(seg.length>1&&/^s-[A-Za-z0-9_-]+$/.test(seg[seg.length-1])){const s=seg.pop();secret=secret||s;url.pathname='/'+seg.join('/');}
+    return {url:url.origin+url.pathname+url.search,secret};
+  }catch(e){return {url:u,secret:''};}
+}
+function scEmbed(u,visual){const n=scNorm(u);return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(n.url)+(n.secret?'&secret_token='+encodeURIComponent(n.secret):'')+'&color=%23a7e02e&auto_play='+(visual?'false':'true')+'&hide_related=true&show_comments=false&visual='+(visual?'true':'false');}
 // body.playing reserves room for the fixed player, which is ~125px tall and was
 // covering the last track (and the signup nudge) on a phone.
 function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');document.body.classList.add('playing');}
