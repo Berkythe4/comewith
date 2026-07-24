@@ -8899,7 +8899,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -9239,7 +9239,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -9270,6 +9270,7 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-scancancel]')) { raState.scanCancel = true; return; }
   const rw = t.closest('[data-ra-weeks]'); if (rw) { raState.radioWeeks = Number(rw.dataset.raWeeks); renderRaMarket(); return; }
   if (t.closest('[data-ra-prodtoggle]')) { raState.producersOnly = !raState.producersOnly; renderRaMarket(); return; }
+  if (t.closest('[data-ra-noscoggle]')) { raState.showNoSc = !raState.showNoSc; renderRaMarket(); return; }
   const rn = t.closest('[data-ra-rename]'); if (rn) return raSetPlaylistName();
   const pp = t.closest('[data-ra-play]'); if (pp) { raPlay(pp.dataset.raPlay, pp.dataset.raName); return; }
   const sg = t.closest('[data-ra-songs]'); if (sg) { raToggleSongs(sg.dataset.raSongs); return; }
@@ -9289,6 +9290,9 @@ document.addEventListener('click', async (e) => {
     return;
   }
   const bpc = t.closest('[data-ra-bpcat]'); if (bpc) { raArtistCatalog(bpc.dataset.raBpcat, bpc.dataset.raBpkey); return; }
+  const bpp = t.closest('[data-ra-bpplay]'); if (bpp) { raPlaySample(bpp.dataset.raBpplay, bpp.dataset.raName); return; }
+  const bpa = t.closest('[data-ra-bpadd]'); if (bpa) { const i = bpa.dataset.raBpadd.lastIndexOf(':'); raAddBeatportTrack(bpa.dataset.raBpadd.slice(0, i), bpa.dataset.raBpadd.slice(i + 1)); return; }
+  const en = t.closest('[data-ra-energy]'); if (en) { const [id, n] = en.dataset.raEnergy.split(':'); raSetEnergy(id, Number(n)); return; }
   if (t.closest('[data-ra-bpcattoken]')) {
     const el = document.querySelector('#kpiModalBody [name="bp_token"]');
     const v = (el && el.value || '').trim();
@@ -9328,6 +9332,10 @@ $('panel-ra-market').addEventListener('change', async (e) => {
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
   const ve = e.target.closest('[data-ra-venue]'); if (ve) { raState.venue = ve.value; renderRaMarket(); return; }
   const sd = e.target.closest('[data-ra-startdate]'); if (sd) { raState.radioStart = sd.value; renderRaMarket(); return; }
+});
+$('panel-ra-market').addEventListener('change', (e) => {
+  const nt = e.target.closest('[data-ra-note]');
+  if (nt) { raSaveNote(nt.dataset.raNote, nt.value.trim()); return; }
 });
 let _raSearchT;
 $('panel-ra-market').addEventListener('input', (e) => {
@@ -9381,7 +9389,11 @@ function raRadioList() {
   if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
   const ql = raState.search.toLowerCase();
   if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
-  if (raState.producersOnly) out = out.filter(a => a.c && a.c.is_producer);
+  // Producers-only means "hide DJs who only post sets". An artist with NO
+  // SoundCloud has been PROVEN nothing — 339 of 1,465 RA artists have no link at
+  // all, and they were dropped here silently. They're now opt-in via 🛒, and
+  // Beatport (keyed on name) is how you check what they've actually released.
+  if (raState.producersOnly) out = out.filter(a => (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
   // Venue sort groups the room together (who else is on that bill / that week),
   // so a venue with no name sinks instead of heading the list, and inside a
@@ -9407,6 +9419,8 @@ function renderRaRadio() {
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
   const genreSet = [...new Set(raState.artists.flatMap(a => a.genres || []))].sort();
   const venueSet = [...new Set(windowArtists.map(a => a.next_venue).filter(Boolean))].sort();
+  const { start: wStart, cut: wCut } = raWindow();
+  const noScCount = raState.artists.filter(a => !a.soundcloud && a.next_event_date >= wStart && a.next_event_date <= wCut).length;
 
   const weekBtn = (w) => `<button class="hub-btn ghost" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w}w</button>`;
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
@@ -9427,13 +9441,15 @@ function renderRaRadio() {
       <span style="display:flex;gap:6px;">
         ${a.soundcloud ? `<button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
         <button class="hub-mini" data-ra-songs="${escapeHtml(a.soundcloud)}">${open ? '▾ songs' : '🎵 songs'}</button>` : ''}
+        ${!a.soundcloud ? `<button class="hub-mini" data-ra-bpcat="${escapeHtml(a.name || '')}" data-ra-bpkey="${escapeHtml(a.key)}" title="No SoundCloud on RA — ask Beatport what they've released">🛒 Beatport</button>` : ''}
         ${watchBtn('artist', a.name, a.name, { sublabel: a.next_venue || '' })}
         ${igUrl(a.instagram) ? `<a class="hub-mini" href="${escapeHtml(igUrl(a.instagram))}" target="_blank" title="Instagram — follow there">📷</a>` : ''}
         ${c && c.ok && c.sc_user_id ? (raState.followed.has(String(c.sc_user_id))
           ? `<button class="hub-mini" data-ra-unfollow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Following on SoundCloud — click to unfollow" style="background:var(--green,#1f7a1f);color:#fff;">✓ following</button>`
           : `<button class="hub-mini" data-ra-follow="${escapeHtml(String(c.sc_user_id))}" data-ra-name="${escapeHtml(a.name)}" title="Follow on your SoundCloud">＋ follow</button>`) : ''}
       </span>
-      ${open ? `<div style="flex:0 0 100%;margin-top:8px;">${raRenderArtistTracks(a.key)}</div>` : ''}
+      ${open ? `<div style="flex:0 0 100%;margin-top:8px;">${raRenderArtistTracks(a.key)}</div>`
+        : (raState.bpCatalog?.[a.key] ? `<div style="flex:0 0 100%;margin-top:8px;">${raBpCatalogHtml(a.key, { songs: [] })}</div>` : '')}
     </div>`;
   }).join('');
 
@@ -9459,6 +9475,7 @@ function renderRaRadio() {
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
         <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
+        <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="RA gave us no SoundCloud link for these artists, so they could never be scanned — look them up on Beatport by name instead">🛒 No-SoundCloud artists${noScCount ? ` (${noScCount})` : ''}</button>
         <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
         <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
         ${anyFilter ? '<button class="hub-mini" data-ra-clearfilters title="Reset search, genre and venue">✕ clear filters</button>' : ''}
@@ -9608,7 +9625,7 @@ function raRenderPlaylist() {
          the groups wrapped into an unreadable ribbon. -->
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">${actions}</div>
     ${liveLinks}
-    ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;">
+    ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;flex-wrap:wrap;">
       <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>` : ''}
@@ -9617,7 +9634,13 @@ function raRenderPlaylist() {
         <button class="hub-mini" data-ra-plmove="${t.id}:up" title="up">↑</button>
         <button class="hub-mini" data-ra-plmove="${t.id}:down" title="down">↓</button>
         <button class="hub-mini" data-ra-removetrack="${t.id}" title="Remove — logged as passed in the song history">✕</button>` : ''}
-      </span></div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
+      </span>
+      ${isWorking ? `<div style="flex:0 0 100%;display:flex;gap:5px;align-items:center;margin-top:5px;flex-wrap:wrap;">
+        <span class="li-sub" title="Your 1-5 read on where this sits in a set. Click the same number again to clear it.">Energy</span>
+        ${[1, 2, 3, 4, 5].map(n => `<button class="hub-mini${t.energy === n ? ' on' : ''}" data-ra-energy="${t.id}:${n}" style="${t.energy === n ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}padding:2px 8px;">${n}</button>`).join('')}
+        <input class="modal-input" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="what you noticed while testing…" style="flex:1 1 220px;font-size:.74rem;padding:4px 8px;">
+      </div>` : (t.energy || t.comment ? `<div class="li-sub" style="flex:0 0 100%;margin-top:3px;">${t.energy ? `⚡ ${t.energy}/5` : ''}${t.energy && t.comment ? ' · ' : ''}${escapeHtml(t.comment || '')}</div>` : '')}
+      </div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
@@ -10227,13 +10250,73 @@ function raBpCatalogHtml(key, c) {
     return `<div class="hub-li" style="padding:5px 6px;${dupe ? 'opacity:.45;' : ''}">
       <div class="li-main"><span>${escapeHtml(full)}${dupe ? ' <span class="li-sub">· already on SoundCloud</span>' : ''}</span>
         <div class="li-sub">${escapeHtml((t.artists || []).join(', '))}${meta ? ' · ' + escapeHtml(meta) : ''}</div></div>
-      <span style="display:flex;gap:6px;">${t.url ? `<a class="hub-mini" href="${escapeHtml(t.url)}" target="_blank" rel="noopener" title="Open on Beatport">🛒</a>` : ''}</span></div>`;
+      <span style="display:flex;gap:6px;">
+        ${t.sample_url ? `<button class="hub-mini" data-ra-bpplay="${escapeHtml(t.sample_url)}" data-ra-name="${escapeHtml(full)}" title="Play Beatport's preview clip">▶</button>` : ''}
+        ${dupe ? '' : `<button class="hub-mini" data-ra-bpadd="${escapeHtml(key)}:${t.bp_id}" title="Add to the station you're building — keeps the preview, BPM, key and buy link">+ add</button>`}
+        ${t.url ? `<a class="hub-mini" href="${escapeHtml(t.url)}" target="_blank" rel="noopener" title="Open on Beatport">🛒</a>` : ''}</span></div>`;
   }).join('');
   const fresh = cat.tracks.filter(t => !have.has((`${t.title}${t.mix_name && !/^original( mix)?$/i.test(t.mix_name) ? `(${t.mix_name})` : ''}`).toLowerCase().replace(/[^a-z0-9]/g, ''))).length;
   return `<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px;">
     <div class="kpi-label">🛒 Beatport catalogue · ${cat.tracks.length} release${cat.tracks.length === 1 ? '' : 's'} · ${fresh} not on SoundCloud
       ${infoTip(`Read from Beatport via the ${cat.method === 'artist_id' ? 'artist catalogue endpoint' : 'catalogue search, filtered to tracks credited to this artist'}. Beatport is a RELEASE catalogue: promos, edits and unreleased material won't be here, and a name that differs on Beatport can under-match.`)}</div>
     <div class="ra-zebra">${rows}</div></div>`;
+}
+// A Beatport preview is a plain mp3, not a SoundCloud widget — same dock so one
+// tap replaces whatever was playing.
+function raPlaySample(url, name) {
+  const el = $('raDock'); if (!el) return;
+  raState.playing = null; raMarkPlaying();
+  el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.45);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ ${escapeHtml(name || '')} · Beatport preview</span>
+      <button class="hub-mini" data-ra-closeplayer title="Close player">✕</button></div>
+    <audio controls autoplay style="width:100%;display:block;" src="${escapeHtml(url)}"></audio>
+    <div class="li-sub" style="font-size:.68rem;margin-top:3px;">Beatport preview clip — roughly two minutes, not the full track.</div></div>`;
+}
+// Pull a Beatport release into the station being built. It keeps the preview
+// clip (so it stays auditionable here and on the phone), the BPM/key Beatport
+// analysed, and the buy link — a track that was never on SoundCloud.
+async function raAddBeatportTrack(key, bpId) {
+  const pl = raState.playlist;
+  if (!pl) { toast('Open a station first', 'err'); return; }
+  const cat = raState.bpCatalog?.[key];
+  const t = (cat?.tracks || []).find(x => String(x.bp_id) === String(bpId));
+  if (!t) { toast('Track not found in the catalogue', 'err'); return; }
+  const full = [t.title, t.mix_name && !/^original( mix)?$/i.test(t.mix_name) ? `(${t.mix_name})` : ''].filter(Boolean).join(' ');
+  try {
+    const sort = ((pl.tracks || []).reduce((m, x) => Math.max(m, x.sort || 0), 0)) + 10;
+    const { error } = await sb.from('sc_playlist_tracks').insert({
+      playlist_id: pl.id,
+      // Synthetic id in the same shape manual/Rekordbox tracks use — sc_track_id
+      // is the key of the permanent song memory and stays NOT NULL (102).
+      sc_track_id: 'bp_' + t.bp_id,
+      title: full, artist_name: (t.artists || []).join(', '),
+      permalink_url: null, sample_url: t.sample_url || null,
+      duration_ms: t.length_ms || null, bpm: t.bpm || null,
+      song_key: t.song_key || null, camelot: t.camelot || null,
+      beatport_url: t.url || null, beatport_price: t.price != null ? '$' + t.price : null,
+      label: t.label || null, source: 'beatport', sort,
+    });
+    if (error) throw error;
+    toast(`Added "${full}" to EP ${pl.station_no ?? ''}`, 'ok');
+    await raLoadPlaylist(); renderRaMarket();
+  } catch (e) { toast('Could not add: ' + (e.message || e), 'err'); }
+}
+// Energy 1-5 + a note, captured WHILE auditioning — the point is to learn the
+// track before deciding to buy it, so these live on the station track and stay
+// private (get-station never selects them).
+async function raSetEnergy(id, n) {
+  const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(id));
+  const next = tr && tr.energy === n ? null : n;     // click the same number to clear
+  if (tr) tr.energy = next;
+  renderRaMarket();
+  const { error } = await sb.from('sc_playlist_tracks').update({ energy: next, notes_at: new Date().toISOString() }).eq('id', id);
+  if (error) toast('Could not save energy: ' + error.message, 'err');
+}
+async function raSaveNote(id, text) {
+  const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(id));
+  if (tr) tr.comment = text;
+  const { error } = await sb.from('sc_playlist_tracks').update({ comment: text || null, notes_at: new Date().toISOString() }).eq('id', id);
+  if (error) toast('Could not save note: ' + error.message, 'err'); else toast('Note saved', 'ok');
 }
 async function raArtistCatalog(name, key, token) {
   if (!name) { toast('No artist name to look up', 'err'); return; }

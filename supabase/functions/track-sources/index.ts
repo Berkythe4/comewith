@@ -351,6 +351,9 @@ Deno.serve(async (req) => {
           release_date: tr.publish_date || tr.new_release_date || null,
           bpm: tr.bpm ?? null, song_key: k.song_key, camelot: k.camelot,
           length_ms: tr.length_ms ?? null,
+          // Beatport's own preview clip — what makes a track auditionable on
+          // the site and on the phone even though it isn't on SoundCloud.
+          sample_url: tr.sample_url || null,
           price: tr.price?.value ?? null,           // DOLLARS, not cents
           url: tr.slug && tr.id ? `https://www.beatport.com/track/${tr.slug}/${tr.id}` : null,
         };

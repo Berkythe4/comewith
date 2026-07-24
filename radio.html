@@ -304,6 +304,7 @@ function scEmbed(u,visual){const n=scNorm(u);return 'https://w.soundcloud.com/pl
 // body.playing reserves room for the fixed player, which is ~125px tall and was
 // covering the last track (and the signup nudge) on a phone.
 function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');document.body.classList.add('playing');}
+function playSample(url,title){$('#pTitle').textContent='▶ '+(title||'')+' · preview';$('#pFrame').innerHTML='<audio controls autoplay style="width:100%;display:block" src="'+url+'"></audio>';$('#player').classList.add('show');document.body.classList.add('playing');}
 $('#pClose').onclick=()=>{$('#player').classList.remove('show');$('#pFrame').innerHTML='';document.body.classList.remove('playing');};
 
 /* ---------- CSV (BOM so Excel opens it clean) ---------- */
@@ -586,6 +587,7 @@ function render(){
           ${t.permalink_url?`<button class="mini" data-play="${esc(t.permalink_url)}" data-title="${esc(t.title)}">▶ play</button>
           <a class="mini" href="${esc(t.permalink_url)}" target="_blank" rel="noopener" title="Open on SoundCloud">☁</a>
           <button class="mini ${isSaved?'on':''}" data-save="${i}" title="${isSaved?'In your playlist — tap to remove':'Save to my playlist'}">${isSaved?'♥':'♡'}</button>`
+            :t.sample_url?`<button class="mini" data-sample="${esc(t.sample_url)}" data-title="${esc(t.title)}">▶ preview</button>`
             :`<span class="meta" title="Not streaming anywhere public — it's in the mix">in the mix</span>`}
         </div></div>`;
     }).join('')+'</div>';
@@ -593,6 +595,9 @@ function render(){
   $('#saveAllBtn').onclick=saveAll;
   $('#shareBtn').onclick=()=>{const u=station.slug?(location.origin+location.pathname+'?s='+station.slug):location.href;navigator.clipboard.writeText(u).then(()=>toast('Link copied'),()=>toast('Copy failed'));};
   $('#root').querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>play(b.dataset.play,b.dataset.title));
+  // Beatport preview clips are ordinary mp3s, not a SoundCloud widget — same
+  // dock, different player, so one tap stops whatever else was going.
+  $('#root').querySelectorAll('[data-sample]').forEach(b=>b.onclick=()=>playSample(b.dataset.sample,b.dataset.title));
   $('#root').querySelectorAll('[data-save]').forEach(b=>b.onclick=()=>toggleSave(tracks[Number(b.dataset.save)]));
 }
 $('#expSignup').onclick=()=>{$('#expOv').classList.remove('show');openAuth('Sign up free — your exports and ♡ playlist save to your profile.');};

@@ -21,7 +21,10 @@ const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }),
 // FINAL MIX (mix_sc_track_url / mix_youtube_url). To get the songs themselves
 // they come to the episode page and export the tracklist.
 const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_youtube_url, cover_url, mix_by";
-const TRACK_COLS = "title, artist_name, permalink_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, sort";
+// sample_url is Beatport's own public preview clip — it lets a track that
+// isn't on SoundCloud still be auditioned, including on the phone via a
+// preview link. energy/comment are private working notes and stay OUT.
+const TRACK_COLS = "title, artist_name, permalink_url, sample_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, sort";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
