@@ -82,25 +82,60 @@ Deno.serve(async (req) => {
         // next_href even at limit=50 (policy/geo thinning). Follow next_href
         // until we have the profile's tracks (bounded) — without this, artists
         // like Enamour showed 1 song out of 75 uploads.
-        let all: any[] = [];
-        let next: string | null = `${api}/users/${u.id}/tracks?limit=50`;
-        for (let p = 0; p < 8 && next && all.length < 200; p++) {
-          const rr = await fetch(next.includes("client_id=") ? next : `${next}${next.includes("?") ? "&" : "?"}client_id=${cid}`, { headers: { "User-Agent": UA } });
-          if (!rr.ok) break;
-          const j = await rr.json();
-          all = all.concat((j.collection || []) as any[]);
-          next = j.next_href || null;
+        //
+        // The old bound of 8 pages was itself the bug: Massane's pages average
+        // under 2 tracks each, so 8 pages saw 10 of his 39 tracks and the app
+        // showed 9 songs. 22 pages are needed to reach the end of that profile.
+        const walk = async (first: string, maxPages: number, maxItems: number) => {
+          const acc: any[] = [];
+          let next: string | null = first;
+          for (let p = 0; p < maxPages && next && acc.length < maxItems; p++) {
+            const rr = await fetch(next.includes("client_id=") ? next : `${next}${next.includes("?") ? "&" : "?"}client_id=${cid}`, { headers: { "User-Agent": UA } });
+            if (!rr.ok) break;
+            const j = await rr.json();
+            for (const it of (j.collection || [])) acc.push(it);
+            next = j.next_href || null;
+          }
+          return acc;
+        };
+
+        let all: any[] = await walk(`${api}/users/${u.id}/tracks?limit=50`, 40, 400);
+
+        // /users/{id}/tracks does NOT return everything an artist has uploaded:
+        // tracks released inside an album or playlist can be missing from it
+        // (Claude VonStroke — 27 from /tracks, 31 once albums and playlists are
+        // merged in). Only keep tracks this profile actually owns; a playlist
+        // can hold anyone's music.
+        const seen = new Set(all.map((t: any) => String(t?.id)));
+        for (const path of ["albums", "playlists", "playlists_without_albums", "spotlight"]) {
+          const containers = await walk(`${api}/users/${u.id}/${path}?limit=50`, 10, 200);
+          for (const c of containers) {
+            for (const t of (c?.tracks || [])) {
+              if (t?.kind !== "track" || !t.id) continue;
+              if (t.user?.id !== u.id) continue;
+              if (seen.has(String(t.id))) continue;
+              seen.add(String(t.id));
+              all.push(t);
+            }
+          }
         }
         const isSong = (t: any) => t.kind === "track" && (t.duration || 0) >= minMs && (t.duration || 0) <= maxMs && t.streamable !== false;
         const songsRaw = all.filter(isSong);
         const setCount = all.filter((t) => t.kind === "track" && (t.duration || 0) > maxMs).length;
+        // Was .slice(0, 30) — an invisible ceiling that 105 of 857 scanned
+        // artists were sitting exactly on. 200 is a storage guard, not an
+        // editorial cut; nobody in this dataset is near it.
         const songs = songsRaw
           .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
-          .slice(0, 30)
+          .slice(0, 200)
           .map((t) => ({ sc_track_id: String(t.id), title: t.title, permalink_url: t.permalink_url, duration_ms: t.duration, playback_count: t.playback_count ?? 0, created_at: t.created_at, artwork_url: t.artwork_url || u.avatar_url || null }));
         rows.push({
           soundcloud: url, sc_user_id: String(u.id), username: u.username, avatar_url: u.avatar_url || null,
           followers: u.followers_count ?? null, is_producer: songs.length > 0, song_count: songs.length,
+          // What SoundCloud SAYS the profile holds. Kept so a shortfall is
+          // visible instead of silent: VonStroke lists 147 but only exposes 31
+          // to an anonymous client, and no amount of paging changes that.
+          sc_track_count: u.track_count ?? null,
           set_count: setCount, songs, ok: true, scanned_at: new Date().toISOString(),
         });
       } catch (_) {
