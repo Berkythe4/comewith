@@ -818,6 +818,12 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   border-bottom: 1px solid var(--border); font-size: 0.84rem;
 }
 .hub-li:last-child { border-bottom: none; }
+/* Incoming-artists zebra: a row runs artist → venue → date → action buttons, so
+   you need to track one line across the full width. A neutral overlay (not a
+   var) so it reads the same barely-there in both themes — it darkens a light
+   surface and lightens a dark one. Kept under 5% on purpose: enough to follow,
+   not enough to look like a highlighted/selected row. */
+#raArtistList > .hub-li:nth-child(even) { background: rgba(128, 128, 128, 0.045); }
 .hub-li .li-main { flex: 1 1 auto; min-width: 0; }
 .hub-li .li-main strong { font-weight: 700; }
 .hub-li .li-sub { font-size: 0.7rem; color: var(--mid); margin-top: 2px; }
