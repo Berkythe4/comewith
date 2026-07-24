@@ -128,5 +128,6 @@ function igUrl(h){h=String(h||'').trim();if(!h)return '';if(/^https?:/i.test(h))
   $('#gigs').innerHTML=gigs.length?('<div class="gigs">'+gigs.map(function(g){return '<div class="gig"><div><div class="n">'+esc(g.event_name||'')+'</div><div class="m">'+fmtDate(g.event_date)+(g.venue_name?(' · '+esc(g.venue_name)):'')+'</div></div>'+(g.role?'<div class="r">'+esc(g.role)+'</div>':'')+'</div>';}).join('')+'</div>'):'<div class="empty">No gigs listed yet.</div>';
 })();
 </script>
+<script src="assets/track.js" defer></script>
 </body>
 </html>
