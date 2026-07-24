@@ -1513,7 +1513,76 @@ function ensureNavGroupOpen(key) {
 let MODULES = [];                 // module_registry rows
 let MY_OVERRIDES = {};            // { module_key: 'grant'|'revoke' } for the signed-in user
 const TEAM = { modules: [], people: [], overrides: {}, tab: 'people', users: [], aliasByUser: {}, gigByUser: {}, actRecent: [], activity: [], actFilter: { from: '', to: '', user: '', table: '' }, activeUser: null, detailActs: [], detailConvCount: 0 };
-const AUDIT_TABLES_LIST = ['actors', 'agreements', 'contracts', 'conversations', 'equipment_inventory', 'event_participants', 'events', 'expenses', 'income', 'inquiries', 'profiles', 'social_posts', 'sponsorships', 'tasks', 'third_party_donations', 'ticketing', 'venues'];
+const AUDIT_TABLES_LIST = ['actors', 'agreements', 'contracts', 'conversations', 'equipment_inventory', 'event_participants', 'events', 'expenses', 'income', 'inquiries', 'listener_playlists', 'mailing_campaigns', 'profiles', 'sc_playlist_tracks', 'sc_playlists', 'site_content', 'social_posts', 'sponsorships', 'subscribers', 'survey_responses', 'tasks', 'third_party_donations', 'ticketing', 'venues'];
+// "Updated ticketing" tells you nothing. Every row below turns the raw table
+// name into what you'd actually call it, and auditWhat() pulls the one field
+// that identifies WHICH record — the log already stores the whole row, the
+// screen just never read it.
+const AUDIT_TABLE_LABEL = {
+  actors: 'People & orgs', agreements: 'Agreements', contracts: 'Contracts',
+  conversations: 'Conversations', equipment_inventory: 'Equipment',
+  event_participants: 'Event lineup', events: 'Events', expenses: 'Expenses',
+  income: 'Income', inquiries: 'Inquiries', listener_playlists: 'Listener playlists',
+  mailing_campaigns: 'Campaigns', profiles: 'Staff logins',
+  sc_playlist_tracks: 'Radio station songs', sc_playlists: 'Radio stations',
+  site_content: 'Site content', social_posts: 'Social posts', sponsorships: 'Sponsorships',
+  subscribers: 'Mailing list', survey_responses: 'Survey responses', tasks: 'Tasks',
+  third_party_donations: 'Donations', ticketing: 'Tickets', venues: 'Venues',
+};
+const auditTableLabel = (t) => AUDIT_TABLE_LABEL[t] || t;
+const auditMoney = (v) => (v == null || v === '' ? '' : '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
+// One row per audited table. Each returns the pieces that identify the record;
+// blanks are dropped and the rest joined with · so a half-empty row still reads.
+const AUDIT_WHAT = {
+  events: r => [r.name, r.series],
+  venues: r => [r.name, r.city],
+  actors: r => [r.display_name || r.legal_name || r.email, r.kind],
+  profiles: r => [r.full_name || r.email, r.role],
+  tasks: r => [r.title, r.status],
+  social_posts: r => [r.title || r.caption, r.stage],
+  agreements: r => [r.agreement_type, r.venue_name, auditMoney(r.total_amount), r.status],
+  contracts: r => [r.kind, auditMoney(r.fee), r.status],
+  inquiries: r => [r.full_name || r.email, r.event_type, r.status],
+  income: r => [auditMoney(r.amount), r.category, r.description],
+  expenses: r => [auditMoney(r.amount), r.vendor || r.category, r.description],
+  ticketing: r => [r.ticket_type, auditMoney(r.amount_paid), r.source],
+  sponsorships: r => [r.tier, auditMoney(r.cash_amount), r.status],
+  third_party_donations: r => [r.donor_name, auditMoney(r.amount)],
+  equipment_inventory: r => [r.name, r.serial_number],
+  event_participants: r => [(r.roles || []).join(', ') || r.role, auditMoney(r.fee)],
+  conversations: r => [r.subject, r.recipient_email],
+  survey_responses: r => [r.source, r.anonymous ? 'anonymous' : ''],
+  sc_playlists: r => [r.station_no != null ? 'EP ' + r.station_no : '', r.name, r.status],
+  sc_playlist_tracks: r => [r.artist_name, r.title],
+  listener_playlists: r => [r.name],
+  site_content: r => [r.key],
+  mailing_campaigns: r => [r.name || r.subject, r.status, r.recipient_count != null ? r.recipient_count + ' recipients' : ''],
+  subscribers: r => [r.email, r.status],
+};
+const AUDIT_WHAT_FALLBACK = ['name', 'title', 'display_name', 'full_name', 'label', 'subject', 'email', 'key', 'description'];
+function auditWhat(a) {
+  // On a DELETE there's no new_data — the deleted row is all we have.
+  const r = a.new_data || a.old_data; if (!r) return '';
+  const fn = AUDIT_WHAT[a.table_name];
+  const parts = fn ? fn(r) : [AUDIT_WHAT_FALLBACK.map(k => r[k]).find(v => v)];
+  const s = (parts || []).filter(v => v != null && v !== '').join(' · ');
+  return s.length > 90 ? s.slice(0, 89) + '…' : s;
+}
+// Bookkeeping columns move on every write and say nothing about intent.
+const AUDIT_SKIP_FIELDS = new Set(['id', 'created_at', 'updated_at', 'updated_by', 'created_by']);
+function auditFieldVal(v) {
+  if (v == null) return '—';
+  if (typeof v === 'object') { const s = JSON.stringify(v); return s.length > 120 ? s.slice(0, 119) + '…' : s; }
+  const s = String(v);
+  return s.length > 120 ? s.slice(0, 119) + '…' : s;
+}
+// What actually changed on an UPDATE — the answer to "updated venues, so what?"
+function auditChanges(a) {
+  const o = a.old_data || {}, n = a.new_data || {};
+  const keys = [...new Set([...Object.keys(o), ...Object.keys(n)])].filter(k => !AUDIT_SKIP_FIELDS.has(k));
+  return keys.filter(k => JSON.stringify(o[k]) !== JSON.stringify(n[k]))
+    .map(k => ({ field: k, from: auditFieldVal(o[k]), to: auditFieldVal(n[k]) }));
+}
 function fmtDT(s) { if (!s) return ''; const d = new Date(s); if (isNaN(d)) return s; return d.toISOString().slice(0, 16).replace('T', ' '); }
 function actionVerb(a) { return a === 'INSERT' ? 'Created' : a === 'UPDATE' ? 'Updated' : a === 'DELETE' ? 'Deleted' : a; }
 
@@ -1710,13 +1779,18 @@ function renderTeamModules() {
 function renderTeamActivity() {
   const f = TEAM.actFilter;
   const userOpts = TEAM.users.map(u => `<option value="${escapeHtml(u.id)}"${f.user === u.id ? ' selected' : ''}>${escapeHtml(u.full_name || u.email)}</option>`).join('');
-  const tableOpts = AUDIT_TABLES_LIST.map(t => `<option value="${t}"${f.table === t ? ' selected' : ''}>${t}</option>`).join('');
-  const rows = (TEAM.activity || []).map(a => `<tr>
+  const tableOpts = AUDIT_TABLES_LIST.map(t => `<option value="${t}"${f.table === t ? ' selected' : ''}>${auditTableLabel(t)}</option>`).join('');
+  const rows = (TEAM.activity || []).map(a => {
+    const what = auditWhat(a);
+    const n = a.action === 'UPDATE' ? auditChanges(a).length : 0;
+    return `<tr data-act-row="${a.id}" style="cursor:pointer;" title="Click for the full record — every field that changed">
     <td class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</td>
     <td>${escapeHtml(a.actor_email || (a.actor_id ? a.actor_id.slice(0, 8) : 'system'))}</td>
     <td>${actionVerb(a.action)}</td>
-    <td>${escapeHtml(a.table_name)}</td>
-  </tr>`).join('') || '<tr><td colspan="4" class="muted" style="padding:14px;">No activity in this range.</td></tr>';
+    <td>${escapeHtml(auditTableLabel(a.table_name))}</td>
+    <td>${what ? escapeHtml(what) : '<span class="muted">—</span>'}${n ? ` <span class="li-sub">· ${n} field${n === 1 ? '' : 's'}</span>` : ''}</td>
+  </tr>`;
+  }).join('') || '<tr><td colspan="5" class="muted" style="padding:14px;">No activity in this range.</td></tr>';
   return `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
       <label class="li-sub">From <input class="modal-input" type="date" data-act-from value="${f.from || ''}" style="max-width:150px;"></label>
       <label class="li-sub">To <input class="modal-input" type="date" data-act-to value="${f.to || ''}" style="max-width:150px;"></label>
@@ -1724,12 +1798,37 @@ function renderTeamActivity() {
       <select class="hub-status-sel" data-act-table><option value="">All tables</option>${tableOpts}</select>
       <button class="hub-mini" data-act-clear>clear</button>
     </div>
-    <table class="data-table"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Table</th></tr></thead><tbody>${rows}</tbody></table>
-    <div class="kpi-hint" style="margin-top:8px;">Every create / update / delete on the audited tables (agreements, contracts, people, tasks, income, expenses). Showing up to 500 in the selected range.</div>`;
+    <table class="data-table"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Area</th><th>What</th></tr></thead><tbody>${rows}</tbody></table>
+    <div class="kpi-hint" style="margin-top:8px;">Every create / update / delete on the audited areas — including radio stations, site content, campaigns and the mailing list. <strong>Click any row</strong> for the full record and exactly which fields changed. Work done by a background job (a SoundCloud publish, a scheduled go-live) logs as <em>system</em>, since it runs as the service role rather than as you. Showing up to 500 in the selected range.</div>`;
+}
+// Opens the row the "What" column summarises: the changed fields on an UPDATE,
+// or the record as created/deleted otherwise.
+function openActDetail(id) {
+  const a = (TEAM.activity || []).find(x => String(x.id) === String(id)); if (!a) return;
+  const what = auditWhat(a);
+  let body;
+  if (a.action === 'UPDATE') {
+    const ch = auditChanges(a);
+    body = ch.length
+      ? `<table class="data-table"><thead><tr><th>Field</th><th>From</th><th>To</th></tr></thead><tbody>${ch.map(c =>
+          `<tr><td><strong>${escapeHtml(c.field)}</strong></td><td class="muted">${escapeHtml(c.from)}</td><td>${escapeHtml(c.to)}</td></tr>`).join('')}</tbody></table>`
+      : '<div class="hub-empty">Nothing changed except bookkeeping fields (timestamps).</div>';
+  } else {
+    const r = a.new_data || a.old_data || {};
+    const rows = Object.keys(r).filter(k => !AUDIT_SKIP_FIELDS.has(k) && r[k] != null && r[k] !== '')
+      .map(k => `<tr><td><strong>${escapeHtml(k)}</strong></td><td>${escapeHtml(auditFieldVal(r[k]))}</td></tr>`).join('');
+    body = rows ? `<table class="data-table"><tbody>${rows}</tbody></table>` : '<div class="hub-empty">No detail stored for this row.</div>';
+  }
+  openKpi(`${actionVerb(a.action)} — ${auditTableLabel(a.table_name)}`,
+    [what, a.actor_email || 'system', fmtDT(a.occurred_at)].filter(Boolean).join(' · '),
+    `${body}<div class="kpi-hint" style="margin-top:8px;">Record id <code>${escapeHtml(a.row_id || '—')}</code></div>`,
+    () => closeKpi(), 'Close');
 }
 async function loadActivity() {
   const f = TEAM.actFilter;
-  let qb = sb.from('audit_log').select('id, table_name, row_id, action, actor_id, actor_email, occurred_at').order('occurred_at', { ascending: false }).limit(500);
+  // old_data/new_data drive the What column and the detail modal. audit_log is
+  // master-only (RLS), so pulling whole rows here exposes nothing new.
+  let qb = sb.from('audit_log').select('id, table_name, row_id, action, actor_id, actor_email, occurred_at, old_data, new_data').order('occurred_at', { ascending: false }).limit(500);
   if (f.from) qb = qb.gte('occurred_at', f.from);
   if (f.to) qb = qb.lte('occurred_at', f.to + 'T23:59:59');
   if (f.user) qb = qb.eq('actor_id', f.user);
@@ -1749,7 +1848,7 @@ async function openUserDetail(uid) {
 }
 async function loadUserActivity() {
   const uid = TEAM.activeUser, f = TEAM.detailRange || {};
-  let qb = sb.from('audit_log').select('id, table_name, row_id, action, occurred_at').eq('actor_id', uid).order('occurred_at', { ascending: false }).limit(500);
+  let qb = sb.from('audit_log').select('id, table_name, row_id, action, occurred_at, old_data, new_data').eq('actor_id', uid).order('occurred_at', { ascending: false }).limit(500);
   if (f.from) qb = qb.gte('occurred_at', f.from);
   if (f.to) qb = qb.lte('occurred_at', f.to + 'T23:59:59');
   const { data } = await qb;
@@ -1761,14 +1860,17 @@ function userActivitySummaryHTML() {
   if (!acts.length) return '<div class="hub-empty">No activity in this range.</div>';
   const by = {};
   acts.forEach(a => { const o = by[a.table_name] ||= { t: a.table_name, ins: 0, upd: 0, del: 0, total: 0, last: null }; o.total++; if (a.action === 'INSERT') o.ins++; else if (a.action === 'UPDATE') o.upd++; else if (a.action === 'DELETE') o.del++; if (!o.last || a.occurred_at > o.last) o.last = a.occurred_at; });
-  const rows = Object.values(by).sort((a, b) => b.total - a.total).map(o => `<tr data-uact-detail="${escapeHtml(o.t)}" style="cursor:pointer;"><td><strong>${escapeHtml(o.t)}</strong></td><td class="num">${o.total}</td><td class="li-sub">${o.ins} created · ${o.upd} updated · ${o.del} deleted</td><td class="li-sub">${escapeHtml(fmtDT(o.last))}</td></tr>`).join('');
+  const rows = Object.values(by).sort((a, b) => b.total - a.total).map(o => `<tr data-uact-detail="${escapeHtml(o.t)}" style="cursor:pointer;"><td><strong>${escapeHtml(auditTableLabel(o.t))}</strong></td><td class="num">${o.total}</td><td class="li-sub">${o.ins} created · ${o.upd} updated · ${o.del} deleted</td><td class="li-sub">${escapeHtml(fmtDT(o.last))}</td></tr>`).join('');
   return `<div class="li-sub" style="margin-bottom:4px;">${acts.length} action${acts.length === 1 ? '' : 's'} in range — click an area for detail.</div>
     <table class="data-table"><thead><tr><th>Area</th><th class="num">Actions</th><th>Breakdown</th><th>Last</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
 function openUserActDetail(table) {
   const list = (TEAM.detailActs || []).filter(a => a.table_name === table);
-  const rows = list.map(a => `<div class="hub-li"><div class="li-main">${actionVerb(a.action)} <span class="li-sub">row ${escapeHtml((a.row_id || '').slice(0, 8))}</span><div class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</div></div></div>`).join('') || '<div class="hub-empty">None.</div>';
-  openKpi('Activity — ' + table, list.length + ' action' + (list.length === 1 ? '' : 's') + ' in range', `<div class="hub-list" style="max-height:420px;overflow:auto;">${rows}</div>`, () => closeKpi(), 'Close');
+  const rows = list.map(a => {
+    const what = auditWhat(a);
+    return `<div class="hub-li"><div class="li-main">${actionVerb(a.action)} ${what ? escapeHtml(what) : `<span class="li-sub">row ${escapeHtml((a.row_id || '').slice(0, 8))}</span>`}<div class="li-sub">${escapeHtml(fmtDT(a.occurred_at))}</div></div></div>`;
+  }).join('') || '<div class="hub-empty">None.</div>';
+  openKpi('Activity — ' + auditTableLabel(table), list.length + ' action' + (list.length === 1 ? '' : 's') + ' in range', `<div class="hub-list" style="max-height:420px;overflow:auto;">${rows}</div>`, () => closeKpi(), 'Close');
 }
 function renderUserDetail() {
   const uid = TEAM.activeUser, u = TEAM.users.find(x => x.id === uid);
@@ -1906,6 +2008,7 @@ $('panel-team').addEventListener('click', (e) => {
   if (e.target.closest('[data-gigs-more]')) { TEAM.gigsExpanded = true; renderTeam(); return; }
   const ud = e.target.closest('[data-uact-detail]'); if (ud) { openUserActDetail(ud.dataset.uactDetail); return; }
   if (e.target.closest('[data-act-clear]')) { TEAM.actFilter = { from: '', to: '', user: '', table: '' }; loadActivity(); return; }
+  const ar = e.target.closest('[data-act-row]'); if (ar) { openActDetail(ar.dataset.actRow); return; }
 });
 $('panel-team').addEventListener('change', (e) => {
   const sc = e.target.closest('[data-detail-scope]'); if (sc) { setStaffRole(TEAM.activeUser, sc.value); return; }
