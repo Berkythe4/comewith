@@ -824,6 +824,15 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
    surface and lightens a dark one. Kept under 5% on purpose: enough to follow,
    not enough to look like a highlighted/selected row. */
 #raArtistList > .hub-li:nth-child(even) { background: rgba(128, 128, 128, 0.045); }
+/* Now playing in the bottom-right dock. Lime to match the player itself, with a
+   left bar so it's findable while scrolling, not just a tint. Listed with the
+   zebra selector so it outranks it — an id beats a class, so a plain
+   .ra-playing rule would lose on every even row. */
+.hub-li.ra-playing,
+#raArtistList > .hub-li.ra-playing:nth-child(even) {
+  background: rgba(167, 224, 46, 0.11);
+  box-shadow: inset 3px 0 0 var(--lime, #A7E02E);
+}
 .hub-li .li-main { flex: 1 1 auto; min-width: 0; }
 .hub-li .li-main strong { font-weight: 700; }
 .hub-li .li-sub { font-size: 0.7rem; color: var(--mid); margin-top: 2px; }
@@ -8607,7 +8616,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -8683,6 +8692,7 @@ function renderRaMarket() {
     return;
   }
   $('raMarketBody').innerHTML = renderRaRadio();
+  raMarkPlaying(); // the rebuild wiped the class; the dock is still playing
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
@@ -8951,7 +8961,7 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
   if (t.closest('[data-ra-refreshshows]')) { raRefreshShowInfo(t.closest('[data-ra-refreshshows]')); return; }
-  if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; return; }
+  if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; raState.playing = null; raMarkPlaying(); return; }
   if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
   if (t.closest('[data-ra-schedule]')) { raScheduleGoLive(); return; }
   if (t.closest('[data-ra-unschedule]')) { raUnschedule(); return; }
@@ -9081,10 +9091,17 @@ function raRadioList() {
   if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
   if (raState.producersOnly) out = out.filter(a => a.c && a.c.is_producer);
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
+  // Venue sort groups the room together (who else is on that bill / that week),
+  // so a venue with no name sinks instead of heading the list, and inside a
+  // venue it's soonest-first — that's the order you'd work a room in.
+  const venue = a => (a.next_venue || '￿').toLowerCase();
   out.sort((a, b) => s === 'followers' ? (b.follower_count || 0) - (a.follower_count || 0)
     : s === 'name' ? (a.name || '').localeCompare(b.name || '')
       : s === 'songs' ? songs(b) - songs(a)
-        : (a.next_event_date || '').localeCompare(b.next_event_date || '') || (b.follower_count || 0) - (a.follower_count || 0)); // 'soon'
+        : s === 'venue' ? venue(a).localeCompare(venue(b))
+          || (a.next_event_date || '').localeCompare(b.next_event_date || '')
+          || (a.name || '').localeCompare(b.name || '')
+          : (a.next_event_date || '').localeCompare(b.next_event_date || '') || (b.follower_count || 0) - (a.follower_count || 0)); // 'soon'
   return out;
 }
 function renderRaRadio() {
@@ -9144,7 +9161,7 @@ function renderRaRadio() {
           <input class="modal-input" data-ra-search placeholder="Search by artist or venue…" style="width:100%;padding-left:32px;${raState.search ? 'padding-right:32px;' : ''}" value="${escapeHtml(raState.search)}">
           ${raState.search ? '<button class="hub-mini" data-ra-clearsearch title="Clear search" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:2px 7px;">✕</button>' : ''}
         </div>
-        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('name', 'Artist A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
         <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
         <select class="modal-select" data-ra-venue style="max-width:160px;" title="Filter by venue"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
       </div>
@@ -9303,8 +9320,21 @@ function raRenderPlaylist() {
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
 // you add tracks / follow / scan — those rebuild raMarketBody, not the dock.
+// Which row the dock is playing. Marked by toggling a class rather than
+// re-rendering — a re-render would rebuild the iframe and restart the audio.
+// renderRaRadio() re-applies it after every rebuild so it survives a scan,
+// a filter change or an artist expanding.
+function raMarkPlaying() {
+  document.querySelectorAll('.ra-playing').forEach(el => el.classList.remove('ra-playing'));
+  if (!raState.playing) return;
+  document.querySelectorAll('[data-ra-play],[data-ra-trackplay]').forEach(b => {
+    const u = b.dataset.raPlay || b.dataset.raTrackplay;
+    if (u && raKey(u) === raState.playing) b.closest('.hub-li')?.classList.add('ra-playing');
+  });
+}
 async function raPlay(scUrl, name) {
   const el = $('raDock'); if (!el) return;
+  raState.playing = raKey(scUrl); raMarkPlaying();
   const src = 'https://w.soundcloud.com/player/?url=' + encodeURIComponent(scUrl) + '&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=false';
   el.innerHTML = `<div style="background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;padding:8px 10px;box-shadow:0 8px 28px rgba(0,0,0,.45);">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span class="li-sub" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">▶ ${escapeHtml(name || '')}</span>
@@ -10179,9 +10209,15 @@ async function raPlayStation() {
     src="https://w.soundcloud.com/player/?url=${encodeURIComponent(tracks[0].permalink_url)}&color=%23a7e02e&auto_play=true&hide_related=true&visual=true"></iframe></div>`;
   const widget = window.SC.Widget($('raStationFrame'));
   let idx = 0;
+  // Keep the row highlight walking down the station as the widget advances, so
+  // playing the set straight through still tells you where you are in the list.
+  const mark = () => { raState.playing = raKey(tracks[idx]?.permalink_url || ''); raMarkPlaying(); };
+  mark();
   widget.bind(window.SC.Widget.Events.READY, () => widget.play());
   widget.bind(window.SC.Widget.Events.FINISH, () => {
-    idx++; if (idx < tracks.length) widget.load(tracks[idx].permalink_url, { auto_play: true });
+    idx++;
+    if (idx < tracks.length) widget.load(tracks[idx].permalink_url, { auto_play: true });
+    mark(); // past the last track this clears the highlight (no tracks[idx])
   });
   toast('Playing your station', 'ok');
 }
