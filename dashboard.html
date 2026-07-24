@@ -824,14 +824,14 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
    surface and lightens a dark one. Kept under 5% on purpose: enough to follow,
    not enough to look like a highlighted/selected row. */
 #raArtistList > .hub-li:nth-child(even) { background: rgba(128, 128, 128, 0.045); }
-/* Now playing in the bottom-right dock. Lime to match the player itself, with a
-   left bar so it's findable while scrolling, not just a tint. Listed with the
-   zebra selector so it outranks it — an id beats a class, so a plain
+/* Now playing in the bottom-right dock. Lime tint only — a left bar sat inside
+   the row's left padding, which the artist rows have (14px) but the song and
+   station-track rows don't (padding:5px 0), so it landed on their text. Listed
+   with the zebra selector so it outranks it — an id beats a class, so a plain
    .ra-playing rule would lose on every even row. */
 .hub-li.ra-playing,
 #raArtistList > .hub-li.ra-playing:nth-child(even) {
   background: rgba(167, 224, 46, 0.11);
-  box-shadow: inset 3px 0 0 var(--lime, #A7E02E);
 }
 .hub-li .li-main { flex: 1 1 auto; min-width: 0; }
 .hub-li .li-main strong { font-weight: 700; }
