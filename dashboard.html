@@ -8909,7 +8909,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -8984,8 +8984,14 @@ function renderRaMarket() {
       <div class="hub-empty">No artists yet. Hit “↻ Pull shows” (or run it from Best Nights) to load upcoming NYC lineups, then scan for producers.</div>`;
     return;
   }
-  $('raMarketBody').innerHTML = renderRaRadio();
+  if (raState.ccMode) { renderRadioCC(); return; }
+  $('raMarketBody').innerHTML = raModeBar() + renderRaRadio();
   raMarkPlaying(); // the rebuild wiped the class; the dock is still playing
+}
+// A small mode switch shared by both radio views (Build ⇄ Control Center).
+function raModeBar() {
+  const b = (k, l, t) => `<button class="hub-btn ghost" data-ra-mode="${k}" style="${(raState.ccMode ? k === 'cc' : k === 'build') ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}" title="${t}">${l}</button>`;
+  return `<div style="display:flex;gap:6px;margin-bottom:10px;">${b('build', '🎛 Build', 'Build this week\'s station')}${b('cc', '🎚 Control Center', 'All episodes — tasks, notes, schedule, links')}</div>`;
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
@@ -9249,7 +9255,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -9260,6 +9266,14 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-unschedule]')) { raUnschedule(); return; }
   if (t.closest('[data-ra-mixupload]')) { raMixUpload(t.closest('[data-ra-mixupload]')); return; }
   if (t.closest('[data-ra-mixlink]')) { raMixLink(t.closest('[data-ra-mixlink]')); return; }
+  const md = t.closest('[data-ra-mode]'); if (md) { raState.ccMode = md.dataset.raMode === 'cc'; if (raState.ccMode) loadRadioCC(); else renderRaMarket(); return; }
+  const cco = t.closest('[data-ra-ccopen]'); if (cco) { raState.ccOpen = raState.ccOpen === cco.dataset.raCcopen ? null : cco.dataset.raCcopen; renderRadioCC(); return; }
+  const ccd = t.closest('[data-ra-ccdetails]'); if (ccd) { ccWithStation(ccd.dataset.raCcdetails, raOpenEpisodeDetails); return; }
+  const ccs = t.closest('[data-ra-ccschedule]'); if (ccs) { raCcSchedule(ccs.dataset.raCcschedule); return; }
+  const ccg = t.closest('[data-ra-ccgenweek]'); if (ccg) { ccWithStation(ccg.dataset.raCcgenweek, raOpenGenWeek); return; }
+  const cca = t.closest('[data-ra-cctaskadd]'); if (cca) { raCcAddTask(cca.dataset.raCctaskadd); return; }
+  const cce = t.closest('[data-ra-cctaskedit]'); if (cce) { openEditTask(cce.dataset.raCctaskedit, loadRadioCC); return; }
+  const ccn = t.closest('[data-ra-ccnoteadd]'); if (ccn) { raCcAddNote(ccn.dataset.raCcnoteadd); return; }
   if (t.closest('[data-ra-genweek]')) { raOpenGenWeek(); return; }
   if (t.closest('[data-ra-history]')) { raOpenHistory(); return; }
   const hf = t.closest('[data-ra-histfilter]'); if (hf) { raState.histFilter = hf.dataset.raHistfilter; const w = $('raHistWrap'); if (w) { w.innerHTML = raHistHtml(); raHistWireSearch(); } return; }
@@ -9347,6 +9361,10 @@ $('panel-ra-market').addEventListener('change', async (e) => {
 $('panel-ra-market').addEventListener('change', (e) => {
   const nt = e.target.closest('[data-ra-note]');
   if (nt) { raSaveNote(nt.dataset.raNote, nt.value.trim()); return; }
+});
+$('panel-ra-market').addEventListener('keydown', (e) => {
+  const cn = e.target.closest('[data-ra-ccnote]');
+  if (cn && e.key === 'Enter') { e.preventDefault(); raCcAddNote(cn.dataset.raCcnote); }
 });
 let _raSearchT;
 $('panel-ra-market').addEventListener('input', (e) => {
@@ -9655,6 +9673,104 @@ function raRenderPlaylist() {
       </div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
 }
+// ============================ RADIO CONTROL CENTER (118) ====================
+// One view of every episode: status, dates, links, its production tasks, and a
+// team-notes thread — with the actions (details, schedule, generate/create
+// tasks, add links) reachable per episode. Reuses raState.stations (all
+// playlists) and the existing detail/finalize/schedule editors.
+const RA_STATUS_LABEL = { building: '🔨 Building', testing: '🧪 Testing', live: '🟢 Live', archived: '📦 Archived' };
+async function loadRadioCC() {
+  // stations already loaded by raLoadPlaylist; pull this-episode tasks + notes.
+  const ids = (raState.stations || []).map(s => s.id);
+  const [tasks, notes] = await Promise.all([
+    ids.length ? sb.from('tasks').select('id,title,status,due_date,milestone,link_url,station_id,pillar').in('station_id', ids).is('deleted_at', null).order('due_date', { nullsFirst: false }) : Promise.resolve({ data: [] }),
+    ids.length ? sb.from('station_notes').select('id,station_id,body,created_at,created_by').in('station_id', ids).order('created_at', { ascending: false }) : Promise.resolve({ data: [] }),
+  ]);
+  raState.ccTasks = tasks.data || [];
+  raState.ccNotes = notes.data || [];
+  renderRadioCC();
+}
+function ccTasksFor(id) { return (raState.ccTasks || []).filter(t => t.station_id === id); }
+function ccNotesFor(id) { return (raState.ccNotes || []).filter(n => n.station_id === id); }
+function renderRadioCC() {
+  const stations = [...(raState.stations || [])].sort((a, b) => (b.station_no || 0) - (a.station_no || 0));
+  const open = raState.ccOpen;
+  const card = (s) => {
+    const tks = ccTasksFor(s.id), done = tks.filter(t => t.status === 'done').length;
+    const isOpen = open === s.id;
+    const sched = s.scheduled_go_live ? `⏰ ${fmtDateTime(s.scheduled_go_live)}` : (s.drop_date ? `📅 drops ${fmtDate(s.drop_date)}` : (s.published_at ? `published ${fmtDate(s.published_at)}` : 'no date set'));
+    const head = `<div class="hub-li" data-ra-ccopen="${s.id}" style="cursor:pointer;">
+      <div class="li-main"><strong>EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || 'Untitled')}</strong>
+        <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>
+        <div class="li-sub">${escapeHtml(sched)}${tks.length ? ` · ${done}/${tks.length} tasks` : ''}${ccNotesFor(s.id).length ? ` · 💬 ${ccNotesFor(s.id).length}` : ''}</div></div>
+      <span class="li-sub">${isOpen ? '▾' : '▸'}</span></div>`;
+    if (!isOpen) return head;
+    const pageUrl = s.slug ? `${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(s.slug)}` : (s.public_token ? `${ARTIST_ORIGIN}radio.html?t=${encodeURIComponent(s.public_token)}` : null);
+    const taskRows = tks.length ? tks.map(t => `<div class="hub-li" style="padding:4px 0;">
+        <div class="li-main"><a href="#" data-ra-cctaskedit="${t.id}" style="color:inherit;">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the episode page">📢</a>` : ''}<div class="li-sub">${t.due_date ? fmtDate(t.due_date) : 'no date'} · ${escapeHtml(t.status)}</div></div>
+      </div>`).join('') : '<div class="li-sub">No tasks yet.</div>';
+    const noteRows = ccNotesFor(s.id).map(n => `<div class="hub-li" style="padding:4px 0;"><div class="li-main"><span>${escapeHtml(n.body)}</span><div class="li-sub">${escapeHtml(fmtDT(n.created_at))}</div></div></div>`).join('') || '<div class="li-sub">No notes yet.</div>';
+    return head + `<div style="border-left:3px solid var(--accent,#5b7fb3);padding:8px 0 12px 12px;margin-bottom:8px;">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button class="hub-mini" data-ra-ccdetails="${s.id}">✎ Details</button>
+        <button class="hub-mini" data-ra-ccschedule="${s.id}">📅 Schedule</button>
+        <button class="hub-mini" data-ra-ccgenweek="${s.id}">🗓 Generate week's tasks</button>
+        <button class="hub-mini" data-ra-cctaskadd="${s.id}">➕ Task</button>
+        ${pageUrl ? `<a class="hub-mini" href="${escapeHtml(pageUrl)}" target="_blank" rel="noopener">🌐 Episode page ↗</a>` : ''}
+        ${s.mix_sc_track_url ? `<a class="hub-mini" href="${escapeHtml(s.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Mix ↗</a>` : ''}
+        ${s.mix_youtube_url ? `<a class="hub-mini" href="${escapeHtml(s.mix_youtube_url)}" target="_blank" rel="noopener">▶ YouTube ↗</a>` : ''}
+      </div>
+      <div class="section-sub">Tasks</div><div class="hub-list" style="margin-bottom:8px;">${taskRows}</div>
+      <div class="section-sub">Team notes</div><div class="hub-list">${noteRows}</div>
+      <div style="display:flex;gap:6px;margin-top:8px;">
+        <input class="modal-input" data-ra-ccnote="${s.id}" placeholder="Add a note for the team…" style="flex:1;" autocomplete="off">
+        <button class="hub-mini" data-ra-ccnoteadd="${s.id}">Post</button>
+      </div>
+    </div>`;
+  };
+  const nextDrops = stations.filter(s => (s.drop_date || s.scheduled_go_live) && s.status !== 'archived')
+    .sort((a, b) => String(a.scheduled_go_live || a.drop_date).localeCompare(String(b.scheduled_go_live || b.drop_date)));
+  $('raMarketBody').innerHTML = raModeBar() + `
+    <div class="hub-sec-bar"><h3>🎚 Artist Radio — Control Center</h3><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span></div>
+    ${nextDrops.length ? `<div class="kpi-hint" style="margin-bottom:10px;">📆 Upcoming: ${nextDrops.slice(0, 4).map(s => `EP ${s.station_no ?? ''} ${escapeHtml(fmtDate(s.scheduled_go_live || s.drop_date))}`).join(' · ')}</div>` : ''}
+    <div class="hub-list">${stations.map(card).join('') || '<div class="hub-empty">No episodes yet.</div>'}</div>`;
+}
+// Load a station into raState.playlist so the existing editors act on it.
+async function ccWithStation(id, fn) {
+  raState.viewPlaylistId = id; await raLoadPlaylist(); fn();
+}
+async function raCcAddNote(id) {
+  const inp = document.querySelector(`[data-ra-ccnote="${id}"]`); const body = (inp?.value || '').trim(); if (!body) return;
+  const { error } = await sb.from('station_notes').insert({ station_id: id, body, created_by: ME.id });
+  if (error) { toast('Could not post: ' + error.message, 'err'); return; }
+  await loadRadioCC();
+}
+async function raCcAddTask(id) {
+  const s = (raState.stations || []).find(x => x.id === id);
+  const { data, error } = await sb.from('tasks').insert({ title: `EP ${s?.station_no ?? ''} — new task`, status: 'todo', source: 'manual', pillar: 'radio', station_id: id }).select('id').single();
+  if (error) { toast('Could not create: ' + error.message, 'err'); return; }
+  openEditTask(data.id, loadRadioCC);
+}
+// The teased release date (drop_date) + optional auto-publish time. drop_date
+// shows as "EP drops <date>" on the site until go-live; scheduled_go_live is the
+// DB-only auto-publish moment (the finalize flow owns the full SoundCloud push).
+function raCcSchedule(id) {
+  const s = (raState.stations || []).find(x => x.id === id); if (!s) return;
+  openKpi('📅 Schedule release', `EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || '')}`, `
+    <label class="modal-label">Teased drop date (shown on the site until live)</label>
+    <input class="modal-input" type="date" name="cc_drop" value="${escapeHtml(s.drop_date || '')}" style="max-width:200px;">
+    <label class="modal-label" style="margin-top:10px;">Auto-publish at (optional)</label>
+    <input class="modal-input" type="datetime-local" name="cc_golive" value="${s.scheduled_go_live ? escapeHtml(String(s.scheduled_go_live).slice(0, 16)) : ''}" style="max-width:240px;">
+    <div class="kpi-hint" style="margin-top:6px;">Auto-publish flips the page live at that time (DB publish). For the full SoundCloud/YouTube push, use <strong>Finalize</strong> in the Build view.</div>`,
+    async () => {
+      const patch = { drop_date: kpiVal('cc_drop') || null, updated_at: new Date().toISOString() };
+      const gl = kpiVal('cc_golive'); patch.scheduled_go_live = gl ? new Date(gl).toISOString() : null;
+      const { error } = await sb.from('sc_playlists').update(patch).eq('id', id);
+      if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+      closeKpi(); await raLoadPlaylist(); await loadRadioCC();
+    }, 'Save schedule');
+}
+
 // ---- Weekly radio production cadence ---------------------------------------
 // The repeatable weekly run, anchored on the WEDNESDAY the set is recorded.
 // Offsets are days from that Wednesday (verified: -4=Sat, -2=Mon, +1=Thu,
@@ -9720,6 +9836,7 @@ async function raGenWeekRun() {
     title: s.title, description: `Radio weekly · ${epLabel} · record ${fmtDate(wed)}`,
     status: 'todo', source: 'template', pillar: 'radio', milestone: !!s.ms,
     link_url: (s.ep && epLink) ? epLink : null,
+    station_id: pl?.id || null,   // scope the task to this episode for the Control Center
     due_date: raDatePlus(wed, s.off),
   }));
   const { error } = await sb.from('tasks').insert(rows);
