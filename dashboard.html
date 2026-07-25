@@ -9281,12 +9281,34 @@ $('panel-income').addEventListener('click', async (e) => {
 // ============================================================
 // ARTISTS — talent roster from actors (artist/dj roles) + booking history.
 // ============================================================
-const artistState = { rows: [], q: '', sortKey: 'gigs', sortDir: -1 };
+const artistState = { rows: [], q: '', sortKey: 'gigs', sortDir: -1, expanded: new Set() };
+// Control-center detail for one artist: clickable tiles for gigs, socials,
+// contact and profile — manage from the roster without leaving the page.
+function artistDetailTiles(a) {
+  const igUrlV = a.instagram ? (a.instagram.startsWith('http') ? a.instagram : 'https://instagram.com/' + a.instagram.replace(/^@/, '')) : '';
+  const socials = [
+    igUrlV ? `<a class="hub-mini" href="${escapeHtml(igUrlV)}" target="_blank" rel="noopener">📷 Instagram</a>` : '',
+    a.soundcloud ? `<a class="hub-mini" href="${escapeHtml(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a>` : '',
+    a.tiktok ? `<a class="hub-mini" href="${escapeHtml(a.tiktok)}" target="_blank" rel="noopener">🎵 TikTok</a>` : '',
+    a.website ? `<a class="hub-mini" href="${escapeHtml(a.website)}" target="_blank" rel="noopener">🌐 Website</a>` : '',
+  ].filter(Boolean).join(' ') || '<span class="li-sub">none on file</span>';
+  const gigs = [...(a.events || [])].sort((x, y) => (y.event_date || '').localeCompare(x.event_date || '')).slice(0, 8);
+  const gigRows = gigs.map(g => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><a href="#" data-artist-gig="${escapeHtml(g.id || '')}" style="color:inherit;">${escapeHtml(g.name || 'event')}</a><div class="li-sub">${escapeHtml(fmtDate(g.event_date))}</div></div></div>`).join('') || '<div class="li-sub">No gigs yet.</div>';
+  const pubUrl = ARTIST_ORIGIN + 'artist.html?id=' + encodeURIComponent(a.id);
+  const tile = (title, body) => `<div style="flex:1 1 220px;min-width:200px;border:1px solid var(--border);border-radius:10px;padding:10px;">
+    <div class="li-sub" style="font-weight:700;margin-bottom:5px;">${title}</div>${body}</div>`;
+  return `<div style="display:flex;gap:10px;flex-wrap:wrap;">
+    ${tile(`🎤 Gigs · ${a.gigs}`, gigRows)}
+    ${tile('📱 Socials', socials)}
+    ${tile('✉ Contact', `${a.email ? `<button class="hub-mini" data-artist-email="${escapeHtml(a.id)}">Email ${escapeHtml(a.display_name)}</button>` : '<span class="li-sub">no email</span>'}${a.phone ? `<div class="li-sub" style="margin-top:4px;">📞 ${escapeHtml(a.phone)}</div>` : ''}`)}
+    ${tile('🌐 Profile', `${a.public_profile ? `<a class="hub-mini" href="${escapeHtml(pubUrl)}" target="_blank" rel="noopener">View public ↗</a> ` : '<span class="li-sub">not on collective</span> '}<button class="hub-mini" data-artist-edit="${escapeHtml(a.id)}">✎ Edit profile</button>`)}
+  </div>`;
+}
 async function loadArtists() {
   $('artistsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [roles, parts] = await Promise.all([
     sb.from('actor_roles').select('role, actor:actors(id, display_name, legal_name, email, phone, instagram, soundcloud, tiktok, website, bio, photo_path, public_profile, collective_rank, edit_token)').in('role', ['artist', 'dj']),
-    sb.from('event_participants').select('actor_id, role, fee, event:events(name, event_date)').in('role', ['dj', 'artist', 'performer', 'headliner', 'opener']),
+    sb.from('event_participants').select('actor_id, role, fee, event:events(id, name, event_date)').in('role', ['dj', 'artist', 'performer', 'headliner', 'opener']),
   ]);
   if (roles.error) { $('artistsBody').innerHTML = `<div class="panel-state err">${escapeHtml(roles.error.message)}</div>`; return; }
   const byActor = new Map();
@@ -9306,16 +9328,21 @@ function renderArtists() {
   const arrow = (key) => s.sortKey === key ? (s.sortDir > 0 ? ' ▲' : ' ▼') : '';
   const th = '<th style="width:28px;"></th>' + ARTIST_COLS.map(([key, lbl]) => `<th data-asort2="${key}" style="cursor:pointer;user-select:none;">${escapeHtml(lbl)}${arrow(key)}</th>`).join('');
   const chip = (r) => `<span class="role-chip" style="cursor:default;">${escapeHtml(r)}</span>`;
-  const rows = list.map(a => `<tr data-artist="${escapeHtml(a.id)}" style="cursor:pointer;">
-    <td><input type="checkbox" data-asel="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name || '')}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${a.email ? 'select to email / copy' : 'no email on file'}"></td>
-    <td><strong>${escapeHtml(a.display_name)}</strong></td>
+  const rows = list.map(a => {
+    const open = s.expanded.has(a.id);
+    const head = `<tr data-aexp="${escapeHtml(a.id)}" style="cursor:pointer;">
+    <td><input type="checkbox" data-asel="${escapeHtml(a.id)}" data-name="${escapeHtml(a.display_name || '')}" data-email="${escapeHtml(a.email || '')}" style="width:auto;margin:0;cursor:pointer;" title="${a.email ? 'select to email / copy' : 'no email on file'}" onclick="event.stopPropagation()"></td>
+    <td><strong>${open ? '▾' : '▸'} ${escapeHtml(a.display_name)}</strong></td>
     <td>${a.public_profile ? '<span class="badge badge-public">🌐 Live</span>' : '<span class="badge badge-hidden">Hidden</span>'}</td>
     <td>${a.roles.map(chip).join(' ')}</td>
     <td class="num">${fmtNum(a.gigs)}</td>
     <td class="num">${a.fees ? money(a.fees) : muted}</td>
     <td>${a.lastGig ? escapeHtml(fmtDate(a.lastGig)) : muted}</td>
     <td class="truncate">${escapeHtml(a.email || a.instagram || a.phone || '') || muted}</td>
-  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
+  </tr>`;
+    if (!open) return head;
+    return head + `<tr class="ac-detail"><td></td><td colspan="7" style="padding:8px 6px 14px;">${artistDetailTiles(a)}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No artists. Add people with a dj/artist role in the Actors tab.</td></tr>`;
   $('artistsBody').innerHTML = `
     <div class="hub-cards" style="margin-bottom:12px;">${card('Artists', fmtNum(s.rows.length))}${card('On collective', fmtNum(s.rows.filter(a => a.public_profile).length))}${card('Total gigs', fmtNum(totGigs))}${card('Fees paid', money(totFees))}</div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
@@ -9492,7 +9519,11 @@ $('panel-artists').addEventListener('click', (e) => {
   if (e.target.closest('[data-artists-copy]')) { artistsCopyEmails(); return; }
   if (e.target.closest('[data-asel]')) return; // ticking a checkbox shouldn't open the profile
   const so = e.target.closest('[data-asort2]'); if (so) { const k = so.dataset.asort2; if (artistState.sortKey === k) artistState.sortDir *= -1; else { artistState.sortKey = k; artistState.sortDir = (k === 'gigs' || k === 'fees') ? -1 : 1; } renderArtists(); return; }
-  const row = e.target.closest('[data-artist]'); if (row) openArtistProfile(row.dataset.artist);
+  // Control-center tile actions inside an expanded row
+  const ae = e.target.closest('[data-artist-edit]'); if (ae) { openArtistProfile(ae.dataset.artistEdit); return; }
+  const aem = e.target.closest('[data-artist-email]'); if (aem) { const a = artistState.rows.find(x => x.id === aem.dataset.artistEmail); if (a?.email) openCompose([{ actor_id: a.id, name: a.display_name, email: a.email }], { source: 'Artists' }); return; }
+  const ag = e.target.closest('[data-artist-gig]'); if (ag) { e.preventDefault(); if (ag.dataset.artistGig) openEventHubTab(ag.dataset.artistGig); return; }
+  const ex = e.target.closest('[data-aexp]'); if (ex) { const id = ex.dataset.aexp; artistState.expanded.has(id) ? artistState.expanded.delete(id) : artistState.expanded.add(id); renderArtists(); return; }
 });
 function artistsSelected() {
   return [...$('artistsBody').querySelectorAll('[data-asel]:checked')].map((c) => ({ actor_id: c.dataset.asel, name: c.dataset.name, email: c.dataset.email }));
@@ -10634,7 +10665,7 @@ const RADIO_CADENCE = [
   { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle', ms: true, ep: true },
   { off: 0, day: 'Wed', title: 'Record the set', ms: true },
   { off: 1, day: 'Thu', title: 'Post the episode', ms: true, ep: true },
-  { off: 1, day: 'Thu', title: '3 highlights recap due' },
+  { off: 1, day: 'Thu', title: '3 highlights recap due — for THIS week\'s episode (Janelle uses it in the Thursday post)' },
   { off: 6, day: 'Tue', title: 'Recap post (following week)' },
 ];
 // Nearest upcoming Wednesday (today counts as Wednesday), as YYYY-MM-DD.
