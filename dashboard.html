@@ -245,7 +245,12 @@ body::before {
 }
 .cal-chip.cal-ms { border-left-color: #E0B84C; background: rgba(224,184,76,0.12); }
 .cal-chip.cal-so { border-left-color: #8362A8; background: rgba(131,98,168,0.12); }
-.cal-chip.cal-el { border-left-color: #4E7A9B; background: rgba(78,122,155,0.12); }
+/* "Ours elsewhere" — our roster playing someone else's night. Dashed border +
+   a distinct teal so it never reads as one of OUR shows (which are solid,
+   series-coloured). The old #4E7A9B was identical to the Bookings series. */
+.cal-chip.cal-el { border-left: 3px dashed #2CB1BC; background: rgba(44,177,188,0.10); color: rgba(242,237,230,0.78); }
+/* Episode "Post" milestone — clickable to open the episode page. */
+.cal-chip.cal-ep { border-left-color: #A7E02E; background: rgba(167,224,46,0.14); cursor: pointer; font-weight: 700; }
 .cal-more { font-size: 0.6rem; color: rgba(242,237,230,0.4); margin-top: 2px; }
 .cal-board-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0 10px; }
 .cal-board table { width: 100%; border-collapse: collapse; }
@@ -9244,7 +9249,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
@@ -9655,11 +9660,15 @@ function raRenderPlaylist() {
 // Offsets are days from that Wednesday (verified: -4=Sat, -2=Mon, +1=Thu,
 // +6=following Tue). Editing this array changes what "Generate week's tasks"
 // creates. `ms` marks the step as a milestone (shows on the calendar grid).
+// `ms` = milestone (calendar grid). `ep` = attach the episode preview link, so
+// the calendar chip opens the episode page (tracklist + copy) for Janelle. The
+// "send to Janelle" step and the "Post" step both get it — the two moments she
+// needs the page.
 const RADIO_CADENCE = [
   { off: -4, day: 'Sat', title: 'Playlist v1 ready' },
-  { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle' },
+  { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle', ms: true, ep: true },
   { off: 0, day: 'Wed', title: 'Record the set', ms: true },
-  { off: 1, day: 'Thu', title: 'Post the episode', ms: true },
+  { off: 1, day: 'Thu', title: 'Post the episode', ms: true, ep: true },
   { off: 1, day: 'Thu', title: '3 highlights recap due' },
   { off: 6, day: 'Tue', title: 'Recap post (following week)' },
 ];
@@ -9700,6 +9709,9 @@ async function raGenWeekRun() {
   if (!wed) throw new Error('Pick the record Wednesday');
   const pl = raState.playlist;
   const epLabel = pl ? `EP ${pl.station_no ?? ''}${pl.name ? ' · ' + pl.name : ''}`.trim() : 'Radio';
+  // The episode PREVIEW link (?t=<token>) — works before AND after go-live, so
+  // Janelle gets the tracklist + copy while it's still unpublished.
+  const epLink = pl?.public_token ? `${ARTIST_ORIGIN}radio.html?t=${encodeURIComponent(pl.public_token)}` : null;
   // Duplicate guard: a "Record the set" task already on this Wednesday means
   // this week was generated before.
   const { data: dupe } = await sb.from('tasks').select('id').eq('due_date', wed).eq('pillar', 'radio').ilike('title', 'Record the set%').limit(1);
@@ -9707,6 +9719,7 @@ async function raGenWeekRun() {
   const rows = RADIO_CADENCE.map(s => ({
     title: s.title, description: `Radio weekly · ${epLabel} · record ${fmtDate(wed)}`,
     status: 'todo', source: 'template', pillar: 'radio', milestone: !!s.ms,
+    link_url: (s.ep && epLink) ? epLink : null,
     due_date: raDatePlus(wed, s.off),
   }));
   const { error } = await sb.from('tasks').insert(rows);
@@ -12484,7 +12497,7 @@ async function calFetch() {
   const [evs, ms, so, mk, roster, ven, tasks] = await Promise.all([
     sb.from('events').select('id,slug,name,series,type,status,event_date,doors_time,venue_id,venue:venues(name)')
       .is('deleted_at', null).gte('event_date', from).lte('event_date', to).order('event_date'),
-    sb.from('tasks').select('id,title,due_date,status,event_id').eq('milestone', true)
+    sb.from('tasks').select('id,title,due_date,status,event_id,link_url').eq('milestone', true)
       .is('deleted_at', null).gte('due_date', from).lte('due_date', to),
     CAL.layers.social
       ? sb.from('social_posts').select('id,title,stage,scheduled_for,channels').is('deleted_at', null)
@@ -12499,7 +12512,7 @@ async function calFetch() {
       ? sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').in('role', ['artist', 'dj', 'performer', 'dancer']).eq('active', true)
       : Promise.resolve({ data: [] }),
     sb.from('venues').select('id,name').is('deleted_at', null).order('name'),
-    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,event_id,event:events(id,name),task_assignments(id,role,actor:actors(id,display_name))')
+    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,link_url,event_id,event:events(id,name),task_assignments(id,role,actor:actors(id,display_name))')
       .is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }).limit(600),
   ]);
   for (const r of [evs, ms, ven, tasks]) if (r.error) throw r.error;
@@ -12627,7 +12640,9 @@ function calGridHtml() {
       const c = CAL_SERIES_COLORS[e.series] || '#8a8a8a';
       chips.push(`<div class="cal-chip" data-cal-ev="${escapeHtml(e.id)}" title="${escapeHtml(e.name)}${e.venue?.name ? ' @ ' + escapeHtml(e.venue.name) : ''}" style="border-left-color:${c};background:${c}22;">${escapeHtml(e.name)}</div>`);
     });
-    (b.ms || []).forEach(t => chips.push(`<div class="cal-chip cal-ms" data-tb-edit="${escapeHtml(t.id)}" title="Milestone: ${escapeHtml(t.title)} — click to edit" style="cursor:pointer;">⭐ ${escapeHtml(t.title)}</div>`));
+    (b.ms || []).forEach(t => t.link_url
+      ? chips.push(`<div class="cal-chip cal-ep" data-cal-openlink="${escapeHtml(t.link_url)}" title="Open the episode page (tracklist + copy): ${escapeHtml(t.title)}">📢 ${escapeHtml(t.title)}</div>`)
+      : chips.push(`<div class="cal-chip cal-ms" data-tb-edit="${escapeHtml(t.id)}" title="Milestone: ${escapeHtml(t.title)} — click to edit" style="cursor:pointer;">⭐ ${escapeHtml(t.title)}</div>`));
     (b.so || []).forEach(p => chips.push(`<div class="cal-chip cal-so" title="Social: ${escapeHtml(p.title || '')}">📱 ${escapeHtml(p.title || 'post')}</div>`));
     (b.el || []).forEach(x => chips.push(`<div class="cal-chip cal-el" title="${escapeHtml(x.artist)} @ ${escapeHtml(x.venue || x.show)}">🎧 ${escapeHtml(x.artist)}</div>`));
     const extra = chips.length > 4 ? `<div class="cal-more">+${chips.length - 4} more</div>` : '';
@@ -12660,7 +12675,9 @@ function calDayListHtml(b, mkMax) {
       `<span style="color:${c};">●</span> <a href="#" data-cal-ev="${escapeHtml(e.id)}">${escapeHtml(e.name)}</a>`,
       `${escapeHtml(e.series || '')}${e.venue?.name ? ' · ' + escapeHtml(e.venue.name) : ''}${e.doors_time ? ' · doors ' + escapeHtml(e.doors_time.slice(0, 5)) : ''} · ${escapeHtml(e.status || '')}${lineup ? '<br>🎧 ' + escapeHtml(lineup) : ''}`));
   });
-  (b.ms || []).forEach(t => out.push(li(`<a href="#" data-tb-edit="${escapeHtml(t.id)}" style="color:inherit;">⭐ ${escapeHtml(t.title)}</a>`, `milestone · ${escapeHtml(t.status)}`)));
+  (b.ms || []).forEach(t => t.link_url
+    ? out.push(li(`📢 <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener">${escapeHtml(t.title)}</a>`, `milestone · ${escapeHtml(t.status)} · opens the episode page (tracklist + copy)`, `<a class="hub-mini" href="#" data-tb-edit="${escapeHtml(t.id)}" title="Edit task">✎</a>`))
+    : out.push(li(`<a href="#" data-tb-edit="${escapeHtml(t.id)}" style="color:inherit;">⭐ ${escapeHtml(t.title)}</a>`, `milestone · ${escapeHtml(t.status)}`)));
   (b.so || []).forEach(p => out.push(li(`📱 ${escapeHtml(p.title || 'post')}`, `social · ${escapeHtml(p.stage || '')}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}`)));
   (b.el || []).forEach(x => out.push(li(`🎧 ${escapeHtml(x.artist)}`, `plays ${x.url ? `<a href="${escapeHtml(x.url)}" target="_blank">${escapeHtml(x.show)}</a>` : escapeHtml(x.show)}${x.venue ? ' @ ' + escapeHtml(x.venue) : ''}`)));
   (b.mk || []).slice(0, mkMax).forEach(e => out.push(li(
@@ -12711,7 +12728,7 @@ function calRenderBoard() {
     const over = t.due_date && t.due_date < today && t.status !== 'done';
     return `<tr class="${t.status === 'done' ? 'done' : ''}">
       <td><span class="tb-star${t.milestone ? ' on' : ''}" data-tb-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
-      <td><a href="#" data-tb-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.pillar ? ` <span class="role-chip" style="cursor:default;background:${wsPillarColor(t.pillar)};color:#fff;font-size:.6rem;">${escapeHtml(wsPillarLabel(t.pillar))}</span>` : ''}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
+      <td><a href="#" data-tb-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the episode page (tracklist + copy)">📢</a>` : ''}${t.pillar ? ` <span class="role-chip" style="cursor:default;background:${wsPillarColor(t.pillar)};color:#fff;font-size:.6rem;">${escapeHtml(wsPillarLabel(t.pillar))}</span>` : ''}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
       <td>${t.event ? `<a href="#" data-cal-ev="${escapeHtml(t.event.id)}">${escapeHtml(t.event.name)}</a>` : '<span class="li-sub">—</span>'}</td>
       <td>${who || '<span class="li-sub">unassigned</span>'}</td>
       <td>${t.priority ? escapeHtml(t.priority) : '<span class="li-sub">—</span>'}</td>
@@ -12739,7 +12756,7 @@ function calRenderBoard() {
 // immediately (then the modal refreshes).
 async function openEditTask(taskId, onSaved) {
   const [tRes, evs, team] = await Promise.all([
-    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,event_id,effort,reward,task_assignments(id,role,actor:actors(id,display_name))').eq('id', taskId).single(),
+    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,link_url,event_id,effort,reward,task_assignments(id,role,actor:actors(id,display_name))').eq('id', taskId).single(),
     sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(150),
     sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true),
   ]);
@@ -12775,6 +12792,7 @@ async function openEditTask(taskId, onSaved) {
       <div><label class="modal-label">Event</label><select class="modal-select" name="event_id"><option value="">— standalone —</option>${evOpts}</select></div>
       <div><label class="modal-label">Bucket</label><select class="modal-select" name="pillar"><option value="">—</option>${WS_PILLARS.map(p => `<option value="${p}"${p === t.pillar ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select></div>
     </div>
+    <div class="modal-form-row"><label class="modal-label">Link (opens from the calendar / 📢)</label><input class="modal-input" name="link_url" value="${escapeHtml(t.link_url || '')}" placeholder="https://comewith.org/radio.html?t=…"></div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Effort</label><input class="modal-input" type="number" min="0" step="1" name="effort" value="${t.effort ?? ''}"></div>
       <div><label class="modal-label">Reward</label><input class="modal-input" type="number" min="0" step="1" name="reward" value="${t.reward ?? ''}"></div>
@@ -12796,6 +12814,7 @@ async function openEditTask(taskId, onSaved) {
         due_date: kpiVal('due_date') || null,
         event_id: kpiVal('event_id') || null,
         pillar: kpiVal('pillar') || null,
+        link_url: kpiVal('link_url') || null,
         milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked,
         effort: kpiVal('effort') === '' ? null : Number(kpiVal('effort')),
         reward: kpiVal('reward') === '' ? null : Number(kpiVal('reward')),
@@ -12856,6 +12875,8 @@ async function calAddTask() {
     }, 'Add');
 }
 $('panel-calendar').addEventListener('click', async (e) => {
+  const ol = e.target.closest('[data-cal-openlink]');
+  if (ol) { e.preventDefault(); window.open(ol.dataset.calOpenlink, '_blank', 'noopener'); return; }
   const ted = e.target.closest('[data-tb-edit]');
   if (ted) { e.preventDefault(); openEditTask(ted.dataset.tbEdit, loadCalendar); return; }
   const evLink = e.target.closest('[data-cal-ev]');
