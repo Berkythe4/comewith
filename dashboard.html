@@ -1423,6 +1423,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <!-- ===== SOCIAL CALENDAR (content planner + threaded notes) ===== -->
+      <div class="panel" id="panel-content-center"><div id="ccBody"><div class="placeholder">Loading content…</div></div></div>
+
       <div class="panel" id="panel-social-calendar">
         <div class="social-toolbar">
           <button class="strat-btn primary" id="socialAddBtn">＋ New post</button>
@@ -1436,7 +1438,6 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <option value="__none">General</option>
           </select>
           <button class="hub-mini" id="socialViewToggle" data-view="timeline">View: Timeline</button>
-          <button class="hub-mini" id="socialCenterBtn" title="All posts across every event — bulk set stage, schedule, reassign, mark posted">📋 Control Center</button>
           <button class="hub-mini" id="socialSnapshotBtn" title="Open a read-only snapshot to print, save as PDF, or send">📤 Share snapshot</button>
           <button class="hub-mini" id="socialEmailBtn" title="Email this view to someone">✉️ Email</button>
         </div>
@@ -1640,6 +1641,8 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'calendar')) MODULES.push({ key: 'calendar', label: 'Calendar & Tasks', nav_group: 'Pinned', sort_order: 1, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   // And the Meetings module ahead of migration 114 propagating.
   if (!MODULES.some(m => m.key === 'meetings')) MODULES.push({ key: 'meetings', label: 'Meetings', nav_group: 'Pinned', sort_order: 2, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
+  // Content Center ahead of migration 120 propagating.
+  if (!MODULES.some(m => m.key === 'content-center')) MODULES.push({ key: 'content-center', label: 'Content Center', nav_group: 'Marketing', sort_order: 5, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -2325,7 +2328,13 @@ async function openPostModal(post, opts) {
     </div>`;
   let notesHtml = '';
   if (!isNew) {
-    notesHtml = `<div class="notes-block">
+    notesHtml = `<div class="modal-form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
+      <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">✅ Tasks</strong>
+        <span id="postTaskSummary" class="li-sub">loading…</span>
+        <button type="button" class="hub-mini" id="postTaskToggle" style="margin-left:auto;">Show / edit</button></div>
+      <div id="postTaskList" style="display:none;margin-top:8px;"></div>
+    </div>
+    <div class="notes-block">
       <div class="modal-label">Conversation</div>
       <div id="postNotesThread" class="notes-thread"><div class="muted">Loading…</div></div>
       <div class="note-add"><textarea class="modal-input" id="newNoteBody" rows="2" placeholder="Add a note for the team… (timestamped)"></textarea>
@@ -2334,8 +2343,45 @@ async function openPostModal(post, opts) {
     </div>`;
   }
   openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved), isNew ? 'Create post' : 'Save post');
-  if (!isNew) loadPostNotes(p.id);
+  if (!isNew) { loadPostNotes(p.id); loadPostTasks(p.id); }
 }
+
+// Tasks attached to a post (120). Shown inline in the composer — done/total, and
+// a togglable list you can check off, add to, or open in the full editor, all
+// without leaving the post.
+let _postTasksExpanded = false;
+async function loadPostTasks(postId) {
+  const { data } = await sb.from('tasks').select('id,title,status,due_date').eq('post_id', postId).is('deleted_at', null).order('created_at');
+  const list = data || [];
+  const done = list.filter(t => t.status === 'done').length;
+  const sum = $('postTaskSummary'); if (sum) sum.textContent = list.length ? `${done}/${list.length} done` : 'none yet';
+  const wrap = $('postTaskList'); if (!wrap) return;
+  wrap.style.display = _postTasksExpanded ? '' : 'none';
+  const rows = list.map(t => `<div class="hub-li" style="padding:3px 0;">
+    <div class="li-main"><label style="display:flex;gap:6px;align-items:center;cursor:pointer;"><input type="checkbox" data-ptask-done="${t.id}"${t.status === 'done' ? ' checked' : ''} style="width:auto;margin:0;"> <span style="${t.status === 'done' ? 'text-decoration:line-through;opacity:.6;' : ''}">${escapeHtml(t.title)}</span></label>
+      ${t.due_date ? `<div class="li-sub">due ${escapeHtml(fmtDate(t.due_date))}</div>` : ''}</div>
+    <button type="button" class="hub-mini" data-ptask-edit="${t.id}">✎</button></div>`).join('') || '<div class="li-sub">No tasks yet.</div>';
+  wrap.innerHTML = rows + `<div style="display:flex;gap:6px;margin-top:6px;">
+    <input class="modal-input" id="ptaskNew" placeholder="Add a task…" style="flex:1;font-size:.8rem;">
+    <button type="button" class="hub-mini" data-ptask-add="${postId}">Add</button></div>`;
+}
+document.addEventListener('click', async (e) => {
+  const tg = e.target.closest('#postTaskToggle'); if (tg) { _postTasksExpanded = !_postTasksExpanded; const w = $('postTaskList'); if (w) w.style.display = _postTasksExpanded ? '' : 'none'; return; }
+  const add = e.target.closest('[data-ptask-add]'); if (add) {
+    const inp = $('ptaskNew'); const title = (inp?.value || '').trim(); if (!title) return;
+    const { error } = await sb.from('tasks').insert({ title, status: 'todo', source: 'manual', pillar: 'content', post_id: add.dataset.ptaskAdd });
+    if (error) { toast('Add failed: ' + error.message, 'err'); return; }
+    _postTasksExpanded = true; await loadPostTasks(add.dataset.ptaskAdd); return;
+  }
+  const ped = e.target.closest('[data-ptask-edit]'); if (ped) { const pid = document.querySelector('[data-ptask-add]')?.dataset.ptaskAdd; openEditTask(ped.dataset.ptaskEdit, () => loadPostTasks(pid)); return; }
+});
+document.addEventListener('change', async (e) => {
+  const cb = e.target.closest('[data-ptask-done]'); if (!cb) return;
+  const pid = document.querySelector('[data-ptask-add]')?.dataset.ptaskAdd;
+  const { error } = await sb.from('tasks').update({ status: cb.checked ? 'done' : 'todo' }).eq('id', cb.dataset.ptaskDone);
+  if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  if (pid) loadPostTasks(pid);
+});
 
 async function savePost(existing, onSaved) {
   const title = kpiVal('title');
@@ -2605,26 +2651,13 @@ function buildSocialEmailHtml(posts, byPost, note) {
 }
 $('socialStageFilter').addEventListener('change', (e) => { social.filterStage = e.target.value; renderSocial(); });
 $('socialSeriesFilter').addEventListener('change', (e) => { social.filterSeries = e.target.value; renderSocial(); });
-// The cycling toggle only walks the three planning views; the Control Center
-// has its own button so it's findable, not three clicks deep.
+// Control Center is its own module now — the calendar's toggle just cycles the
+// three planning views.
 const SOCIAL_CYCLE = ['timeline', 'board', 'list'];
 $('socialViewToggle').addEventListener('click', () => {
   const i = SOCIAL_CYCLE.indexOf(social.view);
-  social.view = SOCIAL_CYCLE[(i + 1) % SOCIAL_CYCLE.length];  // -1 (from center) → timeline
+  social.view = SOCIAL_CYCLE[(i + 1) % SOCIAL_CYCLE.length];
   $('socialViewToggle').textContent = 'View: ' + SOCIAL_VIEW_LABEL[social.view];
-  syncSocialCenterBtn();
-  renderSocial();
-});
-function syncSocialCenterBtn() {
-  const b = $('socialCenterBtn'); if (!b) return;
-  b.classList.toggle('on', social.view === 'center');
-  b.style.background = social.view === 'center' ? 'var(--accent,#5b7fb3)' : '';
-  b.style.color = social.view === 'center' ? '#fff' : '';
-}
-$('socialCenterBtn').addEventListener('click', () => {
-  social.view = social.view === 'center' ? 'timeline' : 'center';
-  $('socialViewToggle').textContent = 'View: ' + SOCIAL_VIEW_LABEL[social.view === 'center' ? 'timeline' : social.view];
-  syncSocialCenterBtn();
   renderSocial();
 });
 $('socialBody').addEventListener('click', (e) => {
@@ -2648,6 +2681,189 @@ $('socialBody').addEventListener('change', (e) => {
 document.addEventListener('click', (e) => {
   const an = e.target.closest('#addNoteBtn'); if (an) { addPostNote(an.dataset.post); return; }
   const dp = e.target.closest('#deletePostBtn'); if (dp) { deletePost(dp.dataset.post); return; }
+});
+
+// ============================ CONTENT CENTER (120) ==========================
+// The one surface Keith + Janelle run content from: every post across every
+// event, filterable (multi-select stage/series/event), as a bulk TABLE or a
+// TREE (event → videos → posts) progress flow, plus mass-create. Reuses the
+// full post composer (openPostModal) so nothing needs a second screen.
+const cc = { posts: [], events: [], taskByPost: {}, view: 'table', selected: new Set(),
+             fStage: new Set(), fSeries: new Set(), fEvent: new Set() };
+async function loadContentCenter() {
+  const [posts, events, tasks] = await Promise.all([
+    sb.from('social_posts').select('*, owner:profiles!owner_id(full_name,email), notes:social_post_notes(count)').is('deleted_at', null).order('scheduled_for', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }),
+    sb.from('events').select('id,name,series,event_date,status,recurrence_parent_id,recap_videos,youtube_url').is('deleted_at', null).order('event_date', { ascending: false }).limit(400),
+    sb.from('tasks').select('id,post_id,status').not('post_id', 'is', null).is('deleted_at', null),
+  ]);
+  if (posts.error) { $('ccBody').innerHTML = `<div class="panel-state err">${escapeHtml(posts.error.message)}</div>`; return; }
+  cc.posts = posts.data || [];
+  cc.events = events.data || [];
+  socialEvents = cc.events;  // share with openPostModal's lookups
+  cc.taskByPost = {};
+  (tasks.data || []).forEach(t => { const o = (cc.taskByPost[t.post_id] ||= { done: 0, total: 0 }); o.total++; if (t.status === 'done') o.done++; });
+  renderContentCenter();
+}
+const ccEventName = (id) => (cc.events.find(e => e.id === id)?.name) || (id ? 'Event' : 'No event');
+function ccFiltered() {
+  return cc.posts.filter(p =>
+    (!cc.fStage.size || cc.fStage.has(p.stage)) &&
+    (!cc.fSeries.size || cc.fSeries.has(p.series || '__none')) &&
+    (!cc.fEvent.size || cc.fEvent.has(p.event_id || '__none')));
+}
+// Generic multi-select dropdown (checkbox list in a <details>), reused for all
+// three filters. `sel` is a Set; options are [value,label].
+function ccMultiDD(key, label, options) {
+  const sel = cc['f' + key];
+  const boxes = options.map(([v, l]) => `<label style="display:flex;gap:6px;align-items:center;padding:3px 4px;white-space:nowrap;"><input type="checkbox" data-cc-filt="${key}" value="${escapeHtml(v)}"${sel.has(v) ? ' checked' : ''} style="width:auto;margin:0;"> ${escapeHtml(l)}</label>`).join('');
+  return `<details class="cal-dd"><summary>${label}${sel.size ? ` (${sel.size})` : ''} ▾</summary><div class="cal-dd-pop" style="max-height:260px;overflow:auto;">${boxes || '<span class="li-sub">none</span>'}${sel.size ? `<button class="hub-mini" data-cc-clearfilt="${key}" style="margin-top:4px;">clear</button>` : ''}</div></details>`;
+}
+function renderContentCenter() {
+  const posts = ccFiltered();
+  const seriesSet = [...new Set(cc.posts.map(p => p.series || '__none'))];
+  const stageOpts = SOCIAL_STAGES.map(s => [s, SOCIAL_STAGE_LABEL[s]]);
+  const seriesOpts = seriesSet.map(s => [s, s === '__none' ? 'General / none' : s]);
+  const evIds = [...new Set(cc.posts.map(p => p.event_id || '__none'))];
+  const evOpts = evIds.map(id => [id, id === '__none' ? 'No event' : ccEventName(id)]);
+  const vbtn = (k, l) => `<button class="hub-mini${cc.view === k ? ' on' : ''}" data-cc-view="${k}" style="${cc.view === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  const bar = `
+    <div class="hub-sec-bar"><h3>📋 Content Center</h3>
+      <span style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="hub-btn" data-cc-newpost>➕ New post</button>
+        <button class="hub-btn ghost" data-cc-mass>⚡ Mass create</button>
+      </span></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
+      ${vbtn('table', '▤ Table')}${vbtn('tree', '🌳 Tree')}
+      <span style="width:8px;"></span>
+      ${ccMultiDD('Stage', 'Stage', stageOpts)}${ccMultiDD('Series', 'Series', seriesOpts)}${ccMultiDD('Event', 'Event', evOpts)}
+      ${(cc.fStage.size || cc.fSeries.size || cc.fEvent.size) ? '<button class="hub-mini" data-cc-clearall>✕ clear filters</button>' : ''}
+      <span class="li-sub" style="margin-left:auto;">${posts.length} of ${cc.posts.length} posts</span>
+    </div>`;
+  $('ccBody').innerHTML = bar + `<div id="ccViewBody">${cc.view === 'tree' ? ccTreeHtml(posts) : ccTableHtml(posts)}</div>`;
+}
+function ccTaskChip(pid) { const o = cc.taskByPost[pid]; return o ? ` <span class="role-chip" style="cursor:default;" title="Tasks done / total">✓ ${o.done}/${o.total}</span>` : ''; }
+function ccTableHtml(posts) {
+  const sel = cc.selected;
+  const byEv = new Map();
+  posts.forEach(p => { const k = p.event_id || '__none'; (byEv.get(k) || byEv.set(k, []).get(k)).push(p); });
+  const groups = [...byEv.entries()].sort((a, b) => (a[0] === '__none' ? 1 : b[0] === '__none' ? -1 : ccEventName(a[0]).localeCompare(ccEventName(b[0]))));
+  const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}">${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
+  const evOpts = ['<option value="">— set event —</option>', '<option value="__clear">— none —</option>'].concat(cc.events.map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`)).join('');
+  const row = (p) => `<tr${sel.has(p.id) ? ' style="background:rgba(167,224,46,0.10);"' : ''}>
+    <td><input type="checkbox" data-cc-sel="${p.id}"${sel.has(p.id) ? ' checked' : ''} style="width:auto;margin:0;"></td>
+    <td><a href="#" data-cc-edit="${p.id}" style="color:inherit;">${escapeHtml(p.title || 'Untitled')}</a>${ccTaskChip(p.id)}${p.content_pillar ? ` <span class="li-sub">${escapeHtml(p.content_pillar)}</span>` : ''}</td>
+    <td>${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</td>
+    <td class="muted">${(p.channels || []).map(c => SOCIAL_CHAN_LABEL[c] || c).join(', ') || '—'}</td>
+    <td class="muted">${p.posted_at ? '✅ ' + escapeHtml(fmtDate(p.posted_at)) : escapeHtml(socialFmtDate(p.scheduled_for)) || '—'}</td>
+    <td class="muted">${p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '—'}</td>
+    <td>${p.link_url ? `<a href="${escapeHtml(p.link_url)}" target="_blank" rel="noopener">↗</a>` : ''}</td>
+  </tr>`;
+  const tables = groups.map(([evId, list]) => `
+    <div class="hub-sec-bar" style="margin-top:12px;"><h3 style="font-size:.85rem;">${escapeHtml(ccEventName(evId))} <span class="li-sub">· ${list.length}</span></h3></div>
+    <table class="data-table"><thead><tr><th style="width:26px;"><input type="checkbox" data-cc-selall="${evId}" style="width:auto;margin:0;"></th><th>Title</th><th>Stage</th><th>Channels</th><th>When</th><th>Owner</th><th></th></tr></thead>
+    <tbody>${list.map(row).join('')}</tbody></table>`).join('');
+  const barSel = sel.size ? `<div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+    <strong>${sel.size} selected</strong>
+    <select class="hub-status-sel" data-cc-bulkstage><option value="">Set stage…</option>${stageOpts}</select>
+    <label class="li-sub">Schedule <input class="modal-input" type="datetime-local" data-cc-bulkdate style="max-width:210px;"></label>
+    <select class="hub-status-sel" data-cc-bulkevent>${evOpts}</select>
+    <button class="hub-mini" data-cc-bulkposted>✅ Mark posted</button>
+    <button class="hub-mini danger" data-cc-bulkdelete>🗑 Delete</button>
+    <button class="hub-mini" data-cc-clearsel>clear</button></div>` : '';
+  return barSel + (tables || '<div class="hub-empty">No posts match these filters.</div>');
+}
+// Tree: each event with content → its videos + its posts, as a progress flow.
+function ccTreeHtml(posts) {
+  const byEv = new Map();
+  posts.forEach(p => { const k = p.event_id || '__none'; (byEv.get(k) || byEv.set(k, []).get(k)).push(p); });
+  // events in date order, only those with posts (respecting filters) or videos
+  const evs = cc.events.filter(e => byEv.has(e.id) || (Array.isArray(e.recap_videos) && e.recap_videos.length) || e.youtube_url);
+  const noEv = byEv.get('__none') || [];
+  const stageDot = (p) => `<span title="${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}">${p.posted_at ? '🟢' : p.stage === 'scheduled' ? '🟡' : '⚪'}</span>`;
+  const postLeaf = (p) => `<div class="hub-li" data-cc-edit="${p.id}" style="cursor:pointer;padding:4px 0 4px 22px;">
+      <div class="li-main"><span>${stageDot(p)} ${escapeHtml(p.title || 'Untitled')}${ccTaskChip(p.id)}</span>
+        <div class="li-sub">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}${p.scheduled_for ? ' · ' + escapeHtml(socialFmtDate(p.scheduled_for)) : ''}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}</div></div>
+      <span class="li-sub">edit →</span></div>`;
+  const evBlock = (e) => {
+    const ps = byEv.get(e.id) || [];
+    const vids = (Array.isArray(e.recap_videos) ? e.recap_videos.filter(v => v && v.url) : []).concat(e.youtube_url ? [{ label: 'Recap video', url: e.youtube_url }] : []);
+    const posted = ps.filter(p => p.posted_at).length;
+    return `<div style="border-left:3px solid ${calSeriesColor(e.series)};padding:6px 0 8px 12px;margin-bottom:6px;">
+      <div class="li-main"><strong><a href="#" data-cc-openevent="${e.id}" style="color:inherit;">${escapeHtml(e.name)}</a></strong>
+        <span class="li-sub">· ${escapeHtml(e.series || 'general')} · ${escapeHtml(fmtDate(e.event_date))} · ${ps.length ? `${posted}/${ps.length} posted` : 'no posts'}</span>
+        <button class="hub-mini" data-cc-newpost-ev="${e.id}" style="margin-left:6px;">➕ post</button></div>
+      ${vids.length ? `<div class="li-sub" style="padding:2px 0 2px 22px;">🎬 ${vids.map(v => `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">${escapeHtml(v.label || 'video')}</a>`).join(' · ')}</div>` : ''}
+      ${ps.map(postLeaf).join('') || '<div class="li-sub" style="padding:2px 0 2px 22px;">No posts yet.</div>'}
+    </div>`;
+  };
+  return `<div class="hub-list">${evs.map(evBlock).join('')}
+    ${noEv.length ? `<div style="border-left:3px solid var(--mid);padding:6px 0 8px 12px;"><strong>No event</strong> <span class="li-sub">· ${noEv.length}</span>${noEv.map(postLeaf).join('')}</div>` : ''}
+    ${!evs.length && !noEv.length ? '<div class="hub-empty">No content matches these filters.</div>' : ''}</div>`;
+}
+async function ccBulk(patch, label) {
+  const ids = [...cc.selected]; if (!ids.length) return;
+  const { error } = await sb.from('social_posts').update(patch).in('id', ids);
+  if (error) { toast('Bulk update failed: ' + error.message, 'err'); return; }
+  toast(`${ids.length} post${ids.length === 1 ? '' : 's'} ${label}`, 'ok');
+  cc.selected.clear(); await loadContentCenter();
+}
+// Mass-create: one post per event in a series (or per selected events).
+async function ccOpenMassCreate() {
+  await ensureSocialLookups();
+  const seriesList = [...new Set(cc.events.map(e => e.series).filter(Boolean))].sort();
+  openKpi('⚡ Mass create posts', 'One post for each event you pick — then refine them individually', `
+    <label class="modal-label">Make a post for…</label>
+    <select class="modal-select" name="mc_scope" style="width:100%;">
+      <option value="series">every event in a series</option>
+      <option value="upcoming">every upcoming event</option>
+    </select>
+    <div class="modal-form-row" data-mc-serieswrap><label class="modal-label">Series</label>
+      <select class="modal-select" name="mc_series" style="width:100%;">${seriesList.map(s => `<option value="${escapeHtml(s)}">${escapeHtml(s)}</option>`).join('')}</select></div>
+    <label class="modal-label">Post title template <span class="li-sub">— {event} is filled in</span></label>
+    <input class="modal-input" name="mc_title" value="{event} — recap" style="width:100%;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;">
+      <div><label class="modal-label">Stage</label><select class="modal-select" name="mc_stage">${SOCIAL_STAGES.map(s => `<option value="${s}"${s === 'idea' ? ' selected' : ''}>${SOCIAL_STAGE_LABEL[s]}</option>`).join('')}</select></div>
+      <div><label class="modal-label">Pillar</label><input class="modal-input" name="mc_pillar" placeholder="recap, promo…"></div>
+    </div>
+    <label class="modal-label" style="margin-top:8px;">Channels</label>
+    <div class="chk-row">${SOCIAL_CHANNELS.map(c => `<label class="chk"><input type="checkbox" data-mc-chan value="${c}"${c === 'instagram' ? ' checked' : ''}> ${SOCIAL_CHAN_LABEL[c]}</label>`).join('')}</div>`,
+    async () => {
+      const scope = kpiVal('mc_scope');
+      const today = new Date().toISOString().slice(0, 10);
+      let evs = scope === 'series' ? cc.events.filter(e => e.series === kpiVal('mc_series')) : cc.events.filter(e => e.event_date >= today);
+      if (!evs.length) { toast('No events matched', 'err'); return; }
+      const chans = [...$('kpiModalBody').querySelectorAll('[data-mc-chan]:checked')].map(b => b.value);
+      const tpl = kpiVal('mc_title') || '{event}';
+      const rows = evs.map(e => ({ title: tpl.replace('{event}', e.name), stage: kpiVal('mc_stage') || 'idea', channels: chans, series: e.series || null, event_id: e.id, content_pillar: kpiVal('mc_pillar') || null }));
+      const { error } = await sb.from('social_posts').insert(rows);
+      if (error) { toast('Mass create failed: ' + error.message, 'err'); return; }
+      closeKpi(); toast(`Created ${rows.length} posts`, 'ok'); await loadContentCenter();
+    }, 'Create posts');
+  setTimeout(() => {
+    const scope = document.querySelector('[name="mc_scope"]'), wrap = document.querySelector('[data-mc-serieswrap]');
+    if (scope && wrap) scope.addEventListener('change', () => { wrap.style.display = scope.value === 'series' ? '' : 'none'; });
+  }, 0);
+}
+$('panel-content-center').addEventListener('click', (e) => {
+  const v = e.target.closest('[data-cc-view]'); if (v) { cc.view = v.dataset.ccView; renderContentCenter(); return; }
+  if (e.target.closest('[data-cc-newpost]')) { openPostModal({ stage: 'idea', channels: ['instagram'] }, { onSaved: loadContentCenter }); return; }
+  const npe = e.target.closest('[data-cc-newpost-ev]'); if (npe) { const ev = cc.events.find(x => x.id === npe.dataset.ccNewpostEv); openPostModal({ stage: 'idea', channels: ['instagram'], event_id: npe.dataset.ccNewpostEv, series: ev?.series || '' }, { onSaved: loadContentCenter }); return; }
+  if (e.target.closest('[data-cc-mass]')) { ccOpenMassCreate(); return; }
+  const oe = e.target.closest('[data-cc-openevent]'); if (oe) { e.preventDefault(); openEventHub(oe.dataset.ccOpenevent); return; }
+  const ed = e.target.closest('[data-cc-edit]'); if (ed) { e.preventDefault(); const p = cc.posts.find(x => x.id === ed.dataset.ccEdit); if (p) openPostModal(p, { onSaved: loadContentCenter }); return; }
+  const cf = e.target.closest('[data-cc-clearfilt]'); if (cf) { cc['f' + cf.dataset.ccClearfilt].clear(); renderContentCenter(); return; }
+  if (e.target.closest('[data-cc-clearall]')) { cc.fStage.clear(); cc.fSeries.clear(); cc.fEvent.clear(); renderContentCenter(); return; }
+  if (e.target.closest('[data-cc-clearsel]')) { cc.selected.clear(); renderContentCenter(); return; }
+  if (e.target.closest('[data-cc-bulkposted]')) { ccBulk({ stage: 'posted', posted_at: new Date().toISOString() }, 'marked posted'); return; }
+  if (e.target.closest('[data-cc-bulkdelete]')) { if (confirm(`Delete ${cc.selected.size} post(s)? (recoverable)`)) ccBulk({ deleted_at: new Date().toISOString() }, 'deleted'); return; }
+});
+$('panel-content-center').addEventListener('change', (e) => {
+  const cf = e.target.closest('[data-cc-filt]'); if (cf) { const set = cc['f' + cf.dataset.ccFilt]; cf.checked ? set.add(cf.value) : set.delete(cf.value); renderContentCenter(); return; }
+  const sc = e.target.closest('[data-cc-sel]'); if (sc) { sc.checked ? cc.selected.add(sc.dataset.ccSel) : cc.selected.delete(sc.dataset.ccSel); renderContentCenter(); return; }
+  const sa = e.target.closest('[data-cc-selall]'); if (sa) { const ev = sa.dataset.ccSelall; ccFiltered().filter(p => (p.event_id || '__none') === ev).forEach(p => sa.checked ? cc.selected.add(p.id) : cc.selected.delete(p.id)); renderContentCenter(); return; }
+  const bs = e.target.closest('[data-cc-bulkstage]'); if (bs && bs.value) { const patch = { stage: bs.value }; if (bs.value === 'posted') patch.posted_at = new Date().toISOString(); ccBulk(patch, 'moved to ' + (SOCIAL_STAGE_LABEL[bs.value] || bs.value)); return; }
+  const bd = e.target.closest('[data-cc-bulkdate]'); if (bd && bd.value) { ccBulk({ scheduled_for: new Date(bd.value).toISOString(), stage: 'scheduled' }, 'scheduled'); return; }
+  const be = e.target.closest('[data-cc-bulkevent]'); if (be && be.value) { ccBulk({ event_id: be.value === '__clear' ? null : be.value }, 'reassigned'); return; }
 });
 
 // ---- Auth state ----
@@ -3324,6 +3540,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
   if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Artist Radio)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
+  if (tab === 'content-center') { await loadContentCenter(); return; } // content ops hub
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
   if (!queries[tab]) return; // placeholder panels are no-ops
   setCount(tab, null);
@@ -5675,6 +5892,7 @@ function renderHubHead() {
       ${stageStepper(e.stage)}
       <div class="hub-head-actions">
         <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
+        <button class="hub-btn ghost" data-hub-action="occurrences" title="Turn this into a recurring series — clone it into future dated occurrences">🔁 Add occurrences</button>
         <button class="hub-btn ghost" data-hub-action="log-ig" title="Log follower counts — defaults to this event's date so it's back-dated to the event">Log IG followers</button>
         ${e.series === 'Dance Infusion' ? '<button class="hub-btn ghost" data-hub-action="edit-impact" title="Edit the public impact report — text, photos, and the publish toggle">Impact report</button>' : ''}
       </div>
@@ -7501,6 +7719,55 @@ async function hubInvolveContact(actorId) {
   toast('Added to this event', 'ok'); await hubReload(hub.section);
 }
 
+// Turn one event into a recurring series: clone it into N future occurrences at
+// a chosen cadence. New rows share the series, copy the core fields (venue,
+// capacity, times, type), get a fresh name suffix and date, and point back at
+// this event via recurrence_parent_id. Money/people/tasks are NOT copied — each
+// occurrence starts clean.
+async function hubMakeOccurrences() {
+  const ev = hub.event; if (!ev) return;
+  const base = ev.event_date || calToday();
+  openKpi('🔁 Add occurrences', `${escapeHtml(ev.name)} · series “${escapeHtml(ev.series || '—')}”`, `
+    <div class="kpi-hint" style="margin-bottom:8px;">Creates future copies of this event — same series, venue, capacity and times. Each starts with no money, people or tasks. Names get a “#n” or date suffix.</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <div><label class="modal-label">Cadence</label><select class="modal-select" name="oc_cad"><option value="7">Weekly</option><option value="14">Every 2 weeks</option><option value="28" selected>Every 4 weeks</option><option value="month">Monthly (same day-of-month)</option></select></div>
+      <div><label class="modal-label">How many</label><input class="modal-input" type="number" name="oc_n" value="3" min="1" max="24" style="max-width:90px;"></div>
+      <div><label class="modal-label">First occurrence date</label><input class="modal-input" type="date" name="oc_start" value="${escapeHtml(base)}"></div>
+    </div>
+    <label class="modal-label" style="margin-top:8px;"><input type="checkbox" name="oc_number" checked style="width:auto;"> append “#2, #3…” to names (else use the date)</label>
+    <div id="ocPreview" class="li-sub" style="margin-top:8px;"></div>`,
+    async () => {
+      const cad = kpiVal('oc_cad'); const n = Math.max(1, Math.min(24, Number(kpiVal('oc_n')) || 1));
+      const start = kpiVal('oc_start') || base; const useNum = !!$('kpiModalBody').querySelector('[name="oc_number"]')?.checked;
+      const dates = ocDates(start, cad, n);
+      const parentId = ev.recurrence_parent_id || ev.id;
+      const rows = dates.map((d, i) => {
+        const name = useNum ? `${ev.name} #${i + 2}` : `${ev.name} — ${fmtDate(d)}`;
+        return {
+          name, slug: (raSlugify(name) || 'event') + '-' + d,   // slug is NOT NULL + unique per date
+          series: ev.series || null, type: ev.type || null, venue_id: ev.venue_id || null,
+          capacity: ev.capacity || null, doors_time: ev.doors_time || null, end_time: ev.end_time || null,
+          event_date: d, status: 'planning', stage: 'planning', recurrence_parent_id: parentId,
+        };
+      });
+      const { error } = await sb.from('events').insert(rows);
+      if (error) { toast('Could not create occurrences: ' + error.message, 'err'); return; }
+      // Backfill parent link on the source event if it wasn't part of a series yet.
+      if (!ev.recurrence_parent_id) await sb.from('events').update({ recurrence_parent_id: ev.id }).eq('id', ev.id);
+      closeKpi(); toast(`Created ${rows.length} occurrence${rows.length === 1 ? '' : 's'}`, 'ok');
+    }, 'Create occurrences');
+  const upd = () => { const el = $('ocPreview'); if (!el) return; const ds = ocDates(kpiVal('oc_start') || base, kpiVal('oc_cad'), Math.min(24, Number(kpiVal('oc_n')) || 1)); el.textContent = 'Dates: ' + ds.map(fmtDate).join(', '); };
+  setTimeout(() => { ['oc_cad', 'oc_n', 'oc_start'].forEach(nm => document.querySelector(`[name="${nm}"]`)?.addEventListener('change', upd)); upd(); }, 0);
+}
+function ocDates(start, cad, n) {
+  const out = []; const base = new Date(start + 'T12:00:00');
+  for (let i = 1; i <= n; i++) {
+    const d = new Date(base);
+    if (cad === 'month') d.setMonth(d.getMonth() + i); else d.setDate(d.getDate() + i * Number(cad));
+    out.push(d.toISOString().slice(0, 10));
+  }
+  return out;
+}
 const HUB_ACTIONS = {
   'edit-core': () => openEditEvent(hub.eventId),
   'set-venue': hubSetVenue,
@@ -7518,6 +7785,7 @@ const HUB_ACTIONS = {
   'edit-contract': (el) => hubEditContract(el.dataset.id),
   'upload-file': hubDoUpload,
   'add-doctype': hubAddDocType,
+  'occurrences': () => hubMakeOccurrences(),
   'log-ig': () => openLogIG({ date: hub.event?.event_date, label: hub.event?.name, source: 'event:' + hub.eventId }),
   'edit-impact': () => openImpactReportEditor(hub.eventId),
   'add-guestlist': hubAddGuestList,
