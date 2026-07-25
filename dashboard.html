@@ -1705,7 +1705,15 @@ async function renderNav() {
 }
 
 // Activate a tab by key: toggle button + panel, set the title, load data.
-function activateTab(key) {
+// Open an event hub in a NEW browser tab (deep-link), so the current screen —
+// and any unsaved work / scroll position — is never lost. The new tab boots
+// straight into the hub via the #event= restore at the bottom of the script.
+function openEventHubTab(eventId, section) {
+  const url = location.pathname + '#event=' + encodeURIComponent(eventId) + (section && section !== 'overview' ? '&sec=' + encodeURIComponent(section) : '');
+  window.open(url, '_blank', 'noopener');
+}
+function activateTab(key, opts) {
+  opts = opts || {};
   const btn = $('sidebarNav').querySelector(`button[data-tab="${key}"]`);
   if (!btn) return;
   // Leaving the event hub for a regular tab — drop the hub deep-link from the URL.
@@ -1715,8 +1723,25 @@ function activateTab(key) {
   ensureNavGroupOpen(key);
   $('mainTitle').textContent = btn.dataset.label || btn.textContent;
   try { localStorage.setItem('cw_active_tab', key); } catch (_) {}
+  // In-app history so the browser Back button returns to the previous tab
+  // instead of leaving the site. fromHistory = we're already responding to a
+  // popstate, so don't touch history. The FIRST activation replaces (seeds the
+  // baseline entry with state) so the very first Back isn't a dead press;
+  // subsequent ones push, building a walkable stack.
+  if (!opts.fromHistory) {
+    try {
+      const url = location.pathname + location.search;
+      if (history.state && history.state.cwTab) history.pushState({ cwTab: key }, '', url);
+      else history.replaceState({ cwTab: key }, '', url);
+    } catch (_) {}
+  }
   loadTab(key);
 }
+window.addEventListener('popstate', (e) => {
+  const st = e.state;
+  if (st && st.cwTab && $('sidebarNav').querySelector(`button[data-tab="${st.cwTab}"]`)) { activateTab(st.cwTab, { fromHistory: true }); }
+  else if (st && st.cwEvent) { openEventHub(st.cwEvent); }
+});
 
 // ---- Team management (master_admin only) ----------------------------------
 // 'partners' (104): sees every module EXCEPT the master_only ones — income,
@@ -2688,13 +2713,14 @@ document.addEventListener('click', (e) => {
 // event, filterable (multi-select stage/series/event), as a bulk TABLE or a
 // TREE (event → videos → posts) progress flow, plus mass-create. Reuses the
 // full post composer (openPostModal) so nothing needs a second screen.
-const cc = { posts: [], events: [], taskByPost: {}, view: 'table', selected: new Set(),
-             fStage: new Set(), fSeries: new Set(), fEvent: new Set() };
+const cc = { posts: [], events: [], taskByPost: {}, photoByEvent: {}, view: 'pipeline', selected: new Set(), expanded: new Set(),
+             fStage: new Set(), fSeries: new Set(), fEvent: new Set(), timeScope: 'all' };
 async function loadContentCenter() {
-  const [posts, events, tasks] = await Promise.all([
+  const [posts, events, tasks, photos] = await Promise.all([
     sb.from('social_posts').select('*, owner:profiles!owner_id(full_name,email), notes:social_post_notes(count)').is('deleted_at', null).order('scheduled_for', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }),
-    sb.from('events').select('id,name,series,event_date,status,recurrence_parent_id,recap_videos,youtube_url').is('deleted_at', null).order('event_date', { ascending: false }).limit(400),
+    sb.from('events').select('id,name,slug,series,event_date,status,is_public,recurrence_parent_id,recap_videos,youtube_url').is('deleted_at', null).order('event_date', { ascending: false }).limit(400),
     sb.from('tasks').select('id,post_id,status').not('post_id', 'is', null).is('deleted_at', null),
+    sb.from('event_photos').select('event_id,is_public'),
   ]);
   if (posts.error) { $('ccBody').innerHTML = `<div class="panel-state err">${escapeHtml(posts.error.message)}</div>`; return; }
   cc.posts = posts.data || [];
@@ -2702,8 +2728,11 @@ async function loadContentCenter() {
   socialEvents = cc.events;  // share with openPostModal's lookups
   cc.taskByPost = {};
   (tasks.data || []).forEach(t => { const o = (cc.taskByPost[t.post_id] ||= { done: 0, total: 0 }); o.total++; if (t.status === 'done') o.done++; });
+  cc.photoByEvent = {};
+  (photos.data || []).forEach(p => { const o = (cc.photoByEvent[p.event_id] ||= { total: 0, public: 0 }); o.total++; if (p.is_public) o.public++; });
   renderContentCenter();
 }
+function ccPostsForEvent(id) { return cc.posts.filter(p => p.event_id === id); }
 const ccEventName = (id) => (cc.events.find(e => e.id === id)?.name) || (id ? 'Event' : 'No event');
 function ccFiltered() {
   return cc.posts.filter(p =>
@@ -2726,20 +2755,114 @@ function renderContentCenter() {
   const evIds = [...new Set(cc.posts.map(p => p.event_id || '__none'))];
   const evOpts = evIds.map(id => [id, id === '__none' ? 'No event' : ccEventName(id)]);
   const vbtn = (k, l) => `<button class="hub-mini${cc.view === k ? ' on' : ''}" data-cc-view="${k}" style="${cc.view === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  const isPipe = cc.view === 'pipeline';
+  const timeSel = `<label class="li-sub">Show <select class="hub-status-sel" data-cc-time><option value="all"${cc.timeScope === 'all' ? ' selected' : ''}>all events</option><option value="upcoming"${cc.timeScope === 'upcoming' ? ' selected' : ''}>upcoming</option><option value="recent"${cc.timeScope === 'recent' ? ' selected' : ''}>last 90 days</option></select></label>`;
   const bar = `
     <div class="hub-sec-bar"><h3>📋 Content Center</h3>
       <span style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button class="hub-btn" data-cc-newpost>➕ New post</button>
+        <button class="hub-btn" data-cc-weekplan title="Generate the 4-day weekly content plan (Sun fun · Tue radio recap · Thu radio go-live · Fri collab)">🗓 Plan a week</button>
         <button class="hub-btn ghost" data-cc-mass>⚡ Mass create</button>
+        <button class="hub-btn ghost" data-cc-newpost>➕ New post</button>
       </span></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
-      ${vbtn('table', '▤ Table')}${vbtn('tree', '🌳 Tree')}
+      ${vbtn('pipeline', '🎬 Pipeline')}${vbtn('table', '▤ Posts table')}${vbtn('tree', '🌳 Tree')}
       <span style="width:8px;"></span>
-      ${ccMultiDD('Stage', 'Stage', stageOpts)}${ccMultiDD('Series', 'Series', seriesOpts)}${ccMultiDD('Event', 'Event', evOpts)}
+      ${isPipe ? timeSel + ccMultiDD('Series', 'Series', seriesOpts) : ccMultiDD('Stage', 'Stage', stageOpts) + ccMultiDD('Series', 'Series', seriesOpts) + ccMultiDD('Event', 'Event', evOpts)}
       ${(cc.fStage.size || cc.fSeries.size || cc.fEvent.size) ? '<button class="hub-mini" data-cc-clearall>✕ clear filters</button>' : ''}
-      <span class="li-sub" style="margin-left:auto;">${posts.length} of ${cc.posts.length} posts</span>
+      <span class="li-sub" style="margin-left:auto;">${isPipe ? '' : posts.length + ' of ' + cc.posts.length + ' posts'}</span>
     </div>`;
-  $('ccBody').innerHTML = bar + `<div id="ccViewBody">${cc.view === 'tree' ? ccTreeHtml(posts) : ccTableHtml(posts)}</div>`;
+  const bodyHtml = cc.view === 'tree' ? ccTreeHtml(posts) : cc.view === 'table' ? ccTableHtml(posts) : ccPipelineHtml();
+  $('ccBody').innerHTML = bar + `<div id="ccViewBody">${bodyHtml}</div>`;
+}
+// The PIPELINE view — each event is a story left→right through its content
+// lifecycle, every stage dated. Expand a row for the full inventory; click any
+// cell to act on it in a popup or a new tab, never leaving this screen.
+const CC_STAGE_LABEL = { announce: 'Announce', event: 'Event day', photos: 'Photos', video: 'Recap video', live: 'Live page', recap: 'Recap post' };
+function ccEventsInScope() {
+  const today = calToday();
+  let evs = cc.events;
+  if (cc.fSeries.size) evs = evs.filter(e => cc.fSeries.has(e.series || '__none'));
+  if (cc.timeScope === 'upcoming') evs = evs.filter(e => (e.event_date || '') >= today);
+  else if (cc.timeScope === 'recent') { const lim = new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10); evs = evs.filter(e => (e.event_date || '') >= lim); }
+  // most-recent first, but upcoming ascending reads better as a forward plan
+  return [...evs].sort((a, b) => cc.timeScope === 'upcoming' ? String(a.event_date).localeCompare(String(b.event_date)) : String(b.event_date).localeCompare(String(a.event_date)));
+}
+// A milestone cell: done (green ✓ + date), pending (amber), or n/a (grey).
+function ccCell(state, label, sub, click) {
+  const bg = state === 'done' ? 'rgba(46,142,114,0.16)' : state === 'pending' ? 'rgba(224,184,76,0.16)' : 'rgba(128,128,128,0.08)';
+  const bd = state === 'done' ? '#2E8E72' : state === 'pending' ? '#E0B84C' : 'var(--border)';
+  const ic = state === 'done' ? '✓' : state === 'pending' ? '⏳' : '·';
+  return `<div class="cc-cell" ${click || ''} style="flex:1;min-width:96px;background:${bg};border:1px solid ${bd};border-radius:8px;padding:6px 8px;${click ? 'cursor:pointer;' : ''}">
+    <div class="li-sub" style="font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div>
+    <div style="font-weight:600;font-size:.82rem;">${ic} ${escapeHtml(sub || '')}</div></div>`;
+}
+function ccPipelineHtml() {
+  const evs = ccEventsInScope();
+  if (!evs.length) return '<div class="hub-empty">No events in this scope. Widen the time filter or clear the series filter.</div>';
+  const rows = evs.map(e => {
+    const ps = ccPostsForEvent(e.id);
+    const ph = cc.photoByEvent[e.id] || { total: 0, public: 0 };
+    const vids = (Array.isArray(e.recap_videos) ? e.recap_videos.filter(v => v && v.url) : []).concat(e.youtube_url ? [{ url: e.youtube_url }] : []);
+    const hasYT = vids.some(v => /youtu/.test(v.url)), hasSC = vids.some(v => /soundcloud/.test(v.url));
+    const posted = ps.filter(p => p.posted_at);
+    const recapPost = ps.filter(p => /recap/i.test(p.content_pillar || '') || /recap/i.test(p.title || '')).sort((a, b) => String(b.posted_at || b.scheduled_for || '').localeCompare(String(a.posted_at || a.scheduled_for || '')))[0] || ps.find(p => p.posted_at);
+    const today = calToday();
+    const past = (e.event_date || '') < today;
+    // stage states
+    const stAnnounce = ps.some(p => p.posted_at) ? 'done' : ps.length ? 'pending' : 'na';
+    const stEvent = past ? 'done' : 'pending';
+    const stPhotos = ph.total ? 'done' : (past ? 'pending' : 'na');
+    const stVideo = vids.length ? 'done' : (past ? 'pending' : 'na');
+    const stLive = e.is_public ? 'done' : 'na';
+    const stRecap = recapPost?.posted_at ? 'done' : (recapPost || ps.length ? 'pending' : (past ? 'pending' : 'na'));
+    const doneN = [stAnnounce, stPhotos, stVideo, stLive, stRecap].filter(s => s === 'done').length;
+    const openExp = cc.expanded.has(e.id);
+    const head = `<div class="hub-li" style="align-items:stretch;flex-wrap:wrap;gap:8px;padding:9px 0;">
+      <div style="flex:0 0 190px;min-width:160px;cursor:pointer;" data-cc-exp="${e.id}">
+        <strong>${openExp ? '▾' : '▸'} ${escapeHtml(e.name)}</strong>
+        <div class="li-sub"><span style="color:${calSeriesColor(e.series)}">●</span> ${escapeHtml(e.series || 'general')} · ${escapeHtml(fmtDate(e.event_date))}</div>
+        <div class="li-sub">${doneN}/5 milestones${ps.length ? ` · ${posted.length}/${ps.length} posts live` : ''}</div>
+      </div>
+      <div style="flex:1;display:flex;gap:5px;flex-wrap:wrap;min-width:280px;">
+        ${ccCell(stAnnounce, 'Announce', ps.length ? `${posted.length}/${ps.length}` : 'none', `data-cc-cellposts="${e.id}"`)}
+        ${ccCell(stPhotos, 'Photos', ph.total ? `${ph.total} (${ph.public} live)` : 'none', `data-cc-cellphotos="${e.id}"`)}
+        ${ccCell(stVideo, 'Video', vids.length ? [hasYT ? 'YT' : '', hasSC ? 'SC' : ''].filter(Boolean).join('+') || 'yes' : 'none', vids.length ? `data-cc-cellvideo="${e.id}"` : '')}
+        ${ccCell(stLive, 'Live page', e.is_public ? 'public' : 'off', e.is_public ? `data-cc-celllive="${e.id}"` : '')}
+        ${ccCell(stRecap, 'Recap post', recapPost ? (recapPost.posted_at ? '✅ ' + fmtDate(recapPost.posted_at) : socialFmtDate(recapPost.scheduled_for) || 'planned') : 'none', `data-cc-cellposts="${e.id}"`)}
+      </div>
+      <div style="flex:0 0 auto;display:flex;align-items:center;gap:5px;">
+        <button class="hub-mini" data-cc-schedule="${e.id}" title="Schedule a post for this event">📅 post</button>
+        <button class="hub-mini" data-cc-openevent-tab="${e.id}" title="Open this event's hub in a new tab">↗ hub</button>
+      </div></div>`;
+    return head + (openExp ? ccRowDetail(e, ps, ph, vids) : '');
+  }).join('');
+  return `<div class="hub-list">${rows}</div>`;
+}
+function ccRowDetail(e, ps, ph, vids) {
+  const line = (icon, label, val, action) => `<div class="hub-li" style="padding:3px 0;padding-left:20px;">
+    <div class="li-main"><span>${icon} ${escapeHtml(label)}</span><div class="li-sub">${val}</div></div>${action || ''}</div>`;
+  const postLines = ps.map(p => `<div class="hub-li" data-cc-edit="${p.id}" style="cursor:pointer;padding:3px 0;padding-left:34px;">
+    <div class="li-main"><span>${p.posted_at ? '🟢' : p.stage === 'scheduled' ? '🟡' : '⚪'} ${escapeHtml(p.title || 'Untitled')}${ccTaskChip(p.id)}</span>
+      <div class="li-sub">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)} · planned ${p.scheduled_for ? escapeHtml(socialFmtDate(p.scheduled_for)) : '—'} → posted ${p.posted_at ? escapeHtml(fmtDate(p.posted_at)) : '—'}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}</div></div>
+    <span class="li-sub">edit →</span></div>`).join('') || '<div class="li-sub" style="padding-left:34px;">No posts yet.</div>';
+  return `<div style="border-left:3px solid ${calSeriesColor(e.series)};margin:0 0 8px 8px;padding:4px 0 8px;">
+    ${line('📸', 'Photos', `${ph.total} uploaded · ${ph.public} on the live gallery`, `<button class="hub-mini" data-cc-cellphotos="${e.id}">View</button> <button class="hub-mini" data-cc-openevent-tab="${e.id}:photos">Manage ↗</button>`)}
+    ${line('🌐', 'Live event page', e.is_public ? 'Public' : 'Not public', e.is_public ? `<a class="hub-mini" href="${ARTIST_ORIGIN}event.html?id=${encodeURIComponent(e.id)}" target="_blank" rel="noopener">Open ↗</a>` : '')}
+    ${line('🎬', 'Recap videos', vids.length ? vids.map(v => `<a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">${escapeHtml(mediaKindLabel(v.url))}</a>`).join(' · ') : 'None linked', '')}
+    <div class="hub-li" style="padding:3px 0;padding-left:20px;"><div class="li-main"><strong>📱 Social posts (${ps.length})</strong></div><button class="hub-mini" data-cc-schedule="${e.id}">➕ Schedule post</button></div>
+    ${postLines}
+  </div>`;
+}
+async function ccPhotoPopup(eventId) {
+  const ev = cc.events.find(x => x.id === eventId);
+  openKpi('📸 Photos — ' + escapeHtml(ev?.name || ''), 'Loading…', '<div class="placeholder">Loading photos…</div>', null, 'Close');
+  const { data } = await sb.from('event_photos').select('id,thumb_path,storage_path,is_public,caption').eq('event_id', eventId).order('sort_order').order('created_at');
+  const photos = data || [];
+  const grid = photos.map(p => `<div style="width:120px;"><img src="${PHOTO_BASE}${escapeHtml(p.thumb_path || p.storage_path)}" loading="lazy" style="width:100%;height:80px;object-fit:cover;border-radius:6px;${p.is_public ? '' : 'opacity:.5;'}"><div class="li-sub" style="font-size:.6rem;">${p.is_public ? '🌐 on site' : 'hidden'}</div></div>`).join('') || '<div class="hub-empty">No photos uploaded.</div>';
+  $('kpiModalBody').innerHTML = `<div class="kpi-hint">${photos.length} photo${photos.length === 1 ? '' : 's'} · ${photos.filter(p => p.is_public).length} on the live gallery. Full upload/manage opens the event's Content tab.</div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;max-height:340px;overflow:auto;margin:8px 0;">${grid}</div>
+    <button type="button" class="hub-btn" data-cc-openevent-tab="${eventId}:photos">Manage photos in a new tab ↗</button>`;
+  $('kpiModalSub').textContent = ev?.name || '';
 }
 function ccTaskChip(pid) { const o = cc.taskByPost[pid]; return o ? ` <span class="role-chip" style="cursor:default;" title="Tasks done / total">✓ ${o.done}/${o.total}</span>` : ''; }
 function ccTableHtml(posts) {
@@ -2800,6 +2923,68 @@ function ccTreeHtml(posts) {
     ${noEv.length ? `<div style="border-left:3px solid var(--mid);padding:6px 0 8px 12px;"><strong>No event</strong> <span class="li-sub">· ${noEv.length}</span>${noEv.map(postLeaf).join('')}</div>` : ''}
     ${!evs.length && !noEv.length ? '<div class="hub-empty">No content matches these filters.</div>' : ''}</div>`;
 }
+// The 4-day base weekly content plan (anchored on Sunday). Offsets in days from
+// that Sunday. Editing this changes what "Plan a week" creates.
+const CONTENT_WEEK = [
+  { off: 0, day: 'Sun', title: 'Sunday fun content', pillar: 'fun' },
+  { off: 2, day: 'Tue', title: 'Radio recap', pillar: 'radio-recap' },
+  { off: 4, day: 'Thu', title: 'Radio go-live', pillar: 'radio-golive' },
+  { off: 5, day: 'Fri', title: 'Weekend / collab', pillar: 'collab' },
+];
+function ccNextSunday() {
+  const d = new Date(); d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + ((0 - d.getDay() + 7) % 7)); // 0 = Sunday
+  return d.toISOString().slice(0, 10);
+}
+function ccDatePlus(iso, off) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + off); return d.toISOString().slice(0, 10); }
+function ccOpenWeekPlan() {
+  const sun = ccNextSunday();
+  const preview = CONTENT_WEEK.map(s => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${s.day} · <span data-wp-date="${s.off}">${escapeHtml(fmtDate(ccDatePlus(sun, s.off)))}</span> · ${escapeHtml(s.pillar)}</div></div></div>`).join('');
+  openKpi('🗓 Plan a content week', 'The 4-day base plan — Sun fun · Tue radio recap · Thu radio go-live · Fri collab', `
+    <label class="modal-label">Week starting (Sunday)</label>
+    <input class="modal-input" type="date" data-wp-sun value="${sun}" style="max-width:200px;">
+    <label class="modal-label" style="margin-top:8px;">Default time</label>
+    <input class="modal-input" type="time" data-wp-time value="18:00" style="max-width:130px;">
+    <div class="kpi-hint" style="margin:8px 0;">Creates 4 scheduled posts (stage <strong>Planned</strong>) with these pillars. Refine, link to an event, and set the real caption on each afterwards.</div>
+    <div class="hub-list" id="wpPreview">${preview}</div>
+    <label class="modal-label" style="margin-top:8px;"><input type="checkbox" data-wp-repeat> also generate the next 3 weeks</label>`,
+    async () => {
+      const sunV = document.querySelector('[data-wp-sun]')?.value || sun;
+      const time = document.querySelector('[data-wp-time]')?.value || '18:00';
+      const weeks = document.querySelector('[data-wp-repeat]')?.checked ? 4 : 1;
+      const rows = [];
+      for (let w = 0; w < weeks; w++) {
+        const base = ccDatePlus(sunV, w * 7);
+        for (const s of CONTENT_WEEK) {
+          const d = ccDatePlus(base, s.off);
+          rows.push({ title: s.title, stage: 'planned', channels: ['instagram'], content_pillar: s.pillar, series: 'Content Creation', scheduled_for: new Date(d + 'T' + time).toISOString() });
+        }
+      }
+      const { error } = await sb.from('social_posts').insert(rows);
+      if (error) { toast('Could not create the plan: ' + error.message, 'err'); return; }
+      closeKpi(); toast(`Created ${rows.length} planned posts`, 'ok'); await loadContentCenter();
+    }, 'Create the plan');
+  setTimeout(() => {
+    const s = document.querySelector('[data-wp-sun]');
+    if (s) s.addEventListener('change', () => document.querySelectorAll('#wpPreview [data-wp-date]').forEach(el => { el.textContent = fmtDate(ccDatePlus(s.value, Number(el.dataset.wpDate))); }));
+  }, 0);
+}
+// Schedule a post for an event straight from the pipeline (full composer,
+// prefilled + returns here on save).
+function ccSchedulePost(eventId) {
+  const ev = cc.events.find(x => x.id === eventId);
+  openPostModal({ event_id: eventId, series: ev?.series || '', stage: 'planned', channels: ['instagram'] }, { onSaved: loadContentCenter });
+}
+async function ccPostsPopup(eventId) {
+  const ev = cc.events.find(x => x.id === eventId);
+  const ps = ccPostsForEvent(eventId);
+  const rows = ps.map(p => `<div class="hub-li" data-cc-edit="${p.id}" style="cursor:pointer;">
+    <div class="li-main"><span>${p.posted_at ? '🟢' : p.stage === 'scheduled' ? '🟡' : '⚪'} ${escapeHtml(p.title || 'Untitled')}${ccTaskChip(p.id)}</span>
+      <div class="li-sub">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)} · planned ${p.scheduled_for ? escapeHtml(socialFmtDate(p.scheduled_for)) : '—'} → posted ${p.posted_at ? escapeHtml(fmtDate(p.posted_at)) : '—'}</div></div>
+    <span class="li-sub">edit →</span></div>`).join('') || '<div class="hub-empty">No posts yet.</div>';
+  openKpi('📱 Posts — ' + escapeHtml(ev?.name || ''), `${ps.length} post${ps.length === 1 ? '' : 's'}`, `<div class="hub-list">${rows}</div>
+    <button type="button" class="hub-btn" data-cc-schedule="${eventId}" style="margin-top:8px;">➕ Schedule a post</button>`, null, 'Close');
+}
 async function ccBulk(patch, label) {
   const ids = [...cc.selected]; if (!ids.length) return;
   const { error } = await sb.from('social_posts').update(patch).in('id', ids);
@@ -2844,12 +3029,21 @@ async function ccOpenMassCreate() {
     if (scope && wrap) scope.addEventListener('change', () => { wrap.style.display = scope.value === 'series' ? '' : 'none'; });
   }, 0);
 }
+// Content Center is delegated on document (not just the panel) so clicks inside
+// the kpi modal popups (photos/posts) resolve too.
 $('panel-content-center').addEventListener('click', (e) => {
   const v = e.target.closest('[data-cc-view]'); if (v) { cc.view = v.dataset.ccView; renderContentCenter(); return; }
+  if (e.target.closest('[data-cc-weekplan]')) { ccOpenWeekPlan(); return; }
   if (e.target.closest('[data-cc-newpost]')) { openPostModal({ stage: 'idea', channels: ['instagram'] }, { onSaved: loadContentCenter }); return; }
   const npe = e.target.closest('[data-cc-newpost-ev]'); if (npe) { const ev = cc.events.find(x => x.id === npe.dataset.ccNewpostEv); openPostModal({ stage: 'idea', channels: ['instagram'], event_id: npe.dataset.ccNewpostEv, series: ev?.series || '' }, { onSaved: loadContentCenter }); return; }
   if (e.target.closest('[data-cc-mass]')) { ccOpenMassCreate(); return; }
-  const oe = e.target.closest('[data-cc-openevent]'); if (oe) { e.preventDefault(); openEventHub(oe.dataset.ccOpenevent); return; }
+  const exp = e.target.closest('[data-cc-exp]'); if (exp) { const id = exp.dataset.ccExp; cc.expanded.has(id) ? cc.expanded.delete(id) : cc.expanded.add(id); renderContentCenter(); return; }
+  const oe = e.target.closest('[data-cc-openevent]'); if (oe) { e.preventDefault(); openEventHubTab(oe.dataset.ccOpenevent); return; }
+  const sp = e.target.closest('[data-cc-schedule]'); if (sp) { ccSchedulePost(sp.dataset.ccSchedule); return; }
+  const cp = e.target.closest('[data-cc-cellphotos]'); if (cp) { ccPhotoPopup(cp.dataset.ccCellphotos); return; }
+  const clp = e.target.closest('[data-cc-cellposts]'); if (clp) { ccPostsPopup(clp.dataset.ccCellposts); return; }
+  const cv = e.target.closest('[data-cc-cellvideo]'); if (cv) { const id = cv.dataset.ccCellvideo; if (!cc.expanded.has(id)) { cc.expanded.add(id); renderContentCenter(); } return; }
+  const cl = e.target.closest('[data-cc-celllive]'); if (cl) { window.open(ARTIST_ORIGIN + 'event.html?id=' + encodeURIComponent(cl.dataset.ccCelllive), '_blank', 'noopener'); return; }
   const ed = e.target.closest('[data-cc-edit]'); if (ed) { e.preventDefault(); const p = cc.posts.find(x => x.id === ed.dataset.ccEdit); if (p) openPostModal(p, { onSaved: loadContentCenter }); return; }
   const cf = e.target.closest('[data-cc-clearfilt]'); if (cf) { cc['f' + cf.dataset.ccClearfilt].clear(); renderContentCenter(); return; }
   if (e.target.closest('[data-cc-clearall]')) { cc.fStage.clear(); cc.fSeries.clear(); cc.fEvent.clear(); renderContentCenter(); return; }
@@ -2857,7 +3051,16 @@ $('panel-content-center').addEventListener('click', (e) => {
   if (e.target.closest('[data-cc-bulkposted]')) { ccBulk({ stage: 'posted', posted_at: new Date().toISOString() }, 'marked posted'); return; }
   if (e.target.closest('[data-cc-bulkdelete]')) { if (confirm(`Delete ${cc.selected.size} post(s)? (recoverable)`)) ccBulk({ deleted_at: new Date().toISOString() }, 'deleted'); return; }
 });
+// Popups (kpi modal) live outside panel-content-center — handle their actions
+// here. Guard on an open Content Center so these don't fire elsewhere.
+document.addEventListener('click', (e) => {
+  if (!document.querySelector('#panel-content-center.active') && !document.querySelector('#kpiModalOverlay.show')) return;
+  const ot = e.target.closest('[data-cc-openevent-tab]'); if (ot) { const [id, sec] = ot.dataset.ccOpeneventTab.split(':'); openEventHubTab(id, sec); return; }
+  const pe = e.target.closest('#kpiModalBody [data-cc-edit]'); if (pe) { e.preventDefault(); const p = cc.posts.find(x => x.id === pe.dataset.ccEdit); if (p) openPostModal(p, { onSaved: loadContentCenter }); return; }
+  const ps = e.target.closest('#kpiModalBody [data-cc-schedule]'); if (ps) { ccSchedulePost(ps.dataset.ccSchedule); return; }
+});
 $('panel-content-center').addEventListener('change', (e) => {
+  const ts = e.target.closest('[data-cc-time]'); if (ts) { cc.timeScope = ts.value; renderContentCenter(); return; }
   const cf = e.target.closest('[data-cc-filt]'); if (cf) { const set = cc['f' + cf.dataset.ccFilt]; cf.checked ? set.add(cf.value) : set.delete(cf.value); renderContentCenter(); return; }
   const sc = e.target.closest('[data-cc-sel]'); if (sc) { sc.checked ? cc.selected.add(sc.dataset.ccSel) : cc.selected.delete(sc.dataset.ccSel); renderContentCenter(); return; }
   const sa = e.target.closest('[data-cc-selall]'); if (sa) { const ev = sa.dataset.ccSelall; ccFiltered().filter(p => (p.event_id || '__none') === ev).forEach(p => sa.checked ? cc.selected.add(p.id) : cc.selected.delete(p.id)); renderContentCenter(); return; }
