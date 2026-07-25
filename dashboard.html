@@ -1436,6 +1436,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <option value="__none">General</option>
           </select>
           <button class="hub-mini" id="socialViewToggle" data-view="timeline">View: Timeline</button>
+          <button class="hub-mini" id="socialCenterBtn" title="All posts across every event — bulk set stage, schedule, reassign, mark posted">📋 Control Center</button>
           <button class="hub-mini" id="socialSnapshotBtn" title="Open a read-only snapshot to print, save as PDF, or send">📤 Share snapshot</button>
           <button class="hub-mini" id="socialEmailBtn" title="Email this view to someone">✉️ Email</button>
         </div>
@@ -2604,10 +2605,26 @@ function buildSocialEmailHtml(posts, byPost, note) {
 }
 $('socialStageFilter').addEventListener('change', (e) => { social.filterStage = e.target.value; renderSocial(); });
 $('socialSeriesFilter').addEventListener('change', (e) => { social.filterSeries = e.target.value; renderSocial(); });
+// The cycling toggle only walks the three planning views; the Control Center
+// has its own button so it's findable, not three clicks deep.
+const SOCIAL_CYCLE = ['timeline', 'board', 'list'];
 $('socialViewToggle').addEventListener('click', () => {
-  const i = SOCIAL_VIEWS.indexOf(social.view);
-  social.view = SOCIAL_VIEWS[(i + 1) % SOCIAL_VIEWS.length];
+  const i = SOCIAL_CYCLE.indexOf(social.view);
+  social.view = SOCIAL_CYCLE[(i + 1) % SOCIAL_CYCLE.length];  // -1 (from center) → timeline
   $('socialViewToggle').textContent = 'View: ' + SOCIAL_VIEW_LABEL[social.view];
+  syncSocialCenterBtn();
+  renderSocial();
+});
+function syncSocialCenterBtn() {
+  const b = $('socialCenterBtn'); if (!b) return;
+  b.classList.toggle('on', social.view === 'center');
+  b.style.background = social.view === 'center' ? 'var(--accent,#5b7fb3)' : '';
+  b.style.color = social.view === 'center' ? '#fff' : '';
+}
+$('socialCenterBtn').addEventListener('click', () => {
+  social.view = social.view === 'center' ? 'timeline' : 'center';
+  $('socialViewToggle').textContent = 'View: ' + SOCIAL_VIEW_LABEL[social.view === 'center' ? 'timeline' : social.view];
+  syncSocialCenterBtn();
   renderSocial();
 });
 $('socialBody').addEventListener('click', (e) => {
