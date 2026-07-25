@@ -9255,6 +9255,7 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-unschedule]')) { raUnschedule(); return; }
   if (t.closest('[data-ra-mixupload]')) { raMixUpload(t.closest('[data-ra-mixupload]')); return; }
   if (t.closest('[data-ra-mixlink]')) { raMixLink(t.closest('[data-ra-mixlink]')); return; }
+  if (t.closest('[data-ra-genweek]')) { raOpenGenWeek(); return; }
   if (t.closest('[data-ra-history]')) { raOpenHistory(); return; }
   const hf = t.closest('[data-ra-histfilter]'); if (hf) { raState.histFilter = hf.dataset.raHistfilter; const w = $('raHistWrap'); if (w) { w.innerHTML = raHistHtml(); raHistWireSearch(); } return; }
   if (t.closest('[data-ra-hideplayed]')) { raState.hidePlayed = !raState.hidePlayed; renderRaMarket(); return; }
@@ -9623,6 +9624,7 @@ function raRenderPlaylist() {
       ${switcher}
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
       <a class="hub-mini" href="${ARTIST_ORIGIN}radio-workflow.html" target="_blank" rel="noopener" title="The weekly run, end to end — build → record → video → go live">🗺️ Weekly run</a>
+      ${isWorking ? `<button class="hub-mini" data-ra-genweek title="Create this week's production tasks — playlist, record, post, recap — dated off the record day, on the shared board">🗓 Generate week's tasks</button>` : ''}
       <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
       ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
     </div>
@@ -9647,6 +9649,70 @@ function raRenderPlaylist() {
       </div>` : (t.energy || t.comment ? `<div class="li-sub" style="flex:0 0 100%;margin-top:3px;">${t.energy ? `⚡ ${t.energy}/5` : ''}${t.energy && t.comment ? ' · ' : ''}${escapeHtml(t.comment || '')}</div>` : '')}
       </div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
+}
+// ---- Weekly radio production cadence ---------------------------------------
+// The repeatable weekly run, anchored on the WEDNESDAY the set is recorded.
+// Offsets are days from that Wednesday (verified: -4=Sat, -2=Mon, +1=Thu,
+// +6=following Tue). Editing this array changes what "Generate week's tasks"
+// creates. `ms` marks the step as a milestone (shows on the calendar grid).
+const RADIO_CADENCE = [
+  { off: -4, day: 'Sat', title: 'Playlist v1 ready' },
+  { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle' },
+  { off: 0, day: 'Wed', title: 'Record the set', ms: true },
+  { off: 1, day: 'Thu', title: 'Post the episode', ms: true },
+  { off: 1, day: 'Thu', title: '3 highlights recap due' },
+  { off: 6, day: 'Tue', title: 'Recap post (following week)' },
+];
+// Nearest upcoming Wednesday (today counts as Wednesday), as YYYY-MM-DD.
+function raNextWednesday() {
+  const d = new Date(); d.setHours(12, 0, 0, 0);
+  d.setDate(d.getDate() + ((3 - d.getDay() + 7) % 7)); // 3 = Wed
+  return d.toISOString().slice(0, 10);
+}
+function raDatePlus(isoWed, off) {
+  const d = new Date(isoWed + 'T12:00:00'); d.setDate(d.getDate() + off);
+  return d.toISOString().slice(0, 10);
+}
+function raOpenGenWeek() {
+  const pl = raState.playlist;
+  const wed = raNextWednesday();
+  const preview = RADIO_CADENCE.map(s => `<div class="hub-li" style="padding:4px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${s.day} · <span data-gw-date="${s.off}">${escapeHtml(fmtDate(raDatePlus(wed, s.off)))}</span></div></div></div>`).join('');
+  openKpi('🗓 Generate week\'s production tasks', `EP ${pl?.station_no ?? '—'} · anchored on the record day`, `
+    <label class="modal-label">Record day (Wednesday)</label>
+    <input class="modal-input" type="date" name="gw_wed" value="${wed}" data-ra-genweek-date style="max-width:200px;">
+    <div class="kpi-hint" style="margin:8px 0;">Six tasks land on the shared board, bucketed <strong>Radio</strong>, dated off this Wednesday. Record + Post are milestones (they show on the calendar).</div>
+    <div class="hub-list" id="gwPreview">${preview}</div>
+    <div class="kpi-hint" style="margin-top:8px;color:var(--amber);">⚠ Confirm the “3 highlights recap” — is it for the episode this week, or the previous week's? Tell me and I'll relabel it.</div>`,
+    raGenWeekRun, 'Create 6 tasks');
+  setTimeout(() => {
+    const de = document.querySelector('[data-ra-genweek-date]');
+    if (de) de.addEventListener('change', () => raGenWeekReprice(de.value));
+  }, 0);
+}
+// Live-update the preview dates when the Wednesday changes.
+function raGenWeekReprice(wed) {
+  document.querySelectorAll('#gwPreview [data-gw-date]').forEach(el => { el.textContent = fmtDate(raDatePlus(wed, Number(el.dataset.gwDate))); });
+}
+// openKpi's submit plumbing calls this (handles the button's disabled/Saving
+// state and surfaces a thrown error), so it just does the work or throws.
+async function raGenWeekRun() {
+  const wed = (document.querySelector('[data-ra-genweek-date]')?.value) || '';
+  if (!wed) throw new Error('Pick the record Wednesday');
+  const pl = raState.playlist;
+  const epLabel = pl ? `EP ${pl.station_no ?? ''}${pl.name ? ' · ' + pl.name : ''}`.trim() : 'Radio';
+  // Duplicate guard: a "Record the set" task already on this Wednesday means
+  // this week was generated before.
+  const { data: dupe } = await sb.from('tasks').select('id').eq('due_date', wed).eq('pillar', 'radio').ilike('title', 'Record the set%').limit(1);
+  if (dupe && dupe.length && !confirm('Looks like this week was already generated (a “Record the set” task exists on that date). Create another set anyway?')) throw new Error('Cancelled — already generated');
+  const rows = RADIO_CADENCE.map(s => ({
+    title: s.title, description: `Radio weekly · ${epLabel} · record ${fmtDate(wed)}`,
+    status: 'todo', source: 'template', pillar: 'radio', milestone: !!s.ms,
+    due_date: raDatePlus(wed, s.off),
+  }));
+  const { error } = await sb.from('tasks').insert(rows);
+  if (error) throw error;
+  closeKpi();
+  toast(`6 production tasks created for the week of ${fmtDate(wed)}`, 'ok');
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
 // you add tracks / follow / scan — those rebuild raMarketBody, not the dock.
