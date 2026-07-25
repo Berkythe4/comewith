@@ -12162,9 +12162,11 @@ async function meetNoteToTask(noteId) {
   const n = MEET.notes.find(x => x.id === noteId); if (!n) return;
   const m = MEET.list.find(x => x.id === MEET.open);
   const title = n.body.length > 120 ? n.body.slice(0, 119) + '…' : n.body;
+  // NB: tasks.created_by is an FK to actors, not auth.users — so it's left
+  // unset here (as submitAddTask/calAddTask do); passing an auth uid FK-errors.
   const { data, error } = await sb.from('tasks').insert({
     title, description: `From meeting: ${m?.title || ''} (${fmtDate(m?.meeting_date)})`,
-    status: 'todo', source: 'meeting', pillar: n.pillar || null, meeting_id: MEET.open, meeting_note_id: noteId, created_by: ME.id,
+    status: 'todo', source: 'meeting', pillar: n.pillar || null, meeting_id: MEET.open, meeting_note_id: noteId,
   }).select('id').single();
   if (error) { toast('Could not create task: ' + error.message, 'err'); return; }
   await sb.from('meeting_notes').update({ task_id: data.id, kind: 'action', updated_at: new Date().toISOString() }).eq('id', noteId);
@@ -12179,7 +12181,7 @@ async function meetAllActionsToTasks() {
     const title = n.body.length > 120 ? n.body.slice(0, 119) + '…' : n.body;
     const { data, error } = await sb.from('tasks').insert({
       title, description: `From meeting: ${m?.title || ''} (${fmtDate(m?.meeting_date)})`,
-      status: 'todo', source: 'meeting', pillar: n.pillar || null, meeting_id: MEET.open, meeting_note_id: n.id, created_by: ME.id,
+      status: 'todo', source: 'meeting', pillar: n.pillar || null, meeting_id: MEET.open, meeting_note_id: n.id,
     }).select('id').single();
     if (!error && data) await sb.from('meeting_notes').update({ task_id: data.id }).eq('id', n.id);
   }
@@ -12293,7 +12295,7 @@ async function meetWsToTask() {
   const w = MEET.ws.find(x => x.id === MEET.wsOpen); if (!w) return;
   const { data, error } = await sb.from('tasks').insert({
     title: w.title, description: `Workstream follow-up`, status: 'todo', source: 'meeting',
-    workstream_id: w.id, created_by: ME.id,
+    pillar: w.pillar || null, workstream_id: w.id,
   }).select('id').single();
   if (error) { toast('Could not create task: ' + error.message, 'err'); return; }
   toast('Task created from workstream', 'ok');
