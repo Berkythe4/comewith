@@ -12466,8 +12466,12 @@ $('panel-meetings').addEventListener('keydown', (e) => {
 // ============================================================================
 const CAL_SERIES_COLORS = {
   'Come With Parties': '#C75A3C', 'Dance Infusion': '#2E8E72',
-  'Come With Production': '#B5791F', 'Content Creation': '#8362A8', 'Bookings': '#4E7A9B',
+  'Come With Production': '#B5791F', 'Content Creation': '#8362A8',
+  // Bookings (we're the booked talent, e.g. July Jewels) gets a distinct
+  // magenta — the old blue-grey was too close to the new "ours elsewhere" teal.
+  'Bookings': '#C264A0',
 };
+const calSeriesColor = (series) => CAL_SERIES_COLORS[series] || '#8a8a8a';
 const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const CAL = {
   month: new Date().toISOString().slice(0, 7),           // 'YYYY-MM'
@@ -12669,11 +12673,14 @@ function calDayListHtml(b, mkMax) {
     `<div class="hub-li" ${attrs}><div class="li-main"><strong>${main}</strong><div class="li-sub">${sub}</div></div>${right}</div>`;
   const out = [];
   (b.events || []).forEach(e => {
-    const c = CAL_SERIES_COLORS[e.series] || '#8a8a8a';
+    const c = calSeriesColor(e.series);
     const lineup = calLineupStr(e.id, 6);
+    // The lineup (this event's artists) takes the EVENT's colour — 7/11's
+    // artists read orange, a Booking's read magenta — so at a glance an artist
+    // on the calendar is tied to the show they're playing.
     out.push(li(
       `<span style="color:${c};">●</span> <a href="#" data-cal-ev="${escapeHtml(e.id)}">${escapeHtml(e.name)}</a>`,
-      `${escapeHtml(e.series || '')}${e.venue?.name ? ' · ' + escapeHtml(e.venue.name) : ''}${e.doors_time ? ' · doors ' + escapeHtml(e.doors_time.slice(0, 5)) : ''} · ${escapeHtml(e.status || '')}${lineup ? '<br>🎧 ' + escapeHtml(lineup) : ''}`));
+      `${escapeHtml(e.series || '')}${e.venue?.name ? ' · ' + escapeHtml(e.venue.name) : ''}${e.doors_time ? ' · doors ' + escapeHtml(e.doors_time.slice(0, 5)) : ''} · ${escapeHtml(e.status || '')}${lineup ? `<br><span style="color:${c};font-weight:600;">🎧 ${escapeHtml(lineup)}</span>` : ''}`));
   });
   (b.ms || []).forEach(t => t.link_url
     ? out.push(li(`📢 <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener">${escapeHtml(t.title)}</a>`, `milestone · ${escapeHtml(t.status)} · opens the episode page (tracklist + copy)`, `<a class="hub-mini" href="#" data-tb-edit="${escapeHtml(t.id)}" title="Edit task">✎</a>`))
