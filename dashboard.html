@@ -1531,13 +1531,13 @@ function ensureNavGroupOpen(key) {
 let MODULES = [];                 // module_registry rows
 let MY_OVERRIDES = {};            // { module_key: 'grant'|'revoke' } for the signed-in user
 const TEAM = { modules: [], people: [], overrides: {}, tab: 'people', users: [], aliasByUser: {}, gigByUser: {}, actRecent: [], activity: [], actFilter: { from: '', to: '', user: '', table: '' }, activeUser: null, detailActs: [], detailConvCount: 0 };
-const AUDIT_TABLES_LIST = ['actors', 'agreements', 'contracts', 'conversations', 'equipment_inventory', 'event_participants', 'events', 'expenses', 'income', 'inquiries', 'listener_playlists', 'mailing_campaigns', 'profiles', 'sc_playlist_tracks', 'sc_playlists', 'site_content', 'social_posts', 'sponsorships', 'subscribers', 'survey_responses', 'tasks', 'third_party_donations', 'ticketing', 'venues'];
+const AUDIT_TABLES_LIST = ['(client)', 'actors', 'agreements', 'contracts', 'conversations', 'equipment_inventory', 'event_participants', 'events', 'expenses', 'income', 'inquiries', 'listener_playlists', 'mailing_campaigns', 'profiles', 'sc_playlist_tracks', 'sc_playlists', 'site_content', 'social_posts', 'sponsorships', 'station_notes', 'subscribers', 'survey_responses', 'tasks', 'third_party_donations', 'ticketing', 'venues'];
 // "Updated ticketing" tells you nothing. Every row below turns the raw table
 // name into what you'd actually call it, and auditWhat() pulls the one field
 // that identifies WHICH record — the log already stores the whole row, the
 // screen just never read it.
 const AUDIT_TABLE_LABEL = {
-  actors: 'People & orgs', agreements: 'Agreements', contracts: 'Contracts',
+  '(client)': '⚠ App error', actors: 'People & orgs', agreements: 'Agreements', contracts: 'Contracts',
   conversations: 'Conversations', equipment_inventory: 'Equipment',
   event_participants: 'Event lineup', events: 'Events', expenses: 'Expenses',
   income: 'Income', inquiries: 'Inquiries', listener_playlists: 'Listener playlists',
@@ -1552,6 +1552,7 @@ const auditMoney = (v) => (v == null || v === '' ? '' : '$' + Number(v).toLocale
 // One row per audited table. Each returns the pieces that identify the record;
 // blanks are dropped and the rest joined with · so a half-empty row still reads.
 const AUDIT_WHAT = {
+  '(client)': r => [r.message, r.context],
   events: r => [r.name, r.series],
   venues: r => [r.name, r.city],
   actors: r => [r.display_name || r.legal_name || r.email, r.kind],
@@ -1602,7 +1603,7 @@ function auditChanges(a) {
     .map(k => ({ field: k, from: auditFieldVal(o[k]), to: auditFieldVal(n[k]) }));
 }
 function fmtDT(s) { if (!s) return ''; const d = new Date(s); if (isNaN(d)) return s; return d.toISOString().slice(0, 16).replace('T', ' '); }
-function actionVerb(a) { return a === 'INSERT' ? 'Created' : a === 'UPDATE' ? 'Updated' : a === 'DELETE' ? 'Deleted' : a; }
+function actionVerb(a) { return a === 'INSERT' ? 'Created' : a === 'UPDATE' ? 'Updated' : a === 'DELETE' ? 'Deleted' : a === 'ERROR' ? '⚠ Error' : a; }
 
 // Effective access for the signed-in user. Master sees all.
 function canAccessModule(m) {
@@ -2112,9 +2113,9 @@ const SOCIAL_STAGE_LABEL = { idea: 'Idea', drafted: 'Drafted', review: 'In revie
 const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'email', 'blog', 'other'];
 const SOCIAL_CHAN_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X', youtube: 'YouTube', email: 'Email', blog: 'Blog', other: 'Other' };
 const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', drafted: '#B5791F', review: '#8362A8', planned: '#2F6F9F', scheduled: '#2E8E72', posted: '#3DA35D', archived: '#B8B0A4' };
-const SOCIAL_VIEWS = ['timeline', 'board', 'list'];
-const SOCIAL_VIEW_LABEL = { timeline: 'Timeline', board: 'Board', list: 'List' };
-const social = { posts: [], noteCounts: {}, filterStage: '', filterSeries: '', view: 'timeline' };
+const SOCIAL_VIEWS = ['timeline', 'board', 'list', 'center'];
+const SOCIAL_VIEW_LABEL = { timeline: 'Timeline', board: 'Board', list: 'List', center: '📋 Control Center' };
+const social = { posts: [], noteCounts: {}, filterStage: '', filterSeries: '', view: 'timeline', selected: new Set() };
 let socialPeople = null, socialEvents = null;
 
 // Order posts chronologically by scheduled_for, bucketed by day; undated last.
@@ -2223,6 +2224,7 @@ function renderSocial() {
     body.innerHTML = h + '</tbody></table>';
     return;
   }
+  if (social.view === 'center') { renderSocialCenter(posts); return; }
   const stages = social.filterStage ? [social.filterStage] : SOCIAL_STAGES;
   let h = '<div class="social-board">';
   for (const s of stages) {
@@ -2234,6 +2236,50 @@ function renderSocial() {
   body.innerHTML = h + '</div>';
 }
 
+// Content / Social Control Center: all posts across events in one table, with
+// bulk actions (set stage, schedule, assign event, delete). The single surface
+// where Keith + Janelle drive everything without a call.
+function renderSocialCenter(posts) {
+  const body = $('socialBody');
+  // Group by linked event; "No event" bucket last.
+  const byEv = new Map();
+  posts.forEach(p => { const k = p.event_id || '__none'; (byEv.get(k) || byEv.set(k, []).get(k)).push(p); });
+  const evName = (id) => (socialEvents || []).find(e => e.id === id)?.name || (id === '__none' ? 'No event' : 'Event');
+  const groups = [...byEv.entries()].sort((a, b) => (a[0] === '__none' ? 1 : b[0] === '__none' ? -1 : evName(a[0]).localeCompare(evName(b[0]))));
+  const sel = social.selected;
+  const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}">${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
+  const evOpts = ['<option value="">— set event —</option>', '<option value="__clear">— none —</option>'].concat((socialEvents || []).map(e => `<option value="${e.id}">${escapeHtml(e.name)}</option>`)).join('');
+  const row = (p) => `<tr${sel.has(p.id) ? ' style="background:rgba(167,224,46,0.10);"' : ''}>
+    <td><input type="checkbox" data-sc-sel="${p.id}"${sel.has(p.id) ? ' checked' : ''} style="width:auto;margin:0;"></td>
+    <td><a href="#" data-sc-edit="${p.id}" style="color:inherit;">${escapeHtml(p.title || 'Untitled')}</a>${p.content_pillar ? ` <span class="li-sub">${escapeHtml(p.content_pillar)}</span>` : ''}</td>
+    <td>${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</td>
+    <td class="muted">${(p.channels || []).map(c => SOCIAL_CHAN_LABEL[c] || c).join(', ') || '—'}</td>
+    <td class="muted">${p.posted_at ? '✅ ' + escapeHtml(fmtDate(p.posted_at)) : escapeHtml(socialFmtDate(p.scheduled_for)) || '—'}</td>
+    <td class="muted">${p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '—'}</td>
+    <td>${p.link_url ? `<a href="${escapeHtml(p.link_url)}" target="_blank" rel="noopener">↗</a>` : ''}</td>
+  </tr>`;
+  const tables = groups.map(([evId, list]) => `
+    <div class="hub-sec-bar" style="margin-top:12px;"><h3 style="font-size:.85rem;">${escapeHtml(evName(evId))} <span class="li-sub">· ${list.length}</span></h3></div>
+    <table class="data-table"><thead><tr><th style="width:26px;"><input type="checkbox" data-sc-selall="${evId}" style="width:auto;margin:0;" title="select all in this event"></th><th>Title</th><th>Stage</th><th>Channels</th><th>When</th><th>Owner</th><th></th></tr></thead>
+    <tbody>${list.map(row).join('')}</tbody></table>`).join('');
+  const bar = `<div style="position:sticky;top:0;z-index:5;background:var(--bg);padding:8px 0;border-bottom:1px solid var(--border);display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+    <strong>${sel.size} selected</strong>
+    <select class="hub-status-sel" data-sc-bulkstage><option value="">Set stage…</option>${stageOpts}</select>
+    <label class="li-sub">Schedule <input class="modal-input" type="datetime-local" data-sc-bulkdate style="max-width:210px;"></label>
+    <select class="hub-status-sel" data-sc-bulkevent>${evOpts}</select>
+    <button class="hub-mini" data-sc-bulkposted title="Mark as posted (now)">✅ Mark posted</button>
+    <button class="hub-mini danger" data-sc-bulkdelete>🗑 Delete</button>
+    <button class="hub-mini" data-sc-clearsel>clear</button>
+  </div>`;
+  body.innerHTML = (sel.size ? bar : '') + (tables || '<div class="placeholder">No posts match this filter.</div>');
+}
+async function socialBulk(patch, label) {
+  const ids = [...social.selected]; if (!ids.length) return;
+  const { error } = await sb.from('social_posts').update(patch).in('id', ids);
+  if (error) { toast('Bulk update failed: ' + error.message, 'err'); return; }
+  toast(`${ids.length} post${ids.length === 1 ? '' : 's'} ${label}`, 'ok');
+  social.selected.clear(); await loadSocialCalendar();
+}
 async function ensureSocialLookups() {
   if (!socialPeople) {
     const { data } = await sb.from('profiles').select('id,full_name,email').in('role', ['master_admin', 'sub_admin']).order('email');
@@ -2245,10 +2291,13 @@ async function ensureSocialLookups() {
   }
 }
 
-async function openPostModal(post) {
+async function openPostModal(post, opts) {
+  opts = opts || {};
   await ensureSocialLookups();
+  // `post` may be a full record (edit) or a seed (e.g. {event_id} from an event
+  // hub "create post"). isNew is driven by the presence of an id, not the object.
   const p = post || {};
-  const isNew = !post;
+  const isNew = !p.id;
   const chanBoxes = SOCIAL_CHANNELS.map(c => `<label class="chk"><input type="checkbox" data-chan value="${c}" ${(p.channels || []).includes(c) ? 'checked' : ''}> ${SOCIAL_CHAN_LABEL[c]}</label>`).join('');
   const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}" ${p.stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
   const seriesOpts = ['', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
@@ -2283,11 +2332,11 @@ async function openPostModal(post) {
       <button type="button" class="hub-mini danger" id="deletePostBtn" data-post="${p.id}" style="margin-top:8px;">Delete post</button>
     </div>`;
   }
-  openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(post), isNew ? 'Create post' : 'Save post');
+  openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved), isNew ? 'Create post' : 'Save post');
   if (!isNew) loadPostNotes(p.id);
 }
 
-async function savePost(existing) {
+async function savePost(existing, onSaved) {
   const title = kpiVal('title');
   if (!title) throw new Error('Title is required');
   const channels = [...$('kpiModalBody').querySelectorAll('[data-chan]:checked')].map(b => b.value);
@@ -2312,7 +2361,8 @@ async function savePost(existing) {
     : await sb.from('social_posts').insert(patch);
   if (res.error) throw new Error(res.error.message);
   closeKpi();
-  await loadSocialCalendar();
+  if (onSaved) { await onSaved(); return; }
+  if (document.querySelector('#panel-social-calendar.active')) await loadSocialCalendar();
 }
 
 async function loadPostNotes(postId) {
@@ -2561,10 +2611,22 @@ $('socialViewToggle').addEventListener('click', () => {
   renderSocial();
 });
 $('socialBody').addEventListener('click', (e) => {
+  // Control Center actions
+  const ed = e.target.closest('[data-sc-edit]'); if (ed) { e.preventDefault(); const p = social.posts.find(x => x.id === ed.dataset.scEdit); if (p) openPostModal(p); return; }
+  if (e.target.closest('[data-sc-clearsel]')) { social.selected.clear(); renderSocial(); return; }
+  const bp = e.target.closest('[data-sc-bulkposted]'); if (bp) { socialBulk({ stage: 'posted', posted_at: new Date().toISOString() }, 'marked posted'); return; }
+  if (e.target.closest('[data-sc-bulkdelete]')) { if (confirm(`Delete ${social.selected.size} post(s)? (soft-delete, recoverable)`)) socialBulk({ deleted_at: new Date().toISOString() }, 'deleted'); return; }
   const card = e.target.closest('[data-post]');
   if (!card) return;
   const p = social.posts.find(x => x.id === card.dataset.post);
   if (p) openPostModal(p);
+});
+$('socialBody').addEventListener('change', (e) => {
+  const sc = e.target.closest('[data-sc-sel]'); if (sc) { sc.checked ? social.selected.add(sc.dataset.scSel) : social.selected.delete(sc.dataset.scSel); renderSocial(); return; }
+  const sa = e.target.closest('[data-sc-selall]'); if (sa) { const ev = sa.dataset.scSelall; socialFiltered().filter(p => (p.event_id || '__none') === ev).forEach(p => sa.checked ? social.selected.add(p.id) : social.selected.delete(p.id)); renderSocial(); return; }
+  const bs = e.target.closest('[data-sc-bulkstage]'); if (bs && bs.value) { const patch = { stage: bs.value }; if (bs.value === 'posted') patch.posted_at = new Date().toISOString(); socialBulk(patch, 'moved to ' + (SOCIAL_STAGE_LABEL[bs.value] || bs.value)); return; }
+  const bd = e.target.closest('[data-sc-bulkdate]'); if (bd && bd.value) { socialBulk({ scheduled_for: new Date(bd.value).toISOString(), stage: 'scheduled' }, 'scheduled'); return; }
+  const be = e.target.closest('[data-sc-bulkevent]'); if (be && be.value) { socialBulk({ event_id: be.value === '__clear' ? null : be.value }, 'reassigned'); return; }
 });
 document.addEventListener('click', (e) => {
   const an = e.target.closest('#addNoteBtn'); if (an) { addPostNote(an.dataset.post); return; }
@@ -2607,6 +2669,10 @@ async function renderForSession(session) {
   $('profileAvatar').textContent = (name[0] || '·').toUpperCase();
   showDash();
   $('refreshBtn').disabled = false;
+  // Now that we're authenticated, capture uncaught errors + rejected promises
+  // into the Activity log too (not just the ones surfaced via an error toast).
+  window.addEventListener('error', (e) => { if (e?.message) logAppError('Uncaught: ' + e.message, (e.filename || '') + ':' + (e.lineno || '')); });
+  window.addEventListener('unhandledrejection', (e) => { const r = e?.reason; logAppError('Unhandled promise: ' + (r?.message || String(r || 'unknown'))); });
 
   // Build the nav from module_registry (+ this user's access), then open the
   // first tab the user can actually see.
@@ -2866,7 +2932,23 @@ async function downscaleImage(file, maxDim = 2200, quality = 0.85) {
 }
 
 // ---- Toasts ----
+// Record client-side errors so they show in the Activity log (119). Best-effort
+// and de-bounced against a repeat of the exact same message, so a retry loop
+// doesn't flood the log. Never throws — logging an error must not cause one.
+let _lastLoggedErr = '';
+async function logAppError(message, context) {
+  try {
+    const msg = String(message || '').slice(0, 2000);
+    if (!msg || msg === _lastLoggedErr) return;
+    _lastLoggedErr = msg;
+    setTimeout(() => { _lastLoggedErr = ''; }, 4000);
+    await sb.rpc('log_client_event', { p_message: msg, p_context: (context || location.hash || '').slice(0, 500) });
+  } catch (_) { /* swallow */ }
+}
 function toast(message, kind = 'ok') {
+  // An error toast is the one thing the user sees when something fails — mirror
+  // it into the Activity log so it isn't lost the moment it fades.
+  if (kind === 'err') logAppError(message);
   let stack = document.getElementById('toastStack');
   if (!stack) {
     stack = document.createElement('div');
@@ -5479,7 +5561,7 @@ const hub = { eventId: null, section: 'overview', event: null, actors: null, cou
               people: [], tasks: [], equipment: [], contracts: [], files: [] };
 const HUB_SECTIONS = [
   ['overview', 'Overview'], ['people', 'People'], ['customers', 'Customers'], ['tasks', 'Tasks'],
-  ['money', 'Money'], ['equipment', 'Equipment'], ['photos', 'Photos'], ['files', 'Files'],
+  ['money', 'Money'], ['equipment', 'Equipment'], ['photos', 'Content'], ['files', 'Files'],
 ];
 const STAGES = ['idea', 'planning', 'confirmed', 'live', 'wrapped', 'reported'];
 
@@ -6634,17 +6716,84 @@ async function hubSecPhotos() {
         <button class="hub-mini danger" data-ph-del="${escapeHtml(p.id)}" title="Delete photo + its files">✕</button>
       </div>
     </div>`).join('');
+  // ---- Linked content at the top: videos, then social posts for this event --
+  const ev = hub.event || {};
+  const vids = Array.isArray(ev.recap_videos) ? ev.recap_videos.filter(v => v && v.url) : [];
+  if (ev.youtube_url && !vids.some(v => v.url === ev.youtube_url)) vids.unshift({ label: 'Recap video', url: ev.youtube_url });
+  const { data: posts } = await sb.from('social_posts')
+    .select('id,title,stage,channels,scheduled_for,posted_at,link_url,asset_url,content_pillar')
+    .eq('event_id', hub.eventId).is('deleted_at', null).order('scheduled_for', { nullsFirst: false });
+  hub.eventPosts = posts || [];
+  const vidRows = vids.map(v => `<div class="hub-li" style="padding:5px 0;">
+      <div class="li-main"><a href="${escapeHtml(v.url)}" target="_blank" rel="noopener">${escapeHtml(v.label || v.url)}</a>
+        <div class="li-sub">${escapeHtml(mediaKindLabel(v.url))}${v.artist_id ? ' · tagged to an artist' : ''}</div></div></div>`).join('');
+  const postRows = (hub.eventPosts).map(p => {
+    const when = p.posted_at ? '✅ posted ' + fmtDate(p.posted_at) : (p.scheduled_for ? '📅 ' + fmtDateTime(p.scheduled_for) : 'unscheduled');
+    return `<div class="hub-li" data-hub-postedit="${p.id}" style="cursor:pointer;padding:5px 0;">
+      <div class="li-main"><strong>${escapeHtml(p.title || 'Untitled')}</strong> <span class="role-chip" style="cursor:default;">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</span>
+        <div class="li-sub">${escapeHtml(when)}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}${p.content_pillar ? ' · ' + escapeHtml(p.content_pillar) : ''}${p.link_url ? ` · <a href="${escapeHtml(p.link_url)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">link ↗</a>` : ''}</div></div>
+      <span class="li-sub">edit →</span></div>`;
+  }).join('');
   $('hubSecBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Photos</h3>
+    <div class="hub-sec-bar"><h3>📣 Content</h3>
+      <span style="display:flex;gap:6px;">
+        <button class="hub-btn" data-hub-postnew>➕ Create post</button>
+        <button class="hub-btn ghost" data-hub-postlink>🔗 Link existing post</button>
+      </span></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">Everything published or planned for this event — recap videos, and the social posts, in one place. Create a post with the full brief (caption, channels, schedule, assets, CTA) so it's ready to publish; link an existing one to attach it here.</div>
+    <div class="section-sub">Videos &amp; linked media</div>
+    <div class="hub-list" style="margin-bottom:12px;">${vidRows || '<div class="li-sub">No videos linked yet — add them in the event\'s ✎ Recap editor.</div>'}</div>
+    <div class="section-sub">Social posts (${hub.eventPosts.length})</div>
+    <div class="hub-list" style="margin-bottom:16px;">${postRows || '<div class="li-sub">No posts for this event yet — hit “➕ Create post”.</div>'}</div>
+    <div class="hub-sec-bar"><h3>📸 Photos</h3>
       <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page</span></div>
-    <div class="kpi-hint" style="margin-bottom:8px;">Drop event photos here — each is resized in your browser to a ~1600px full version plus a small grid thumbnail before upload, so the public page stays fast and bandwidth stays cheap. “On site” controls what the gallery lists — but the photo bucket itself is public, so never upload anything sensitive here (documents belong in Files).</div>
+    <div class="kpi-hint" style="margin-bottom:8px;">Drop event photos here — each is resized in your browser to a ~1600px full version plus a small grid thumbnail before upload. “On site” controls what the public gallery lists; the photo bucket is public, so never upload anything sensitive here (documents belong in Files).</div>
     <div id="phDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drag &amp; drop photos here — or click to browse</div>
     <input type="file" id="phFile" accept="image/*,.heic,.heif" multiple style="display:none">
     <div class="li-sub" id="phStatus" style="margin:4px 0 10px;"></div>
     <div style="display:flex;flex-wrap:wrap;gap:10px;" id="phGrid">${cards || '<div class="hub-empty" style="width:100%;">No photos yet.</div>'}</div>`;
   hubPhotosWire();
 }
+// Attach an existing (unlinked or other-event) social post to THIS event.
+async function hubLinkExistingPost() {
+  const { data: posts } = await sb.from('social_posts')
+    .select('id,title,stage,event_id').is('deleted_at', null).order('created_at', { ascending: false }).limit(300);
+  const avail = (posts || []).filter(p => p.event_id !== hub.eventId);
+  if (!avail.length) { toast('No other posts to link', 'ok'); return; }
+  const opts = avail.map(p => `<option value="${p.id}">${escapeHtml(p.title || 'Untitled')} · ${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}${p.event_id ? ' (moving from another event)' : ''}</option>`).join('');
+  openKpi('🔗 Link existing post', 'Attach a post to ' + escapeHtml(hub.event?.name || 'this event'), `
+    <label class="modal-label">Post</label>
+    <select class="modal-select" name="link_post" style="width:100%;">${opts}</select>
+    <div class="kpi-hint" style="margin-top:6px;">This sets the post's linked event to this one.</div>`,
+    async () => {
+      const id = kpiVal('link_post'); if (!id) return;
+      const { error } = await sb.from('social_posts').update({ event_id: hub.eventId }).eq('id', id);
+      if (error) { toast('Link failed: ' + error.message, 'err'); return; }
+      closeKpi(); toast('Post linked to this event', 'ok'); hubGoSection('photos');
+    }, 'Link post');
+}
+// Human label for a media URL (best-effort — reuses mediaKind if present).
+function mediaKindLabel(u) {
+  const s = String(u || '').toLowerCase();
+  if (s.includes('youtu')) return 'YouTube';
+  if (s.includes('soundcloud')) return 'SoundCloud';
+  if (s.includes('instagram')) return 'Instagram';
+  if (s.includes('tiktok')) return 'TikTok';
+  if (s.includes('vimeo')) return 'Vimeo';
+  return 'Link';
+}
 function hubPhotosWire() {
+  // Content actions (top of the section) — reuse the full social-post composer,
+  // returning to this section on save. onSaved reloads the Content section.
+  const back = () => hubGoSection('photos');
+  const body = $('hubSecBody');
+  body.querySelectorAll('[data-hub-postnew]').forEach(b => b.addEventListener('click', () =>
+    openPostModal({ event_id: hub.eventId, series: hub.event?.series || '', stage: 'idea', channels: ['instagram'] }, { onSaved: back })));
+  body.querySelectorAll('[data-hub-postedit]').forEach(el => el.addEventListener('click', async () => {
+    const { data } = await sb.from('social_posts').select('*').eq('id', el.dataset.hubPostedit).single();
+    if (data) openPostModal(data, { onSaved: back });
+  }));
+  body.querySelectorAll('[data-hub-postlink]').forEach(b => b.addEventListener('click', hubLinkExistingPost));
   const drop = $('phDrop'), input = $('phFile'), grid = $('phGrid');
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent, #5b7fb3)'; });
@@ -7944,7 +8093,8 @@ function renderActorsTable() {
     <td class="num">${a.events || 0}</td>
     <td>${statusSel(a)}</td>
     <td class="li-sub">${escapeHtml(fmtDate(a.created_at))}</td>
-    <td>${a.email ? `<button class="hub-mini" data-aemail="${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}</td>
+    <td style="white-space:nowrap;">${a.email ? `<button class="hub-mini" data-aemail="${escapeHtml(a.id)}" title="Email ${escapeHtml(a.display_name)}">✉</button>` : ''}
+      <button class="hub-mini danger" data-adel="${escapeHtml(a.id)}" title="Delete this actor (soft-delete — logged in the Activity log, recoverable)">🗑</button></td>
   </tr>`).join('') || `<tr><td colspan="${ACTOR_COLS.length + 2}" class="muted" style="padding:14px;">No actors match.</td></tr>`;
   $('actorsTable').innerHTML = `<table class="data-table"><thead><tr>${th}</tr></thead><tbody>${rows}</tbody></table>`;
   const cnt = $('actorsBody').querySelector('[data-acount]'); if (cnt) cnt.textContent = `${list.length} of ${s.rows.length}`;
@@ -8041,8 +8191,20 @@ async function submitAddActor() {
   if (roles.length) { const { error: re } = await sb.from('actor_roles').insert(roles.map(role => ({ actor_id: data.id, role }))); if (re) throw re; }
   closeKpi(); toast('Actor added', 'ok'); loadActors();
 }
+async function deleteActor(id) {
+  const a = actorState.rows.find(x => x.id === id);
+  const name = a?.display_name || 'this actor';
+  // Soft-delete: sets deleted_at (recoverable), and the audit trigger on actors
+  // logs it as an UPDATE — so who deleted whom, and when, is in the Activity log.
+  if (!confirm(`Delete ${name}?\n\nThey're removed from lists but not erased — their gig history stays intact and it's logged in the Activity log. An admin can restore them.`)) return;
+  const { error } = await sb.from('actors').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+  if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+  toast(`Deleted ${name} — logged in the Activity log`, 'ok');
+  loadActors();
+}
 $('panel-actors').addEventListener('click', (e) => {
   if (e.target.closest('[data-aadd]')) { openAddActor(); return; }
+  const del = e.target.closest('[data-adel]'); if (del) { deleteActor(del.dataset.adel); return; }
   const rf = e.target.closest('[data-arolefilter]');
   if (rf) {
     const r = rf.dataset.arolefilter;
