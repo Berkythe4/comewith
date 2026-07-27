@@ -20,7 +20,10 @@ const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }),
 // SOURCE PLAYLIST — the only SoundCloud/YouTube links a listener gets are the
 // FINAL MIX (mix_sc_track_url / mix_youtube_url). To get the songs themselves
 // they come to the episode page and export the tracklist.
-const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_youtube_url, cover_url, mix_by";
+// mix_sc_track_id lets the page embed the mix by numeric id — the widget then
+// survives the mix being moved between accounts / re-uploaded (which orphaned
+// EP1's stored permalink and silently broke its player).
+const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_sc_track_id, mix_youtube_url, cover_url, mix_by";
 // sample_url is Beatport's own public preview clip — it lets a track that
 // isn't on SoundCloud still be auditioned, including on the phone via a
 // preview link. energy/comment are private working notes and stay OUT.

@@ -301,6 +301,16 @@ function scNorm(u){
   }catch(e){return {url:u,secret:''};}
 }
 function scEmbed(u,visual){const n=scNorm(u);return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(n.url)+(n.secret?'&secret_token='+encodeURIComponent(n.secret):'')+'&color=%23a7e02e&auto_play='+(visual?'false':'true')+'&hide_related=true&show_comments=false&visual='+(visual?'true':'false');}
+// The mix embeds most reliably by NUMERIC TRACK ID (api.soundcloud.com/tracks/N):
+// that survives the track being moved between accounts or re-uploaded — the very
+// thing that orphaned EP1's stored permalink and left a silent broken player. But
+// a private/secret mix must keep its secret_token, so only switch to the id form
+// when there's no secret to carry.
+function mixEmbedSrc(s){
+  const norm=scNorm(s.mix_sc_track_url||'');
+  if(s.mix_sc_track_id&&!norm.secret) return 'https://api.soundcloud.com/tracks/'+s.mix_sc_track_id;
+  return s.mix_sc_track_url;
+}
 // body.playing reserves room for the fixed player, which is ~125px tall and was
 // covering the last track (and the signup nudge) on a phone.
 function play(url,title){$('#pTitle').textContent='▶ '+(title||'');$('#pFrame').innerHTML='<iframe allow="autoplay; encrypted-media" src="'+scEmbed(url,false)+'"></iframe>';$('#player').classList.add('show');document.body.classList.add('playing');}
@@ -559,7 +569,7 @@ function render(){
   // to get the songs you come to this page and export the tracklist.
   const scBtn=station.mix_sc_track_url?`<a class="chip" href="${esc(station.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Listen on SoundCloud ↗</a>`:'';
   const ytBtn=station.mix_youtube_url?`<a class="chip" href="${esc(station.mix_youtube_url)}" target="_blank" rel="noopener">▶ Watch on YouTube ↗</a>`:'';
-  const embedUrl=station.mix_sc_track_url;
+  const embedUrl=mixEmbedSrc(station);
   $('#root').innerHTML=
     // The cover only ever showed on the hub card; on the episode page itself
     // there was nothing visual above the tracklist.
