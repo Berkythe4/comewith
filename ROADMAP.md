@@ -806,3 +806,18 @@ built (024/026) but **no non-admin login is provisioned**.
 ### 🐞 Still-open bugs (re-verify when next in that flow)
 - Events Services Agreement (payment-method/recording-rights buttons, fee-total auto-update, client
   auto-populate); dashboard tabs need filter/sort.
+
+---
+
+## Parked options (built, not in active use)
+
+### 📧 Email-to-create ingest (parked 2026-07-27 — per-mailbox cost)
+`ingest-email` edge function is BUILT, DEPLOYED, and end-to-end tested (creates
+events/expenses/tasks from a templated email; gated by `INGEST_SECRET`; emails a
+✓/✗ confirmation back). NOT wired up: it needs an inbound email address pointed
+at it, and a dedicated mailbox (Google Workspace etc.) is charged per user, which
+we're avoiding for now. **If revisited:** Cloudflare Email Routing gives a free
+inbound address (no mailbox) → an Email Worker POSTs to
+`…/functions/v1/ingest-email?key=<INGEST_SECRET>`. Template + parser already
+support EVENT / EXPENSE / TASK. Function + secret remain in place; just wire an
+inbound route to activate. See `supabase/functions/ingest-email/index.ts`.

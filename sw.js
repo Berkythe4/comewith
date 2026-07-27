@@ -6,7 +6,7 @@
 //   • Same-origin static assets (icons, manifest) → cache-first.
 //   • Everything cross-origin (Supabase, fonts, DICE, etc.) → straight to
 //     network, untouched.
-const CACHE = 'cw-shell-v1';
+const CACHE = 'cw-shell-v2';
 const SHELL = ['/dashboard.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', (e) => {
@@ -35,4 +35,22 @@ self.addEventListener('fetch', (e) => {
       return r;
     }).catch(() => hit))
   );
+});
+
+// ---- Web Push (opt-in) ------------------------------------------------------
+self.addEventListener('push', (e) => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (_) { d = { title: 'Come With', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Come With', {
+    body: d.body || '', icon: '/icons/icon-192.png', badge: '/icons/favicon-32.png',
+    data: { url: d.url || '/dashboard.html' }, tag: d.tag || undefined,
+  }));
+});
+self.addEventListener('notificationclick', (e) => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || '/dashboard.html';
+  e.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((cs) => {
+    for (const c of cs) { if (c.url.includes('/dashboard.html') && 'focus' in c) return c.focus(); }
+    return self.clients.openWindow(url);
+  }));
 });

@@ -1202,6 +1202,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="main-header">
         <div class="main-title" id="mainTitle">Strategy</div>
         <div class="refresh-cluster">
+          <button class="refresh-btn" id="installBtn" title="Install Come With as an app on your phone" hidden>📲 Install app</button>
           <button class="refresh-btn" id="notifBtn" title="Notifications — things you've been asked to action" style="position:relative;">🔔<span class="chat-unread" id="notifUnread" hidden></span></button>
           <button class="refresh-btn" id="chatBtn" title="Team chat — messages between the team, live">💬 Chat<span class="chat-unread" id="chatUnread" hidden></span></button>
           <button class="refresh-btn wf-trigger" id="workflowBtn" title="See how everything connects, end to end">🗺️ Workflow</button>
@@ -14027,14 +14028,46 @@ const CHAT_POLL_MS = 45000;
 // requests a draft / feedback / approval or @-assigns you. Click a notification
 // to jump to the thing; check it off when handled. This is the connective tissue
 // that lets Keith + Janelle work without meetings.
-const NOTIF = { list: [], open: false, sub: null, timer: null };
+const NOTIF = { list: [], open: false, sub: null, timer: null, pushOn: false };
 const NOTIF_ICON = { feedback_request: '👀', draft_request: '📝', assigned: '📌', mention: '💬', approved: '✅', fyi: '🔔' };
+// Web-push is OPT-IN and OFF by default. Public VAPID key (safe to expose).
+const NOTIF_VAPID = 'BDFHyz0Gw30sT2kouWe0vcqFKabkVpRUJCpMuSPTI2WcDulngS66vcr_FKl8J67n7Pfkm31bhV3n1Ze0njCadYQ';
+const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+function b64ToU8(b64) { const pad = '='.repeat((4 - b64.length % 4) % 4); const s = (b64 + pad).replace(/-/g, '+').replace(/_/g, '/'); const raw = atob(s); return Uint8Array.from([...raw].map(c => c.charCodeAt(0))); }
 // Fire a notification to a teammate. Best-effort; never throws into the caller.
+// Also nudges their phone via push (a no-op unless they've opted in).
 async function notify(userId, kind, title, body, subjectType, subjectId) {
   if (!userId || userId === ME.id) return; // don't notify yourself
   try {
     await sb.from('notifications').insert({ user_id: userId, from_user_id: ME.id, kind, title, body: body || null, subject_type: subjectType || null, subject_id: subjectId || null });
+    const url = subjectType === 'post' ? '/dashboard.html' : subjectType === 'event' ? '/dashboard.html#event=' + subjectId : '/dashboard.html';
+    sb.functions.invoke('send-push', { body: { user_id: userId, title, body: body || '', url } }).catch(() => {});
   } catch (e) { logAppError('notify failed: ' + (e.message || e)); }
+}
+async function pushRefreshState() {
+  if (!pushSupported()) { NOTIF.pushOn = false; return; }
+  try { const reg = await navigator.serviceWorker.ready; const s = await reg.pushManager.getSubscription(); NOTIF.pushOn = !!s && Notification.permission === 'granted'; }
+  catch (_) { NOTIF.pushOn = false; }
+}
+async function pushEnable() {
+  if (!pushSupported()) { toast('Push isn\'t supported in this browser', 'err'); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Notifications blocked — allow them in browser settings', 'err'); return; }
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ToU8(NOTIF_VAPID) });
+    const j = sub.toJSON();
+    await sb.from('push_subscriptions').upsert({ user_id: ME.id, endpoint: sub.endpoint, subscription: j }, { onConflict: 'endpoint' });
+    NOTIF.pushOn = true; toast('Push notifications on for this device', 'ok'); notifRender();
+  } catch (e) { toast('Could not enable push: ' + (e.message || e), 'err'); }
+}
+async function pushDisable() {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const s = await reg.pushManager.getSubscription();
+    if (s) { await sb.from('push_subscriptions').delete().eq('endpoint', s.endpoint); await s.unsubscribe(); }
+    NOTIF.pushOn = false; toast('Push notifications off', 'ok'); notifRender();
+  } catch (e) { toast('Could not disable push: ' + (e.message || e), 'err'); }
 }
 async function notifRefresh() {
   const { data } = await sb.from('notifications').select('*').eq('user_id', ME.id).neq('status', 'done').order('created_at', { ascending: false }).limit(50);
@@ -14045,6 +14078,7 @@ async function notifRefresh() {
 }
 async function notifInit() {
   if (NOTIF.timer) return;
+  pushRefreshState();   // reflect any existing opt-in (still off by default)
   await notifRefresh();
   try {
     NOTIF.sub = sb.channel('notif-' + ME.id)
@@ -14064,8 +14098,9 @@ function notifRender() {
       <div class="li-sub">${escapeHtml(fmtDT(n.created_at))}</div>
     </div>
     <button class="hub-mini" data-notif-done="${n.id}" title="Mark done">✓</button></div>`;
+  const pushBtn = pushSupported() ? `<button class="hub-mini" data-notif-push title="${NOTIF.pushOn ? 'Push on for this device — click to turn off' : 'Get a phone alert when you\'re asked to action something'}" style="${NOTIF.pushOn ? 'background:#7C83DB;color:#fff;' : ''}">${NOTIF.pushOn ? '🔔 Push on' : '🔕 Push off'}</button>` : '';
   p.innerHTML = `<div class="notif-head"><strong>🔔 Notifications</strong>
-      <span style="display:flex;gap:6px;">${NOTIF.list.some(n => n.status === 'unread') ? '<button class="hub-mini" data-notif-allread>Mark all read</button>' : ''}<button class="hub-mini" data-notif-close>✕</button></span></div>
+      <span style="display:flex;gap:6px;">${pushBtn}${NOTIF.list.some(n => n.status === 'unread') ? '<button class="hub-mini" data-notif-allread>Mark all read</button>' : ''}<button class="hub-mini" data-notif-close>✕</button></span></div>
     <div class="notif-body">${NOTIF.list.map(row).join('') || '<div class="hub-empty">Nothing needs your attention. 🎉</div>'}</div>`;
 }
 function notifToggle() {
@@ -14096,6 +14131,7 @@ document.addEventListener('click', async (e) => {
   if (e.target.closest('#notifBtn')) { notifToggle(); return; }
   if (e.target.closest('[data-notif-close]')) { NOTIF.open = false; $('notifPanel')?.classList.remove('show'); return; }
   const done = e.target.closest('[data-notif-done]'); if (done) { const id = done.dataset.notifDone; await sb.from('notifications').update({ status: 'done', done_at: new Date().toISOString() }).eq('id', id); await notifRefresh(); return; }
+  if (e.target.closest('[data-notif-push]')) { NOTIF.pushOn ? pushDisable() : pushEnable(); return; }
   if (e.target.closest('[data-notif-allread]')) { await markNotifsRead(); notifRender(); return; }
   const op = e.target.closest('[data-notif-open]'); if (op) { const n = NOTIF.list.find(x => x.id === op.dataset.notifOpen); NOTIF.open = false; $('notifPanel')?.classList.remove('show'); notifGoto(n); return; }
   // click-away closes the panel
@@ -15008,6 +15044,32 @@ try {
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
   window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
 }
+// "Install app" — Android/desktop Chrome fire beforeinstallprompt (we capture it
+// and the button triggers the native prompt). iPhone never fires it: install is
+// ALWAYS manual via Safari's Share → Add to Home Screen, so we show a guide. The
+// button hides itself once the app is already installed (standalone display).
+let _deferredInstall = null;
+const _isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); _deferredInstall = e; const b = document.getElementById('installBtn'); if (b && !_isStandalone()) b.hidden = false; });
+window.addEventListener('appinstalled', () => { const b = document.getElementById('installBtn'); if (b) b.hidden = true; _deferredInstall = null; });
+document.addEventListener('DOMContentLoaded', () => {
+  const b = document.getElementById('installBtn'); if (!b) return;
+  const ua = navigator.userAgent;
+  const iOS = /iPhone|iPad|iPod/.test(ua);
+  // On iOS Safari (not an in-app webview / Chrome-iOS), show the button so we can
+  // guide them — there's no automatic prompt on iOS, ever.
+  const iosSafari = iOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|GSA|FBAN|FBAV|Instagram|Line/.test(ua);
+  if (!_isStandalone() && iosSafari) b.hidden = false;
+  b.addEventListener('click', async () => {
+    if (_deferredInstall) { _deferredInstall.prompt(); try { await _deferredInstall.userChoice; } catch (_) {} _deferredInstall = null; b.hidden = true; return; }
+    // iOS / no native prompt → instructions.
+    if (iOS) {
+      alert('To install on your iPhone:\n\n1. Make sure you\'re in Safari (not Chrome or an in-app browser).\n2. Tap the Share button — the square with an up-arrow at the bottom of Safari.\n3. Scroll down and tap "Add to Home Screen".\n4. Tap "Add".\n\nCome With will open full-screen like an app.');
+    } else {
+      alert('To install: open this site in Chrome or Edge, then use the browser menu (⋮) → "Install Come With" / "Add to Home screen".');
+    }
+  });
+});
 </script>
 
 <style>
