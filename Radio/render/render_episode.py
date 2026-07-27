@@ -260,9 +260,9 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
         _cdivider(d, cx, 92 + cs + 232)
         _ctext(d, cx, 92 + cs + 262, "Every track is an artist playing New York — soon.", F_body(44), CREAM)
     if stage >= 3:
-        _ctext(d, cx, 92 + cs + 330, "Hear the sound here, then go catch them live.", F_body(44), DIM)
+        _ctext(d, cx, 92 + cs + 330, "Hear who's playing, grab your tickets, go live.", F_body(44), DIM)
     if stage >= 4:
-        _ctext(d, cx, 92 + cs + 416, "GENRES · RELEASE DATES · WHERE TO BUY EVERY TRACK", F_mono(28), FAINT)
+        _ctext(d, cx, 92 + cs + 416, "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN", F_mono(28), FAINT)
         _ctext(d, cx, 92 + cs + 452, "comewith.org", F_disp(44), LIME)
     return im.convert("RGB")
 
@@ -276,12 +276,12 @@ def draw_outro(bg, cover_sm, next_date, stage):
     _ctext(d, cx, 292, "PLUGGING IN.", F_disp(78), CREAM)
     if stage >= 1:
         _cdivider(d, cx, 430)
-        _ctext(d, cx, 462, "The full tracklist — every song, its genre, release date", F_body(40), CREAM)
-        _ctext(d, cx, 512, "and where to buy it — is yours to download, free, at", F_body(40), CREAM)
+        _ctext(d, cx, 462, "Tickets to every artist you just heard — plus when &", F_body(40), CREAM)
+        _ctext(d, cx, 512, "where they play next, and the mix to replay — at", F_body(40), CREAM)
     if stage >= 2:
         _ctext(d, cx, 576, "comewith.org", F_disp(60), LIME)
     if stage >= 3:
-        _ctext(d, cx, 690, "Follow @comewith so you never miss a track.", F_body(40), DIM)
+        _ctext(d, cx, 690, "Follow @comewithnyc so you never miss a drop.", F_body(40), DIM)
     if stage >= 4:
         nd = fmt_md(next_date)
         txt = "WE PLUG BACK IN NEXT THURSDAY" + ((" · " + nd.upper()) if nd else "")
