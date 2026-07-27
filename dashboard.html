@@ -640,7 +640,18 @@ body::before {
   width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto;
   padding: 28px 30px;
   animation: modalIn 0.15s ease-out;
+  position: relative;
 }
+/* Always-visible close (X) — NN/g: never rely only on a Cancel button buried
+   at the bottom, especially on mobile where the form scrolls. */
+.modal-x {
+  position: absolute; top: 10px; right: 12px; z-index: 3;
+  width: 34px; height: 34px; border-radius: 50%;
+  background: var(--surface, #201826); border: 1px solid var(--border-strong);
+  color: var(--ink, #ede4d3); font-size: 1rem; cursor: pointer; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal-x:hover { color: var(--red); }
 @keyframes modalIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal-title {
   font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
@@ -808,6 +819,26 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   /* touch-friendly controls in mobile */
   .hub-status-sel, .modal-input, .modal-select { min-height: 40px; font-size: 0.9rem; }
   .hub-btn, .hub-mini { min-height: 38px; }
+
+  /* Modals become a FULL-SCREEN sheet: sticky header with the X (always
+     reachable), the body scrolls on its own, and a sticky footer keeps
+     Cancel/Save in view. Fixes "can't get out of the post popup". Uses dvh so
+     the mobile browser chrome doesn't hide the footer. */
+  .modal-overlay { padding: 0; align-items: stretch; }
+  .modal {
+    max-width: none; width: 100vw; height: 100vh; height: 100dvh; max-height: none;
+    border: none; padding: 0; display: flex; flex-direction: column;
+  }
+  .modal-x { position: fixed; top: max(10px, env(safe-area-inset-top)); right: 12px; width: 40px; height: 40px; font-size: 1.15rem; }
+  .modal-title { padding: 16px 56px 0 18px; padding-top: max(16px, calc(env(safe-area-inset-top) + 6px)); flex: 0 0 auto; }
+  .modal-sub { padding: 2px 56px 10px 18px; flex: 0 0 auto; }
+  #kpiModalForm { flex: 1 1 auto; display: flex; flex-direction: column; min-height: 0; }
+  #kpiModalBody { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 0 18px 12px; }
+  .modal-actions {
+    flex: 0 0 auto; margin: 0; padding: 12px 18px calc(12px + env(safe-area-inset-bottom));
+    border-top: 1px solid var(--border); background: var(--bg); position: sticky; bottom: 0;
+  }
+  .modal-actions button { flex: 1; min-height: 46px; font-size: 0.95rem; }
 }
 
 /* ============================================================
@@ -1158,6 +1189,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 <!-- ========== KPI ENTRY MODAL (Phase 13 — Part B) ========== -->
 <div class="modal-overlay" id="kpiModalOverlay">
   <div class="modal">
+    <button type="button" class="modal-x" id="kpiModalX" aria-label="Close" title="Close">✕</button>
     <div class="modal-title" id="kpiModalTitle">—</div>
     <div class="modal-sub" id="kpiModalSub"></div>
     <form id="kpiModalForm">
@@ -2963,16 +2995,39 @@ function openAssetModal(ctx, onSaved) {
       <div><label class="modal-label">Media</label><select class="modal-select" name="ca_media"><option value="video">Video</option><option value="audio">Audio</option><option value="image">Image</option><option value="other">Other</option></select></div>
       <div><label class="modal-label">Length note</label><input class="modal-input" name="ca_dur" placeholder="0:30, full set…" style="max-width:120px;"></div>
     </div>
-    <label class="modal-label" style="margin-top:8px;">Link (YouTube, SoundCloud, Drive, IG…)</label>
+    <label class="modal-label" style="margin-top:8px;">📱 Upload from your phone <span class="li-sub">— a clip, photo, or audio you made</span></label>
+    <input class="modal-input" type="file" name="ca_file" accept="video/*,image/*,audio/*" style="width:100%;">
+    <div class="li-sub" style="text-align:center;margin:6px 0;">— or —</div>
+    <label class="modal-label">Paste a link (YouTube, SoundCloud, Drive, IG…)</label>
     <input class="modal-input" name="ca_url" placeholder="https://…" style="width:100%;">
     <label class="modal-label" style="margin-top:8px;">Label</label>
     <input class="modal-input" name="ca_label" value="${escapeHtml(ctx.defaultLabel || '')}" placeholder="e.g. 7/11 recap — 30s reel" style="width:100%;">
-    <label class="modal-label" style="margin-top:8px;"><input type="checkbox" name="ca_public" style="width:auto;"> also lives on the public site</label>`,
+    <label class="modal-label" style="margin-top:8px;"><input type="checkbox" name="ca_public" style="width:auto;"> also lives on the public site</label>
+    <div class="li-sub" id="caUpStatus" style="margin-top:4px;"></div>`,
     async () => {
-      const url = kpiVal('ca_url'); if (!url) { toast('Add a link', 'err'); return; }
+      const fileEl = $('kpiModalBody').querySelector('[name="ca_file"]');
+      const file = fileEl?.files?.[0];
+      let url = kpiVal('ca_url'), storage_path = null, media = kpiVal('ca_media') || 'video';
+      if (file) {
+        const st = $('caUpStatus'); if (st) st.textContent = 'Uploading…';
+        try {
+          // Images get resized; video/audio upload as-is. Public bucket → the
+          // public URL becomes the asset link so it plays on the site + phone.
+          const isImg = (file.type || '').startsWith('image/') || /\.hei[cf]$/i.test(file.name || '');
+          const blob = isImg ? await downscaleImage(file, 1600, 0.85) : file;
+          media = isImg ? 'image' : (file.type || '').startsWith('audio/') ? 'audio' : 'video';
+          const ext = isImg ? 'jpg' : ((file.name || '').split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
+          const safe = (file.name || 'clip').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 50);
+          storage_path = `clips/${ctx.event_id || ctx.post_id || ctx.station_id || 'misc'}/${Date.now()}_${safe}.${ext}`;
+          const up = await sb.storage.from('event-photos').upload(storage_path, blob, { contentType: isImg ? 'image/jpeg' : (file.type || 'application/octet-stream') });
+          if (up.error) throw up.error;
+          url = PHOTO_BASE + storage_path;   // public URL
+        } catch (e) { toast('Upload failed: ' + (e.message || e), 'err'); if ($('caUpStatus')) $('caUpStatus').textContent = ''; return; }
+      }
+      if (!url) { toast('Upload a file or paste a link', 'err'); return; }
       const row = { event_id: ctx.event_id || null, post_id: ctx.post_id || null, station_id: ctx.station_id || null,
-        kind: kpiVal('ca_kind') || 'full', media: kpiVal('ca_media') || 'video', url,
-        label: kpiVal('ca_label') || null, duration_note: kpiVal('ca_dur') || null,
+        kind: kpiVal('ca_kind') || (file ? 'clip' : 'full'), media, url, storage_path,
+        label: kpiVal('ca_label') || (file ? (file.name || 'clip') : null), duration_note: kpiVal('ca_dur') || null,
         is_public: !!$('kpiModalBody').querySelector('[name="ca_public"]')?.checked, created_by: ME.id };
       const { error } = await sb.from('content_assets').insert(row);
       if (error) { toast('Save failed: ' + error.message, 'err'); return; }
@@ -3117,14 +3172,54 @@ function ccRowDetail(e, ps, ph, vids) {
 }
 async function ccPhotoPopup(eventId) {
   const ev = cc.events.find(x => x.id === eventId);
-  openKpi('📸 Photos — ' + escapeHtml(ev?.name || ''), 'Loading…', '<div class="placeholder">Loading photos…</div>', null, 'Close');
+  openKpi('📸 Photos — ' + escapeHtml(ev?.name || ''), ev?.name || '', '<div class="placeholder">Loading photos…</div>', null, 'Close');
+  await ccRenderPhotoPopup(eventId);
+}
+async function ccRenderPhotoPopup(eventId) {
   const { data } = await sb.from('event_photos').select('id,thumb_path,storage_path,is_public,caption').eq('event_id', eventId).order('sort_order').order('created_at');
   const photos = data || [];
-  const grid = photos.map(p => `<div style="width:120px;"><img src="${PHOTO_BASE}${escapeHtml(p.thumb_path || p.storage_path)}" loading="lazy" style="width:100%;height:80px;object-fit:cover;border-radius:6px;${p.is_public ? '' : 'opacity:.5;'}"><div class="li-sub" style="font-size:.6rem;">${p.is_public ? '🌐 on site' : 'hidden'}</div></div>`).join('') || '<div class="hub-empty">No photos uploaded.</div>';
-  $('kpiModalBody').innerHTML = `<div class="kpi-hint">${photos.length} photo${photos.length === 1 ? '' : 's'} · ${photos.filter(p => p.is_public).length} on the live gallery. Full upload/manage opens the event's Content tab.</div>
-    <div style="display:flex;flex-wrap:wrap;gap:8px;max-height:340px;overflow:auto;margin:8px 0;">${grid}</div>
-    <button type="button" class="hub-btn" data-cc-openevent-tab="${eventId}:photos">Manage photos in a new tab ↗</button>`;
-  $('kpiModalSub').textContent = ev?.name || '';
+  const grid = photos.map(p => `<div style="width:104px;"><img src="${PHOTO_BASE}${escapeHtml(p.thumb_path || p.storage_path)}" loading="lazy" style="width:100%;height:74px;object-fit:cover;border-radius:6px;${p.is_public ? '' : 'opacity:.5;'}"><div class="li-sub" style="font-size:.6rem;">${p.is_public ? '🌐 on site' : 'hidden'}</div></div>`).join('') || '<div class="hub-empty" style="width:100%;">No photos yet.</div>';
+  const body = $('kpiModalBody'); if (!body) return;
+  // In-place upload — pick from the phone's camera OR photo library (no capture
+  // attr = user chooses either), resized in the browser, no page change.
+  body.innerHTML = `<div class="kpi-hint">${photos.length} photo${photos.length === 1 ? '' : 's'} · ${photos.filter(p => p.is_public).length} on the live gallery.</div>
+    <label class="hub-btn" style="display:inline-flex;margin:8px 0;cursor:pointer;">📷 Add photos from your phone
+      <input type="file" id="ccPhotoFile" accept="image/*,.heic,.heif" multiple style="display:none;"></label>
+    <div class="li-sub" id="ccPhotoStatus" style="margin:2px 0 8px;"></div>
+    <div style="display:flex;flex-wrap:wrap;gap:8px;max-height:46vh;overflow:auto;margin:6px 0;">${grid}</div>
+    <button type="button" class="hub-mini" data-cc-openevent-tab="${eventId}:photos">Open full photo manager ↗</button>`;
+  const inp = $('ccPhotoFile');
+  if (inp) inp.addEventListener('change', () => { ccUploadPhotos(eventId, [...inp.files]); inp.value = ''; });
+}
+// Reusable photo upload (mirrors hubPhotosUpload) targeting any event; used from
+// the mobile Content Center popup so you never leave the page.
+async function ccUploadPhotos(eventId, files) {
+  const imgs = files.filter((f) => (f.type || '').startsWith('image/') || /\.hei[cf]$/i.test(f.name || ''));
+  if (!imgs.length) return;
+  const status = $('ccPhotoStatus');
+  const { data: existing } = await sb.from('event_photos').select('sort_order,file_hash').eq('event_id', eventId);
+  const seen = new Set((existing || []).map(r => r.file_hash).filter(Boolean));
+  let sort = (existing || []).reduce((m, r) => Math.max(m, r.sort_order || 0), 0);
+  let done = 0, failed = 0, dupes = 0;
+  for (const f of imgs) {
+    if (status) status.textContent = `Uploading ${done + failed + dupes + 1} of ${imgs.length}…`;
+    try {
+      const hash = await fileHash(f).catch(() => null);
+      if (hash && seen.has(hash)) { dupes++; continue; }
+      const full = await downscaleImage(f, 1600, 0.85), thumb = await downscaleImage(f, 480, 0.8);
+      const safe = (f.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+      const base = `event/${eventId}/${Date.now()}_${safe}`;
+      const up1 = await sb.storage.from('event-photos').upload(base + '_full.jpg', full, { contentType: full.type || 'image/jpeg' });
+      if (up1.error) throw up1.error;
+      const up2 = await sb.storage.from('event-photos').upload(base + '_thumb.jpg', thumb, { contentType: thumb.type || 'image/jpeg' });
+      const { error: insErr } = await sb.from('event_photos').insert({ event_id: eventId, storage_path: base + '_full.jpg', thumb_path: up2.error ? null : base + '_thumb.jpg', sort_order: (sort += 10), file_hash: hash });
+      if (insErr) throw insErr;
+      if (hash) seen.add(hash); done++;
+    } catch (err) { failed++; console.warn('cc photo upload failed', err); }
+  }
+  toast(`${done} photo${done === 1 ? '' : 's'} added${dupes ? ` · ${dupes} dup skipped` : ''}${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
+  await ccRenderPhotoPopup(eventId);
+  if (cc.photoByEvent) { const o = (cc.photoByEvent[eventId] ||= { total: 0, public: 0 }); o.total += done; }
 }
 function ccTaskChip(pid) { const o = cc.taskByPost[pid]; return o ? ` <span class="role-chip" style="cursor:default;" title="Tasks done / total">✓ ${o.done}/${o.total}</span>` : ''; }
 function ccTableHtml(posts) {
@@ -5309,6 +5404,7 @@ const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${
 const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
 
 $('kpiModalCancel').addEventListener('click', closeKpi);
+$('kpiModalX').addEventListener('click', closeKpi);
 // No click-outside-to-close (a drag-select ending on the overlay was closing the
 // pop-out). Close only via Cancel / Save or Escape.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
@@ -13729,6 +13825,7 @@ function calRender() {
       <button class="hub-mini" data-cal-goto-today>Today</button>
       <span style="width:10px;"></span>
       <button class="cal-chipbtn${CAL.view === 'month' ? ' on' : ''}" data-cal-view="month">Month</button>
+      <button class="cal-chipbtn${CAL.view === 'week' ? ' on' : ''}" data-cal-view="week">Week</button>
       <button class="cal-chipbtn${CAL.view === 'agenda' ? ' on' : ''}" data-cal-view="agenda">Agenda</button>
       <span style="width:10px;"></span>
       ${layerChip('milestones', '⭐ Milestones')}${layerChip('social', '📱 Social')}${layerChip('market', '🌐 Market')}${layerChip('elsewhere', '🎧 Ours elsewhere')}
@@ -13737,7 +13834,7 @@ function calRender() {
       ${calDD('series', 'Series', seriesOpts)}${calDD('status', 'Status', statusOpts)}${calDD('venue', 'Venue', venueOpts)}${calDD('artist', 'Artist', artistOpts)}
       <span style="margin-left:auto;display:flex;gap:10px;align-items:center;">${legend}</span>
     </div>
-    <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : calAgendaHtml()}</div>
+    <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : CAL.view === 'week' ? calWeekHtml() : calAgendaHtml()}</div>
     <div id="calDayDetail">${CAL.selDay ? calDayDetailHtml(CAL.selDay) : ''}</div>
     <div class="hub-sec-bar" style="margin-top:22px;"><h3>Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
     <div class="cal-board" id="calBoard"></div>`;
@@ -13746,7 +13843,7 @@ function calRender() {
 // Refresh the grid/agenda + day detail without rebuilding the toolbar, so the
 // multi-select dropdowns stay open while the user ticks several options.
 function calRefreshViews() {
-  const w = $('calGridWrap'); if (w) w.innerHTML = CAL.view === 'month' ? calGridHtml() : calAgendaHtml();
+  const w = $('calGridWrap'); if (w) w.innerHTML = CAL.view === 'month' ? calGridHtml() : CAL.view === 'week' ? calWeekHtml() : calAgendaHtml();
   const dd = $('calDayDetail'); if (dd) dd.innerHTML = CAL.selDay ? calDayDetailHtml(CAL.selDay) : '';
   document.querySelectorAll('#calBody .cal-dd').forEach(d => {
     const key = d.dataset.key; if (!key) return;
@@ -13791,6 +13888,25 @@ function calGridHtml() {
   }
   const hdr = CAL_DOW.map(dw => `<div class="li-sub" style="text-align:center;font-size:.68rem;">${dw}</div>`).join('');
   return `<div class="cal-grid">${hdr}${cells.join('')}</div>`;
+}
+// Week view: the 7 days (Sun–Sat) of the week containing the selected day (or
+// today), each as its own section — reads great on mobile as a vertical list.
+function calWeekHtml() {
+  const byDay = calBuckets();
+  const today = calToday();
+  const anchor = new Date(((CAL.selDay && CAL.selDay.startsWith(CAL.month)) ? CAL.selDay : (today.startsWith(CAL.month) ? today : CAL.month + '-01')) + 'T00:00:00');
+  const sun = new Date(anchor); sun.setDate(anchor.getDate() - anchor.getDay());   // back to Sunday
+  const blocks = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(sun); d.setDate(sun.getDate() + i);
+    const ds = d.toISOString().slice(0, 10);
+    const inMonth = ds.startsWith(CAL.month);
+    const lbl = d.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    const b = byDay[ds];
+    const list = b ? calDayListHtml(b, 12) : (inMonth ? '<div class="li-sub" style="padding:4px 8px;">Nothing scheduled.</div>' : '<div class="li-sub" style="padding:4px 8px;">— (change month to load) —</div>');
+    blocks.push(`<div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;${ds === today ? 'color:var(--lime,#A7E02E);' : ''}">${ds === today ? '● ' : ''}${escapeHtml(lbl)}</h3></div>${list}`);
+  }
+  return `<div>${blocks.join('')}</div>`;
 }
 function calAgendaHtml() {
   const byDay = calBuckets();
