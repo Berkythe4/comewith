@@ -10345,7 +10345,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -10383,6 +10383,7 @@ document.addEventListener('click', async (e) => {
   const urp = t.closest('[data-ra-unrepost]'); if (urp) { raSocial('unrepost', urp.dataset.raUnrepost, urp.dataset.raName); return; }
   if (t.closest('[data-ra-refresh]')) return raRefresh(t.closest('[data-ra-refresh]'));
   if (t.closest('[data-ra-matchsc]')) { raMatchSc(t.closest('[data-ra-matchsc]')); return; }
+  if (t.closest('[data-ra-refreshall]')) { raRefreshAll(t.closest('[data-ra-refreshall]')); return; }
   if (t.closest('[data-ra-scan]')) return raScan();
   if (t.closest('[data-ra-rescan]')) return raRescan();
   if (t.closest('[data-ra-scancancel]')) { raState.scanCancel = true; return; }
@@ -10587,9 +10588,10 @@ function renderRaRadio() {
     </div>`;
   }).join('');
 
+  const todo = noScCount + unscanned;   // artists needing a link and/or a read
   const scanBar = raState.scanning
-    ? `<div class="kpi-hint" style="margin:0;display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Scanning SoundCloud ${raState.scanDone}/${raState.scanTotal}… <button class="hub-mini" data-ra-scancancel>stop</button></div>`
-    : `<button class="hub-btn" data-ra-scan title="Check each artist's SoundCloud to find who produces original music">${scanned ? '↻ ' : ''}Scan${unscanned ? ` ${unscanned} new` : ''} for producers</button>${scanned ? ' <button class="hub-mini" data-ra-rescan title="Discard the cached song lists and read every artist again — use after a change to how songs are read">↻ re-read all</button>' : ''}`;
+    ? `<div class="kpi-hint" style="margin:0;display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Reading SoundCloud ${raState.scanDone}/${raState.scanTotal}… <button class="hub-mini" data-ra-scancancel>stop</button></div>`
+    : `<button class="hub-btn" data-ra-refreshall title="Pull all music &amp; data for the artists in this window — find any missing SoundCloud links, then read every profile for songs &amp; followers. (Episode &amp; upload tools live in the station builder below.)">↻ Refresh music &amp; data${todo ? ` (${todo})` : ''}</button>${scanned ? ' <button class="hub-mini" data-ra-rescan title="Re-read every profile from scratch — use after a change to how songs are read">↻ re-read all</button>' : ''}`;
 
   const anyFilter = raState.search || raState.genre || raState.venue || raState.sourceFilter;
   // Sticky toolbar: pins to the top of the panel so search + filters are always
@@ -10611,8 +10613,7 @@ function renderRaRadio() {
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
         <button class="hub-btn" data-ra-refresh title="Re-pull upcoming NYC shows from Resident Advisor + Ticketmaster + DICE (~20s)">↻ Pull shows</button>
         <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
-        ${noScCount ? `<button class="hub-btn" data-ra-matchsc title="Search SoundCloud by name for the ${noScCount} artist${noScCount === 1 ? '' : 's'} with no link yet (DICE, Ticketmaster, some RA). Confident matches only, then they get scanned for songs.">☁ Match SoundCloud (${noScCount})</button>` : ''}
-        <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="Show artists that still have no SoundCloud link — check Beatport by name instead">🛒 No-SoundCloud artists${noScCount ? ` (${noScCount})` : ''}</button>
+        <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="Show only artists that still have no SoundCloud link after a refresh — check Beatport by name instead">🛒 No-SoundCloud${noScCount ? ` (${noScCount})` : ''}</button>
         <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
         <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
         ${anyFilter ? '<button class="hub-mini" data-ra-clearfilters title="Reset search, genre and venue">✕ clear filters</button>' : ''}
@@ -11149,6 +11150,36 @@ async function raMatchSc(btn) {
   toast(`Matched ${matched} of ${names.length} to SoundCloud${matched ? ' — scanning for songs…' : ''}`, matched ? 'ok' : 'err');
   renderRaMarket();
   if (matched) raScan();
+}
+// ONE button for the whole discovery pool: pull all music + data for the artists
+// currently in this window. First finds any missing SoundCloud links (all
+// sources), then reads every unscanned profile (songs, followers). This is how
+// you refresh the pool — the episode/upload tools stay in the station builder.
+async function raRefreshAll(btn) {
+  const { start, cut } = raWindow();
+  const seen = new Set(); const names = [];
+  for (const a of raState.artists) {
+    if (a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
+    const n = (a.name || '').trim(); if (!n) continue;
+    const k = n.toLowerCase(); if (seen.has(k)) continue; seen.add(k); names.push(n);
+  }
+  const label = btn ? btn.textContent : '';
+  if (btn) btn.disabled = true;
+  // 1) match the no-link artists so they can be read this same pass
+  if (names.length) {
+    const found = {};
+    for (let i = 0; i < names.length; i += 25) {
+      if (btn) btn.textContent = `☁ Finding SoundCloud ${Math.min(i + 25, names.length)}/${names.length}…`;
+      try {
+        const { data } = await sb.functions.invoke('sc-match', { body: { names: names.slice(i, i + 25), write: true } });
+        (data?.results || []).forEach(r => { if (r.matched && r.soundcloud) found[r.name.toLowerCase()] = r.soundcloud; });
+      } catch (_) { /* keep going */ }
+    }
+    raState.artists.forEach(a => { if (!a.soundcloud) { const s = found[(a.name || '').toLowerCase()]; if (s) a.soundcloud = s; } });
+  }
+  if (btn) { btn.disabled = false; btn.textContent = label; }
+  // 2) read songs + followers for everyone not yet scanned
+  raScan();
 }
 // Dropping a song = considered and PASSED → permanent song memory (marks it when
 // researching later + auto-carries it into the next station at finalize). Shared
