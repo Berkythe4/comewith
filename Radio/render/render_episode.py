@@ -15,11 +15,17 @@ Usage:
         --cover Radio/Artwork/Radio_Thumbnail.jpg \
         --out Radio/Video/EP1.mp4 --ep "EP 1"
 
+The video opens with an intro slide and ends with a closing slide (staged reveal,
+overlaid on the mix so total runtime is unchanged) — see draw_intro/draw_outro.
+`make_episode.py` fills the bookend meta (mixed-by, drop dates) from prod for you.
+
 `start` in the cues CSV is mm:ss (e.g. 4:12) or plain seconds. Any blank starts
 are reported and abort, so you never render a half-timed video by accident.
 
-  --dry           render cards + a 1s preview only (fast sanity check)
-  --title TEXT    show name (default "Come With Radio")
+  --dry            render cards + a 1s preview only (fast sanity check)
+  --title TEXT     show name (default "Come With Radio")
+  --mixed-by TEXT  intro credit;  --drop-date / --next-date  YYYY-MM-DD (bookends)
+  --no-bookends    skip the intro + closing;  --intro-secs / --outro-secs  retime
 """
 import argparse, csv, os, re, subprocess, sys, tempfile
 import sys as _sys

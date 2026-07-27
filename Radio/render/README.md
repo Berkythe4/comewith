@@ -75,13 +75,30 @@ Out comes a 1920×1080 H.264 MP4 in `Radio/Video/`. Upload it to YouTube, paste
 the link into the dashboard (✎ Details → YouTube link).
 
 Flags: `--dry` renders the cards + a 1-second preview (fast sanity check);
-`--title` overrides the show name.
+`--title` overrides the show name; bookend flags are below.
 
 ### What it looks like
-Per track: your cover, artist (big), title, BPM + Camelot/key chips, "up next",
-and a lime progress bar that fills across the whole mix. No camera, no editor, no
-ticket pitch — just the music on screen. Brand pulled from `radio.html`; type is
-Arial Black + Consolas (stand-ins for Archivo / DM Mono).
+It opens with an **intro slide** and ends with a **closing slide** (see next
+section), with the track cards in between. Per track: your cover, artist (big),
+title, a **genre + release-year** line, the artist's next show (date + venue
+chips), "up next", and a lime progress bar that fills across the whole mix. No
+camera, no editor. Brand pulled from `radio.html`; type is Arial Black + Consolas
+(stand-ins for Archivo / DM Mono).
+
+### The intro + closing bookends (automatic)
+`make_episode.py` turns these on for you — it reads who mixed the episode and the
+this-drop / next-drop dates from prod and passes them in, so the one-liner just
+works. Both slides assemble a line at a time then hold, and they're **overlaid on
+the opening and closing of the mix** — the video's total length equals the mix,
+no dead air. Copy leads with **tickets**, then who's playing & where, then where
+to listen (genre/release live on the track cards, not here).
+
+- **Preview them without a full render:** `python Radio/render/preview_bookends.py`
+  → stills + a short silent mp4 in `Radio/Video/_preview/`. Edit the wording in
+  `render_episode.py` (`draw_intro` / `draw_outro`), re-run, eyeball, repeat.
+- **Override the dates / credit by hand** (if not in the DB yet):
+  `--mixed-by "Berky" --drop-date 2026-07-30 --next-date 2026-08-06`.
+- **Turn them off:** `--no-bookends`. **Retime:** `--intro-secs` / `--outro-secs`.
 
 ---
 
