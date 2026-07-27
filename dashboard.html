@@ -9992,7 +9992,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', sourceFilter: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -10348,7 +10348,7 @@ document.addEventListener('click', async (e) => {
   if (!t.closest('[data-ra-refresh],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
-  if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; renderRaMarket(); return; }
+  if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
   if (t.closest('[data-ra-refreshshows]')) { raRefreshShowInfo(t.closest('[data-ra-refreshshows]')); return; }
   if (t.closest('[data-ra-closeplayer]')) { const d = $('raDock'); if (d) d.innerHTML = ''; raState.playing = null; raMarkPlaying(); return; }
   if (t.closest('[data-ra-finalize]')) { raOpenFinalize(); return; }
@@ -10448,6 +10448,7 @@ $('panel-ra-market').addEventListener('change', async (e) => {
   const so = e.target.closest('[data-ra-sort]'); if (so) { raState.sort = so.value; renderRaMarket(); return; }
   const ge = e.target.closest('[data-ra-genre]'); if (ge) { raState.genre = ge.value; renderRaMarket(); return; }
   const ve = e.target.closest('[data-ra-venue]'); if (ve) { raState.venue = ve.value; renderRaMarket(); return; }
+  const src = e.target.closest('[data-ra-source]'); if (src) { raState.sourceFilter = src.value; renderRaMarket(); return; }
   const sd = e.target.closest('[data-ra-startdate]'); if (sd) { raState.radioStart = sd.value; renderRaMarket(); return; }
 });
 $('panel-ra-market').addEventListener('change', (e) => {
@@ -10511,13 +10512,18 @@ function raRadioList() {
   }
   if (raState.genre) out = out.filter(a => (a.genres || []).includes(raState.genre));
   if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
+  // Source filter (RA / DICE / TM). DICE & Ticketmaster artists carry no
+  // SoundCloud, so picking a source shows EVERYONE from it (bypasses the
+  // producers-only filter below) — that's how you actually see DICE shows.
+  if (raState.sourceFilter) out = out.filter(a => (a.source || 'ra') === raState.sourceFilter);
   const ql = raState.search.toLowerCase();
   if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
   // Producers-only means "hide DJs who only post sets". An artist with NO
   // SoundCloud has been PROVEN nothing — 339 of 1,465 RA artists have no link at
   // all, and they were dropped here silently. They're now opt-in via 🛒, and
   // Beatport (keyed on name) is how you check what they've actually released.
-  if (raState.producersOnly) out = out.filter(a => (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
+  // Skipped entirely when a source is explicitly chosen (see above).
+  if (raState.producersOnly && !raState.sourceFilter) out = out.filter(a => (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
   // Venue sort groups the room together (who else is on that bill / that week),
   // so a venue with no name sinks instead of heading the list, and inside a
@@ -10543,6 +10549,9 @@ function renderRaRadio() {
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
   const genreSet = [...new Set(raState.artists.flatMap(a => a.genres || []))].sort();
   const venueSet = [...new Set(windowArtists.map(a => a.next_venue).filter(Boolean))].sort();
+  // Which sources actually pulled in artists (so the filter only offers real ones).
+  const srcCounts = {}; for (const a of raState.artists) { const s = a.source || 'ra'; srcCounts[s] = (srcCounts[s] || 0) + 1; }
+  const srcSet = Object.keys(srcCounts).sort((a, b) => srcCounts[b] - srcCounts[a]);
   const { start: wStart, cut: wCut } = raWindow();
   const noScCount = raState.artists.filter(a => !a.soundcloud && a.next_event_date >= wStart && a.next_event_date <= wCut).length;
 
@@ -10552,7 +10561,7 @@ function renderRaRadio() {
 
   const cards = list.slice(0, 120).map((a) => {
     const c = a.c, open = raState.openArtist === a.key;
-    const badge = !a.soundcloud ? `<span class="li-sub" style="color:var(--mid,#888)">no SoundCloud on RA</span>`
+    const badge = !a.soundcloud ? `<span class="li-sub" style="color:var(--mid,#888)">no SoundCloud link — 🛒 check Beatport</span>`
       : !c ? `<span class="li-sub">⏳ tap 🎵 to scan</span>`
         : !c.ok ? `<span class="li-sub" style="color:var(--mid,#888)">⚠ profile unavailable</span>`
           : c.is_producer ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">🎛 Producer · ${c.song_count} song${c.song_count === 1 ? '' : 's'}</span>`
@@ -10581,7 +10590,7 @@ function renderRaRadio() {
     ? `<div class="kpi-hint" style="margin:0;display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Scanning SoundCloud ${raState.scanDone}/${raState.scanTotal}… <button class="hub-mini" data-ra-scancancel>stop</button></div>`
     : `<button class="hub-btn" data-ra-scan title="Check each artist's SoundCloud to find who produces original music">${scanned ? '↻ ' : ''}Scan${unscanned ? ` ${unscanned} new` : ''} for producers</button>${scanned ? ' <button class="hub-mini" data-ra-rescan title="Discard the cached song lists and read every artist again — use after a change to how songs are read">↻ re-read all</button>' : ''}`;
 
-  const anyFilter = raState.search || raState.genre || raState.venue;
+  const anyFilter = raState.search || raState.genre || raState.venue || raState.sourceFilter;
   // Sticky toolbar: pins to the top of the panel so search + filters are always
   // reachable while you scroll the artist list (no scrolling back up past the
   // station box). Row 1 = find (search + how to sort/narrow); row 2 = window + scan.
@@ -10596,8 +10605,10 @@ function renderRaRadio() {
         <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
         <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
         <select class="modal-select" data-ra-venue style="max-width:160px;" title="Filter by venue"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
+        ${srcSet.length > 1 ? `<select class="modal-select" data-ra-source style="max-width:150px;" title="Show only shows pulled from one source. DICE/Ticketmaster artists have no SoundCloud, so pick the source to see them all."><option value="">All sources</option>${srcSet.map(s => `<option value="${s}"${raState.sourceFilter === s ? ' selected' : ''}>${(RA_SOURCE[s]?.l || s.toUpperCase())} · ${srcCounts[s]}</option>`).join('')}</select>` : ''}
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
+        <button class="hub-btn" data-ra-refresh title="Re-pull upcoming NYC shows from Resident Advisor + Ticketmaster + DICE (~20s)">↻ Pull shows</button>
         <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
         <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="RA gave us no SoundCloud link for these artists, so they could never be scanned — look them up on Beatport by name instead">🛒 No-SoundCloud artists${noScCount ? ` (${noScCount})` : ''}</button>
         <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
@@ -10607,8 +10618,10 @@ function renderRaRadio() {
       </div>
     </div>
     ${raRenderPlaylist()}
-    <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}</span></h3></div>
-    <div class="hub-list ra-zebra" id="raArtistList">${cards || `<div class="hub-empty">${raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
+    <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${raState.sourceFilter
+      ? `${list.length} from ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()}`
+      : `${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}`}</span></h3></div>
+    <div class="hub-list ra-zebra" id="raArtistList">${cards || `<div class="hub-empty">${raState.sourceFilter ? `No ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()} shows in this window — widen the window above or hit “↻ Pull shows”.` : raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
 function raRenderArtistTracks(key) {
   const c = raState.cache[key];
