@@ -239,6 +239,7 @@ async function bpSearch(token: string, title: string, artist: string) {
     bpm: typeof best.bpm === "number" ? best.bpm : null,
     song_key: k.song_key, camelot: k.camelot,
     label: best.release?.label?.name || null,
+    release_date: best.publish_date || best.new_release_date || null,
     price, score: Number(bestScore.toFixed(2)),
   };
 }
@@ -443,7 +444,7 @@ Deno.serve(async (req) => {
       .select("id", { count: "exact", head: true }).eq("playlist_id", playlistId);
 
     const { data: tracks } = await admin.from("sc_playlist_tracks")
-      .select("id, title, artist_name, bpm, song_key, camelot")
+      .select("id, title, artist_name, bpm, song_key, camelot, release_date, label")
       .eq("playlist_id", playlistId).order("sort").range(offset, offset + limit - 1);
     if (!tracks?.length) {
       return new Response(JSON.stringify({ results: [], applied: 0, total: total || 0, offset, done: true }), { headers: JH });
@@ -479,6 +480,12 @@ Deno.serve(async (req) => {
         if (!t.song_key && beatport.song_key) patch.song_key = beatport.song_key;
         if (!t.camelot && beatport.camelot) patch.camelot = beatport.camelot;
         if (patch.bpm || patch.song_key || patch.camelot) applied++;
+      }
+      // Release date + label: pure store metadata (not Rekordbox-owned), so just
+      // FILL IN when we don't already have it — never overwrite.
+      if (beatport) {
+        if (!t.release_date && beatport.release_date) patch.release_date = beatport.release_date;
+        if (!t.label && beatport.label) patch.label = beatport.label;
       }
       await admin.from("sc_playlist_tracks").update(patch).eq("id", t.id);
 

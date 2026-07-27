@@ -129,11 +129,30 @@ def main():
             print("   • or type mm:ss into the `start` column of the cues CSV")
             raise SystemExit(2)
 
-    # 3) render
+    # 3) render — pull the intro/closing meta (who mixed it, this drop, next drop)
+    # from prod so the bookend slides fill themselves in.
+    mixed_by = drop_date = next_date = ""
+    try:
+        sys.path.insert(0, HERE)
+        from make_cues import env as _env, q as _q
+        E = _env()
+        meta = _q(E, """
+            select mix_by, drop_date::text,
+                   (select drop_date::text from sc_playlists n
+                    where n.drop_date > p.drop_date order by n.drop_date limit 1) as next_drop
+            from sc_playlists p where p.station_no = %s limit 1;""" % ep_no)
+        if meta:
+            mixed_by = meta[0].get("mix_by") or ""
+            drop_date = meta[0].get("drop_date") or ""
+            next_date = meta[0].get("next_drop") or ""
+    except Exception as ex:
+        print("(couldn't read episode meta for the intro/closing — rendering with what we have: %s)" % ex)
+
     out = a.out or os.path.join(ROOT, "Radio", "Week %s" % ep_no, "CWR_Ep%s_YouTube.mp4" % ep_no)
     print("== Rendering %s ==" % ep_label)
     cmd = [PY, os.path.join(HERE, "render_episode.py"),
-           "--audio", a.audio, "--cover", a.cover, "--out", out, "--ep", ep_label, "--abitrate", "320k"]
+           "--audio", a.audio, "--cover", a.cover, "--out", out, "--ep", ep_label, "--abitrate", "320k",
+           "--mixed-by", mixed_by, "--drop-date", drop_date, "--next-date", next_date]
     if tl_json:
         cmd += ["--json", tl_json, "--meta", cues]
     else:

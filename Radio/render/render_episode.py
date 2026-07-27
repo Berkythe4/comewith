@@ -151,8 +151,16 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     ttitle = truncate(d, track["title"] or "", F_body(58), mw)
     d.text((mx, cy + 214), ttitle, font=F_body(58), fill=DIM)
 
+    # song facts — genre + release year (about the SONG). Shown above the show
+    # chips (which are about the artist's upcoming gig).
+    gline = fmt_genre_release(track)
+    if gline:
+        d.text((mx, cy + 286), truncate(d, gline, F_mono(30), mw), font=F_mono(30), fill=DIM)
+        chy = cy + 348
+    else:
+        chy = cy + 300
     # chips: the artist's upcoming show — date + venue (what viewers care about)
-    chx = mx; chy = cy + 300
+    chx = mx
     dt = fmt_show_date(track.get("show_date"))
     if dt:
         chx = chip(d, chx, chy, dt, F_mono(34), accent=True) + 22
@@ -179,6 +187,136 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
 
     im.convert("RGB").save(out_png)
 
+def fmt_genre_release(t):
+    """'HOUSE · GARAGE   —   RELEASED 2024' from a track's genres + release_date.
+    genres may be a list, a pipe/comma string, or empty; release_date any date-ish
+    string. Either piece is optional; returns '' when we know nothing."""
+    parts = []
+    g = t.get("genres")
+    if isinstance(g, list):
+        gl = [str(x).strip() for x in g if str(x).strip()]
+    else:
+        gl = [x.strip() for x in re.split(r"[|,/]", str(g or "")) if x.strip()]
+    if gl:
+        parts.append(" · ".join(gl[:2]).upper())
+    rd = str(t.get("release_date") or "").strip()
+    if rd:
+        m = re.match(r"(\d{4})", rd)
+        parts.append("RELEASED " + (m.group(1) if m else rd))
+    return "   —   ".join(parts)
+
+def fmt_md(s):
+    s = (s or "").strip()
+    if not s:
+        return ""
+    try:
+        from datetime import datetime
+        dt = datetime.strptime(s[:10], "%Y-%m-%d")
+        return "%s %d" % (dt.strftime("%b"), dt.day)      # Jul 30
+    except Exception:
+        return s
+
+def next_thursday(drop, given):
+    """The closing 'plug back in' date. Prefer an explicit --next-date; else this
+    episode's drop + 7 days; else nothing."""
+    if given:
+        return given
+    if not drop:
+        return ""
+    try:
+        from datetime import datetime, timedelta
+        return (datetime.strptime(drop[:10], "%Y-%m-%d") + timedelta(days=7)).strftime("%Y-%m-%d")
+    except Exception:
+        return ""
+
+def _ctext(d, cx, y, text, fnt, fill):
+    """Draw horizontally-centered text; return the y just below it."""
+    w = d.textlength(text, font=fnt)
+    d.text((cx - w / 2, y), text, font=fnt, fill=fill)
+    a, de = fnt.getmetrics(); return y + a + de
+
+def _cdivider(d, cx, y, half=210):
+    d.rounded_rectangle([cx - half, y, cx + half, y + 4], radius=2, fill=LIME_DK)
+
+# ---- INTRO: one accumulating "slide" that tells the station's story ----------
+# Fixed layout (lines never shift); `stage` reveals more of it each beat, so the
+# story assembles in place, then the full slide holds. Overlays the opening of
+# the mix so total runtime is unchanged.
+def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
+    im = bg.copy(); d = ImageDraw.Draw(im); cx = W // 2
+    cs = cover_sm.size[0]
+    im.paste(cover_sm, (cx - cs // 2, 92), cover_sm)          # cover, top-center
+    tag = "● ON AIR"
+    tw = d.textlength(tag, font=F_monob(28))
+    d.text((cx - tw / 2, 92 + cs + 22), tag, font=F_monob(28), fill=LIME)
+    _ctext(d, cx, 92 + cs + 66, "COME WITH RADIO", F_disp(86), CREAM)
+    if stage >= 1:                                            # credits
+        cred = "  ·  ".join([p for p in [
+            ep_label.upper(),
+            ("MIXED BY " + mixed_by.upper()) if mixed_by else "",
+            fmt_show_date(drop_date).upper()] if p])
+        _ctext(d, cx, 92 + cs + 176, cred, F_mono(30), DIM)
+    if stage >= 2:
+        _cdivider(d, cx, 92 + cs + 232)
+        _ctext(d, cx, 92 + cs + 262, "Every track is an artist playing New York — soon.", F_body(44), CREAM)
+    if stage >= 3:
+        _ctext(d, cx, 92 + cs + 330, "Hear the sound here, then go catch them live.", F_body(44), DIM)
+    if stage >= 4:
+        _ctext(d, cx, 92 + cs + 416, "GENRES · RELEASE DATES · WHERE TO BUY EVERY TRACK", F_mono(28), FAINT)
+        _ctext(d, cx, 92 + cs + 452, "comewith.org", F_disp(44), LIME)
+    return im.convert("RGB")
+
+# ---- CLOSING: sincere thanks, tracklist download, follow, next Thursday ------
+def draw_outro(bg, cover_sm, next_date, stage):
+    im = bg.copy(); d = ImageDraw.Draw(im); cx = W // 2
+    tag = "● THAT'S THE SHOW"
+    tw = d.textlength(tag, font=F_monob(28))
+    d.text((cx - tw / 2, 150), tag, font=F_monob(28), fill=LIME)
+    _ctext(d, cx, 200, "THANK YOU FOR", F_disp(78), CREAM)
+    _ctext(d, cx, 292, "PLUGGING IN.", F_disp(78), CREAM)
+    if stage >= 1:
+        _cdivider(d, cx, 430)
+        _ctext(d, cx, 462, "The full tracklist — every song, its genre, release date", F_body(40), CREAM)
+        _ctext(d, cx, 512, "and where to buy it — is yours to download, free, at", F_body(40), CREAM)
+    if stage >= 2:
+        _ctext(d, cx, 576, "comewith.org", F_disp(60), LIME)
+    if stage >= 3:
+        _ctext(d, cx, 690, "Follow @comewith so you never miss a track.", F_body(40), DIM)
+    if stage >= 4:
+        nd = fmt_md(next_date)
+        txt = "WE PLUG BACK IN NEXT THURSDAY" + ((" · " + nd.upper()) if nd else "")
+        tw2 = d.textlength(txt, font=F_mono(38))
+        pad = 30
+        d.rounded_rectangle([cx - tw2 / 2 - pad, 772, cx + tw2 / 2 + pad, 772 + 78],
+                            radius=40, outline=LIME_DK, width=2)
+        d.text((cx - tw2 / 2, 772 + 20), txt, font=F_mono(38), fill=LIME)
+    return im.convert("RGB")
+
+# reveal cadence (seconds per beat); last beat is the full-slide hold.
+INTRO_BEATS = [1.7, 1.7, 2.4, 2.4, 2.4, 5.0]     # stages 0,1,2,3,4, then hold@4
+OUTRO_BEATS = [1.8, 2.4, 2.2, 2.2, 2.6, 5.0]     # stages 0,1,2,3,4, then hold@4
+
+def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs):
+    """PNG frames for the intro, scaled to fit total_secs. Returns [(png,dur)]."""
+    scale = total_secs / sum(INTRO_BEATS)
+    out = []
+    for i, base in enumerate(INTRO_BEATS):
+        stage = min(i, 4)
+        png = os.path.join(work, "intro_%02d.png" % i)
+        draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage).save(png)
+        out.append((png, max(0.1, base * scale)))
+    return out
+
+def build_outro(work, bg, cover_sm, next_date, total_secs):
+    scale = total_secs / sum(OUTRO_BEATS)
+    out = []
+    for i, base in enumerate(OUTRO_BEATS):
+        stage = min(i, 4)
+        png = os.path.join(work, "outro_%02d.png" % i)
+        draw_outro(bg, cover_sm, next_date, stage).save(png)
+        out.append((png, max(0.1, base * scale)))
+    return out
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--cues", help="cues CSV (idx,start,artist,title,bpm,...)")
@@ -190,6 +328,12 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--ep", default="EP 1")
     ap.add_argument("--title", default="Come With Radio")
+    ap.add_argument("--mixed-by", default="", help="intro credit — who mixed it")
+    ap.add_argument("--drop-date", default="", help="this episode's drop date YYYY-MM-DD (intro)")
+    ap.add_argument("--next-date", default="", help="next drop YYYY-MM-DD (closing 'plug back in'); default = drop-date + 7")
+    ap.add_argument("--no-bookends", action="store_true", help="skip the intro + closing slides")
+    ap.add_argument("--intro-secs", type=float, default=15.5)
+    ap.add_argument("--outro-secs", type=float, default=16.0)
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
 
@@ -213,6 +357,8 @@ def main():
             tracks.append({"start": str(r.get("start_sec", "")), "artist": r.get("artist", ""),
                            "title": r.get("title", ""), "bpm": m.get("bpm", ""),
                            "song_key": m.get("song_key", ""), "camelot": m.get("camelot", ""),
+                           "genres": r.get("genres") or m.get("genres", ""),
+                           "release_date": r.get("release_date") or m.get("release_date", ""),
                            "show_date": r.get("show_date") or m.get("show_date", ""),
                            "show_venue": r.get("show_venue") or m.get("show_venue", "")})
     else:
@@ -246,7 +392,7 @@ def main():
     bg = make_background()
     cover = rounded_cover(a.cover, 470, 34)
     print("Rendering %d track cards…" % len(tracks))
-    concat = []
+    cards = []
     for i, t in enumerate(tracks):
         nxt = None
         if i + 1 < len(tracks):
@@ -256,7 +402,25 @@ def main():
         render_card(bg, cover, t, i + 1, len(tracks), a.ep, a.title, nxt, png,
                     progress=starts[i] / total if total else 0)
         dur = max(0.1, ends[i] - starts[i])
-        concat.append((png, dur))
+        cards.append([png, dur])
+
+    # Bookends: the intro overlays the OPENING of the mix and the closing overlays
+    # the ENDING, so the audio (the mix) is untouched and total runtime is exactly
+    # the mix length. We just steal the first/last few seconds of card time.
+    intro = outro = []
+    if not a.no_bookends:
+        cover_sm = rounded_cover(a.cover, 300, 24)
+        intro_secs = min(a.intro_secs, cards[0][1] * 0.7)          # don't eat a whole track
+        outro_secs = min(a.outro_secs, cards[-1][1] * 0.7)
+        drop = a.drop_date
+        nxt_date = next_thursday(drop, a.next_date)
+        intro = build_intro(work, bg, cover_sm, a.ep, a.mixed_by, drop, intro_secs)
+        outro = build_outro(work, bg, cover_sm, nxt_date, outro_secs)
+        cards[0][1] = max(0.1, cards[0][1] - intro_secs)           # first card starts after intro
+        cards[-1][1] = max(0.1, cards[-1][1] - outro_secs)         # last card ends before outro
+        print("Intro %.1fs + closing %.1fs (overlaid on the mix — total unchanged)."
+              % (intro_secs, outro_secs))
+    concat = list(intro) + [tuple(c) for c in cards] + list(outro)
 
     listfile = os.path.join(work, "list.txt")
     with open(listfile, "w", encoding="utf-8") as f:
