@@ -9992,7 +9992,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', sourceFilter: '', producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', sourceFilter: '', nycOnly: false, producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -10012,8 +10012,8 @@ function ensureScWidget() {
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social] = await Promise.all([
-    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
-    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
+    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
+    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
   if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
@@ -10091,6 +10091,13 @@ const RA_SOURCE = { ra: { l: 'RA', c: '#4E7A9B' }, dice: { l: 'DICE', c: '#E0384
 function raSourceTag(src) {
   const s = RA_SOURCE[src] || { l: (src || 'RA').toUpperCase(), c: 'var(--mid)' };
   return `<span class="role-chip" style="cursor:default;background:${s.c};color:#fff;font-size:.58rem;padding:1px 6px;" title="Pulled from ${s.l}">${s.l}</span>`;
+}
+// NYC-local from the artist's profile city (captured from SoundCloud on refresh).
+// Any of the five boroughs / common spellings counts.
+const NYC_RE = /\b(new york|nyc|brooklyn|queens|the bronx|bronx|manhattan|staten island|ridgewood|bushwick|astoria)\b/i;
+function isNyc(a) { return !!(a && a.city && NYC_RE.test(a.city)); }
+function nycTag(a) {
+  return isNyc(a) ? `<span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.58rem;padding:1px 6px;" title="Lives in NYC — profile city: ${escapeHtml(a.city)}">📍 NYC</span>` : '';
 }
 // Blended night metrics: demand (RSVP) + star power (headliner reach) vs competition.
 // `opp` is data-only; `score(dow)` applies the day-of-week desirability weight.
@@ -10345,7 +10352,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -10390,6 +10397,8 @@ document.addEventListener('click', async (e) => {
   const rw = t.closest('[data-ra-weeks]'); if (rw) { raState.radioWeeks = Number(rw.dataset.raWeeks); renderRaMarket(); return; }
   if (t.closest('[data-ra-prodtoggle]')) { raState.producersOnly = !raState.producersOnly; renderRaMarket(); return; }
   if (t.closest('[data-ra-noscoggle]')) { raState.showNoSc = !raState.showNoSc; renderRaMarket(); return; }
+  if (t.closest('[data-ra-nyctoggle]')) { raState.nycOnly = !raState.nycOnly; renderRaMarket(); return; }
+  if (t.closest('[data-ra-addentity]')) { raAddOpen(); return; }
   const rn = t.closest('[data-ra-rename]'); if (rn) return raSetPlaylistName();
   const pp = t.closest('[data-ra-play]'); if (pp) { raPlay(pp.dataset.raPlay, pp.dataset.raName); return; }
   const sg = t.closest('[data-ra-songs]'); if (sg) { raToggleSongs(sg.dataset.raSongs); return; }
@@ -10507,7 +10516,8 @@ function raRadioList() {
   const { start, cut } = raWindow();
   const seen = new Set(); let out = [];
   for (const a of raState.artists) {
-    if (!a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
+    const inWin = a.next_event_date && a.next_event_date >= start && a.next_event_date <= cut;
+    if (!inWin && !a.is_partner) continue;   // partners always show, even with no upcoming date
     const k = a.soundcloud ? raKey(a.soundcloud) : 'n:' + (a.name || '').toLowerCase();
     if (seen.has(k)) continue; seen.add(k);
     out.push({ ...a, key: k, c: a.soundcloud ? (raState.cache[k] || null) : null });
@@ -10518,6 +10528,7 @@ function raRadioList() {
   // SoundCloud, so picking a source shows EVERYONE from it (bypasses the
   // producers-only filter below) — that's how you actually see DICE shows.
   if (raState.sourceFilter) out = out.filter(a => (a.source || 'ra') === raState.sourceFilter);
+  if (raState.nycOnly) out = out.filter(a => isNyc(a));
   const ql = raState.search.toLowerCase();
   if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
   // Producers-only means "hide DJs who only post sets". An artist with NO
@@ -10525,7 +10536,7 @@ function raRadioList() {
   // all, and they were dropped here silently. They're now opt-in via 🛒, and
   // Beatport (keyed on name) is how you check what they've actually released.
   // Skipped entirely when a source is explicitly chosen (see above).
-  if (raState.producersOnly && !raState.sourceFilter) out = out.filter(a => (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
+  if (raState.producersOnly && !raState.sourceFilter) out = out.filter(a => a.is_partner || (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
   // Venue sort groups the room together (who else is on that bill / that week),
   // so a venue with no name sinks instead of heading the list, and inside a
@@ -10570,8 +10581,8 @@ function renderRaRadio() {
             : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
     return `<div class="hub-li" style="flex-wrap:wrap;">
       <div class="li-main">
-        <strong>${escapeHtml(a.name)}</strong> ${raSourceTag(a.source)}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
-        <div class="li-sub">Playing ${escapeHtml(a.next_venue || 'NYC')} · ${escapeHtml(fmtDate(a.next_event_date))}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}</div>
+        <strong>${escapeHtml(a.name)}</strong> ${raSourceTag(a.source)}${nycTag(a)}${a.is_partner ? ` <span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;font-size:.58rem;padding:1px 6px;" title="Added by you as a partner / manual entry">🤝 partner</span>` : ''}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
+        <div class="li-sub">${a.next_event_date ? 'Playing ' + escapeHtml(a.next_venue || 'NYC') + ' · ' + escapeHtml(fmtDate(a.next_event_date)) : '<span style="color:var(--gold,#B5791F)">Partner · no upcoming show tracked</span>'}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}${a.city ? ' · 📍 ' + escapeHtml(a.city) : ''}</div>
       </div>
       <span style="display:flex;gap:6px;">
         ${a.soundcloud ? `<button class="hub-mini" data-ra-play="${escapeHtml(a.soundcloud)}" data-ra-name="${escapeHtml(a.name)}" title="Play their SoundCloud profile">▶</button>
@@ -10612,6 +10623,8 @@ function renderRaRadio() {
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
         <button class="hub-btn" data-ra-refresh title="Re-pull upcoming NYC shows from Resident Advisor + Ticketmaster + DICE (~20s)">↻ Pull shows</button>
+        <button class="hub-btn" data-ra-addentity title="Add an artist or venue to the database — auto-captures their SoundCloud, city & links (for partnerships)">➕ Add</button>
+        <button class="hub-btn ghost" data-ra-nyctoggle style="${raState.nycOnly ? 'background:var(--hot,#ff5ca8);color:#1a0a12;' : ''}" title="Show only artists whose profile city is NYC (captured from SoundCloud on refresh)">📍 NYC locals</button>
         <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
         <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="Show only artists that still have no SoundCloud link after a refresh — check Beatport by name instead">🛒 No-SoundCloud${noScCount ? ` (${noScCount})` : ''}</button>
         <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
@@ -11180,6 +11193,104 @@ async function raRefreshAll(btn) {
   if (btn) { btn.disabled = false; btn.textContent = label; }
   // 2) read songs + followers for everyone not yet scanned
   raScan();
+}
+// ── Add an artist or venue to the database (for partnerships) ────────────────
+// Auto-captures what we can find, then you confirm & save. Artists land in the
+// radio pool flagged is_partner (always shown, even with no upcoming date);
+// venues land in the shared venues table (also the future heat-map's entity).
+let raAddCaptured = null;
+function raAddOpen() {
+  raAddCaptured = null;
+  const body = `
+    <div class="modal-form-row"><label>What are you adding?</label>
+      <div style="display:flex;gap:16px;margin-top:5px;">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="artist" checked onchange="raAddTypeChange()"> 🎧 Artist</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="venue" onchange="raAddTypeChange()"> 📍 Venue</label>
+      </div>
+    </div>
+    <div class="modal-form-row"><label for="addName">Name</label>
+      <div style="display:flex;gap:8px;">
+        <input class="modal-input" id="addName" placeholder="e.g. Peggy Gou" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();raAddLookup();}">
+        <button type="button" class="hub-btn" onclick="raAddLookup()">🔎 Look up</button>
+      </div>
+    </div>
+    <div id="addPreview" class="li-sub" style="margin-top:6px;line-height:1.6;">Type a name and hit <b>Look up</b> — for an artist we auto-find their SoundCloud, city &amp; reach.</div>`;
+  openKpi('➕ Add to the database', 'Auto-captures links & tags for potential partnerships', body, raAddSave, 'Save to database');
+  $('kpiModalSubmit').disabled = true;
+}
+function raAddTypeChange() {
+  raAddCaptured = null;
+  const pv = $('addPreview'); if (pv) pv.innerHTML = 'Hit <b>Look up</b> to capture what we can find.';
+  if ($('kpiModalSubmit')) $('kpiModalSubmit').disabled = true;
+}
+async function raAddLookup() {
+  const name = ($('addName')?.value || '').trim();
+  const type = document.querySelector('input[name=addtype]:checked')?.value || 'artist';
+  if (!name) { toast('Type a name first', 'err'); return; }
+  const pv = $('addPreview'); pv.innerHTML = '<span class="spinner"></span> Looking up…';
+  $('kpiModalSubmit').disabled = true;
+  if (type === 'artist') {
+    let r = null;
+    try { const { data } = await sb.functions.invoke('sc-match', { body: { names: [name], write: false } }); r = (data?.results || [])[0]; } catch (_) { /* offline */ }
+    raAddCaptured = { type, followers: r?.followers || 0, verified: !!r?.verified };
+    pv.innerHTML = `<div style="display:grid;gap:8px;">
+      ${r?.matched ? `<div>☁ SoundCloud found${r.verified ? ' · <b style="color:var(--green,#1f7a1f)">verified</b>' : ''}${r.followers ? ' · ' + fmtNum(r.followers) + ' followers' : ''}${r.city ? ' · ' + escapeHtml(r.city) : ''}</div>` : `<div style="color:var(--gold,#B5791F)">No confident SoundCloud match — paste the link by hand if you have it.</div>`}
+      <label class="li-sub">SoundCloud<input class="modal-input" id="addSc" value="${escapeHtml(r?.soundcloud || '')}" placeholder="https://soundcloud.com/…"></label>
+      <label class="li-sub">City<input class="modal-input" id="addCity" value="${escapeHtml(r?.city || '')}" placeholder="Brooklyn, NY"></label>
+      <label class="li-sub">Instagram<input class="modal-input" id="addIg" placeholder="@handle or URL"></label>
+      <label class="li-sub">Genres (comma-separated)<input class="modal-input" id="addGenres" placeholder="House, Techno"></label>
+    </div>`;
+  } else {
+    let known = null;
+    try { const { data } = await sb.from('ra_events').select('venue_name').ilike('venue_name', name).limit(1); known = (data || [])[0]; } catch (_) { /* ignore */ }
+    raAddCaptured = { type };
+    pv.innerHTML = `<div style="display:grid;gap:8px;">
+      <div class="li-sub">${known ? '✓ Seen on Resident Advisor.' : 'New venue.'} Fill what you know — this seeds the club heat-map.</div>
+      <label class="li-sub">Area / neighborhood<input class="modal-input" id="addArea" placeholder="Bushwick"></label>
+      <label class="li-sub">Capacity<input class="modal-input" id="addCap" type="number" placeholder="600"></label>
+      <label class="li-sub">Website<input class="modal-input" id="addWeb" placeholder="https://…"></label>
+      <label class="li-sub">Instagram<input class="modal-input" id="addIg" placeholder="@handle"></label>
+      <label class="li-sub">Resident Advisor URL<input class="modal-input" id="addRa" placeholder="https://ra.co/clubs/…"></label>
+      <label class="li-sub">Tickets URL<input class="modal-input" id="addTix" placeholder="https://…"></label>
+      <label class="li-sub">Genres<input class="modal-input" id="addGenres" placeholder="House, Techno"></label>
+      <label class="li-sub">Notes<input class="modal-input" id="addNotes" placeholder="Contact, vibe, partnership status…"></label>
+    </div>`;
+  }
+  $('kpiModalSubmit').disabled = false;
+}
+async function raAddSave() {
+  const name = ($('addName')?.value || '').trim();
+  if (!name || !raAddCaptured) { toast('Look up a name first', 'err'); return; }
+  const val = (id) => ($(id)?.value || '').trim();
+  const genres = val('addGenres').split(',').map(s => s.trim()).filter(Boolean);
+  if (raAddCaptured.type === 'artist') {
+    const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+    const row = {
+      ra_id: 'man_' + slug, name,
+      soundcloud: val('addSc') || null, city: val('addCity') || null,
+      instagram: val('addIg') || null, genres: genres.length ? genres : null,
+      follower_count: raAddCaptured.followers || null, source: 'manual', is_partner: true,
+    };
+    const { error } = await sb.from('ra_artists').upsert(row, { onConflict: 'ra_id' });
+    if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+    toast(`Added ${name} as a partner artist`, 'ok');
+    closeKpi(); await loadRaMarket();
+  } else {
+    const row = {
+      name, area: val('addArea') || null, capacity: parseInt(val('addCap')) || null,
+      website: val('addWeb') || null, instagram: val('addIg') || null,
+      ra_url: val('addRa') || null, ticket_url: val('addTix') || null,
+      genres: genres.length ? genres : null, notes: val('addNotes') || null,
+      is_partner: true, source: 'manual',
+    };
+    const { data: ex } = await sb.from('venues').select('id').ilike('name', name).is('deleted_at', null).limit(1);
+    const { error } = (ex && ex.length)
+      ? await sb.from('venues').update(row).eq('id', ex[0].id)
+      : await sb.from('venues').insert(row);
+    if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+    toast(`Saved venue ${name} — it'll anchor the heat-map`, 'ok');
+    closeKpi();
+  }
 }
 // Dropping a song = considered and PASSED → permanent song memory (marks it when
 // researching later + auto-carries it into the next station at finalize). Shared

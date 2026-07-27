@@ -118,18 +118,22 @@ Deno.serve(async (req) => {
 
         if (!best) { results.push({ name, matched: false }); continue; }
         const soundcloud = (best.permalink_url || "").replace("://www.", "://");
+        const city = (best.city || "").toString().trim() || null;   // SoundCloud profile city
+        const country = (best.country_code || best.country || "").toString().trim() || null;
         // confidence: verified or a real following reads as a safe, strong match.
         const confidence = best.verified ? "high" : (best.followers_count >= 500 ? "high" : (best.track_count > 0 ? "medium" : "low"));
         results.push({
           name, matched: true, soundcloud,
           username: best.username || best.permalink, followers: best.followers_count || 0,
-          verified: !!best.verified, track_count: best.track_count || 0, confidence,
+          verified: !!best.verified, track_count: best.track_count || 0, city, country, confidence,
         });
 
         if (write && soundcloud) {
           // Fill only EMPTY soundcloud, and only for that exact name — never
           // overwrite a link RA already gave us.
           await admin.from("ra_artists").update({ soundcloud }).ilike("name", name).is("soundcloud", null);
+          // City is the NYC-local signal — fill it wherever it's still blank.
+          if (city) await admin.from("ra_artists").update({ city }).ilike("name", name).is("city", null);
         }
       } catch { results.push({ name, matched: false }); }
       await new Promise((res) => setTimeout(res, 120)); // be gentle on SC search
