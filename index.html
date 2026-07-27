@@ -41,10 +41,30 @@
   .hero h1 .hot{color:var(--hot)}
   .hero p.lede{font-size:clamp(1.05rem,2vw,1.3rem);color:var(--dim);max-width:50ch;margin-bottom:28px}
   .hero .cta{display:flex;gap:12px;flex-wrap:wrap}
-  .nextshow{margin-top:40px;border:1px solid var(--line);border-radius:18px;background:linear-gradient(180deg,var(--panel),rgba(36,18,41,.4));padding:18px 22px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;max-width:760px}
-  .nextshow .date{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--lime);color:#180c12;border-radius:12px;width:64px;height:64px;flex:0 0 auto}
-  .nextshow .date .m{font-family:'DM Mono';font-size:.7rem}.nextshow .date .d{font-family:'Archivo';font-weight:900;font-size:1.7rem;line-height:1}
-  .nextshow .info{flex:1;min-width:150px}.nextshow .info .n{font-family:'Archivo';font-weight:700;font-size:1.15rem;text-transform:uppercase}
+  /* RADIO feature — the lead. Large, artwork + play, prominent lime CTA. */
+  .radiofeat{margin-top:34px;display:flex;gap:22px;align-items:stretch;max-width:880px;
+    border:1px solid var(--lime-dk);border-radius:22px;overflow:hidden;
+    background:linear-gradient(135deg,rgba(167,224,46,.10),var(--panel) 55%);
+    transition:.2s;text-decoration:none;color:inherit}
+  .radiofeat:hover{transform:translateY(-3px);border-color:var(--lime);box-shadow:0 18px 50px rgba(0,0,0,.4)}
+  .radiofeat .rf-art{flex:0 0 190px;min-height:190px;background:var(--bg2) center/cover no-repeat;
+    display:flex;align-items:center;justify-content:center;position:relative}
+  .radiofeat .rf-play{font-size:2.4rem;color:#fff;background:rgba(0,0,0,.35);border-radius:50%;
+    width:64px;height:64px;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px)}
+  .radiofeat .rf-body{flex:1;min-width:0;padding:24px 26px;display:flex;flex-direction:column;justify-content:center;gap:8px}
+  .radiofeat .rf-kicker{font-family:'DM Mono',monospace;font-size:.74rem;letter-spacing:.18em;text-transform:uppercase;color:var(--lime)}
+  .radiofeat .rf-title{font-family:'Archivo',sans-serif;font-weight:900;font-size:clamp(1.7rem,4.2vw,2.6rem);line-height:1;text-transform:uppercase;letter-spacing:-.02em}
+  .radiofeat .rf-meta{font-family:'DM Mono',monospace;font-size:.82rem;color:var(--dim)}
+  .radiofeat .rf-tease{font-family:'DM Mono',monospace;font-size:.8rem;color:var(--gold,#e9b949)}
+  .radiofeat .rf-cta{margin-top:8px;align-self:flex-start;background:var(--lime);color:#180c12;font-family:'DM Mono',monospace;
+    font-size:.82rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:11px 20px;border-radius:999px}
+  @media(max-width:640px){.radiofeat{flex-direction:column}.radiofeat .rf-art{flex:0 0 150px;min-height:150px}}
+  /* NEXT UP — now the secondary item, smaller. */
+  .nextshow{margin-top:16px;border:1px solid var(--line);border-radius:14px;background:linear-gradient(180deg,var(--panel),rgba(36,18,41,.4));padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;max-width:620px}
+  .nextshow.small{opacity:.92}
+  .nextshow .date{display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--lime);color:#180c12;border-radius:10px;width:50px;height:50px;flex:0 0 auto}
+  .nextshow .date .m{font-family:'DM Mono';font-size:.62rem}.nextshow .date .d{font-family:'Archivo';font-weight:900;font-size:1.35rem;line-height:1}
+  .nextshow .info{flex:1;min-width:150px}.nextshow .info .n{font-family:'Archivo';font-weight:700;font-size:.98rem;text-transform:uppercase}
   .strip{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2);overflow:hidden;white-space:nowrap}
   .strip .run{display:inline-block;padding:13px 0;animation:scroll 26s linear infinite;font-family:'Archivo';font-weight:900;font-size:1.05rem;text-transform:uppercase}
   .strip .run span{color:var(--lime-dk);margin:0 24px}
@@ -172,15 +192,25 @@
   <div class="label" data-cw="hero.kicker">Brooklyn · Daytime & after-dark · House · Disco · Benefit</div>
   <h1><span data-cw="hero.h1">Come dance.</span><br><span class="hot" data-cw="hero.h2">Do good.</span></h1>
   <p class="lede" data-cw="hero.lede">We throw the parties, build the rooms, and dance for a cause. Underground sound from Brooklyn — by day and by night — and through Dance Infusion, every floor gives back to the National MS Society.</p>
-  <div class="cta"><a href="#events" class="btn primary" data-cw="hero.cta1">See upcoming events</a><a href="#book" class="btn" data-cw="hero.cta2">Book us for your event</a></div>
-  <div class="nextshow" id="nextShow" hidden>
+  <div class="cta"><a href="radio.html" class="btn primary" data-cw="hero.cta1">▶ Listen to the Radio</a><a href="#book" class="btn" data-cw="hero.cta2">Book us for your event</a></div>
+
+  <!-- RADIO — our lead. Big feature card teasing the latest episode / next drop. -->
+  <a class="radiofeat" id="radioFeat" href="radio.html" hidden>
+    <div class="rf-art" id="rfArt"><span class="rf-play">▶</span></div>
+    <div class="rf-body">
+      <div class="rf-kicker">📻 Come With Radio</div>
+      <div class="rf-title" id="rfTitle">—</div>
+      <div class="rf-meta" id="rfMeta"></div>
+      <div class="rf-tease" id="rfTease" hidden></div>
+      <span class="rf-cta" id="rfCta">▶ Listen now</span>
+    </div>
+  </a>
+
+  <div class="nextshow small" id="nextShow" hidden>
     <div class="date"><span class="m" id="nsM">—</span><span class="d" id="nsD">—</span></div>
-    <div class="info"><div class="label" style="margin-bottom:4px">Next up</div><div class="n" id="nsN">—</div><div class="sub" id="nsV" style="color:var(--dim);font-family:'DM Mono';font-size:.85rem">—</div></div>
+    <div class="info"><div class="label" style="margin-bottom:2px">Next up · live</div><div class="n" id="nsN">—</div><div class="sub" id="nsV" style="color:var(--dim);font-family:'DM Mono';font-size:.8rem">—</div></div>
     <a class="btn primary" id="nsBtn" href="#" target="_blank" rel="noopener">Get tickets ↗</a>
   </div>
-  <a id="radioPill" href="radio.html" hidden style="margin-top:14px;display:inline-flex;align-items:center;gap:10px;border:1px solid var(--lime-dk);border-radius:999px;background:var(--panel);padding:10px 18px;font-family:'DM Mono',monospace;font-size:.82rem;transition:.18s">
-    <span>📻</span><span id="radioPillTxt"></span><span style="color:var(--lime)">→</span>
-  </a>
 </div></header>
 
 <div class="strip"><div class="run" id="strip"></div></div>
@@ -410,17 +440,29 @@ async function loadImpactReport(){
     ? '<a class="btn gold" href="events/dance-infusion/di-02-2026-05/reports/impact-report.html" style="width:100%;justify-content:center">Read the #2 Impact Report →</a>'
     : '';
 }
-// Come With Radio pill: teases the next scheduled drop; once an episode is
-// live it flips to "New — listen". Hidden when there's nothing to say.
-async function loadRadioPill(){
-  const el=$('#radioPill');if(!el)return;
+// Come With Radio — the homepage LEAD. Big feature card: latest live episode
+// (artwork, EP, mixed-by, length) with a Listen CTA, plus a next-drop tease.
+async function loadRadioFeature(){
+  const el=$('#radioFeat');if(!el)return;
   let j={};try{const r=await fetch(CWURL+'/functions/v1/get-station?list=1',{headers:CWH});j=await r.json();}catch(_){return;}
-  const nd=j.next_drop,ep=(j.stations||[])[0];
+  const nd=j.next_drop, ep=(j.stations||[])[0];
   const dropFmt=s=>new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
-  if(nd&&nd.drop_date){$('#radioPillTxt').textContent='Come With Radio · EP '+(nd.station_no??'')+' drops '+dropFmt(nd.drop_date);el.hidden=false;}
-  else if(ep){$('#radioPillTxt').textContent='New on Come With Radio · EP '+(ep.station_no??'')+(ep.name?(' — '+ep.name):'');if(ep.slug)el.href='radio.html?s='+encodeURIComponent(ep.slug);el.hidden=false;}
+  if(ep){
+    const showName=(ep.name&&!/^weekly station$/i.test(ep.name))?' · '+ep.name:'';
+    $('#rfTitle').textContent='EP '+(ep.station_no??'')+showName;
+    $('#rfMeta').textContent=[ep.mix_by?('Mixed by '+ep.mix_by):'',ep.track_count?(ep.track_count+' tracks'):'',ep.total_min?(ep.total_min+' min'):''].filter(Boolean).join(' · ');
+    const art=ep.cover_url||ep.artwork_url;if(art)$('#rfArt').style.backgroundImage="url('"+art+"')";
+    if(ep.slug)el.href='radio.html?s='+encodeURIComponent(ep.slug);
+    $('#rfCta').textContent='▶ Listen now';
+  }else{
+    $('#rfTitle').textContent='Come With Radio';
+    $('#rfMeta').textContent='Mixes built from artists playing NYC soon — every track is a show you can catch.';
+    $('#rfCta').textContent='Explore the radio →';
+  }
+  if(nd&&nd.drop_date){$('#rfTease').textContent='⏰ EP '+(nd.station_no??'')+' drops '+dropFmt(nd.drop_date);$('#rfTease').hidden=false;}
+  el.hidden=false;
 }
-loadContent();loadEvents();loadCollective();loadImpactReport();loadRadioPill();
+loadContent();loadEvents();loadCollective();loadImpactReport();loadRadioFeature();
 </script>
 <script src="assets/track.js" defer></script>
 </body>
