@@ -2850,7 +2850,7 @@ const cc = { posts: [], events: [], taskByPost: {}, photoByEvent: {}, view: 'pip
 async function loadContentCenter() {
   const [posts, events, tasks, photos, assets] = await Promise.all([
     sb.from('social_posts').select('*, owner:profiles!owner_id(full_name,email), notes:social_post_notes(count)').is('deleted_at', null).order('scheduled_for', { ascending: true, nullsFirst: false }).order('created_at', { ascending: false }),
-    sb.from('events').select('id,name,slug,series,event_date,status,is_public,recurrence_parent_id,recap_videos,youtube_url').is('deleted_at', null).order('event_date', { ascending: false }).limit(400),
+    sb.from('events').select('id,name,slug,series,event_date,status,is_public,recurrence_parent_id,recap_videos,youtube_url,content_confirmed').is('deleted_at', null).order('event_date', { ascending: false }).limit(400),
     sb.from('tasks').select('id,post_id,status').not('post_id', 'is', null).is('deleted_at', null),
     sb.from('event_photos').select('event_id,is_public'),
     sb.from('content_assets').select('id,event_id,post_id,kind,media,url,label,is_public,duration_note').order('created_at', { ascending: false }),
@@ -2958,11 +2958,12 @@ function ccEventsInScope() {
   // most-recent first, but upcoming ascending reads better as a forward plan
   return [...evs].sort((a, b) => cc.timeScope === 'upcoming' ? String(a.event_date).localeCompare(String(b.event_date)) : String(b.event_date).localeCompare(String(a.event_date)));
 }
-// A milestone cell: done (green ✓ + date), pending (amber), or n/a (grey).
+// A milestone cell: done (green ✓), pending (amber ⏳), confirmed-none (calm
+// indigo ✓ — resolved, just no content by design), or n/a (grey ·).
 function ccCell(state, label, sub, click) {
-  const bg = state === 'done' ? 'rgba(46,142,114,0.16)' : state === 'pending' ? 'rgba(224,184,76,0.16)' : 'rgba(128,128,128,0.08)';
-  const bd = state === 'done' ? '#2E8E72' : state === 'pending' ? '#E0B84C' : 'var(--border)';
-  const ic = state === 'done' ? '✓' : state === 'pending' ? '⏳' : '·';
+  const bg = state === 'done' ? 'rgba(46,142,114,0.16)' : state === 'pending' ? 'rgba(224,184,76,0.16)' : state === 'confirmed' ? 'rgba(124,131,219,0.18)' : 'rgba(128,128,128,0.08)';
+  const bd = state === 'done' ? '#2E8E72' : state === 'pending' ? '#E0B84C' : state === 'confirmed' ? '#7C83DB' : 'var(--border)';
+  const ic = state === 'done' ? '✓' : state === 'pending' ? '⏳' : state === 'confirmed' ? '✓' : '·';
   return `<div class="cc-cell" ${click || ''} style="flex:1;min-width:96px;background:${bg};border:1px solid ${bd};border-radius:8px;padding:6px 8px;${click ? 'cursor:pointer;' : ''}">
     <div class="li-sub" style="font-size:.6rem;letter-spacing:.08em;text-transform:uppercase;">${escapeHtml(label)}</div>
     <div style="font-weight:600;font-size:.82rem;">${ic} ${escapeHtml(sub || '')}</div></div>`;
@@ -2981,27 +2982,30 @@ function ccPipelineHtml() {
     const recapPost = ps.filter(p => /recap/i.test(p.content_pillar || '') || /recap/i.test(p.title || '')).sort((a, b) => String(b.posted_at || b.scheduled_for || '').localeCompare(String(a.posted_at || a.scheduled_for || '')))[0] || ps.find(p => p.posted_at);
     const today = calToday();
     const past = (e.event_date || '') < today;
-    // stage states
-    const stAnnounce = ps.some(p => p.posted_at) ? 'done' : ps.length ? 'pending' : 'na';
-    const stEvent = past ? 'done' : 'pending';
-    const stPhotos = ph.total ? 'done' : (past ? 'pending' : 'na');
-    const stVideo = vids.length ? 'done' : (past ? 'pending' : 'na');
-    const stLive = e.is_public ? 'done' : 'na';
-    const stRecap = recapPost?.posted_at ? 'done' : (recapPost || ps.length ? 'pending' : (past ? 'pending' : 'na'));
-    const doneN = [stAnnounce, stPhotos, stVideo, stLive, stRecap].filter(s => s === 'done').length;
+    const cf = e.content_confirmed || {};
+    // A stage with no content resolves to 'confirmed' (indigo) once you've
+    // confirmed there won't be any; otherwise 'pending' after the event, 'na'
+    // before. `has` = does this stage already have content.
+    const st = (key, has, doneSub) => has ? 'done' : (cf[key] ? 'confirmed' : (past ? 'pending' : 'na'));
+    const stPromo = ps.some(p => p.posted_at) ? 'done' : (cf.promo ? 'confirmed' : (ps.length ? 'pending' : 'na'));
+    const stPhotos = st('photos', ph.total > 0);
+    const stVideo = st('video', vids.length > 0);
+    const stLive = e.is_public ? 'done' : (cf.live ? 'confirmed' : 'na');
+    const stRecap = recapPost?.posted_at ? 'done' : (cf.recap ? 'confirmed' : (recapPost || ps.length || past ? 'pending' : 'na'));
+    const resolvedN = [stPromo, stPhotos, stVideo, stLive, stRecap].filter(s => s === 'done' || s === 'confirmed').length;
     const openExp = cc.expanded.has(e.id);
     const head = `<div class="hub-li" style="align-items:stretch;flex-wrap:wrap;gap:8px;padding:9px 0;">
       <div style="flex:0 0 190px;min-width:160px;cursor:pointer;" data-cc-exp="${e.id}">
         <strong>${openExp ? '▾' : '▸'} ${escapeHtml(e.name)}</strong>
         <div class="li-sub"><span style="color:${calSeriesColor(e.series)}">●</span> ${escapeHtml(e.series || 'general')} · ${escapeHtml(fmtDate(e.event_date))}</div>
-        <div class="li-sub">${doneN}/5 milestones${ps.length ? ` · ${posted.length}/${ps.length} posts live` : ''}</div>
+        <div class="li-sub">${resolvedN}/5 resolved${ps.length ? ` · ${posted.length}/${ps.length} posts live` : ''}</div>
       </div>
       <div style="flex:1;display:flex;gap:5px;flex-wrap:wrap;min-width:280px;">
-        ${ccCell(stAnnounce, 'Announce', ps.length ? `${posted.length}/${ps.length}` : 'none', `data-cc-cellposts="${e.id}"`)}
-        ${ccCell(stPhotos, 'Photos', ph.total ? `${ph.total} (${ph.public} live)` : 'none', `data-cc-cellphotos="${e.id}"`)}
-        ${ccCell(stVideo, 'Audio / Video', vids.length ? `${vids.length}${clips ? ` · ${clips} clip${clips === 1 ? '' : 's'}` : ''}` : 'none', `data-cc-cellvideo="${e.id}"`)}
-        ${ccCell(stLive, 'Live page', e.is_public ? 'public' : 'off', e.is_public ? `data-cc-celllive="${e.id}"` : '')}
-        ${ccCell(stRecap, 'Recap post', recapPost ? (recapPost.posted_at ? '✅ ' + fmtDate(recapPost.posted_at) : socialFmtDate(recapPost.scheduled_for) || 'planned') : 'none', `data-cc-cellposts="${e.id}"`)}
+        ${ccCell(stPromo, 'Promo', stPromo === 'confirmed' ? 'no promo' : (ps.length ? `${posted.length}/${ps.length}` : 'none'), `data-cc-cellposts="${e.id}"`)}
+        ${ccCell(stPhotos, 'Photos', stPhotos === 'confirmed' ? 'none — ok' : (ph.total ? `${ph.total} (${ph.public} live)` : 'none'), `data-cc-cellphotos="${e.id}"`)}
+        ${ccCell(stVideo, 'Audio / Video', stVideo === 'confirmed' ? 'none — ok' : (vids.length ? `${vids.length}${clips ? ` · ${clips} clip${clips === 1 ? '' : 's'}` : ''}` : 'none'), `data-cc-cellvideo="${e.id}"`)}
+        ${ccCell(stLive, 'Live page', stLive === 'confirmed' ? 'none — ok' : (e.is_public ? 'public' : 'off'), e.is_public ? `data-cc-celllive="${e.id}"` : '')}
+        ${ccCell(stRecap, 'Recap post', stRecap === 'confirmed' ? 'none — ok' : (recapPost ? (recapPost.posted_at ? '✅ ' + fmtDate(recapPost.posted_at) : socialFmtDate(recapPost.scheduled_for) || 'planned') : 'none'), `data-cc-cellposts="${e.id}"`)}
       </div>
       <div style="flex:0 0 auto;display:flex;align-items:center;gap:5px;">
         <button class="hub-mini" data-cc-schedule="${e.id}" title="Schedule a post for this event">📅 post</button>
@@ -3011,14 +3015,21 @@ function ccPipelineHtml() {
   }).join('');
   return `<div class="hub-list">${rows}</div>`;
 }
+const CC_CONFIRMABLE = [['promo', 'Promo'], ['photos', 'Photos'], ['video', 'Audio/Video'], ['recap', 'Recap post']];
 function ccRowDetail(e, ps, ph, vids) {
   const line = (icon, label, val, action) => `<div class="hub-li" style="padding:3px 0;padding-left:20px;">
     <div class="li-main"><span>${icon} ${escapeHtml(label)}</span><div class="li-sub">${val}</div></div>${action || ''}</div>`;
+  const cf = e.content_confirmed || {};
+  const confirmChips = CC_CONFIRMABLE.map(([k, l]) => {
+    const on = !!cf[k];
+    return `<button class="hub-mini" data-cc-confirm="${e.id}:${k}" style="${on ? 'background:#7C83DB;color:#fff;' : ''}" title="${on ? 'Confirmed there will be no ' + l.toLowerCase() + ' — click to undo' : 'Confirm there will be no ' + l.toLowerCase()}">${on ? '✓ no ' + l.toLowerCase() : 'No ' + l.toLowerCase() + '?'}</button>`;
+  }).join(' ');
   const postLines = ps.map(p => `<div class="hub-li" data-cc-edit="${p.id}" style="cursor:pointer;padding:3px 0;padding-left:34px;">
     <div class="li-main"><span>${p.posted_at ? '🟢' : p.stage === 'scheduled' ? '🟡' : '⚪'} ${escapeHtml(p.title || 'Untitled')}${ccTaskChip(p.id)}</span>
       <div class="li-sub">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)} · planned ${p.scheduled_for ? escapeHtml(socialFmtDate(p.scheduled_for)) : '—'} → posted ${p.posted_at ? escapeHtml(fmtDate(p.posted_at)) : '—'}${(p.channels || []).length ? ' · ' + escapeHtml(p.channels.join(', ')) : ''}</div></div>
     <span class="li-sub">edit →</span></div>`).join('') || '<div class="li-sub" style="padding-left:34px;">No posts yet.</div>';
   return `<div style="border-left:3px solid ${calSeriesColor(e.series)};margin:0 0 8px 8px;padding:4px 0 8px;">
+    <div class="hub-li" style="padding:3px 0 7px;padding-left:20px;flex-wrap:wrap;"><div class="li-main"><span class="li-sub">Nothing planned for a stage? Confirm it so it stops showing as pending:</span></div><span style="display:flex;gap:5px;flex-wrap:wrap;">${confirmChips}</span></div>
     ${line('📸', 'Photos', `${ph.total} uploaded · ${ph.public} on the live gallery`, `<button class="hub-mini" data-cc-cellphotos="${e.id}">View</button> <button class="hub-mini" data-cc-openevent-tab="${e.id}:photos">Manage ↗</button>`)}
     ${line('🌐', 'Live event page', e.is_public ? 'Public' : 'Not public', e.is_public ? `<a class="hub-mini" href="${ARTIST_ORIGIN}event.html?id=${encodeURIComponent(e.id)}" target="_blank" rel="noopener">Open ↗</a>` : '')}
     <div class="hub-li" style="padding:3px 0;padding-left:20px;"><div class="li-main"><strong>🎬 Full-length content</strong></div><button class="hub-mini" data-cc-addasset="${e.id}:full">➕ Link full-length</button></div>
@@ -3161,6 +3172,17 @@ async function ccPostsPopup(eventId) {
   openKpi('📱 Posts — ' + escapeHtml(ev?.name || ''), `${ps.length} post${ps.length === 1 ? '' : 's'}`, `<div class="hub-list">${rows}</div>
     <button type="button" class="hub-btn" data-cc-schedule="${eventId}" style="margin-top:8px;">➕ Schedule a post</button>`, null, 'Close');
 }
+// Confirm (or un-confirm) that a content stage will have nothing — flips the
+// pipeline cell to the calm indigo "resolved" state instead of amber pending.
+async function ccToggleConfirm(eventId, stage) {
+  const ev = cc.events.find(x => x.id === eventId); if (!ev) return;
+  const cf = { ...(ev.content_confirmed || {}) };
+  if (cf[stage]) delete cf[stage]; else cf[stage] = true;
+  ev.content_confirmed = cf;                 // optimistic
+  renderContentCenter();
+  const { error } = await sb.from('events').update({ content_confirmed: cf }).eq('id', eventId);
+  if (error) { toast('Could not save: ' + error.message, 'err'); ev.content_confirmed = null; loadContentCenter(); }
+}
 async function ccBulk(patch, label) {
   const ids = [...cc.selected]; if (!ids.length) return;
   const { error } = await sb.from('social_posts').update(patch).in('id', ids);
@@ -3220,6 +3242,7 @@ $('panel-content-center').addEventListener('click', (e) => {
   const clp = e.target.closest('[data-cc-cellposts]'); if (clp) { ccPostsPopup(clp.dataset.ccCellposts); return; }
   const cv = e.target.closest('[data-cc-cellvideo]'); if (cv) { const id = cv.dataset.ccCellvideo; if (!cc.expanded.has(id)) { cc.expanded.add(id); renderContentCenter(); } return; }
   const aa = e.target.closest('[data-cc-addasset]'); if (aa) { const [eid, kind] = aa.dataset.ccAddasset.split(':'); const ev = cc.events.find(x => x.id === eid); openAssetModal({ event_id: eid, kind, label: ev?.name, defaultLabel: (ev?.name || '') + (kind === 'clip' ? ' — clip' : '') }, loadContentCenter); return; }
+  const cnf = e.target.closest('[data-cc-confirm]'); if (cnf) { const [eid, stage] = cnf.dataset.ccConfirm.split(':'); ccToggleConfirm(eid, stage); return; }
   const cl = e.target.closest('[data-cc-celllive]'); if (cl) { window.open(ARTIST_ORIGIN + 'event.html?id=' + encodeURIComponent(cl.dataset.ccCelllive), '_blank', 'noopener'); return; }
   const ed = e.target.closest('[data-cc-edit]'); if (ed) { e.preventDefault(); const p = cc.posts.find(x => x.id === ed.dataset.ccEdit); if (p) openPostModal(p, { onSaved: loadContentCenter }); return; }
   const cf = e.target.closest('[data-cc-clearfilt]'); if (cf) { cc['f' + cf.dataset.ccClearfilt].clear(); renderContentCenter(); return; }
