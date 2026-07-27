@@ -1961,6 +1961,7 @@ function renderUserDetail() {
         <div><span class="lbl">Password</span>${u.must_change_password ? 'must change' : 'set'}</div>
         <div><span class="lbl">Invite</span>${u.email_confirmed ? 'accepted' : 'pending'}</div>
       </div>
+      <div style="margin-top:8px;"><button class="hub-mini" data-user-reset="${escapeHtml(u.email)}" title="Emails ${escapeHtml(u.email)} a secure link to set a new password">🔑 Send password reset</button></div>
     </div>
     <div class="hub-cards" style="margin:12px 0;">${card('Aliases', aliases.length)}${card('Gigs', g.gigs)}${card('Fees earned', money(g.fees))}${card('Last gig', g.last ? fmtDate(g.last) : '—')}${card('Conversations', TEAM.detailConvCount)}</div>
     ${isMaster ? '<div class="kpi-hint">Master admin — full access to everything, always.</div>' : `
@@ -2071,7 +2072,18 @@ $('panel-team').addEventListener('click', (e) => {
   const ud = e.target.closest('[data-uact-detail]'); if (ud) { openUserActDetail(ud.dataset.uactDetail); return; }
   if (e.target.closest('[data-act-clear]')) { TEAM.actFilter = { from: '', to: '', user: '', table: '' }; loadActivity(); return; }
   const ar = e.target.closest('[data-act-row]'); if (ar) { openActDetail(ar.dataset.actRow); return; }
+  const rst = e.target.closest('[data-user-reset]'); if (rst) { sendPasswordReset(rst.dataset.userReset); return; }
 });
+// Master triggers a reset email for any teammate; they click the link and land
+// back on the dashboard in recovery mode (handled in onAuthStateChange), where
+// the Set-password form is waiting.
+async function sendPasswordReset(email) {
+  if (!email) { toast('No email on file for this user', 'err'); return; }
+  if (!confirm(`Email a password-reset link to ${email}?`)) return;
+  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname });
+  if (error) { toast('Reset failed: ' + error.message, 'err'); return; }
+  toast('Password-reset link sent to ' + email, 'ok');
+}
 $('panel-team').addEventListener('change', (e) => {
   const sc = e.target.closest('[data-detail-scope]'); if (sc) { setStaffRole(TEAM.activeUser, sc.value); return; }
   const uf = e.target.closest('[data-uact-from]'); if (uf) { TEAM.detailRange.from = uf.value; loadUserActivity(); return; }
@@ -3290,7 +3302,21 @@ async function renderForSession(session) {
   notifInit();
 }
 
-sb.auth.onAuthStateChange((_event, session) => { renderForSession(session); });
+sb.auth.onAuthStateChange((_event, session) => {
+  renderForSession(session);
+  // Arrived via a password-reset / invite link → guide them straight to setting
+  // a password (the form already exists on the login card + dashboard).
+  if (_event === 'PASSWORD_RECOVERY') {
+    setTimeout(() => {
+      const f = $('setPasswordForm'), b = $('setPasswordBtn');
+      if (f) { f.hidden = false; }
+      if (b) b.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      const np = $('newPassword'); if (np) np.focus();
+      const m = $('setPasswordMsg'); if (m) { m.className = 'setpw-msg ok'; m.textContent = 'Reset link accepted — choose a new password below.'; }
+      toast('Set your new password', 'ok');
+    }, 300);
+  }
+});
 
 // ---- Login handlers ----
 // Admins may sign in with email+password OR magic link, interchangeably.
