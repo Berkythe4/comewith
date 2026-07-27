@@ -10293,9 +10293,12 @@ async function raRefresh(btn) {
   try {
     const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 90 } });
     if (error) throw error;
-    let tm = 0;
+    let tm = 0, dice = 0;
     try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 90 } }); tm = r.data?.edm_saved || 0; } catch (_) { /* skip */ }
-    toast(`Pulled ${data.events_saved} RA shows${tm ? ` + ${tm} Ticketmaster EDM` : ''} · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
+    // DICE (source='dice') — reverse-engineered public endpoints, no key. Never
+    // touches RA/TM rows; failure here doesn't fail the whole pull.
+    try { const r = await sb.functions.invoke('pull-dice', { body: { days: 90 } }); dice = r.data?.saved || 0; } catch (_) { /* skip */ }
+    toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
     if (document.querySelector('#panel-market.active')) await loadMarket(); else await loadRaMarket();
   } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull shows'; } }
 }
