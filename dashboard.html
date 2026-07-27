@@ -768,6 +768,48 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   .data-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
 
+/* ---- Mobile app shell (bottom tab bar) --------------------------------------
+   Shown on phones and in the installed PWA. Replaces the sidebar with a
+   thumb-reachable bottom bar; the sidebar/top strip is hidden so navigation is
+   one tap, not a scroll through 30 grouped items. */
+.mtabbar { display: none; }
+.msheet { display: none; }
+@media (max-width: 800px) {
+  .sidebar { display: none; }                 /* replaced by the bottom bar */
+  .main { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }  /* clear the bar */
+  .mtabbar {
+    display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 800;
+    background: var(--sidebar, #16140F); border-top: 1px solid rgba(242,237,230,0.12);
+    padding-bottom: env(safe-area-inset-bottom); box-shadow: 0 -6px 20px rgba(0,0,0,0.35);
+  }
+  .mtab {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px;
+    background: none; border: none; color: rgba(242,237,230,0.62); cursor: pointer;
+    padding: 8px 2px 7px; font-size: 0.6rem; font-family: inherit; letter-spacing: 0.02em;
+  }
+  .mtab .mt-i { font-size: 1.15rem; line-height: 1; }
+  .mtab.active { color: var(--lime, #A7E02E); }
+  .mtab.active .mt-i { transform: translateY(-1px); }
+  /* "More" sheet — full-height list of every other section. */
+  .msheet { display: none; position: fixed; inset: 0; z-index: 950; background: rgba(10,5,12,0.6); }
+  .msheet:not([hidden]) { display: block; }
+  .msheet-inner {
+    position: absolute; left: 0; right: 0; bottom: 0; max-height: 82vh; overflow-y: auto;
+    background: var(--surface, #201826); border-top-left-radius: 16px; border-top-right-radius: 16px;
+    padding: 14px 14px calc(20px + env(safe-area-inset-bottom));
+  }
+  .msheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+  .msheet-item {
+    display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+    background: none; border: none; border-bottom: 1px solid var(--border); color: var(--ink, #ede4d3);
+    padding: 13px 6px; font-size: 0.95rem; font-family: inherit; cursor: pointer;
+  }
+  .msheet-group { font-size: 0.66rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); margin: 14px 6px 4px; }
+  /* touch-friendly controls in mobile */
+  .hub-status-sel, .modal-input, .modal-select { min-height: 40px; font-size: 0.9rem; }
+  .hub-btn, .hub-mini { min-height: 38px; }
+}
+
 /* ============================================================
    EVENT HUB — operational home for a single event (Sprint 1).
    Cohesive Come With identity; this screen is the template the
@@ -1480,9 +1522,22 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-team">
         <div id="teamBody"></div>
       </div>
+      <div class="panel" id="panel-mhome"><div id="mhomeBody"></div></div>
+
     </main>
 
   </div>
+
+  <!-- Mobile bottom tab bar — shown only on phones / installed PWA. -->
+  <nav class="mtabbar" id="mtabbar" aria-label="Mobile navigation">
+    <button class="mtab" data-mtab="mhome"><span class="mt-i">🏠</span><span>Home</span></button>
+    <button class="mtab" data-mtab="content-center"><span class="mt-i">📣</span><span>Content</span></button>
+    <button class="mtab" data-mtab="calendar"><span class="mt-i">✅</span><span>Tasks</span></button>
+    <button class="mtab" data-mtab="ra-market"><span class="mt-i">📻</span><span>Radio</span></button>
+    <button class="mtab" data-mtab="meetings"><span class="mt-i">🤝</span><span>Meetings</span></button>
+    <button class="mtab" data-mtab="__more"><span class="mt-i">⋯</span><span>More</span></button>
+  </nav>
+  <div class="msheet" id="msheet" hidden><div class="msheet-inner"><div class="msheet-head"><strong>All sections</strong><button class="hub-mini" id="msheetClose">✕</button></div><div id="msheetList"></div></div></div>
 </div>
 
 <script type="module">
@@ -1766,6 +1821,7 @@ function activateTab(key, opts) {
       else history.replaceState({ cwTab: key }, '', url);
     } catch (_) {}
   }
+  if (typeof mtabSync === 'function') mtabSync(key);   // keep the mobile bar in sync
   loadTab(key);
 }
 window.addEventListener('popstate', (e) => {
@@ -3342,6 +3398,10 @@ async function renderForSession(session) {
   if (target) activateTab(target);
   chatInit();
   notifInit();
+  // On a phone / installed PWA, land on the mobile Home so the first thing you
+  // see is the thumb-friendly landing, not a desktop panel. notifInit populates
+  // NOTIF.list shortly after; loadMHome re-reads it, so a slight delay is fine.
+  try { if (window.matchMedia('(max-width: 800px)').matches) setTimeout(() => mtabGo('mhome'), 200); } catch (_) {}
 }
 
 sb.auth.onAuthStateChange((_event, session) => {
@@ -13556,7 +13616,7 @@ const CAL = {
   selDay: null,
   data: null,                                            // month bundle
   tasks: [],                                             // full board list (not month-bound)
-  board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', due: 'all', msOnly: false, sort: 'due', dir: 1 },
+  board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', pillar: '', due: 'all', msOnly: false, sort: 'due', dir: 1 },
 };
 function calToday() { return new Date().toISOString().slice(0, 10); }
 function calMonthRange() {
@@ -13777,6 +13837,7 @@ function calBoardTasks() {
     (!f.event || String(t.event_id || '') === f.event) &&
     (!f.assignee || (t.task_assignments || []).some(a => a.actor && a.actor.id === f.assignee)) &&
     (!f.priority || t.priority === f.priority) &&
+    (!f.pillar || t.pillar === f.pillar) &&
     (!f.msOnly || t.milestone) &&
     (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
   if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
@@ -13826,6 +13887,7 @@ function calRenderBoard() {
       <select class="hub-status-sel" data-tb-filter="event"><option value="">All events</option>${evOpts}</select>
       <select class="hub-status-sel" data-tb-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
       <select class="hub-status-sel" data-tb-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-tb-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
       <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue'], ['7', 'Next 7 days'], ['30', 'Next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-tb-mson>⭐ milestones only</button>
       <span class="li-sub" style="margin-left:auto;">${list.length} task${list.length !== 1 ? 's' : ''}</span>
@@ -14143,6 +14205,106 @@ document.addEventListener('click', async (e) => {
   const op = e.target.closest('[data-notif-open]'); if (op) { const n = NOTIF.list.find(x => x.id === op.dataset.notifOpen); NOTIF.open = false; $('notifPanel')?.classList.remove('show'); notifGoto(n); return; }
   // click-away closes the panel
   if (NOTIF.open && !e.target.closest('#notifPanel') && !e.target.closest('#notifBtn')) { NOTIF.open = false; $('notifPanel')?.classList.remove('show'); }
+});
+// ============================ MOBILE APP SHELL ==============================
+// A thumb-reachable bottom tab bar (phones + installed PWA). The 5 primary tabs
+// route to existing panels; Home is a mobile landing; More opens every other
+// section. Highlights the active tab and keeps in sync with sidebar navigation.
+const MTAB_FOR = { 'content-center': 'content-center', calendar: 'calendar', 'ra-market': 'ra-market', meetings: 'meetings', mhome: 'mhome' };
+function mtabSync(key) {
+  document.querySelectorAll('.mtab').forEach(b => b.classList.toggle('active', b.dataset.mtab === (MTAB_FOR[key] || '')));
+}
+function mtabGo(key) {
+  if (key === '__more') { mSheetOpen(); return; }
+  if (key === 'mhome') {
+    for (const p of document.querySelectorAll('.panel')) p.classList.toggle('active', p.id === 'panel-mhome');
+    $('mainTitle').textContent = 'Home';
+    loadMHome(); mtabSync('mhome'); window.scrollTo(0, 0); return;
+  }
+  const btn = $('sidebarNav').querySelector(`button[data-tab="${key}"]`);
+  if (btn) { activateTab(key); mtabSync(key); window.scrollTo(0, 0); }
+  else toast('That section isn\'t available for your role', 'err');
+}
+function mSheetOpen() {
+  // Build from the same modules the sidebar shows (role-filtered), grouped.
+  const groups = {};
+  for (const m of MODULES) { if (!canAccessModule(m)) continue; (groups[m.nav_group] = groups[m.nav_group] || []).push(m); }
+  const order = (typeof NAV_GROUP_ORDER !== 'undefined' && NAV_GROUP_ORDER) || Object.keys(groups);
+  let html = '';
+  for (const g of order) {
+    const mods = (groups[g] || []).sort((a, b) => a.sort_order - b.sort_order);
+    if (!mods.length) continue;
+    html += `<div class="msheet-group">${escapeHtml(g)}</div>`;
+    html += mods.map(m => `<button class="msheet-item" data-msheet="${escapeHtml(m.key)}">${m.master_only ? '🔑 ' : ''}${escapeHtml(m.label)}</button>`).join('');
+  }
+  html += `<div class="msheet-group">Account</div>
+    <button class="msheet-item" data-msheet-acct="password">🔑 Set / change password</button>
+    <button class="msheet-item" data-msheet-acct="signout">🚪 Sign out</button>`;
+  $('msheetList').innerHTML = html || '<div class="hub-empty">No sections.</div>';
+  $('msheet').hidden = false;
+}
+// Account actions from the More sheet (the sidebar footer is hidden on mobile).
+function mAcct(which) {
+  mSheetClose();
+  if (which === 'signout') { sb.auth.signOut(); return; }
+  if (which === 'password') {
+    openKpi('Set / change password', 'Choose a new password for your login', `
+      <label class="modal-label">New password</label>
+      <input class="modal-input" type="password" name="m_pw" autocomplete="new-password" placeholder="At least 6 characters" style="width:100%;">`,
+      async () => {
+        const pw = kpiVal('m_pw'); if (pw.length < 6) { toast('At least 6 characters', 'err'); return; }
+        const { error } = await sb.auth.updateUser({ password: pw });
+        if (error) { toast('Failed: ' + error.message, 'err'); return; }
+        closeKpi(); toast('Password saved', 'ok');
+      }, 'Save password');
+  }
+}
+function mSheetClose() { $('msheet').hidden = true; }
+document.getElementById('mtabbar').addEventListener('click', (e) => { const b = e.target.closest('[data-mtab]'); if (b) mtabGo(b.dataset.mtab); });
+document.getElementById('msheet').addEventListener('click', (e) => {
+  if (e.target.id === 'msheet' || e.target.closest('#msheetClose')) { mSheetClose(); return; }
+  const acct = e.target.closest('[data-msheet-acct]'); if (acct) { mAcct(acct.dataset.msheetAcct); return; }
+  const it = e.target.closest('[data-msheet]'); if (it) { mSheetClose(); activateTab(it.dataset.msheet); mtabSync(it.dataset.msheet); window.scrollTo(0, 0); }
+});
+// Mobile Home: what you need from the road — unread notifications, your open/due
+// tasks, and quick-add. Reuses live data; nothing new server-side.
+async function loadMHome() {
+  const body = $('mhomeBody');
+  body.innerHTML = '<div class="placeholder"><span class="spinner"></span> Loading…</div>';
+  const today = new Date().toISOString().slice(0, 10);
+  const [tasks] = await Promise.all([
+    sb.from('tasks').select('id,title,status,due_date,priority').is('deleted_at', null).neq('status', 'done').order('due_date', { nullsFirst: false }).limit(50),
+  ]);
+  const tl = tasks.data || [];
+  const overdue = tl.filter(t => t.due_date && t.due_date < today);
+  const soon = tl.filter(t => t.due_date && t.due_date >= today).slice(0, 8);
+  const notes = (NOTIF.list || []).slice(0, 6);
+  const notifRows = notes.length ? notes.map(n => `<div class="hub-li" data-mhome-notif="${n.id}" style="cursor:pointer;padding:7px 0;">
+      <div class="li-main"><span>${n.status === 'unread' ? '🔵 ' : ''}${NOTIF_ICON[n.kind] || '🔔'} ${escapeHtml(n.title)}</span><div class="li-sub">${escapeHtml(fmtDT(n.created_at))}</div></div></div>`).join('') : '<div class="li-sub">Nothing needs your attention. 🎉</div>';
+  const taskRow = (t) => `<div class="hub-li" data-mhome-task="${t.id}" style="cursor:pointer;padding:7px 0;">
+      <div class="li-main"><span>${t.status === 'doing' ? '🔵' : '⚪'} ${escapeHtml(t.title)}</span><div class="li-sub">${t.due_date ? (t.due_date < today ? '⏰ overdue · ' : 'due ') + escapeHtml(fmtDate(t.due_date)) : 'no date'}${t.priority ? ' · ' + escapeHtml(t.priority) : ''}</div></div></div>`;
+  body.innerHTML = `
+    <div class="hub-sec-bar"><h3>👋 Home</h3></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
+      <button class="hub-btn" data-mhome-add="task">＋ Task</button>
+      <button class="hub-btn ghost" data-mhome-add="post">＋ Post</button>
+      <button class="hub-btn ghost" data-mhome-go="calendar">✅ All tasks</button>
+    </div>
+    <div class="hub-sec-bar"><h3>🔔 Notifications ${notes.filter(n => n.status === 'unread').length ? `<span class="li-sub">· ${notes.filter(n => n.status === 'unread').length} new</span>` : ''}</h3></div>
+    <div class="hub-list" style="margin-bottom:14px;">${notifRows}</div>
+    ${overdue.length ? `<div class="hub-sec-bar"><h3 style="color:var(--red);">⏰ Overdue (${overdue.length})</h3></div><div class="hub-list" style="margin-bottom:14px;">${overdue.slice(0, 8).map(taskRow).join('')}</div>` : ''}
+    <div class="hub-sec-bar"><h3>✅ Coming up</h3></div>
+    <div class="hub-list">${soon.map(taskRow).join('') || '<div class="li-sub">Nothing scheduled.</div>'}</div>`;
+}
+$('panel-mhome').addEventListener('click', (e) => {
+  const n = e.target.closest('[data-mhome-notif]'); if (n) { const item = NOTIF.list.find(x => x.id === n.dataset.mhomeNotif); if (item) notifGoto(item); return; }
+  const t = e.target.closest('[data-mhome-task]'); if (t) { openEditTask(t.dataset.mhomeTask, loadMHome); return; }
+  const g = e.target.closest('[data-mhome-go]'); if (g) { mtabGo(g.dataset.mhomeGo); return; }
+  const a = e.target.closest('[data-mhome-add]'); if (a) {
+    if (a.dataset.mhomeAdd === 'task') { calAddTask ? calAddTask() : mtabGo('calendar'); }
+    else if (a.dataset.mhomeAdd === 'post') { openPostModal({ stage: 'idea', channels: ['instagram'] }, { onSaved: () => {} }); }
+    return;
+  }
 });
 const CHAT = { open: false, channels: [], staffMap: {}, activeId: null, msgs: [], unreadByChan: {}, sub: null, subOk: false, timer: null };
 async function chatInit() {
