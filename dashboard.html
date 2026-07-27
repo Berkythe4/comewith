@@ -9856,7 +9856,7 @@ function ensureScWidget() {
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social] = await Promise.all([
-    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
+    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
@@ -9929,6 +9929,13 @@ let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venu
 const DOW_WEIGHT = [0.65, 0.15, 0.30, 0.55, 0.80, 1.0, 1.0];
 const median = (a) => { if (!a.length) return 0; const s = [...a].sort((x, y) => x - y); const m = Math.floor(s.length / 2); return s.length % 2 ? s[m] : Math.round((s[m - 1] + s[m]) / 2); };
 const headlinerK = (e) => Math.round(Math.max(0, ...((e.lineup || []).map(a => Number(a.follower_count) || 0))) / 1000); // top artist's followers, in thousands
+// Where a market artist/event came from — RA (Resident Advisor), DICE, or TM
+// (Ticketmaster). Coloured so the three read apart at a glance.
+const RA_SOURCE = { ra: { l: 'RA', c: '#4E7A9B' }, dice: { l: 'DICE', c: '#E0384E' }, tm: { l: 'TM', c: '#0263E0' } };
+function raSourceTag(src) {
+  const s = RA_SOURCE[src] || { l: (src || 'RA').toUpperCase(), c: 'var(--mid)' };
+  return `<span class="role-chip" style="cursor:default;background:${s.c};color:#fff;font-size:.58rem;padding:1px 6px;" title="Pulled from ${s.l}">${s.l}</span>`;
+}
 // Blended night metrics: demand (RSVP) + star power (headliner reach) vs competition.
 // `opp` is data-only; `score(dow)` applies the day-of-week desirability weight.
 function nightMetrics(list) {
@@ -10396,7 +10403,7 @@ function renderRaRadio() {
             : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
     return `<div class="hub-li" style="flex-wrap:wrap;">
       <div class="li-main">
-        <strong>${escapeHtml(a.name)}</strong>${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
+        <strong>${escapeHtml(a.name)}</strong> ${raSourceTag(a.source)}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
         <div class="li-sub">Playing ${escapeHtml(a.next_venue || 'NYC')} · ${escapeHtml(fmtDate(a.next_event_date))}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}</div>
       </div>
       <span style="display:flex;gap:6px;">
