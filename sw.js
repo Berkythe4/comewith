@@ -1,26 +1,33 @@
-// Come With PWA service worker — v3.
-// LESSON: caching the app HTML risks serving stale, broken app code. So this SW
-// now NEVER caches dashboard.html — navigations are network-only. It caches only
-// the icons + manifest (which never change) so install still works offline. This
-// guarantees the app code is always fresh from the network.
-const CACHE = 'cw-static-v3';
+// Come With PWA service worker — v4.
+// Chrome only treats the app as INSTALLABLE if the SW actually handles the
+// start_url navigation with respondWith(). v3 returned early (no respondWith),
+// which silently disabled the install prompt. So navigations are now
+// NETWORK-FIRST via respondWith: fresh from the network when online (never
+// stale), cached copy only as an offline fallback. Icons/manifest cache-first.
+const CACHE = 'cw-static-v4';
 const STATIC = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(STATIC)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
-  // Delete EVERY old cache (including v1/v2 that cached HTML) and take over now.
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
-  // Navigations / any HTML → always network. Never serve app code from cache.
-  if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) return;
   const url = new URL(req.url);
+
+  // Navigations (the app HTML) → network-first, cache as offline fallback. The
+  // respondWith is what makes Chrome consider the app installable.
+  if (req.mode === 'navigate') {
+    e.respondWith(
+      fetch(req).then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put('/dashboard.html', cp)); return r; })
+        .catch(() => caches.match('/dashboard.html').then((h) => h || caches.match(req)))
+    );
+    return;
+  }
   if (url.origin !== location.origin) return;   // Supabase/APIs/fonts untouched
-  // Only the small static icon/manifest set is cached.
   if (!STATIC.includes(url.pathname)) return;
   e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
 });
