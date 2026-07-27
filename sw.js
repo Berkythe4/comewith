@@ -1,40 +1,28 @@
-// Come With PWA service worker.
-// Deliberately conservative: the dashboard is a live, frequently-deployed app
-// against Supabase, so we NEVER want to serve a stale dashboard.html or hijack
-// API calls. Strategy:
-//   • Navigations (the HTML) → network-first, fall back to cache only offline.
-//   • Same-origin static assets (icons, manifest) → cache-first.
-//   • Everything cross-origin (Supabase, fonts, DICE, etc.) → straight to
-//     network, untouched.
-const CACHE = 'cw-shell-v2';
-const SHELL = ['/dashboard.html', '/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png'];
+// Come With PWA service worker — v3.
+// LESSON: caching the app HTML risks serving stale, broken app code. So this SW
+// now NEVER caches dashboard.html — navigations are network-only. It caches only
+// the icons + manifest (which never change) so install still works offline. This
+// guarantees the app code is always fresh from the network.
+const CACHE = 'cw-static-v3';
+const STATIC = ['/manifest.webmanifest', '/icons/icon-192.png', '/icons/apple-touch-icon.png', '/icons/favicon-32.png'];
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(STATIC)).then(() => self.skipWaiting()));
 });
 self.addEventListener('activate', (e) => {
+  // Delete EVERY old cache (including v1/v2 that cached HTML) and take over now.
   e.waitUntil(caches.keys().then((keys) => Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 self.addEventListener('fetch', (e) => {
   const req = e.request;
   if (req.method !== 'GET') return;
+  // Navigations / any HTML → always network. Never serve app code from cache.
+  if (req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html')) return;
   const url = new URL(req.url);
-  if (url.origin !== location.origin) return;                 // never touch Supabase/APIs/fonts
-
-  if (req.mode === 'navigate') {                              // HTML: fresh first, cache offline
-    e.respondWith(
-      fetch(req).then((r) => { const cp = r.clone(); caches.open(CACHE).then((c) => c.put('/dashboard.html', cp)); return r; })
-        .catch(() => caches.match('/dashboard.html'))
-    );
-    return;
-  }
-  // Static same-origin assets: cache-first, then network (and cache it).
-  e.respondWith(
-    caches.match(req).then((hit) => hit || fetch(req).then((r) => {
-      if (r.ok) { const cp = r.clone(); caches.open(CACHE).then((c) => c.put(req, cp)); }
-      return r;
-    }).catch(() => hit))
-  );
+  if (url.origin !== location.origin) return;   // Supabase/APIs/fonts untouched
+  // Only the small static icon/manifest set is cached.
+  if (!STATIC.includes(url.pathname)) return;
+  e.respondWith(caches.match(req).then((hit) => hit || fetch(req)));
 });
 
 // ---- Web Push (opt-in) ------------------------------------------------------

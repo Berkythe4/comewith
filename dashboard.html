@@ -15045,11 +15045,20 @@ try {
   }, 400);
 } catch (_) { /* noop */ }
 
-// PWA: register the service worker so the dashboard is installable to a phone's
-// home screen and opens full-screen like an app. Only on HTTPS (prod); localhost
-// is fine too. Failure is silent — the app works identically without it.
+// PWA: register the service worker. It no longer caches app HTML (v3), so it
+// can't serve stale code; on register we also tell any waiting worker to take
+// over immediately so an old cached shell is replaced without a manual reload.
 if ('serviceWorker' in navigator && location.protocol === 'https:') {
-  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+  window.addEventListener('load', async () => {
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      reg.update();
+      // If a new SW activates while the page is open, reload once to drop any
+      // stale shell a prior version cached.
+      let reloaded = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => { if (!reloaded) { reloaded = true; location.reload(); } });
+    } catch (_) {}
+  });
 }
 // "Install app" — Android/desktop Chrome fire beforeinstallprompt (we capture it
 // and the button triggers the native prompt). iPhone never fires it: install is
@@ -15063,17 +15072,17 @@ document.addEventListener('DOMContentLoaded', () => {
   const b = document.getElementById('installBtn'); if (!b) return;
   const ua = navigator.userAgent;
   const iOS = /iPhone|iPad|iPod/.test(ua);
-  // On iOS Safari (not an in-app webview / Chrome-iOS), show the button so we can
-  // guide them — there's no automatic prompt on iOS, ever.
-  const iosSafari = iOS && /Safari/.test(ua) && !/CriOS|FxiOS|EdgiOS|GSA|FBAN|FBAV|Instagram|Line/.test(ua);
-  if (!_isStandalone() && iosSafari) b.hidden = false;
+  // Always show the button (unless already installed) so it's never "missing" —
+  // clicking either fires the native prompt or explains how, per platform.
+  if (!_isStandalone()) b.hidden = false;
   b.addEventListener('click', async () => {
     if (_deferredInstall) { _deferredInstall.prompt(); try { await _deferredInstall.userChoice; } catch (_) {} _deferredInstall = null; b.hidden = true; return; }
-    // iOS / no native prompt → instructions.
     if (iOS) {
-      alert('To install on your iPhone:\n\n1. Make sure you\'re in Safari (not Chrome or an in-app browser).\n2. Tap the Share button — the square with an up-arrow at the bottom of Safari.\n3. Scroll down and tap "Add to Home Screen".\n4. Tap "Add".\n\nCome With will open full-screen like an app.');
+      alert('Install on iPhone (Safari only):\n\n1. You must be in SAFARI — not Chrome and not the in-app browser from a text/email. If you opened this from a message, tap ••• → "Open in Safari" first.\n2. Tap the Share button (the square with an up-arrow, bottom-center of Safari).\n3. Scroll down → "Add to Home Screen" → Add.\n\nIt then opens full-screen like an app.');
+    } else if (/Chrome|Edg/.test(ua)) {
+      alert('Install on your computer:\n\nLook in the address bar (right side) for the install icon — a small screen with a down-arrow (⊕). Click it → Install.\n\nOr: browser menu (⋮ top-right) → "Install Come With…".');
     } else {
-      alert('To install: open this site in Chrome or Edge, then use the browser menu (⋮) → "Install Come With" / "Add to Home screen".');
+      alert('To install, open this site in Chrome, Edge, or Safari (iPhone), then use the browser\'s Install / "Add to Home Screen" option.');
     }
   });
 });
