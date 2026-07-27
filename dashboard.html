@@ -2,8 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Come With — Dashboard v2</title>
+<!-- PWA: installable to the home screen so the team can work from the road -->
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" content="#140a17" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Come With" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:ital,wght@0,400;0,700;1,400&family=Inconsolata:wght@300;400;500&display=swap" rel="stylesheet" />
 <style>
@@ -748,6 +757,15 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
   .sidebar-nav button.active { border-left-color: transparent; border-bottom-color: var(--red); }
   .sidebar-footer { flex: 1 1 100%; }
   .main { padding: 20px 16px 40px; }
+  /* PWA on a phone: respect the notch/home-indicator safe areas, and let the
+     notifications dropdown + header controls use the full width. */
+  .main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); padding-bottom: max(40px, env(safe-area-inset-bottom)); }
+  .sidebar-header { padding-top: max(16px, env(safe-area-inset-top)); }
+  .notif-panel { right: 8px; left: 8px; width: auto; top: 66px; }
+  .main-header { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .refresh-cluster { flex-wrap: wrap; }
+  .kpi-grid { grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); }
+  .data-table { display: block; overflow-x: auto; white-space: nowrap; }
 }
 
 /* ============================================================
@@ -14983,6 +15001,13 @@ try {
     if (hub.event && _sec && _sec !== 'overview') hubGoSection(_sec);
   }, 400);
 } catch (_) { /* noop */ }
+
+// PWA: register the service worker so the dashboard is installable to a phone's
+// home screen and opens full-screen like an app. Only on HTTPS (prod); localhost
+// is fine too. Failure is silent — the app works identically without it.
+if ('serviceWorker' in navigator && location.protocol === 'https:') {
+  window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => {}); });
+}
 </script>
 
 <style>
