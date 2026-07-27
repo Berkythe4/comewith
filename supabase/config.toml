@@ -135,3 +135,7 @@ verify_jwt = true           # admin-only (role re-checked inside the function)
 [functions.track]
 enabled = true
 verify_jwt = false          # PUBLIC beacon — sendBeacon cannot set an apikey header
+
+[functions.ingest-email]
+enabled = true
+verify_jwt = false          # PUBLIC — inbound email webhook; gated by INGEST_SECRET
