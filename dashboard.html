@@ -10155,6 +10155,10 @@ function platTag(src) { const p = platformOf(src); return `<span class="role-chi
 
 function scArtistData() {
   const evs = raState.events || [];
+  // Memoized on the underlying data — recomputes only when shows/scans/pool change,
+  // not on every sort/filter/expand (those work on copies of this list).
+  const sig = evs.length + ':' + Object.keys(raState.cache || {}).length + ':' + (raState.artists || []).length;
+  if (raState._scArtSig === sig && raState._scArtData) return raState._scArtData;
   const artByName = {}; (raState.artists || []).forEach(a => { artByName[(a.name || '').toLowerCase()] = a; });
   const sixMo = Date.now() - 1000 * 60 * 60 * 24 * 182;
   const cand = {};
@@ -10206,6 +10210,7 @@ function scArtistData() {
     if (c.recent) s = Math.min(100, s + 4);
     c.buzz = Math.round(s);
   });
+  raState._scArtSig = sig; raState._scArtData = list;
   return list;
 }
 // Buzz-by-name, memoized on (events, cache) size, so Artist Radio can sort by it too.
@@ -10217,6 +10222,8 @@ function raBuzzMap() {
 }
 function scVenueData() {
   const evs = raState.events || [];
+  const sig = evs.length + ':' + (raState.venues || []).length;
+  if (raState._scVenSig === sig && raState._scVenData) return raState._scVenData;
   const vByName = {}; (raState.venues || []).forEach(v => vByName[(v.name || '').toLowerCase()] = v);
   const v = {};
   evs.forEach(e => {
@@ -10241,6 +10248,7 @@ function scVenueData() {
     x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
     x.ra_url = rec?.ra_url || null; x.ticket_url = rec?.ticket_url || null;
   });
+  raState._scVenSig = sig; raState._scVenData = list;
   return list;
 }
 function scSnapshot() {
