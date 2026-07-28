@@ -10140,6 +10140,7 @@ async function loadMarket() {
   if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
   if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
   await raLoadWatch();
+  await ensureRadioArtists();
   renderMarket();
 }
 // ════════ NYC SCENE — internal control-center data layer ════════════════════
@@ -10160,7 +10161,8 @@ function scArtistData() {
   const evs = raState.events || [];
   // Memoized on the underlying data — recomputes only when shows/scans/pool change,
   // not on every sort/filter/expand (those work on copies of this list).
-  const sig = evs.length + ':' + Object.keys(raState.cache || {}).length + ':' + (raState.artists || []).length;
+  const radioSet = raState.radioArtists || new Set();
+  const sig = evs.length + ':' + Object.keys(raState.cache || {}).length + ':' + (raState.artists || []).length + ':' + radioSet.size;
   if (raState._scArtSig === sig && raState._scArtData) return raState._scArtData;
   const artByName = {}; (raState.artists || []).forEach(a => { artByName[(a.name || '').toLowerCase()] = a; });
   const sixMo = Date.now() - 1000 * 60 * 60 * 24 * 182;
@@ -10196,6 +10198,7 @@ function scArtistData() {
     c.reach = Math.max(c.raFollowers, c.scFollowers);
     c.recent = !!(cache?.songs || []).some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
     c.nyc = NYC_RE.test(c.city || '');
+    c.onRadio = radioSet.has(c.name.toLowerCase());
     c.genresArr = [...c.genres]; c.venuesArr = [...c.venues]; c.platformsArr = [...c.platforms];
     c.showCount = c.shows.length;
     c.shows.sort((x, y) => (x.date || '').localeCompare(y.date || ''));
@@ -10225,7 +10228,8 @@ function raBuzzMap() {
 }
 function scVenueData() {
   const evs = raState.events || [];
-  const sig = evs.length + ':' + (raState.venues || []).length;
+  const radioSet = raState.radioArtists || new Set();
+  const sig = evs.length + ':' + (raState.venues || []).length + ':' + radioSet.size;
   if (raState._scVenSig === sig && raState._scVenData) return raState._scVenData;
   const vByName = {}; (raState.venues || []).forEach(v => vByName[(v.name || '').toLowerCase()] = v);
   const v = {};
@@ -10245,7 +10249,10 @@ function scVenueData() {
   list.forEach(x => {
     x.avgDemand = x.shows ? Math.round(x.demandSum / x.shows) : 0;
     x.topGenres = Object.entries(x.genres).sort((a, b) => b[1] - a[1]).slice(0, 3).map(g => g[0]);
+    x.genresAll = Object.keys(x.genres);
     x.platformsArr = [...x.platforms]; x.artistCount = x.artists.size;
+    x.radioArtists = [...x.artists].filter(a => radioSet.has(a.toLowerCase()));
+    x.onRadio = x.radioArtists.length > 0;
     x.showList.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const rec = vByName[x.name.toLowerCase()];
     x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
@@ -10807,7 +10814,19 @@ async function raRefresh(btn) {
   } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull shows'; } }
 }
 // ════════ Scene Map (panel-scene-map) — internal geographic web of the scene ════
-let sceneMap = null, sceneMarkers = {}, sceneLines = [], sceneState = { sizeBy: 'shows', platform: '', selected: null };
+let sceneMap = null, sceneMarkers = {}, sceneLines = [], sceneState = { sizeBy: 'shows', platform: '', minShows: 1, genre: '', onRadio: false, selected: null };
+const RADIO_COLOR = '#a7e02e';   // distinct lime for venues hosting artists who've made the radio
+// Distinct individual artists who've appeared on any radio station (split combined
+// credits like "A, B & C" so lineup names match). Used to flag venues + artists.
+async function ensureRadioArtists() {
+  if (raState.radioArtists) return;
+  try {
+    const { data } = await sb.from('sc_playlist_tracks').select('artist_name');
+    const set = new Set();
+    (data || []).forEach(t => (t.artist_name || '').split(/,|&|\bfeat\.?\b|\bft\.?\b|\bx\b|\bvs\.?\b/i).forEach(p => { const n = p.trim().toLowerCase(); if (n) set.add(n); }));
+    raState.radioArtists = set;
+  } catch (_) { raState.radioArtists = new Set(); }
+}
 function ensureLeaflet() {
   if (window.L) return Promise.resolve();
   if (window._leafletP) return window._leafletP;
@@ -10830,6 +10849,7 @@ async function loadSceneMap() {
     }
     if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)); raState.artists = data || []; }
     if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
+    await ensureRadioArtists();
     await ensureLeaflet();
   } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }
   renderSceneMap();
@@ -10839,28 +10859,44 @@ function renderSceneMap() {
   const venues = scVenueData();
   const mapped = venues.filter(v => v.lat != null && v.lng != null);
   const unmapped = venues.length - mapped.length;
+  const genreSet = [...new Set(mapped.flatMap(v => v.genresAll || []))].sort();
+  const radioCount = mapped.filter(v => v.onRadio).length;
+  // filters
+  let list = mapped;
+  if (sceneState.platform) list = list.filter(v => v.platformsArr.includes(sceneState.platform));
+  if (sceneState.minShows > 1) list = list.filter(v => v.shows >= sceneState.minShows);
+  if (sceneState.genre) list = list.filter(v => (v.genresAll || []).includes(sceneState.genre));
+  if (sceneState.onRadio) list = list.filter(v => v.onRadio);
+  const gOpt = g => `<option value="${escapeHtml(g)}"${sceneState.genre === g ? ' selected' : ''}>${escapeHtml(g)}</option>`;
+  const sOpt = (v, l) => `<option value="${v}"${sceneState.minShows === v ? ' selected' : ''}>${l}</option>`;
   body.innerHTML = `
-    <div class="hub-sec-bar"><h3>🗺️ Scene Map <span class="li-sub" style="font-weight:normal;">· internal · ${mapped.length} venues plotted${unmapped ? ' · ' + unmapped + ' not yet located' : ''}</span></h3>
-      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-        <label class="li-sub">Size <select class="modal-select" data-sm-size style="max-width:120px;"><option value="shows"${sceneState.sizeBy === 'shows' ? ' selected' : ''}>by shows</option><option value="demand"${sceneState.sizeBy === 'demand' ? ' selected' : ''}>by demand</option></select></label>
-        <select class="modal-select" data-sm-plat style="max-width:150px;"><option value="">All platforms</option>${['ra', 'dice', 'tm'].map(s => `<option value="${s}"${sceneState.platform === s ? ' selected' : ''}>${platformOf(s).l}</option>`).join('')}</select>
-        <button class="hub-btn" data-ra-refresh>↻ Pull shows</button></span></div>
-    <div class="kpi-hint" style="margin-bottom:10px;">Every NYC venue with upcoming shows, on the map. Dot size = activity, color = ticketing platform. Click a venue to see its shows &amp; artists and light up the venues it shares artists with — the scene web.</div>
+    <div class="hub-sec-bar"><h3>🗺️ Scene Map <span class="li-sub" style="font-weight:normal;">· internal · ${list.length} shown${list.length !== mapped.length ? ' of ' + mapped.length : ''}${unmapped ? ' · ' + unmapped + ' not located' : ''}</span></h3>
+      <button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
+      <label class="li-sub">Size <select class="modal-select" data-sm-size style="max-width:120px;"><option value="shows"${sceneState.sizeBy === 'shows' ? ' selected' : ''}>by shows</option><option value="demand"${sceneState.sizeBy === 'demand' ? ' selected' : ''}>by demand</option></select></label>
+      <select class="modal-select" data-sm-plat style="max-width:150px;"><option value="">All platforms</option>${['ra', 'dice', 'tm'].map(s => `<option value="${s}"${sceneState.platform === s ? ' selected' : ''}>${platformOf(s).l}</option>`).join('')}</select>
+      <select class="modal-select" data-sm-minshows style="max-width:120px;" title="Minimum upcoming shows">${sOpt(1, 'Any shows')}${sOpt(2, '2+ shows')}${sOpt(3, '3+ shows')}${sOpt(5, '5+ shows')}${sOpt(10, '10+ shows')}</select>
+      <select class="modal-select" data-sm-genre style="max-width:150px;" title="Genre"><option value="">All genres</option>${genreSet.map(gOpt).join('')}</select>
+      <button class="hub-btn ghost" data-sm-radio style="${sceneState.onRadio ? `background:${RADIO_COLOR};color:#0f0814;` : ''}" title="Only venues hosting artists who've appeared on the radio">🎙 On the radio${radioCount ? ` (${radioCount})` : ''}</button>
+    </div>
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:8px;font-size:.72rem;" class="li-sub">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${RADIO_COLOR};vertical-align:middle;"></span> on the radio</span>
+      ${['ra', 'dice', 'tm'].map(s => `<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${platformOf(s).c};vertical-align:middle;"></span> ${platformOf(s).l}</span>`).join('')}
+      <span>· dot size = ${sceneState.sizeBy === 'demand' ? 'demand' : 'shows'}</span>
+    </div>
     <div id="sceneMapCanvas" style="height:min(64vh,600px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#0e1116;"></div>
-    <div id="sceneMapInfo" style="margin-top:12px;">${mapped.length ? '<div class="li-sub">Tip: click a dot to open a venue.</div>' : '<div class="hub-empty">No venues located yet — the geocoder is still filling these in, or hit “↻ Pull shows”.</div>'}</div>`;
-  const L = window.L; if (!L || !mapped.length) return;
+    <div id="sceneMapInfo" style="margin-top:12px;">${list.length ? '<div class="li-sub">Tip: click a dot to open a venue and see the venues it shares artists with.</div>' : '<div class="hub-empty">No venues match — loosen the filters, or the geocoder is still running.</div>'}</div>`;
+  const L = window.L; if (!L || !list.length) return;
   if (sceneMap) { try { sceneMap.remove(); } catch (_) {} sceneMap = null; }
   sceneMarkers = {}; sceneLines = [];
   sceneMap = L.map('sceneMapCanvas', { zoomControl: true, scrollWheelZoom: true }).setView([40.717, -73.955], 12);
   L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(sceneMap);
-  let list = mapped;
-  if (sceneState.platform) list = list.filter(v => v.platformsArr.includes(sceneState.platform));
   const sizeVal = v => sceneState.sizeBy === 'demand' ? v.demandMax : v.shows;
   const maxS = Math.max(1, ...list.map(sizeVal));
   list.forEach(v => {
-    const p = platformOf(v.platformsArr[0] || 'ra');
-    const m = L.circleMarker([v.lat, v.lng], { radius: 6 + 22 * Math.sqrt(sizeVal(v) / maxS), color: p.c, weight: 1.5, fillColor: p.c, fillOpacity: 0.5 });
-    m.bindTooltip(`${escapeHtml(v.name)} · ${v.shows} show${v.shows === 1 ? '' : 's'}`, { direction: 'top' });
+    const col = v.onRadio ? RADIO_COLOR : platformOf(v.platformsArr[0] || 'ra').c;
+    const m = L.circleMarker([v.lat, v.lng], { radius: 6 + 22 * Math.sqrt(sizeVal(v) / maxS), color: col, weight: v.onRadio ? 2.5 : 1.5, fillColor: col, fillOpacity: v.onRadio ? 0.7 : 0.5 });
+    m.bindTooltip(`${escapeHtml(v.name)} · ${v.shows} show${v.shows === 1 ? '' : 's'}${v.onRadio ? ' · 🎙 on radio' : ''}`, { direction: 'top' });
     m.on('click', () => sceneSelect(v.name));
     m.addTo(sceneMap); sceneMarkers[v.name] = m;
   });
@@ -10887,9 +10923,10 @@ function renderSceneInfo(v, shared) {
   const web = shared.sort((a, b) => b.common.length - a.common.length).slice(0, 8).map(s => `<div class="li-sub"><span data-sm-venue="${escapeHtml(s.v.name)}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;">${escapeHtml(s.v.name)}</span> — ${s.common.length} shared (${escapeHtml(s.common.slice(0, 3).join(', '))}${s.common.length > 3 ? '…' : ''})</div>`).join('');
   return `<div style="background:var(--card,#20142a);border:1px solid var(--border);border-radius:12px;padding:14px 16px;">
     <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
-      <strong style="font-size:1.1rem;">${escapeHtml(v.name)}</strong>
+      <strong style="font-size:1.1rem;">${escapeHtml(v.name)}${v.onRadio ? ` <span class="role-chip" style="cursor:default;background:${RADIO_COLOR};color:#0f0814;font-size:.55rem;padding:1px 6px;">🎙 ON RADIO</span>` : ''}</strong>
       <button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(v.name)}">Open in control center →</button></div>
     <div class="li-sub">${v.shows} shows · ${fmtNum(v.demandSum)} total RSVP · ${v.artistCount} artists · ${v.platformsArr.map(p => platformOf(p).s).join(' · ')}${v.capacity ? ' · cap ' + fmtNum(v.capacity) : ''}${v.area ? ' · ' + escapeHtml(v.area) : ''}</div>
+    ${v.onRadio && v.radioArtists?.length ? `<div class="li-sub" style="color:${RADIO_COLOR};">🎙 On our radio: ${escapeHtml(v.radioArtists.slice(0, 6).join(', '))}${v.radioArtists.length > 6 ? '…' : ''}</div>` : ''}
     <div class="li-sub" style="margin-top:8px;font-weight:700;">Artists here <span style="font-weight:normal;">· click to open</span></div>
     <div style="margin:4px 0 8px;">${artChips || '—'}</div>
     ${web ? `<div class="li-sub" style="font-weight:700;">Connected venues <span style="font-weight:normal;">· share artists (green lines)</span></div>${web}` : '<div class="li-sub">No shared-artist links to other venues yet.</div>'}
@@ -10897,6 +10934,7 @@ function renderSceneInfo(v, shared) {
 }
 $('panel-scene-map').addEventListener('click', (e) => {
   if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
+  if (e.target.closest('[data-sm-radio]')) { sceneState.onRadio = !sceneState.onRadio; renderSceneMap(); return; }
   const sv = e.target.closest('[data-sm-venue]'); if (sv) { sceneSelect(sv.dataset.smVenue); return; }
   const oa = e.target.closest('[data-sm-openvenue]'); if (oa) { const n = oa.dataset.smOpenvenue; activateTab('market'); setTimeout(() => { marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; renderMarket(); }, 140); return; }
   const sa = e.target.closest('[data-sm-artist]'); if (sa) { const n = sa.dataset.smArtist; activateTab('market'); setTimeout(() => { marketState.tab = 'artists'; marketState.aExpand = n; marketState.aSearch = n; marketState.aSrc = ''; marketState.aGenre = ''; renderMarket(); }, 140); return; }
@@ -10904,6 +10942,8 @@ $('panel-scene-map').addEventListener('click', (e) => {
 $('panel-scene-map').addEventListener('change', (e) => {
   const sz = e.target.closest('[data-sm-size]'); if (sz) { sceneState.sizeBy = sz.value; renderSceneMap(); return; }
   const pl = e.target.closest('[data-sm-plat]'); if (pl) { sceneState.platform = pl.value; renderSceneMap(); return; }
+  const ms = e.target.closest('[data-sm-minshows]'); if (ms) { sceneState.minShows = Number(ms.value); renderSceneMap(); return; }
+  const sg = e.target.closest('[data-sm-genre]'); if (sg) { sceneState.genre = sg.value; renderSceneMap(); return; }
 });
 // Best Nights (panel-market) controls.
 $('panel-market').addEventListener('click', (e) => {
