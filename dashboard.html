@@ -10016,11 +10016,13 @@ function ensureScWidget() {
 // ===== ARTIST RADIO module (panel-ra-market) =====
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
-  const [ar, cache, social] = await Promise.all([
+  const [ar, cache, social, ev] = await Promise.all([
     sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
     sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
+    sb.from('ra_events').select('ra_id,event_date,venue_name,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)),
   ]);
+  raState.events = ev.data || [];
   if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
   raState.artists = ar.data || [];
   raState.cache = {}; (cache.data || []).forEach(c => { raState.cache[raKey(c.soundcloud)] = c; });
@@ -10083,7 +10085,11 @@ function raModeBar() {
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
-let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReasons: [], bookNyc: false };
+let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReasons: [], bookNyc: false,
+  // NYC Scene control center
+  tab: 'overview',
+  aSort: 'buzz', aDir: -1, aSrc: '', aGenre: '', aNyc: false, aProd: false, aHasSc: false, aSearch: '', aExpand: null,
+  vSort: 'shows', vDir: -1, vSearch: '', vPlatform: '', vExpand: null };
 // How good a night-of-week is for throwing a party, independent of the data
 // (Fri/Sat prime, Sun/Thu decent, Mon/Tue dead). Multiplies the score so Monday
 // can't top the list even on a quiet week. Sun..Sat.
@@ -10119,24 +10125,35 @@ function nightMetrics(list) {
 const nightScore = (met, dow) => met.opp * (DOW_WEIGHT[dow] ?? 0.5);
 async function loadMarket() {
   $('marketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading market…</div>';
-  const [ev, mine] = await Promise.all([
+  const [ev, mine, ven] = await Promise.all([
     sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
     sb.from('events').select('name,event_date,total_attendance').not('total_attendance', 'is', null),
-    // artists (for top-by-follows) share raState — load if empty
-    (raState.artists && raState.artists.length) ? Promise.resolve({ data: raState.artists }) : sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue').not('follower_count', 'is', null).order('follower_count', { ascending: false }),
+    sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner').is('deleted_at', null),
   ]);
   if (ev.error) { $('marketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
-  raState.events = ev.data || []; raState.mine = mine.data || [];
-  if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue').not('follower_count', 'is', null).order('follower_count', { ascending: false }); raState.artists = data || []; }
+  raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
+  // Full artist pool (city/partner) + scan cache so Buzz/NYC work here even if the radio tab hasn't loaded.
+  if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue,city,is_partner,source').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'); raState.artists = data || []; }
+  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
   if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
   await raLoadWatch();
   renderMarket();
 }
-// BUZZ — popularity from every source we have, per artist on an upcoming NYC bill.
-// Blend (signed off): show-demand 40 / reach 35 / catalog 15 / editorial 10, with
-// a small bump for a release in the last ~6 months. Signals are log-normalized
-// within the candidate set so one giant act doesn't flatten everyone else.
-function mkBuzzList() {
+// ════════ NYC SCENE — internal control-center data layer ════════════════════
+// The data WEB: shows carry a source → ticketing platform + a ticket URL, a
+// venue, and a lineup of artists (with SoundCloud + followers inline). We fuse
+// that with the radio pool (ra_artists: city, partner) and the scan cache
+// (SoundCloud followers, song catalog, producer flag) into per-artist and
+// per-venue intelligence you can sort, filter and drill into.
+const PLATFORM = {
+  ra:   { l: 'Resident Advisor', s: 'RA',   c: '#4E7A9B' },
+  dice: { l: 'DICE',             s: 'DICE', c: '#E0384E' },
+  tm:   { l: 'Ticketmaster',     s: 'TM',   c: '#0263E0' },
+};
+function platformOf(src) { return PLATFORM[src] || { l: (src || 'RA').toUpperCase(), s: (src || 'RA').toUpperCase(), c: 'var(--mid,#888)' }; }
+function platTag(src) { const p = platformOf(src); return `<span class="role-chip" style="cursor:default;background:${p.c};color:#fff;font-size:.55rem;padding:1px 6px;" title="Tickets via ${p.l}">${p.s}</span>`; }
+
+function scArtistData() {
   const evs = raState.events || [];
   const artByName = {}; (raState.artists || []).forEach(a => { artByName[(a.name || '').toLowerCase()] = a; });
   const sixMo = Date.now() - 1000 * 60 * 60 * 24 * 182;
@@ -10144,91 +10161,292 @@ function mkBuzzList() {
   evs.forEach(e => (e.lineup || []).forEach(la => {
     const nm = (la.name || '').trim(); if (!nm) return;
     const k = nm.toLowerCase();
-    const c = cand[k] || (cand[k] = { name: nm, demand: 0, editorial: false, nextDate: null, venue: '', genres: e.genres || [], raFollowers: 0 });
+    const c = cand[k] || (cand[k] = { name: nm, demand: 0, editorial: false, nextDate: null, venue: '', genres: new Set(), raFollowers: 0, soundcloud: la.soundcloud || null, shows: [], venues: new Set(), platforms: new Set() });
     c.demand = Math.max(c.demand, Number(e.attending) || 0);
     if (e.is_pick) c.editorial = true;
-    if (e.event_date && (!c.nextDate || e.event_date < c.nextDate)) { c.nextDate = e.event_date; c.venue = e.venue_name || ''; }
+    (e.genres || []).forEach(g => c.genres.add(g));
     c.raFollowers = Math.max(c.raFollowers, Number(la.follower_count) || 0);
+    if (la.soundcloud && !c.soundcloud) c.soundcloud = la.soundcloud;
+    if (e.venue_name) c.venues.add(e.venue_name);
+    c.platforms.add(e.source || 'ra');
+    c.shows.push({ date: e.event_date, venue: e.venue_name || '', platform: e.source || 'ra', attending: Number(e.attending) || 0, url: e.content_url, pick: e.is_pick });
+    if (e.event_date && (!c.nextDate || e.event_date < c.nextDate)) { c.nextDate = e.event_date; c.venue = e.venue_name || ''; }
   }));
   Object.values(cand).forEach(c => {
     const a = artByName[c.name.toLowerCase()];
-    c.soundcloud = a?.soundcloud || null;
+    if (a?.soundcloud) c.soundcloud = a.soundcloud;
+    c.instagram = a?.instagram || null;
     c.city = a?.city || '';
+    c.source = a?.source || 'ra';
+    c.isPartner = !!a?.is_partner;
     c.raFollowers = Math.max(c.raFollowers, Number(a?.follower_count) || 0);
-    if (a?.genres?.length) c.genres = a.genres;
+    (a?.genres || []).forEach(g => c.genres.add(g));
     const cache = c.soundcloud ? raState.cache[raKey(c.soundcloud)] : null;
     if (cache?.city && !c.city) c.city = cache.city;
+    c.scanned = !!cache; c.isProducer = !!cache?.is_producer;
     c.songCount = Number(cache?.song_count) || 0;
-    c.reach = Math.max(c.raFollowers, Number(cache?.followers) || 0);
+    c.scFollowers = Number(cache?.followers) || 0;
+    c.reach = Math.max(c.raFollowers, c.scFollowers);
     c.recent = !!(cache?.songs || []).some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
+    c.nyc = NYC_RE.test(c.city || '');
+    c.genresArr = [...c.genres]; c.venuesArr = [...c.venues]; c.platformsArr = [...c.platforms];
+    c.showCount = c.shows.length;
+    c.shows.sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   });
   const list = Object.values(cand);
   const lg = x => Math.log1p(Math.max(0, x));
-  const maxD = Math.max(1, ...list.map(c => lg(c.demand)));
-  const maxR = Math.max(1, ...list.map(c => lg(c.reach)));
-  const maxC = Math.max(1, ...list.map(c => lg(c.songCount)));
+  const maxD = Math.max(1e-9, ...list.map(c => lg(c.demand)));
+  const maxR = Math.max(1e-9, ...list.map(c => lg(c.reach)));
+  const maxC = Math.max(1e-9, ...list.map(c => lg(c.songCount)));
   list.forEach(c => {
-    let s = 40 * (lg(c.demand) / maxD) + 35 * (lg(c.reach) / maxR) + 15 * (lg(c.songCount) / maxC) + 10 * (c.editorial ? 1 : 0);
-    if (c.recent) s = Math.min(100, s + 4);        // small recent-release bump
+    c.sDemand = Math.round(100 * lg(c.demand) / maxD);
+    c.sReach = Math.round(100 * lg(c.reach) / maxR);
+    c.sCatalog = Math.round(100 * lg(c.songCount) / maxC);
+    let s = 0.40 * c.sDemand + 0.35 * c.sReach + 0.15 * c.sCatalog + (c.editorial ? 10 : 0);
+    if (c.recent) s = Math.min(100, s + 4);
     c.buzz = Math.round(s);
   });
-  list.sort((a, b) => b.buzz - a.buzz || (a.nextDate || '').localeCompare(b.nextDate || ''));
   return list;
 }
-function renderMkBooking() {
-  const all = mkBuzzList();
-  const nycCount = all.filter(c => NYC_RE.test(c.city || '')).length;
-  let list = marketState.bookNyc ? all.filter(c => NYC_RE.test(c.city || '')) : all;
-  const rows = list.slice(0, 30).map(c => {
-    const nyc = NYC_RE.test(c.city || '');
-    const meta = [c.nextDate ? 'Playing ' + escapeHtml(c.venue || 'NYC') + ' · ' + fmtDate(c.nextDate) : '',
-      c.demand ? fmtNum(c.demand) + ' RSVP' : '', c.reach ? fmtNum(c.reach) + ' reach' : '',
-      c.songCount ? c.songCount + ' songs' : '', c.editorial ? '⭐ RA pick' : '', c.recent ? '🆕 recent release' : ''].filter(Boolean).join(' · ');
-    return `<div class="hub-li"><div class="li-main">
-      <strong>${escapeHtml(c.name)}</strong> <span class="role-chip" style="cursor:default;background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;padding:1px 7px;" title="Buzz — blended popularity 0–100">${c.buzz}</span>${nyc ? ` <span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.58rem;padding:1px 6px;" title="Lives in NYC — ${escapeHtml(c.city)}">📍 NYC</span>` : ''}${(c.genres || []).length ? ` <span class="li-sub">· ${escapeHtml((c.genres || []).slice(0, 2).join(', '))}</span>` : ''}
-      <div class="li-sub">${escapeHtml(meta)}</div></div>
-      <span style="display:flex;gap:6px;">${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener" title="Their SoundCloud">☁</a>` : ''}${watchBtn('artist', c.name, c.name, { sublabel: c.venue || '' })}</span></div>`;
+// Buzz-by-name, memoized on (events, cache) size, so Artist Radio can sort by it too.
+function raBuzzMap() {
+  const sig = (raState.events || []).length + ':' + Object.keys(raState.cache || {}).length;
+  if (raState._buzzSig === sig && raState._buzzMap) return raState._buzzMap;
+  const m = {}; scArtistData().forEach(c => { m[c.name.toLowerCase()] = c.buzz; });
+  raState._buzzSig = sig; raState._buzzMap = m; return m;
+}
+function scVenueData() {
+  const evs = raState.events || [];
+  const vByName = {}; (raState.venues || []).forEach(v => vByName[(v.name || '').toLowerCase()] = v);
+  const v = {};
+  evs.forEach(e => {
+    const nm = (e.venue_name || '').trim(); if (!nm) return;
+    const x = v[nm] || (v[nm] = { name: nm, shows: 0, demandSum: 0, demandMax: 0, genres: {}, platforms: new Set(), artists: new Set(), picks: 0, ticketed: 0, nextDate: null, showList: [] });
+    x.shows++; const at = Number(e.attending) || 0;
+    x.demandSum += at; x.demandMax = Math.max(x.demandMax, at);
+    (e.genres || []).forEach(g => x.genres[g] = (x.genres[g] || 0) + 1);
+    x.platforms.add(e.source || 'ra');
+    (e.lineup || []).forEach(la => la.name && x.artists.add(la.name));
+    if (e.is_pick) x.picks++; if (e.is_ticketed) x.ticketed++;
+    if (e.event_date && (!x.nextDate || e.event_date < x.nextDate)) x.nextDate = e.event_date;
+    x.showList.push({ date: e.event_date, title: e.title, platform: e.source || 'ra', attending: at, url: e.content_url });
+  });
+  const list = Object.values(v);
+  list.forEach(x => {
+    x.avgDemand = x.shows ? Math.round(x.demandSum / x.shows) : 0;
+    x.topGenres = Object.entries(x.genres).sort((a, b) => b[1] - a[1]).slice(0, 3).map(g => g[0]);
+    x.platformsArr = [...x.platforms]; x.artistCount = x.artists.size;
+    x.showList.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const rec = vByName[x.name.toLowerCase()];
+    x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
+    x.ra_url = rec?.ra_url || null; x.ticket_url = rec?.ticket_url || null;
+  });
+  return list;
+}
+function scSnapshot() {
+  const evs = raState.events || [], arts = raState.artists || [];
+  const bySrc = (arr) => { const o = {}; arr.forEach(x => { const s = x.source || 'ra'; o[s] = (o[s] || 0) + 1; }); return o; };
+  const cacheVals = Object.values(raState.cache || {});
+  const songs = cacheVals.reduce((s, c) => s + (Number(c.song_count) || 0), 0);
+  const nyc = arts.filter(a => NYC_RE.test(a.city || (raState.cache[a.soundcloud ? raKey(a.soundcloud) : '']?.city) || '')).length;
+  return {
+    evTotal: evs.length, evSrc: bySrc(evs), arTotal: arts.length, arSrc: bySrc(arts),
+    withSc: arts.filter(a => a.soundcloud).length, scanned: cacheVals.length,
+    producers: cacheVals.filter(c => c.is_producer).length, songs,
+    avgSongs: cacheVals.length ? (songs / cacheVals.length).toFixed(1) : '0',
+    nyc, venues: new Set(evs.map(e => e.venue_name).filter(Boolean)).size,
+    lastFetch: evs.reduce((m, e) => (e.fetched_at || '') > m ? e.fetched_at : m, ''),
+  };
+}
+
+// ════════ NYC SCENE — UI ═════════════════════════════════════════════════════
+// Always-on coverage snapshot: confirms exactly what data is captured right now.
+function renderScSnapshot() {
+  const s = scSnapshot();
+  const srcStr = (o) => ['ra', 'dice', 'tm'].filter(k => o[k]).map(k => `${platformOf(k).s} ${o[k]}`).join(' · ') || '—';
+  const stat = (icon, label, value, sub) => `<div style="flex:1 1 130px;background:var(--card,#20142a);border:1px solid var(--border);border-radius:12px;padding:9px 13px;">
+    <div class="li-sub" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;">${icon} ${label}</div>
+    <div style="font-weight:800;font-size:1.15rem;line-height:1.15;">${value}</div><div class="li-sub" style="font-size:.66rem;">${sub || '&nbsp;'}</div></div>`;
+  return `<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;">
+    ${stat('📅', 'Events', fmtNum(s.evTotal), srcStr(s.evSrc))}
+    ${stat('🎧', 'Artists', fmtNum(s.arTotal), srcStr(s.arSrc))}
+    ${stat('☁', 'SoundCloud', s.withSc + ' linked', `${s.scanned} scanned · ${s.producers} producers`)}
+    ${stat('🎵', 'Songs', fmtNum(s.songs), `${s.avgSongs} avg / scanned`)}
+    ${stat('📍', 'NYC-local', fmtNum(s.nyc), 'artists')}
+    ${stat('🏛', 'Venues', fmtNum(s.venues), s.lastFetch ? 'updated ' + fmtDate(s.lastFetch) : 'distinct')}</div>`;
+}
+function scTabNav() {
+  const tab = (k, l) => `<button class="hub-btn ghost" data-sc-tab="${k}" style="${marketState.tab === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  return `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px;">${tab('overview', '📊 Overview')}${tab('artists', '🎧 Artists')}${tab('venues', '🏛 Venues')}</div>`;
+}
+function scSortHead(label, key, cur, dir, attr, alignR) {
+  const on = cur === key;
+  return `<th data-${attr}="${key}" style="cursor:pointer;white-space:nowrap;padding:7px 8px;text-align:${alignR ? 'right' : 'left'};user-select:none;position:sticky;top:0;background:var(--card,#20142a);z-index:1;">${label}${on ? (dir < 0 ? ' ▾' : ' ▴') : '<span style="opacity:.3"> ⇅</span>'}</th>`;
+}
+function renderScArtists() {
+  const f = marketState;
+  const full = scArtistData();
+  const genreSet = [...new Set(full.flatMap(c => c.genresArr))].sort();
+  let list = full.slice();
+  if (f.aSrc) list = list.filter(c => (c.source || 'ra') === f.aSrc);
+  if (f.aGenre) list = list.filter(c => c.genresArr.includes(f.aGenre));
+  if (f.aNyc) list = list.filter(c => c.nyc);
+  if (f.aProd) list = list.filter(c => c.isProducer);
+  if (f.aHasSc) list = list.filter(c => c.soundcloud);
+  if (f.aSearch) { const q = f.aSearch.toLowerCase(); list = list.filter(c => c.name.toLowerCase().includes(q) || c.venuesArr.some(v => v.toLowerCase().includes(q))); }
+  const key = f.aSort || 'buzz', dir = f.aDir ?? -1;
+  const val = c => ({ name: c.name.toLowerCase(), buzz: c.buzz, demand: c.demand, reach: c.reach, songs: c.songCount, shows: c.showCount, next: c.nextDate || '9999-99' }[key]);
+  list.sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * dir; });
+  const rows = list.slice(0, 250).map(c => {
+    const exp = f.aExpand === c.name;
+    const tags = [c.nyc ? `<span class="role-chip" style="background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.53rem;padding:0 5px;">NYC</span>` : '', c.isPartner ? `<span class="role-chip" style="background:var(--green,#1f7a1f);color:#fff;font-size:.53rem;padding:0 5px;">partner</span>` : '', c.isProducer ? `<span class="role-chip" style="background:#2a1c36;color:var(--lime,#a7e02e);font-size:.53rem;padding:0 5px;">🎛</span>` : ''].filter(Boolean).join(' ');
+    return `<tr data-sc-aexpand="${escapeHtml(c.name)}" style="cursor:pointer;border-top:1px solid var(--border);${exp ? 'background:var(--hover,rgba(255,255,255,.04));' : ''}">
+      <td style="padding:6px 8px;"><strong>${escapeHtml(c.name)}</strong> ${platTag(c.source)} ${tags}${c.genresArr.length ? `<div class="li-sub" style="font-size:.64rem;">${escapeHtml(c.genresArr.slice(0, 2).join(', '))}</div>` : ''}</td>
+      <td style="padding:6px 8px;text-align:center;"><span class="role-chip" style="background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;">${c.buzz}</span></td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.demand ? fmtNum(c.demand) : '—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.reach ? fmtNum(c.reach) : '—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.scanned ? c.songCount : '<span class="li-sub" title="not scanned yet">·</span>'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.showCount}</td>
+      <td style="padding:6px 8px;white-space:nowrap;">${c.nextDate ? fmtDate(c.nextDate) + `<div class="li-sub" style="font-size:.64rem;">${escapeHtml(c.venue || '')}</div>` : '—'}</td>
+    </tr>${exp ? `<tr><td colspan="7" style="padding:2px 10px 12px;">${scArtistExpand(c)}</td></tr>` : ''}`;
   }).join('');
-  return `<div class="hub-sec-bar" style="margin-top:20px;"><h3>🎧 Who to book <span class="li-sub" style="font-weight:normal;">· ${list.length} artists · ranked by buzz</span></h3>
-      <button class="hub-btn ghost" data-mk-booknyc style="${marketState.bookNyc ? 'background:var(--hot,#ff5ca8);color:#1a0a12;' : ''}" title="Only artists whose profile city is NYC">📍 NYC locals${nycCount ? ` (${nycCount})` : ''}</button></div>
-    <div class="kpi-hint" style="margin-bottom:10px;">Buzz blends <strong>show demand</strong> (RSVPs) + <strong>reach</strong> (RA & SoundCloud followers) + <strong>catalog</strong> (songs) + <strong>editorial</strong> (RA picks), with a bump for a recent release. Scan artists in the radio tab to fill in SoundCloud reach/catalog.</div>
-    <div class="hub-list ra-zebra">${rows || '<div class="hub-empty">No lineup data yet — hit “↻ Pull shows”.</div>'}</div>`;
+  const opt = (v, l, cur) => `<option value="${escapeHtml(v)}"${cur === v ? ' selected' : ''}>${escapeHtml(l)}</option>`;
+  const toggle = (attr, on, label, col) => `<button class="hub-btn ghost" data-${attr} style="${on ? `background:${col};color:#1a0a12;` : ''}">${label}</button>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <input class="modal-input" data-sc-asearch placeholder="🔎 Artist or venue…" value="${escapeHtml(f.aSearch)}" style="flex:1 1 200px;min-width:160px;">
+      <select class="modal-select" data-sc-asrc style="max-width:150px;"><option value="">All sources</option>${['ra', 'dice', 'tm'].map(s => opt(s, platformOf(s).l, f.aSrc)).join('')}</select>
+      <select class="modal-select" data-sc-agenre style="max-width:150px;"><option value="">All genres</option>${genreSet.map(g => opt(g, g, f.aGenre)).join('')}</select>
+      ${toggle('sc-anyc', f.aNyc, '📍 NYC', 'var(--hot,#ff5ca8)')}
+      ${toggle('sc-aprod', f.aProd, '🎛 Producers', 'var(--lime,#a7e02e)')}
+      ${toggle('sc-ahassc', f.aHasSc, '☁ Has SoundCloud', 'var(--accent,#5b7fb3)')}
+    </div>
+    <div class="li-sub" style="margin-bottom:6px;">${list.length} of ${full.length} artists${list.length > 250 ? ' · showing top 250' : ''} · click a column to sort, a row to drill in</div>
+    <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
+        <thead><tr>
+          ${scSortHead('Artist', 'name', key, dir, 'sc-asort')}
+          <th style="padding:7px 8px;text-align:center;position:sticky;top:0;background:var(--card,#20142a);cursor:pointer;" data-sc-asort="buzz" title="Blended popularity">Buzz${key === 'buzz' ? (dir < 0 ? ' ▾' : ' ▴') : '<span style="opacity:.3"> ⇅</span>'}</th>
+          ${scSortHead('RSVP', 'demand', key, dir, 'sc-asort', true)}
+          ${scSortHead('Reach', 'reach', key, dir, 'sc-asort', true)}
+          ${scSortHead('Songs', 'songs', key, dir, 'sc-asort', true)}
+          ${scSortHead('Shows', 'shows', key, dir, 'sc-asort', true)}
+          ${scSortHead('Next', 'next', key, dir, 'sc-asort')}
+        </tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" style="padding:16px;text-align:center;" class="li-sub">No artists match — clear a filter, or hit “↻ Pull shows”.</td></tr>'}</tbody>
+      </table></div>`;
+}
+function scArtistExpand(c) {
+  const bar = (l, v) => `<div style="display:flex;align-items:center;gap:8px;font-size:.78rem;"><span style="width:64px;color:var(--mid,#888)">${l}</span><span style="flex:1;height:6px;background:#2a1c36;border-radius:4px;overflow:hidden;"><i style="display:block;height:100%;width:${v}%;background:var(--lime,#a7e02e)"></i></span><span style="width:28px;text-align:right;font-variant-numeric:tabular-nums;">${v}</span></div>`;
+  const shows = c.shows.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${escapeHtml(s.venue)} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.pick ? ' · ⭐' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">tickets ↗</a>` : ''}</div>`).join('');
+  return `<div style="display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;padding-top:8px;align-items:start;">
+    <div style="display:grid;gap:5px;">
+      <div class="li-sub" style="font-weight:700;">Buzz ${c.buzz} — how it's built</div>
+      ${bar('Demand', c.sDemand)}${bar('Reach', c.sReach)}${bar('Catalog', c.sCatalog)}
+      <div class="li-sub" style="min-height:1em;">${[c.editorial ? '⭐ +10 RA pick' : '', c.recent ? '🆕 +4 recent release' : '', c.city ? '📍 ' + escapeHtml(c.city) : ''].filter(Boolean).join(' · ')}</div>
+      <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a>` : ''}${c.instagram && igUrl(c.instagram) ? `<a class="hub-mini" href="${escapeHtml(igUrl(c.instagram))}" target="_blank" rel="noopener">📷 IG</a>` : ''}${watchBtn('artist', c.name, c.name, {})}</div>
+    </div>
+    <div><div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows (${c.showCount})</div>${shows || '<div class="li-sub">—</div>'}</div>
+  </div>`;
+}
+function renderScVenues() {
+  const f = marketState;
+  const full = scVenueData();
+  let list = full.slice();
+  if (f.vPlatform) list = list.filter(x => x.platformsArr.includes(f.vPlatform));
+  if (f.vSearch) { const q = f.vSearch.toLowerCase(); list = list.filter(x => x.name.toLowerCase().includes(q) || (x.topGenres || []).some(g => g.toLowerCase().includes(q))); }
+  const key = f.vSort || 'shows', dir = f.vDir ?? -1;
+  const val = x => ({ name: x.name.toLowerCase(), shows: x.shows, avg: x.avgDemand, peak: x.demandMax, artists: x.artistCount, next: x.nextDate || '9999-99' }[key]);
+  list.sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * dir; });
+  const rows = list.slice(0, 250).map(x => {
+    const exp = f.vExpand === x.name;
+    return `<tr data-sc-vexpand="${escapeHtml(x.name)}" style="cursor:pointer;border-top:1px solid var(--border);${exp ? 'background:var(--hover,rgba(255,255,255,.04));' : ''}">
+      <td style="padding:6px 8px;"><strong>${escapeHtml(x.name)}</strong>${x.isPartner ? ` <span class="role-chip" style="background:var(--green,#1f7a1f);color:#fff;font-size:.53rem;padding:0 5px;">partner</span>` : ''}${x.capacity ? ` <span class="li-sub">· cap ${fmtNum(x.capacity)}</span>` : ''}${x.topGenres.length ? `<div class="li-sub" style="font-size:.64rem;">${escapeHtml(x.topGenres.join(', '))}</div>` : ''}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${x.shows}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${x.avgDemand ? fmtNum(x.avgDemand) : '—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${x.demandMax ? fmtNum(x.demandMax) : '—'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${x.artistCount}</td>
+      <td style="padding:6px 8px;">${x.platformsArr.map(platTag).join(' ')}</td>
+      <td style="padding:6px 8px;white-space:nowrap;">${x.nextDate ? fmtDate(x.nextDate) : '—'}</td>
+    </tr>${exp ? `<tr><td colspan="7" style="padding:2px 10px 12px;">${scVenueExpand(x)}</td></tr>` : ''}`;
+  }).join('');
+  const opt = (v, l, cur) => `<option value="${escapeHtml(v)}"${cur === v ? ' selected' : ''}>${escapeHtml(l)}</option>`;
+  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <input class="modal-input" data-sc-vsearch placeholder="🔎 Venue or genre…" value="${escapeHtml(f.vSearch)}" style="flex:1 1 200px;min-width:160px;">
+      <select class="modal-select" data-sc-vplatform style="max-width:160px;"><option value="">All platforms</option>${['ra', 'dice', 'tm'].map(s => opt(s, platformOf(s).l, f.vPlatform)).join('')}</select>
+    </div>
+    <div class="li-sub" style="margin-bottom:6px;">${list.length} of ${full.length} venues · click a column to sort, a row for its shows &amp; artists</div>
+    <div style="overflow-x:auto;max-height:70vh;overflow-y:auto;border:1px solid var(--border);border-radius:10px;">
+      <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
+        <thead><tr>
+          ${scSortHead('Venue', 'name', key, dir, 'sc-vsort')}
+          ${scSortHead('Shows', 'shows', key, dir, 'sc-vsort', true)}
+          ${scSortHead('Avg RSVP', 'avg', key, dir, 'sc-vsort', true)}
+          ${scSortHead('Peak', 'peak', key, dir, 'sc-vsort', true)}
+          ${scSortHead('Artists', 'artists', key, dir, 'sc-vsort', true)}
+          <th style="padding:7px 8px;position:sticky;top:0;background:var(--card,#20142a);">Tickets</th>
+          ${scSortHead('Next', 'next', key, dir, 'sc-vsort')}
+        </tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" style="padding:16px;text-align:center;" class="li-sub">No venues yet — hit “↻ Pull shows”.</td></tr>'}</tbody>
+      </table></div>`;
+}
+function scVenueExpand(x) {
+  const links = [x.ra_url ? `<a class="hub-mini" href="${escapeHtml(x.ra_url)}" target="_blank" rel="noopener">RA ↗</a>` : '', x.ticket_url ? `<a class="hub-mini" href="${escapeHtml(x.ticket_url)}" target="_blank" rel="noopener">Tickets ↗</a>` : ''].filter(Boolean).join(' ');
+  const shows = x.showList.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${escapeHtml(s.title || '')} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">↗</a>` : ''}</div>`).join('');
+  return `<div style="display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;padding-top:8px;align-items:start;">
+    <div style="display:grid;gap:4px;">
+      <div class="li-sub"><strong>${x.shows}</strong> shows · <strong>${fmtNum(x.demandSum)}</strong> total RSVP · <strong>${x.artistCount}</strong> artists · ${x.picks} RA picks</div>
+      <div class="li-sub">${x.area ? '📍 ' + escapeHtml(x.area) + ' · ' : ''}${x.capacity ? 'cap ' + fmtNum(x.capacity) + ' · ' : ''}${Math.round(x.ticketed / x.shows * 100)}% ticketed</div>
+      <div class="li-sub">${x.topGenres.join(' · ') || ''}</div>
+      ${links ? `<div style="display:flex;gap:6px;margin-top:4px;">${links}</div>` : ''}
+    </div>
+    <div><div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows</div>${shows || '<div class="li-sub">—</div>'}</div>
+  </div>`;
 }
 function renderMarket() {
   const evs = raState.events;
-  if (!evs.length) {
-    $('marketBody').innerHTML = `<div class="hub-sec-bar"><h3>Best Nights</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
-      <div class="hub-empty">No show data yet. Hit “↻ Pull shows” to load upcoming NYC events from Resident Advisor + Ticketmaster (~20s).</div>`;
+  if (!evs || !evs.length) {
+    $('marketBody').innerHTML = `<div class="hub-sec-bar"><h3>🗽 NYC Scene</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
+      <div class="hub-empty">No show data yet. Hit “↻ Pull shows” to load upcoming NYC events from Resident Advisor + DICE + Ticketmaster (~20s).</div>`;
     return;
   }
-  const lastFetch = evs.reduce((m, e) => e.fetched_at > m ? e.fetched_at : m, evs[0].fetched_at);
-  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
-  const dowM = DOW.map((d, i) => { const met = nightMetrics(evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i)); return { d, i, ...met, score: nightScore(met, i) }; });
-  const best = [...dowM].sort((a, b) => b.score - a.score)[0];
-  const picks = evs.filter(e => e.is_pick).length;
-
+  const content = marketState.tab === 'artists' ? renderScArtists()
+    : marketState.tab === 'venues' ? renderScVenues()
+    : renderScOverview();
   $('marketBody').innerHTML = `
-    <div class="hub-sec-bar"><h3>Best Nights — NYC</h3>
-      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="li-sub">${evs.length} shows · updated ${fmtDate(lastFetch)}</span>
+    <div class="hub-sec-bar"><h3>🗽 NYC Scene · control center</h3>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;"><span class="li-sub">internal — RA + DICE + Ticketmaster</span>
         <button class="hub-btn" data-ra-refresh>↻ Pull shows</button></span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Upcoming NYC shows from <strong>Resident Advisor</strong> + <strong>Ticketmaster</strong> (EDM only). Score blends <strong>demand</strong> (RSVP) + <strong>star power</strong> (headliner reach) against <strong>competition</strong> (how many shows that night).</div>
-    <div class="hub-cards" style="margin-bottom:14px;">
-      ${card('Shows ahead', fmtNum(evs.length))}
-      ${card('Best night', best ? best.d : '—', best ? `${fmtNum(best.med)} RSVP · ${best.starK}k reach · ${best.n} shows` : '')}
-      ${card('RA picks', fmtNum(picks), 'editor-featured')}
-      ${card('Ticketed', Math.round(evs.filter(e => e.is_ticketed).length / evs.length * 100) + '%', 'of shows')}
+    ${renderScSnapshot()}
+    ${scTabNav()}
+    ${content}`;
+}
+function scOverviewRow(c) {
+  return `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(c.name)}</strong> <span class="role-chip" style="cursor:default;background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;">${c.buzz}</span>${c.nyc ? ' <span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.53rem;padding:0 5px;">NYC</span>' : ''}${platTag(c.source)}
+    <div class="li-sub">${c.nextDate ? fmtDate(c.nextDate) + ' · ' + escapeHtml(c.venue || '') : ''}${c.demand ? ' · ' + fmtNum(c.demand) + ' RSVP' : ''}${c.reach ? ' · ' + fmtNum(c.reach) + ' reach' : ''}</div></div>
+    <span>${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener" title="SoundCloud">☁</a>` : ''}${watchBtn('artist', c.name, c.name, { sublabel: c.venue || '' })}</span></div>`;
+}
+function renderScOverview() {
+  const evs = raState.events;
+  const dowM = DOW.map((d, i) => { const met = nightMetrics(evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i)); return { d, i, ...met, score: nightScore(met, i) }; });
+  const top = scArtistData().slice().sort((a, b) => b.buzz - a.buzz);
+  const topBuzz = top.slice(0, 6);
+  const nycTop = top.filter(c => c.nyc).slice(0, 6);
+  return `
+    <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+      <div><div class="hub-sec-bar"><h3>🔥 Top buzz</h3><button class="hub-btn ghost" data-sc-tab="artists">See all →</button></div>
+        <div class="hub-list ra-zebra">${topBuzz.map(scOverviewRow).join('') || '<div class="hub-empty">—</div>'}</div></div>
+      <div><div class="hub-sec-bar"><h3>📍 NYC locals</h3><button class="hub-btn ghost" data-sc-golocal>See all →</button></div>
+        <div class="hub-list ra-zebra">${nycTop.map(scOverviewRow).join('') || '<div class="hub-empty">No NYC-local artists in range yet — refresh music &amp; data in the radio tab.</div>'}</div></div>
     </div>
-    ${renderMkBooking()}
     ${renderMkWatchlist()}
-    <div class="hub-sec-bar"><h3>Best nights to throw</h3>
+    <div class="hub-sec-bar" style="margin-top:20px;"><h3>Best nights to throw <span class="li-sub" style="font-weight:normal;">· for our own parties</span></h3>
       <span style="display:flex;gap:6px;"><button class="hub-btn ghost" data-mk-view="week" style="${marketState.view === 'week' ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">By weekday</button>
         <button class="hub-btn ghost" data-mk-view="calendar" style="${marketState.view === 'calendar' ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">📅 Calendar</button></span></div>
     ${marketState.view === 'week' ? renderMkWeek(dowM) : renderMkCalendar()}
     <div class="two-col" style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:20px;align-items:start;">
       ${renderMkVenues()}
       ${renderMkGenres()}
-    </div>
-    ${renderMkTopArtists()}`;
+    </div>`;
 }
 function renderMkWeek(dowM) {
   const maxScore = Math.max(1, ...dowM.map(s => s.score));
@@ -10570,6 +10788,16 @@ async function raRefresh(btn) {
 // Best Nights (panel-market) controls.
 $('panel-market').addEventListener('click', (e) => {
   const v = e.target.closest('[data-mk-view]'); if (v) { marketState.view = v.dataset.mkView; renderMarket(); return; }
+  // ── NYC Scene control center ──
+  const sct = e.target.closest('[data-sc-tab]'); if (sct) { marketState.tab = sct.dataset.scTab; marketState.aExpand = null; marketState.vExpand = null; renderMarket(); return; }
+  if (e.target.closest('[data-sc-golocal]')) { marketState.tab = 'artists'; marketState.aNyc = true; renderMarket(); return; }
+  const sas = e.target.closest('[data-sc-asort]'); if (sas) { const k = sas.dataset.scAsort; if (marketState.aSort === k) marketState.aDir = -marketState.aDir; else { marketState.aSort = k; marketState.aDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
+  const svt = e.target.closest('[data-sc-vsort]'); if (svt) { const k = svt.dataset.scVsort; if (marketState.vSort === k) marketState.vDir = -marketState.vDir; else { marketState.vSort = k; marketState.vDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
+  if (e.target.closest('[data-sc-anyc]')) { marketState.aNyc = !marketState.aNyc; renderMarket(); return; }
+  if (e.target.closest('[data-sc-aprod]')) { marketState.aProd = !marketState.aProd; renderMarket(); return; }
+  if (e.target.closest('[data-sc-ahassc]')) { marketState.aHasSc = !marketState.aHasSc; renderMarket(); return; }
+  const aex = e.target.closest('[data-sc-aexpand]'); if (aex && !e.target.closest('a,button')) { const n = aex.dataset.scAexpand; marketState.aExpand = marketState.aExpand === n ? null : n; renderMarket(); return; }
+  const vex = e.target.closest('[data-sc-vexpand]'); if (vex && !e.target.closest('a,button')) { const n = vex.dataset.scVexpand; marketState.vExpand = marketState.vExpand === n ? null : n; renderMarket(); return; }
   if (e.target.closest('[data-mk-booknyc]')) { marketState.bookNyc = !marketState.bookNyc; renderMarket(); return; }
   const mon = e.target.closest('[data-mk-mon]'); if (mon) { const d = marketState.month; marketState.month = new Date(d.getFullYear(), d.getMonth() + Number(mon.dataset.mkMon), 1); marketState.selDate = null; renderMarket(); return; }
   const day = e.target.closest('[data-mk-day]'); if (day) { marketState.selDate = marketState.selDate === day.dataset.mkDay ? null : day.dataset.mkDay; renderMarket(); return; }
@@ -10581,6 +10809,19 @@ $('panel-market').addEventListener('click', (e) => {
 });
 $('panel-market').addEventListener('change', (e) => {
   const vs = e.target.closest('[data-mk-vsort]'); if (vs) { marketState.venueSort = vs.value; marketState.venuePage = 0; renderMarket(); return; }
+  const asr = e.target.closest('[data-sc-asrc]'); if (asr) { marketState.aSrc = asr.value; renderMarket(); return; }
+  const agn = e.target.closest('[data-sc-agenre]'); if (agn) { marketState.aGenre = agn.value; renderMarket(); return; }
+  const vpl = e.target.closest('[data-sc-vplatform]'); if (vpl) { marketState.vPlatform = vpl.value; renderMarket(); return; }
+});
+let _scSearchT;
+$('panel-market').addEventListener('input', (e) => {
+  const as = e.target.closest('[data-sc-asearch]'), vs = e.target.closest('[data-sc-vsearch]');
+  if (!as && !vs) return;
+  clearTimeout(_scSearchT); const val = e.target.value; const which = as ? 'aSearch' : 'vSearch'; const sel = as ? '[data-sc-asearch]' : '[data-sc-vsearch]';
+  _scSearchT = setTimeout(() => {
+    marketState[which] = val; renderMarket();
+    const el = document.querySelector('#panel-market ' + sel); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, 250);
 });
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
@@ -10614,7 +10855,10 @@ function raRadioList() {
   // so a venue with no name sinks instead of heading the list, and inside a
   // venue it's soonest-first — that's the order you'd work a room in.
   const venue = a => (a.next_venue || '￿').toLowerCase();
-  out.sort((a, b) => s === 'followers' ? (b.follower_count || 0) - (a.follower_count || 0)
+  const bz = s === 'buzz' ? raBuzzMap() : null;
+  const buzzOf = a => bz[(a.name || '').toLowerCase()] || 0;
+  out.sort((a, b) => s === 'buzz' ? (buzzOf(b) - buzzOf(a)) || (a.next_event_date || '').localeCompare(b.next_event_date || '')
+    : s === 'followers' ? (b.follower_count || 0) - (a.follower_count || 0)
     : s === 'name' ? (a.name || '').localeCompare(b.name || '')
       : s === 'songs' ? songs(b) - songs(a)
         : s === 'venue' ? venue(a).localeCompare(venue(b))
@@ -10644,8 +10888,11 @@ function renderRaRadio() {
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
   const genreOpt = (v, l) => `<option value="${escapeHtml(v)}"${raState.genre === v ? ' selected' : ''}>${escapeHtml(l)}</option>`;
 
+  const bzMap = raBuzzMap();
   const cards = list.slice(0, 120).map((a) => {
     const c = a.c, open = raState.openArtist === a.key;
+    const bz = bzMap[(a.name || '').toLowerCase()];
+    const buzzChip = bz ? ` <span class="role-chip" style="cursor:default;background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;padding:0 6px;" title="Buzz — blended popularity 0–100 (sort by it above)">🔥 ${bz}</span>` : '';
     const badge = !a.soundcloud ? `<span class="li-sub" style="color:var(--mid,#888)">no SoundCloud link — 🛒 check Beatport</span>`
       : !c ? `<span class="li-sub">⏳ tap 🎵 to scan</span>`
         : !c.ok ? `<span class="li-sub" style="color:var(--mid,#888)">⚠ profile unavailable</span>`
@@ -10653,7 +10900,7 @@ function renderRaRadio() {
             : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
     return `<div class="hub-li" style="flex-wrap:wrap;">
       <div class="li-main">
-        <strong>${escapeHtml(a.name)}</strong> ${raSourceTag(a.source)}${nycTag(a)}${a.is_partner ? ` <span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;font-size:.58rem;padding:1px 6px;" title="Added by you as a partner / manual entry">🤝 partner</span>` : ''}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
+        <strong>${escapeHtml(a.name)}</strong>${buzzChip} ${raSourceTag(a.source)}${nycTag(a)}${a.is_partner ? ` <span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;font-size:.58rem;padding:1px 6px;" title="Added by you as a partner / manual entry">🤝 partner</span>` : ''}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
         <div class="li-sub">${a.next_event_date ? 'Playing ' + escapeHtml(a.next_venue || 'NYC') + ' · ' + escapeHtml(fmtDate(a.next_event_date)) : '<span style="color:var(--gold,#B5791F)">Partner · no upcoming show tracked</span>'}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}${a.city ? ' · 📍 ' + escapeHtml(a.city) : ''}</div>
       </div>
       <span style="display:flex;gap:6px;">
@@ -10688,7 +10935,7 @@ function renderRaRadio() {
           <input class="modal-input" data-ra-search placeholder="Search by artist or venue…" style="width:100%;padding-left:32px;${raState.search ? 'padding-right:32px;' : ''}" value="${escapeHtml(raState.search)}">
           ${raState.search ? '<button class="hub-mini" data-ra-clearsearch title="Clear search" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:2px 7px;">✕</button>' : ''}
         </div>
-        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('buzz', '🔥 Buzz')}${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
         <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
         <select class="modal-select" data-ra-venue style="max-width:160px;" title="Filter by venue"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
         ${srcSet.length > 1 ? `<select class="modal-select" data-ra-source style="max-width:150px;" title="Show only shows pulled from one source. DICE/Ticketmaster artists have no SoundCloud, so pick the source to see them all."><option value="">All sources</option>${srcSet.map(s => `<option value="${s}"${raState.sourceFilter === s ? ' selected' : ''}>${(RA_SOURCE[s]?.l || s.toUpperCase())} · ${srcCounts[s]}</option>`).join('')}</select>` : ''}
@@ -10706,6 +10953,7 @@ function renderRaRadio() {
       </div>
     </div>
     ${raRenderPlaylist()}
+    ${(raState.events && raState.events.length) ? renderScSnapshot() : ''}
     <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${raState.sourceFilter
       ? `${list.length} from ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()}`
       : `${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}`}</span></h3></div>
