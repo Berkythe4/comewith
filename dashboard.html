@@ -10083,7 +10083,7 @@ function raModeBar() {
 }
 
 // ================= BEST NIGHTS module (panel-market) — scheduling intel =========
-let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReasons: [] };
+let marketState = { view: 'week', month: null, selDate: null, venuePage: 0, venueSort: 'avg', genre: '', showArchived: false, watchReasons: [], bookNyc: false };
 // How good a night-of-week is for throwing a party, independent of the data
 // (Fri/Sat prime, Sun/Thu decent, Mon/Tue dead). Multiplies the score so Monday
 // can't top the list even on a quiet week. Sun..Sat.
@@ -10132,6 +10132,68 @@ async function loadMarket() {
   await raLoadWatch();
   renderMarket();
 }
+// BUZZ — popularity from every source we have, per artist on an upcoming NYC bill.
+// Blend (signed off): show-demand 40 / reach 35 / catalog 15 / editorial 10, with
+// a small bump for a release in the last ~6 months. Signals are log-normalized
+// within the candidate set so one giant act doesn't flatten everyone else.
+function mkBuzzList() {
+  const evs = raState.events || [];
+  const artByName = {}; (raState.artists || []).forEach(a => { artByName[(a.name || '').toLowerCase()] = a; });
+  const sixMo = Date.now() - 1000 * 60 * 60 * 24 * 182;
+  const cand = {};
+  evs.forEach(e => (e.lineup || []).forEach(la => {
+    const nm = (la.name || '').trim(); if (!nm) return;
+    const k = nm.toLowerCase();
+    const c = cand[k] || (cand[k] = { name: nm, demand: 0, editorial: false, nextDate: null, venue: '', genres: e.genres || [], raFollowers: 0 });
+    c.demand = Math.max(c.demand, Number(e.attending) || 0);
+    if (e.is_pick) c.editorial = true;
+    if (e.event_date && (!c.nextDate || e.event_date < c.nextDate)) { c.nextDate = e.event_date; c.venue = e.venue_name || ''; }
+    c.raFollowers = Math.max(c.raFollowers, Number(la.follower_count) || 0);
+  }));
+  Object.values(cand).forEach(c => {
+    const a = artByName[c.name.toLowerCase()];
+    c.soundcloud = a?.soundcloud || null;
+    c.city = a?.city || '';
+    c.raFollowers = Math.max(c.raFollowers, Number(a?.follower_count) || 0);
+    if (a?.genres?.length) c.genres = a.genres;
+    const cache = c.soundcloud ? raState.cache[raKey(c.soundcloud)] : null;
+    if (cache?.city && !c.city) c.city = cache.city;
+    c.songCount = Number(cache?.song_count) || 0;
+    c.reach = Math.max(c.raFollowers, Number(cache?.followers) || 0);
+    c.recent = !!(cache?.songs || []).some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
+  });
+  const list = Object.values(cand);
+  const lg = x => Math.log1p(Math.max(0, x));
+  const maxD = Math.max(1, ...list.map(c => lg(c.demand)));
+  const maxR = Math.max(1, ...list.map(c => lg(c.reach)));
+  const maxC = Math.max(1, ...list.map(c => lg(c.songCount)));
+  list.forEach(c => {
+    let s = 40 * (lg(c.demand) / maxD) + 35 * (lg(c.reach) / maxR) + 15 * (lg(c.songCount) / maxC) + 10 * (c.editorial ? 1 : 0);
+    if (c.recent) s = Math.min(100, s + 4);        // small recent-release bump
+    c.buzz = Math.round(s);
+  });
+  list.sort((a, b) => b.buzz - a.buzz || (a.nextDate || '').localeCompare(b.nextDate || ''));
+  return list;
+}
+function renderMkBooking() {
+  const all = mkBuzzList();
+  const nycCount = all.filter(c => NYC_RE.test(c.city || '')).length;
+  let list = marketState.bookNyc ? all.filter(c => NYC_RE.test(c.city || '')) : all;
+  const rows = list.slice(0, 30).map(c => {
+    const nyc = NYC_RE.test(c.city || '');
+    const meta = [c.nextDate ? 'Playing ' + escapeHtml(c.venue || 'NYC') + ' · ' + fmtDate(c.nextDate) : '',
+      c.demand ? fmtNum(c.demand) + ' RSVP' : '', c.reach ? fmtNum(c.reach) + ' reach' : '',
+      c.songCount ? c.songCount + ' songs' : '', c.editorial ? '⭐ RA pick' : '', c.recent ? '🆕 recent release' : ''].filter(Boolean).join(' · ');
+    return `<div class="hub-li"><div class="li-main">
+      <strong>${escapeHtml(c.name)}</strong> <span class="role-chip" style="cursor:default;background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;padding:1px 7px;" title="Buzz — blended popularity 0–100">${c.buzz}</span>${nyc ? ` <span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.58rem;padding:1px 6px;" title="Lives in NYC — ${escapeHtml(c.city)}">📍 NYC</span>` : ''}${(c.genres || []).length ? ` <span class="li-sub">· ${escapeHtml((c.genres || []).slice(0, 2).join(', '))}</span>` : ''}
+      <div class="li-sub">${escapeHtml(meta)}</div></div>
+      <span style="display:flex;gap:6px;">${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener" title="Their SoundCloud">☁</a>` : ''}${watchBtn('artist', c.name, c.name, { sublabel: c.venue || '' })}</span></div>`;
+  }).join('');
+  return `<div class="hub-sec-bar" style="margin-top:20px;"><h3>🎧 Who to book <span class="li-sub" style="font-weight:normal;">· ${list.length} artists · ranked by buzz</span></h3>
+      <button class="hub-btn ghost" data-mk-booknyc style="${marketState.bookNyc ? 'background:var(--hot,#ff5ca8);color:#1a0a12;' : ''}" title="Only artists whose profile city is NYC">📍 NYC locals${nycCount ? ` (${nycCount})` : ''}</button></div>
+    <div class="kpi-hint" style="margin-bottom:10px;">Buzz blends <strong>show demand</strong> (RSVPs) + <strong>reach</strong> (RA & SoundCloud followers) + <strong>catalog</strong> (songs) + <strong>editorial</strong> (RA picks), with a bump for a recent release. Scan artists in the radio tab to fill in SoundCloud reach/catalog.</div>
+    <div class="hub-list ra-zebra">${rows || '<div class="hub-empty">No lineup data yet — hit “↻ Pull shows”.</div>'}</div>`;
+}
 function renderMarket() {
   const evs = raState.events;
   if (!evs.length) {
@@ -10156,6 +10218,7 @@ function renderMarket() {
       ${card('RA picks', fmtNum(picks), 'editor-featured')}
       ${card('Ticketed', Math.round(evs.filter(e => e.is_ticketed).length / evs.length * 100) + '%', 'of shows')}
     </div>
+    ${renderMkBooking()}
     ${renderMkWatchlist()}
     <div class="hub-sec-bar"><h3>Best nights to throw</h3>
       <span style="display:flex;gap:6px;"><button class="hub-btn ghost" data-mk-view="week" style="${marketState.view === 'week' ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">By weekday</button>
@@ -10507,6 +10570,7 @@ async function raRefresh(btn) {
 // Best Nights (panel-market) controls.
 $('panel-market').addEventListener('click', (e) => {
   const v = e.target.closest('[data-mk-view]'); if (v) { marketState.view = v.dataset.mkView; renderMarket(); return; }
+  if (e.target.closest('[data-mk-booknyc]')) { marketState.bookNyc = !marketState.bookNyc; renderMarket(); return; }
   const mon = e.target.closest('[data-mk-mon]'); if (mon) { const d = marketState.month; marketState.month = new Date(d.getFullYear(), d.getMonth() + Number(mon.dataset.mkMon), 1); marketState.selDate = null; renderMarket(); return; }
   const day = e.target.closest('[data-mk-day]'); if (day) { marketState.selDate = marketState.selDate === day.dataset.mkDay ? null : day.dataset.mkDay; renderMarket(); return; }
   const vp = e.target.closest('[data-mk-vpage]'); if (vp) { marketState.venuePage += Number(vp.dataset.mkVpage); renderMarket(); return; }
