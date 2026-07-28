@@ -7547,6 +7547,7 @@ async function hubSecPhotos() {
       <div style="display:flex;gap:6px;align-items:center;">
         <label style="display:flex;gap:5px;align-items:center;cursor:pointer;font-size:.8em;" title="Show in the public gallery"><input type="checkbox" data-ph-pub="${escapeHtml(p.id)}"${p.is_public ? ' checked' : ''} style="width:auto;margin:0;"> on site</label>
         <span style="flex:1"></span>
+        <a class="hub-mini" href="${PHOTO_BASE}${escapeHtml(p.storage_path)}?download=${encodeURIComponent('come-with-' + (i + 1) + '.jpg')}" download title="Download full-size for a post">⬇</a>
         ${i > 0 ? `<button class="hub-mini" data-ph-move="${escapeHtml(p.id)}:-1" title="Move earlier">↑</button>` : ''}
         ${i < hub.photos.length - 1 ? `<button class="hub-mini" data-ph-move="${escapeHtml(p.id)}:1" title="Move later">↓</button>` : ''}
         <button class="hub-mini danger" data-ph-del="${escapeHtml(p.id)}" title="Delete photo + its files">✕</button>
@@ -7592,7 +7593,7 @@ async function hubSecPhotos() {
     <div class="section-sub">Social posts (${hub.eventPosts.length})</div>
     <div class="hub-list" style="margin-bottom:16px;">${postRows || '<div class="li-sub">No posts for this event yet — hit “➕ Create post”.</div>'}</div>
     <div class="hub-sec-bar"><h3>📸 Photos</h3>
-      <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page</span></div>
+      <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page · ⬇ saves the full-size to pick for a post</span></div>
     <div class="kpi-hint" style="margin-bottom:8px;">Drop event photos here — each is resized in your browser to a ~1600px full version plus a small grid thumbnail before upload. “On site” controls what the public gallery lists; the photo bucket is public, so never upload anything sensitive here (documents belong in Files).</div>
     <div id="phDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drag &amp; drop photos here — or click to browse</div>
     <input type="file" id="phFile" accept="image/*,.heic,.heif" multiple style="display:none">
