@@ -3044,11 +3044,19 @@ function openAssetModal(ctx, onSaved) {
       const file = fileEl?.files?.[0];
       let url = kpiVal('ca_url'), storage_path = null, media = kpiVal('ca_media') || 'video';
       if (file) {
-        const st = $('caUpStatus'); if (st) st.textContent = 'Uploading…';
+        const st = $('caUpStatus');
+        const isImg = (file.type || '').startsWith('image/') || /\.hei[cf]$/i.test(file.name || '');
+        // Clips/audio upload as-is, so a huge file must be caught up front rather
+        // than failing mid-upload (the bucket caps at 200MB).
+        if (!isImg && file.size > 200 * 1024 * 1024) {
+          toast(`That file is ${(file.size / 1048576).toFixed(0)} MB — the max is 200 MB. Trim the clip or export it smaller.`, 'err');
+          if (st) st.textContent = '';
+          return;
+        }
+        if (st) st.textContent = `Uploading ${(file.size / 1048576).toFixed(1)} MB… (large clips take a moment)`;
         try {
           // Images get resized; video/audio upload as-is. Public bucket → the
           // public URL becomes the asset link so it plays on the site + phone.
-          const isImg = (file.type || '').startsWith('image/') || /\.hei[cf]$/i.test(file.name || '');
           const blob = isImg ? await downscaleImage(file, 1600, 0.85) : file;
           media = isImg ? 'image' : (file.type || '').startsWith('audio/') ? 'audio' : 'video';
           const ext = isImg ? 'jpg' : ((file.name || '').split('.').pop() || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -5480,6 +5488,9 @@ $('kpiModalForm').addEventListener('submit', async (e) => {
     const jwt = /JWT/i.test(err.message || '');
     toast('Save failed: ' + (jwt ? 'Session expired. Please sign in again.' : (err.message || String(err))), 'err');
     if (jwt) await sb.auth.signOut();
+  } finally {
+    // Always re-enable — a kpiSubmit that catches its own error and returns
+    // (e.g. a failed upload) used to leave the button stuck on "Saving…".
     btn.disabled = false; btn.textContent = orig;
   }
 });
