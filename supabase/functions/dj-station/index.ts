@@ -89,9 +89,12 @@ Deno.serve(async (req) => {
         .select("soundcloud, songs, is_producer, followers").in("soundcloud", scUrls.slice(i, i + 200));
       (cache || []).forEach((c) => { songByUrl[norm(c.soundcloud)] = (c.songs || []).slice(0, 12).map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url })); });
     }
+    // A sub-group (e.g. the festival's Disco Den stage) so the DJ can sort it out.
+    const discoSet = new Set((Array.isArray(params.disco) ? params.disco : []).map((n: string) => n));
     const out = (artists || []).map((a) => ({
       name: a.name, soundcloud: a.soundcloud, followers: a.follower_count || 0,
       genres: a.genres || [], city: a.city || null,
+      group: discoSet.has(a.name) ? "disco" : "main",
       next_event_date: a.next_event_date, next_venue: a.next_venue, next_event_url: a.next_event_url,
       songs: a.soundcloud ? (songByUrl[norm(a.soundcloud)] || []) : [],
     }));

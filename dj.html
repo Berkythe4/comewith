@@ -18,7 +18,11 @@
   .scopebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;}
   .chip{font-family:var(--mono);font-size:.7rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);}
   .chip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
-  input.search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:1rem;margin:6px 0 16px;}
+  input.search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:1rem;margin:6px 0 10px;}
+  .grpf{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
+  .gchip{font-family:var(--mono);font-size:.72rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--dim);cursor:pointer;}
+  .gchip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
+  .g.disco{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
   h2{font-family:var(--disp);font-size:1.05rem;margin:22px 0 8px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
   .art-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
@@ -89,7 +93,7 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
 const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
 const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
-let DATA=null, IN=new Set(), DJADD=new Set();
+let DATA=null, IN=new Set(), DJADD=new Set(), GRP='';
 
 async function djAction(btn,kind,ai,si){
   const a=DATA.artists[ai], s=a.songs[si], id=String(s.sc_track_id||''); if(!id) return;
@@ -105,6 +109,7 @@ async function djAction(btn,kind,ai,si){
 document.addEventListener('click',e=>{
   const add=e.target.closest('[data-add]'); if(add){ const [ai,si]=add.dataset.add.split(':'); djAction(add,'add',+ai,+si); return; }
   const rm=e.target.closest('[data-rm]'); if(rm){ const [ai,si]=rm.dataset.rm.split(':'); djAction(rm,'remove',+ai,+si); return; }
+  const g=e.target.closest('[data-grp]'); if(g){ GRP=g.dataset.grp; const y=window.scrollY; render($('#q')?.value||''); window.scrollTo(0,y); return; }
 });
 
 async function load(){
@@ -130,7 +135,7 @@ function artistCard(a,i){
     return `<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">▶</a>`:''}${btn}</div>`;
   }).join('');
   return `<div class="card">
-    <div class="art-top"><strong>${esc(a.name)}</strong>${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
+    <div class="art-top"><strong>${esc(a.name)}</strong>${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
     <div>${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a> `:''}${songs.length?`<button class="btn" data-songs="${i}">🎵 ${songs.length} song${songs.length===1?'':'s'}</button>`:'<span class="meta" style="margin-left:2px;">no songs scanned yet</span>'}</div>
     ${songs.length?`<div class="songs" id="songs-${i}">${songRows}</div>`:''}
@@ -141,6 +146,8 @@ function render(q){
   IN=new Set((d.tracklist||[]).map(t=>String(t.sc_track_id||'')));
   DJADD=new Set((d.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
   let arts=d.artists;
+  const hasDisco=d.artists.some(a=>a.group==='disco');
+  if(GRP) arts=arts.filter(a=>(a.group||'main')===GRP);
   if(q){ const ql=q.toLowerCase(); arts=arts.filter(a=>(a.name||'').toLowerCase().includes(ql)||(a.next_venue||'').toLowerCase().includes(ql)||(a.genres||[]).some(g=>g.toLowerCase().includes(ql))); }
   const tl=d.tracklist||[];
   $('#root').innerHTML=`
@@ -150,6 +157,10 @@ function render(q){
       ? `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`
       : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}</div>
     <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
+    ${hasDisco?`<div class="grpf">
+      <button class="gchip${GRP===''?' on':''}" data-grp="">All</button>
+      <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main lineup</button>
+      <button class="gchip${GRP==='disco'?' on':''}" data-grp="disco">🕺 Disco Den</button></div>`:''}
     <div class="tl"><details><summary>▶ In this episode — <span id="inCount">${tl.length}</span> track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.source==='dj'?' · <span style="color:var(--lime)">your pick</span>':''}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')||'<div class="t">Empty — add songs below.</div>'}</details></div>
     <h2>Artists in scope · ${arts.length}</h2>
     ${arts.map(artistCard).join('')||'<div class="state">No artists match. Clear the search.</div>'}
