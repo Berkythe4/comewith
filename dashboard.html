@@ -2522,7 +2522,7 @@ async function openPostModal(post, opts) {
   const fields = `
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required value="${escapeHtml(p.title || '')}" placeholder="Post title / internal name"></div>
     <div class="modal-form-row" style="background:rgba(167,224,46,0.06);border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
-      <label class="modal-label">📋 Brief — what this post should say <span class="li-sub">(you write it, the drafter turns it into copy)</span></label>
+      <div style="display:flex;align-items:center;gap:8px;"><label class="modal-label" style="margin:0;">📋 Brief — what this post should say <span class="li-sub">(you write it, the drafter turns it into copy)</span></label><button type="button" class="hub-mini" data-brief-pop style="margin-left:auto;flex:0 0 auto;" title="Pop the brief into a floating window you can read while writing the caption">⤢ Read full</button></div>
       <textarea class="modal-input" name="brief" rows="3" placeholder="e.g. Recap of 7/11 — thank everyone, tease the next one, tag the DJs. Fun, high-energy tone.">${escapeHtml(p.brief || '')}</textarea>
       <div class="modal-grid2" style="margin-top:6px;">
         <div><label class="modal-label">Drafts the copy</label><select class="modal-input" name="draft_by">${draftOpts}</select></div>
@@ -2577,6 +2577,34 @@ async function openPostModal(post, opts) {
   openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved), isNew ? 'Create post' : 'Save post');
   if (!isNew) { loadPostNotes(p.id); loadPostTasks(p.id); loadPostAssets(p.id); }
 }
+// Floating, NON-blocking reader for the brief so a long note doesn't crowd the
+// form — you can keep it open and drag it aside while writing the caption.
+function toggleBriefPopup() {
+  const existing = document.getElementById('briefPopup');
+  if (existing) { existing.remove(); return; }
+  const ta = document.querySelector('#kpiModalBody [name="brief"]');
+  const el = document.createElement('div');
+  el.id = 'briefPopup';
+  el.style.cssText = 'position:fixed;top:16px;right:16px;width:min(400px,92vw);max-height:74vh;z-index:100000;background:var(--card,#20142a);border:1px solid var(--border-strong,#3a2a48);border-radius:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;';
+  el.innerHTML = `<div id="briefPopHdr" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);background:rgba(167,224,46,.10);cursor:move;user-select:none;">
+      <strong style="font-size:.85rem;">📋 The brief</strong>
+      <span class="li-sub" style="margin-left:auto;font-size:.66rem;">drag aside · keeps open while you type</span>
+      <button type="button" class="hub-mini" id="briefPopClose" title="Close">✕</button></div>
+    <div id="briefPopBody" style="padding:13px 15px;overflow:auto;white-space:pre-wrap;line-height:1.6;font-size:.98rem;"></div>`;
+  document.body.appendChild(el);
+  const setText = (t) => { $('briefPopBody').textContent = (t || '').trim() || '(No brief written yet — type it in the form.)'; };
+  setText(ta ? ta.value : '');
+  $('briefPopClose').onclick = () => el.remove();
+  // Drag by the header; move/up listeners live only for the duration of a drag.
+  $('briefPopHdr').addEventListener('pointerdown', (ev) => {
+    if (ev.target.closest('button')) return;
+    const r = el.getBoundingClientRect(); const ox = ev.clientX - r.left, oy = ev.clientY - r.top;
+    el.style.right = 'auto'; el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+    const move = (e2) => { el.style.left = Math.max(0, e2.clientX - ox) + 'px'; el.style.top = Math.max(0, e2.clientY - oy) + 'px'; };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); ev.preventDefault();
+  });
+}
 async function loadPostAssets(postId) {
   const { data } = await sb.from('content_assets').select('id,kind,media,url,label,duration_note').eq('post_id', postId).order('created_at');
   const wrap = $('postAssetList'); if (!wrap) return;
@@ -2603,6 +2631,7 @@ async function loadPostTasks(postId) {
     <button type="button" class="hub-mini" data-ptask-add="${postId}">Add</button></div>`;
 }
 document.addEventListener('click', async (e) => {
+  if (e.target.closest('[data-brief-pop]')) { toggleBriefPopup(); return; }
   const tg = e.target.closest('#postTaskToggle'); if (tg) { _postTasksExpanded = !_postTasksExpanded; const w = $('postTaskList'); if (w) w.style.display = _postTasksExpanded ? '' : 'none'; return; }
   const add = e.target.closest('[data-ptask-add]'); if (add) {
     const inp = $('ptaskNew'); const title = (inp?.value || '').trim(); if (!title) return;
@@ -5406,7 +5435,9 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
   setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
-function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; }
+function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); }
+// Keep the floating brief reader in sync if the brief is edited while it's open.
+document.addEventListener('input', (e) => { if (e.target.matches('#kpiModalBody [name="brief"]')) { const b = document.getElementById('briefPopBody'); if (b) b.textContent = (e.target.value || '').trim() || '(No brief written yet — type it in the form.)'; } });
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
 const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
 
