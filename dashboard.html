@@ -1534,6 +1534,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-social-calendar">
         <div class="social-toolbar">
           <button class="strat-btn primary" id="socialAddBtn">＋ New post</button>
+          <button class="hub-mini" id="socialWeekPlanBtn" title="Populate the recurring weekly posts — customizable">🗓 Plan a week</button>
           <select class="hub-status-sel" id="socialStageFilter">
             <option value="">All stages</option>
           </select>
@@ -2632,6 +2633,9 @@ async function loadPostTasks(postId) {
 }
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-brief-pop]')) { toggleBriefPopup(); return; }
+  if (e.target.closest('[data-cc-editweek]')) { ccEditWeekPlan(); return; }
+  if (e.target.closest('[data-wpe-add]')) { const l = document.getElementById('wpeList'); if (l) l.insertAdjacentHTML('beforeend', ccWpeRow()); return; }
+  const wpdel = e.target.closest('[data-wpe-del]'); if (wpdel) { wpdel.closest('[data-wpe-row]')?.remove(); return; }
   const tg = e.target.closest('#postTaskToggle'); if (tg) { _postTasksExpanded = !_postTasksExpanded; const w = $('postTaskList'); if (w) w.style.display = _postTasksExpanded ? '' : 'none'; return; }
   const add = e.target.closest('[data-ptask-add]'); if (add) {
     const inp = $('ptaskNew'); const title = (inp?.value || '').trim(); if (!title) return;
@@ -2841,6 +2845,7 @@ async function exportSnapshot() {
 
 // Social calendar event wiring (toolbar elements are static; cards/notes are delegated).
 $('socialAddBtn').addEventListener('click', () => openPostModal(null));
+$('socialWeekPlanBtn').addEventListener('click', () => ccOpenWeekPlan());
 $('socialSnapshotBtn').addEventListener('click', exportSnapshot);
 $('socialEmailBtn').addEventListener('click', emailSocialCalendar);
 // Email the current social-calendar view as an inline-HTML snapshot (via send-notice).
@@ -3325,49 +3330,111 @@ function ccTreeHtml(posts) {
 }
 // The 4-day base weekly content plan (anchored on Sunday). Offsets in days from
 // that Sunday. Editing this changes what "Plan a week" creates.
-const CONTENT_WEEK = [
-  { off: 0, day: 'Sun', title: 'Sunday fun content', pillar: 'fun' },
-  { off: 2, day: 'Tue', title: 'Radio recap', pillar: 'radio-recap' },
-  { off: 4, day: 'Thu', title: 'Radio go-live', pillar: 'radio-golive' },
-  { off: 5, day: 'Fri', title: 'Weekend / collab', pillar: 'collab' },
+const CC_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const CONTENT_WEEK = [   // the default; the live one is cc.weekPlan (editable, saved in site_content)
+  { off: 0, day: 'Sun', title: 'Sunday fun content', pillar: 'fun', channels: ['instagram'] },
+  { off: 2, day: 'Tue', title: 'Radio recap', pillar: 'radio-recap', channels: ['instagram'] },
+  { off: 4, day: 'Thu', title: 'Radio go-live', pillar: 'radio-golive', channels: ['instagram'] },
+  { off: 5, day: 'Fri', title: 'Weekend / collab', pillar: 'collab', channels: ['instagram'] },
 ];
+const ccNormWeek = (arr) => arr.map(s => ({ off: Math.max(0, Math.min(6, Number(s.off) || 0)), day: CC_DAYS[Number(s.off) || 0], title: s.title || 'Post', pillar: s.pillar || '', channels: (Array.isArray(s.channels) && s.channels.length) ? s.channels : ['instagram'] }));
+// The weekly template + default series/time live in site_content so edits persist.
+async function ccLoadWeekPlan() {
+  try {
+    const { data } = await sb.from('site_content').select('key,value').in('key', ['ops.content_week', 'ops.content_week_series', 'ops.content_week_time']);
+    const byKey = {}; (data || []).forEach(r => byKey[r.key] = r.value);
+    let arr = null; try { arr = JSON.parse(byKey['ops.content_week'] || 'null'); } catch (_) {}
+    cc.weekPlan = (Array.isArray(arr) && arr.length) ? ccNormWeek(arr) : ccNormWeek(CONTENT_WEEK);
+    cc.weekSeries = byKey['ops.content_week_series'] || 'Content Creation';
+    cc.weekTime = byKey['ops.content_week_time'] || '18:00';
+  } catch (_) { cc.weekPlan = ccNormWeek(CONTENT_WEEK); cc.weekSeries = 'Content Creation'; cc.weekTime = '18:00'; }
+}
 function ccNextSunday() {
   const d = new Date(); d.setHours(12, 0, 0, 0);
   d.setDate(d.getDate() + ((0 - d.getDay() + 7) % 7)); // 0 = Sunday
   return d.toISOString().slice(0, 10);
 }
 function ccDatePlus(iso, off) { const d = new Date(iso + 'T12:00:00'); d.setDate(d.getDate() + off); return d.toISOString().slice(0, 10); }
-function ccOpenWeekPlan() {
-  const sun = ccNextSunday();
-  const preview = CONTENT_WEEK.map(s => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${s.day} · <span data-wp-date="${s.off}">${escapeHtml(fmtDate(ccDatePlus(sun, s.off)))}</span> · ${escapeHtml(s.pillar)}</div></div></div>`).join('');
-  openKpi('🗓 Plan a content week', 'The 4-day base plan — Sun fun · Tue radio recap · Thu radio go-live · Fri collab', `
+const CC_WEEK_SERIES = ['Content Creation', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Bookings', ''];
+function ccRefreshAfterPlan() {
+  if (document.querySelector('#panel-social-calendar.active')) return loadSocialCalendar();
+  if (document.querySelector('#panel-content-center.active')) return loadContentCenter();
+  return Promise.resolve();
+}
+async function ccOpenWeekPlan() {
+  if (!cc.weekPlan) await ccLoadWeekPlan();
+  const week = cc.weekPlan, sun = ccNextSunday();
+  const preview = week.map(s => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${escapeHtml(s.day)} · <span data-wp-date="${s.off}">${escapeHtml(fmtDate(ccDatePlus(sun, s.off)))}</span>${s.pillar ? ' · ' + escapeHtml(s.pillar) : ''} · ${escapeHtml((s.channels || ['instagram']).map(c => SOCIAL_CHAN_LABEL[c] || c).join(', '))}</div></div></div>`).join('');
+  openKpi('🗓 Plan a content week', `${week.length} recurring post${week.length === 1 ? '' : 's'} per week`, `
     <label class="modal-label">Week starting (Sunday)</label>
     <input class="modal-input" type="date" data-wp-sun value="${sun}" style="max-width:200px;">
-    <label class="modal-label" style="margin-top:8px;">Default time</label>
-    <input class="modal-input" type="time" data-wp-time value="18:00" style="max-width:130px;">
-    <div class="kpi-hint" style="margin:8px 0;">Creates 4 scheduled posts (stage <strong>Planned</strong>) with these pillars. Refine, link to an event, and set the real caption on each afterwards.</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+      <div><label class="modal-label">Default time</label><input class="modal-input" type="time" data-wp-time value="${escapeHtml(cc.weekTime || '18:00')}" style="max-width:130px;"></div>
+      <div><label class="modal-label">Series</label><select class="modal-input" data-wp-series style="max-width:190px;">${CC_WEEK_SERIES.map(s => `<option value="${escapeHtml(s)}"${(cc.weekSeries || 'Content Creation') === s ? ' selected' : ''}>${s || '— general —'}</option>`).join('')}</select></div>
+    </div>
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">The posts</h3><button type="button" class="hub-mini" data-cc-editweek title="Change the days, titles, pillars & channels — and add/remove posts">✎ Customize</button></div>
     <div class="hub-list" id="wpPreview">${preview}</div>
-    <label class="modal-label" style="margin-top:8px;"><input type="checkbox" data-wp-repeat> also generate the next 3 weeks</label>`,
+    <div class="kpi-hint" style="margin:8px 0;">Creates these as <strong>Planned</strong> posts. Refine the caption, link an event, etc. on each afterward.</div>
+    <label class="modal-label"><input type="checkbox" data-wp-repeat> also generate the next 3 weeks</label>`,
     async () => {
       const sunV = document.querySelector('[data-wp-sun]')?.value || sun;
       const time = document.querySelector('[data-wp-time]')?.value || '18:00';
+      const series = document.querySelector('[data-wp-series]')?.value ?? 'Content Creation';
       const weeks = document.querySelector('[data-wp-repeat]')?.checked ? 4 : 1;
       const rows = [];
       for (let w = 0; w < weeks; w++) {
         const base = ccDatePlus(sunV, w * 7);
-        for (const s of CONTENT_WEEK) {
+        for (const s of week) {
           const d = ccDatePlus(base, s.off);
-          rows.push({ title: s.title, stage: 'planned', channels: ['instagram'], content_pillar: s.pillar, series: 'Content Creation', scheduled_for: new Date(d + 'T' + time).toISOString() });
+          rows.push({ title: s.title, stage: 'planned', channels: s.channels || ['instagram'], content_pillar: s.pillar || null, series: series || null, scheduled_for: new Date(d + 'T' + time).toISOString() });
         }
       }
       const { error } = await sb.from('social_posts').insert(rows);
       if (error) { toast('Could not create the plan: ' + error.message, 'err'); return; }
-      closeKpi(); toast(`Created ${rows.length} planned posts`, 'ok'); await loadContentCenter();
+      // Remember the last-used time/series as the new defaults.
+      try { await sb.from('site_content').upsert([{ key: 'ops.content_week_time', value: time }, { key: 'ops.content_week_series', value: series }], { onConflict: 'key' }); cc.weekTime = time; cc.weekSeries = series; } catch (_) {}
+      closeKpi(); toast(`Created ${rows.length} planned post${rows.length === 1 ? '' : 's'}`, 'ok'); await ccRefreshAfterPlan();
     }, 'Create the plan');
   setTimeout(() => {
     const s = document.querySelector('[data-wp-sun]');
     if (s) s.addEventListener('change', () => document.querySelectorAll('#wpPreview [data-wp-date]').forEach(el => { el.textContent = fmtDate(ccDatePlus(s.value, Number(el.dataset.wpDate))); }));
   }, 0);
+}
+// The template editor — add / remove / reword the recurring posts; saved to site_content.
+function ccWpeRow(s) {
+  s = s || { off: 0, title: '', pillar: '', channels: ['instagram'] };
+  return `<div data-wpe-row style="display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--border);">
+    <div style="display:flex;flex-direction:column;gap:5px;flex:1;min-width:220px;">
+      <div style="display:flex;gap:6px;">
+        <select class="modal-input" data-wpe-day style="max-width:92px;font-size:.85rem;">${CC_DAYS.map((d, di) => `<option value="${di}"${(Number(s.off) || 0) === di ? ' selected' : ''}>${d}</option>`).join('')}</select>
+        <input class="modal-input" data-wpe-title value="${escapeHtml(s.title || '')}" placeholder="Post title" style="flex:1;font-size:.85rem;">
+      </div>
+      <input class="modal-input" data-wpe-pillar value="${escapeHtml(s.pillar || '')}" placeholder="pillar — fun, radio-recap, collab…" style="font-size:.85rem;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">${SOCIAL_CHANNELS.map(c => `<label class="chk" style="font-size:.75rem;"><input type="checkbox" data-wpe-chan value="${c}"${(s.channels || ['instagram']).includes(c) ? ' checked' : ''}> ${SOCIAL_CHAN_LABEL[c] || c}</label>`).join('')}</div>
+    </div>
+    <button type="button" class="hub-mini danger" data-wpe-del title="Remove this post">✕</button>
+  </div>`;
+}
+function ccEditWeekPlan() {
+  const week = cc.weekPlan || ccNormWeek(CONTENT_WEEK);
+  openKpi('✎ Customize the weekly plan', 'These are the posts “Plan a week” creates every week',
+    `<div class="kpi-hint" style="margin-bottom:8px;">Set the day, title, pillar and channels for each recurring post — add or remove as many as you want. Saved for the whole team.</div>
+     <div id="wpeList">${week.map(ccWpeRow).join('')}</div>
+     <button type="button" class="hub-mini" data-wpe-add style="margin-top:8px;">➕ Add a post</button>`,
+    async () => {
+      const rows = [...document.querySelectorAll('#wpeList [data-wpe-row]')].map(r => ({
+        off: Number(r.querySelector('[data-wpe-day]').value) || 0,
+        title: (r.querySelector('[data-wpe-title]').value || '').trim() || 'Post',
+        pillar: (r.querySelector('[data-wpe-pillar]').value || '').trim(),
+        channels: [...r.querySelectorAll('[data-wpe-chan]:checked')].map(c => c.value),
+      }));
+      if (!rows.length) { toast('Add at least one post', 'err'); return; }
+      rows.sort((a, b) => a.off - b.off);
+      const { error } = await sb.from('site_content').upsert({ key: 'ops.content_week', value: JSON.stringify(rows) }, { onConflict: 'key' });
+      if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+      cc.weekPlan = ccNormWeek(rows);
+      closeKpi(); toast('Weekly plan saved', 'ok'); ccOpenWeekPlan();
+    }, 'Save template');
 }
 // Schedule a post for an event straight from the pipeline (full composer,
 // prefilled + returns here on save).
