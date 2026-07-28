@@ -2411,7 +2411,11 @@ async function renderSocialGrid(posts) {
   const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), startDow = first.getDay();
   const monthLbl = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const byDay = {};
-  posts.forEach(p => { const d = (p.posted_at || p.scheduled_for || '').slice(0, 10); if (d) (byDay[d] ||= []).push(p); });
+  // Place a post on the day it was PLANNED for (scheduled_for), not the posting
+  // timestamp — otherwise marking it posted relocates it to today and it vanishes
+  // from the day you scheduled it. posted_at is only a fallback for posts that
+  // never had a scheduled date. (🟢 still marks it as posted.)
+  posts.forEach(p => { const d = (p.scheduled_for || p.posted_at || '').slice(0, 10); if (d) (byDay[d] ||= []).push(p); });
   const today = new Date().toISOString().slice(0, 10);
   const cells = [];
   for (let i = 0; i < startDow; i++) cells.push('<div></div>');
