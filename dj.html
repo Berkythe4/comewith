@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Come With Radio — DJ workspace</title>
+<style>
+  :root{--bg0:#140a17;--bg1:#1e1128;--panel:#1b1022;--panel2:#20142a;--line:#33223f;
+    --cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;--lime:#a7e02e;--hot:#ff5ca8;
+    --disp:"Arial Black",Arial,sans-serif;--body:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;--mono:"Consolas",ui-monospace,monospace;}
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg0) 40%);color:var(--cream);font-family:var(--body);line-height:1.55;min-height:100vh;}
+  .wrap{max-width:820px;margin:0 auto;padding:24px 16px 80px;}
+  .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--lime);}
+  h1{font-family:var(--disp);font-size:clamp(1.7rem,5vw,2.6rem);margin:.25em 0 .1em;line-height:1.05;}
+  .sub{color:var(--dim);font-size:1rem;}
+  .scopebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;}
+  .chip{font-family:var(--mono);font-size:.7rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);}
+  .chip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
+  input.search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:1rem;margin:6px 0 16px;}
+  h2{font-family:var(--disp);font-size:1.05rem;margin:22px 0 8px;}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
+  .art-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
+  .art-top strong{font-size:1.08rem;}
+  .g{font-family:var(--mono);font-size:.62rem;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:1px 7px;}
+  .nyc{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
+  .meta{color:var(--faint);font-size:.85rem;margin-top:3px;}
+  a{color:var(--lime);text-decoration:none;} a:hover{text-decoration:underline;}
+  .btn{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:4px 11px;border-radius:8px;border:1px solid var(--line);color:var(--cream);margin-top:8px;cursor:pointer;background:none;}
+  .songs{margin-top:8px;display:none;}
+  .songs.open{display:block;}
+  .song{display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.9rem;}
+  .song .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .tl{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px 14px;}
+  .tl details summary{cursor:pointer;font-family:var(--mono);font-size:.8rem;color:var(--dim);}
+  .tl .t{font-size:.88rem;padding:3px 0;border-top:1px solid var(--line);}
+  .state{text-align:center;color:var(--dim);padding:60px 20px;}
+  .foot{margin-top:40px;color:var(--faint);font-size:.8rem;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap" id="root"><div class="state">Loading your episode…</div></div>
+<script>
+const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
+const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
+const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
+let DATA=null;
+
+async function load(){
+  const token=new URLSearchParams(location.search).get('ep');
+  if(!token){ $('#root').innerHTML='<div class="state">No episode link. Ask for a fresh link.</div>'; return; }
+  let j;
+  try{
+    const r=await fetch(CWURL+'/functions/v1/dj-station',{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify({token})});
+    j=await r.json();
+    if(!r.ok||!j.ok) throw new Error(j.error||'Could not load.');
+  }catch(e){ $('#root').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
+  DATA=j; render('');
+}
+function artistCard(a,i){
+  const nyc=NYC.test(a.city||'');
+  const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
+  const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
+  const songs=(a.songs||[]);
+  const songRows=songs.map(s=>`<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">▶ play</a>`:''}</div>`).join('');
+  return `<div class="card">
+    <div class="art-top"><strong>${esc(a.name)}</strong>${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
+    ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
+    <div>${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a> `:''}${songs.length?`<button class="btn" data-songs="${i}">🎵 ${songs.length} song${songs.length===1?'':'s'}</button>`:'<span class="meta" style="margin-left:2px;">no songs scanned yet</span>'}</div>
+    ${songs.length?`<div class="songs" id="songs-${i}">${songRows}</div>`:''}
+  </div>`;
+}
+function render(q){
+  const d=DATA, ep=d.episode, sc=d.scope;
+  let arts=d.artists;
+  if(q){ const ql=q.toLowerCase(); arts=arts.filter(a=>(a.name||'').toLowerCase().includes(ql)||(a.next_venue||'').toLowerCase().includes(ql)||(a.genres||[]).some(g=>g.toLowerCase().includes(ql))); }
+  const tl=d.tracklist||[];
+  $('#root').innerHTML=`
+    <div class="kicker">📻 Come With Radio · your DJ workspace</div>
+    <h1>EP ${ep.no??''} — ${esc(ep.name||'')}</h1>
+    <div class="sub">Everything below is scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Research and audition — this is your shortlist to build from.</div>
+    <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
+    ${tl.length?`<div class="tl"><details><summary>▶ Already in this episode — ${tl.length} track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')}</details></div>`:''}
+    <h2>Artists in scope · ${arts.length}</h2>
+    ${arts.map(artistCard).join('')||'<div class="state">No artists match. Clear the search.</div>'}
+    <div class="foot">Read-only workspace for the assigned DJ. Links expire when access is revoked.</div>`;
+  $('#q').addEventListener('input',e=>{ const v=e.target.value; render(v); const el=$('#q'); if(el){el.focus();el.setSelectionRange(v.length,v.length);} });
+  document.querySelectorAll('[data-songs]').forEach(b=>b.addEventListener('click',()=>{ const el=document.getElementById('songs-'+b.dataset.songs); if(el) el.classList.toggle('open'); }));
+}
+load();
+</script>
+</body>
+</html>
