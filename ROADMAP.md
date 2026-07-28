@@ -200,6 +200,63 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-07-28 (Radio ecosystem + Content Center + NYC Scene control center)
+
+> Big build-out since the 2026-07-23 radio close. Migrations **107–132 applied to prod**;
+> new pages `dj.html`; new edge fns `sc-match`, `dj-station`, `pull-dice` deployed.
+
+### ✅ Come With Radio — bookends, genre/release, artist matching
+- YouTube render: staged **intro + closing** "story" slides, overlaid on the mix so
+  runtime is unchanged; per-track **genre + release-date** line (`Radio/render/`).
+- **sc-match** edge fn resolves a SoundCloud profile from an artist name
+  (conservative). "↻ Refresh music & data" fills DICE/TM/no-link artists (all
+  sources) then scans; 🛒 Beatport catalog on every artist; **NYC-local** city
+  from SC (128) → 📍 tag + filter.
+- **DICE** market source (`pull-dice`, reverse-engineered, source-isolated).
+
+### ✅ NYC Scene control center (Best Nights reworked)
+- Tabbed (Overview / Artists / Venues) with an always-on **coverage snapshot**
+  (events/artists per source, songs, NYC, venues). Multi-source **Buzz** score,
+  sortable/filterable explorers, ticketing-platform tags, artist↔venue cross-nav.
+- **🗺️ Scene Map** (new internal nav item): Leaflet map of geocoded venues
+  (206/235), size = activity, distinct color for **on-the-radio** venues, filters
+  (shows/genre/on-radio) + shared-artist web lines. `venues` extended (126/127).
+
+### ✅ Content Center + social calendar
+- "➕ Add artist/venue" auto-capture; **editable "Plan a week"** template
+  (`site_content ops.content_week`) reachable from Content Center **and** Social
+  Calendar. Photo-manager downloads; clip upload fixed (**129**: bucket video MIME
+  + 200 MB + stuck-"Saving" fix); floating brief reader; posted posts stay on their
+  planned day.
+
+### ✅ Radio episode planning + DJ portal (130–132)
+- **Edit any episode** via Control Center ✎ Details; future **'planned' skeletons**;
+  **assignment** (user / DJ actor); internal **recap_notes**; episode↔social-post link.
+- **DJ scoped link**: `dj.html` + `dj-station` (token-gated, revoke = clear
+  `dj_token`) — a DJ sees only that week's scoped artists/songs and can **＋add
+  picks** (source='dj', 132). Builder shows a 🎧 DJ-pick badge.
+- **Special editions**: multi-day festival series (`edition_name`/`edition_seq`) —
+  built for **Come With Elements Radio** (4 daily drops; Martin+Henry+32LVS+Keith).
+
+### ✅ Access / ops fixes
+- Janelle (marketing) granted the `events` module so Content Center line items load.
+- Removed the incorrect **GetSongBPM** footer credit (data is Rekordbox/Beatport).
+- Mobile rebuild (bottom tab bar, full-screen modals, in-app photo/clip upload, PWA).
+- EP1 SoundCloud player fixed (embed by track id — survives account moves).
+
+### 📌 One-time
+- **EP2 tracklist reconciled** 2026-07-28 — SoundCloud reorder of the shared 39 +
+  the 20 website additions appended; nothing removed.
+
+### ▶️ Open / next
+- DJ portal: assign 32LVS as a person-actor if not yet in the roster; let DJs
+  reorder their picks (currently add/remove only).
+- Public **club heat-map** — hold until ≥4 weeks of scene data; keep internal
+  triggers off it (the Scene Map is the internal precursor).
+- Rekordbox tag-writing (energy/comments back to purchased files) — still parked.
+
+---
+
 ## Current state — reconciled 2026-07-18 (Modular nav + master Calendar & Tasks + team chat)
 
 > Migrations **096–098 APPLIED to prod**; `send-actor-email` **redeployed**; `dashboard.html`
