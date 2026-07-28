@@ -131,6 +131,7 @@ Deno.serve(async (req) => {
           .map((t) => ({ sc_track_id: String(t.id), title: t.title, permalink_url: t.permalink_url, duration_ms: t.duration, playback_count: t.playback_count ?? 0, created_at: t.created_at, artwork_url: t.artwork_url || u.avatar_url || null }));
         rows.push({
           soundcloud: url, sc_user_id: String(u.id), username: u.username, avatar_url: u.avatar_url || null,
+          city: (u.city || "").toString().trim() || null,   // profile city → NYC-local tag
           followers: u.followers_count ?? null, is_producer: songs.length > 0, song_count: songs.length,
           // What SoundCloud SAYS the profile holds. Kept so a shortfall is
           // visible instead of silent: VonStroke lists 147 but only exposes 31

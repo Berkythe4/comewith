@@ -5405,6 +5405,11 @@ const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy
 
 $('kpiModalCancel').addEventListener('click', closeKpi);
 $('kpiModalX').addEventListener('click', closeKpi);
+// The main script is an ES module, so inline onclick can't reach its functions —
+// the Add-artist/venue modal wires its controls through delegation instead.
+$('kpiModalOverlay').addEventListener('click', (e) => { if (e.target.closest('[data-add-lookup]')) { e.preventDefault(); raAddLookup(); } });
+$('kpiModalOverlay').addEventListener('change', (e) => { if (e.target.closest('[data-add-type]')) raAddTypeChange(); });
+$('kpiModalOverlay').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'addName') { e.preventDefault(); e.stopPropagation(); raAddLookup(); } }, true);
 // No click-outside-to-close (a drag-select ending on the overlay was closing the
 // pop-out). Close only via Cancel / Save or Escape.
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
@@ -10013,7 +10018,7 @@ async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social] = await Promise.all([
     sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
-    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,is_producer,song_count,set_count,songs,ok,scanned_at'),
+    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'),
     sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
   ]);
   if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
@@ -10095,9 +10100,12 @@ function raSourceTag(src) {
 // NYC-local from the artist's profile city (captured from SoundCloud on refresh).
 // Any of the five boroughs / common spellings counts.
 const NYC_RE = /\b(new york|nyc|brooklyn|queens|the bronx|bronx|manhattan|staten island|ridgewood|bushwick|astoria)\b/i;
-function isNyc(a) { return !!(a && a.city && NYC_RE.test(a.city)); }
+// City can live on the artist row (from sc-match) or the scan cache (from sc-enrich).
+function raCity(a) { return (a && (a.city || (a.c && a.c.city) || (raState.cache[a.key] && raState.cache[a.key].city))) || ''; }
+function isNyc(a) { return NYC_RE.test(raCity(a)); }
 function nycTag(a) {
-  return isNyc(a) ? `<span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.58rem;padding:1px 6px;" title="Lives in NYC — profile city: ${escapeHtml(a.city)}">📍 NYC</span>` : '';
+  const city = raCity(a);
+  return NYC_RE.test(city) ? `<span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.58rem;padding:1px 6px;" title="Lives in NYC — profile city: ${escapeHtml(city)}">📍 NYC</span>` : '';
 }
 // Blended night metrics: demand (RSVP) + star power (headliner reach) vs competition.
 // `opp` is data-only; `score(dow)` applies the day-of-week desirability weight.
@@ -11204,14 +11212,14 @@ function raAddOpen() {
   const body = `
     <div class="modal-form-row"><label>What are you adding?</label>
       <div style="display:flex;gap:16px;margin-top:5px;">
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="artist" checked onchange="raAddTypeChange()"> 🎧 Artist</label>
-        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="venue" onchange="raAddTypeChange()"> 📍 Venue</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="artist" data-add-type checked> 🎧 Artist</label>
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;"><input type="radio" name="addtype" value="venue" data-add-type> 📍 Venue</label>
       </div>
     </div>
     <div class="modal-form-row"><label for="addName">Name</label>
       <div style="display:flex;gap:8px;">
-        <input class="modal-input" id="addName" placeholder="e.g. Peggy Gou" style="flex:1;" onkeydown="if(event.key==='Enter'){event.preventDefault();raAddLookup();}">
-        <button type="button" class="hub-btn" onclick="raAddLookup()">🔎 Look up</button>
+        <input class="modal-input" id="addName" placeholder="e.g. Peggy Gou" style="flex:1;">
+        <button type="button" class="hub-btn" data-add-lookup>🔎 Look up</button>
       </div>
     </div>
     <div id="addPreview" class="li-sub" style="margin-top:6px;line-height:1.6;">Type a name and hit <b>Look up</b> — for an artist we auto-find their SoundCloud, city &amp; reach.</div>`;
