@@ -2522,6 +2522,7 @@ async function openPostModal(post, opts) {
   const COPY_STATUS = { brief: '📋 Brief', drafting: '✍️ Drafting', feedback: '👀 Feedback requested', approved: '✅ Approved' };
   const fields = `
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required value="${escapeHtml(p.title || '')}" placeholder="Post title / internal name"></div>
+    <div id="postEpisodeBox"></div>
     <div class="modal-form-row" style="background:rgba(167,224,46,0.06);border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
       <div style="display:flex;align-items:center;gap:8px;"><label class="modal-label" style="margin:0;">📋 Brief — what this post should say <span class="li-sub">(you write it, the drafter turns it into copy)</span></label><button type="button" class="hub-mini" data-brief-pop style="margin-left:auto;flex:0 0 auto;" title="Pop the brief into a floating window you can read while writing the caption">⤢ Read full</button></div>
       <textarea class="modal-input" name="brief" rows="3" placeholder="e.g. Recap of 7/11 — thank everyone, tease the next one, tag the DJs. Fun, high-energy tone.">${escapeHtml(p.brief || '')}</textarea>
@@ -2577,6 +2578,18 @@ async function openPostModal(post, opts) {
   }
   openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved), isNew ? 'Create post' : 'Save post');
   if (!isNew) { loadPostNotes(p.id); loadPostTasks(p.id); loadPostAssets(p.id); }
+  if (p.station_id) raLoadPostEpisode(p.station_id);
+}
+// Show the tagged radio episode + its recap notes on a post, so Janelle has the
+// recap material right where she drafts.
+async function raLoadPostEpisode(stationId) {
+  const box = $('postEpisodeBox'); if (!box) return;
+  const { data } = await sb.from('sc_playlists').select('station_no,name,slug,recap_notes').eq('id', stationId).maybeSingle();
+  if (!data) return;
+  const url = data.slug ? 'https://comewith.org/radio.html?s=' + data.slug : null;
+  box.innerHTML = `<div class="modal-form-row" style="border:1px solid var(--gold);border-radius:8px;padding:10px;background:rgba(181,121,31,0.06);">
+    <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">🎧 Linked episode — EP ${data.station_no ?? ''} · ${escapeHtml(data.name || '')}</strong>${url ? ` <a href="${url}" target="_blank" rel="noopener" class="hub-mini" style="margin-left:auto;">page ↗</a>` : ''}</div>
+    ${data.recap_notes ? `<div class="modal-label" style="margin-top:6px;">📝 Recap notes from the episode</div><div class="li-sub" style="white-space:pre-wrap;line-height:1.55;">${escapeHtml(data.recap_notes)}</div>` : '<div class="li-sub" style="margin-top:4px;">No recap notes on this episode yet.</div>'}</div>`;
 }
 // Floating, NON-blocking reader for the brief so a long note doesn't crowd the
 // form — you can keep it open and drag it aside while writing the caption.
@@ -2633,6 +2646,9 @@ async function loadPostTasks(postId) {
 }
 document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-brief-pop]')) { toggleBriefPopup(); return; }
+  if (e.target.closest('[data-ra-djgen]')) { raDjGenLink(); return; }
+  if (e.target.closest('[data-ra-djrevoke]')) { raDjRevoke(); return; }
+  const djc = e.target.closest('[data-ra-djcopy]'); if (djc) { (navigator.clipboard?.writeText(djc.dataset.raDjcopy) || Promise.resolve()).then(() => toast('Link copied', 'ok')); return; }
   if (e.target.closest('[data-cc-editweek]')) { ccEditWeekPlan(); return; }
   if (e.target.closest('[data-wpe-add]')) { const l = document.getElementById('wpeList'); if (l) l.insertAdjacentHTML('beforeend', ccWpeRow()); return; }
   const wpdel = e.target.closest('[data-wpe-del]'); if (wpdel) { wpdel.closest('[data-wpe-row]')?.remove(); return; }
@@ -10161,7 +10177,7 @@ async function loadRaMarket() {
 // server-side with carried-over songs). The switcher can view any past station.
 // raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
 // carried marks when researching future stations + the 📜 History view).
-const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by,scheduled_go_live';
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by,scheduled_go_live,recap_notes,assigned_to,assigned_actor_id,dj_token,dj_search_params';
 async function raLoadPlaylist() {
   const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
   raState.stations = all || [];
@@ -10780,7 +10796,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -10797,6 +10813,7 @@ document.addEventListener('click', async (e) => {
   const ccs = t.closest('[data-ra-ccschedule]'); if (ccs) { raCcSchedule(ccs.dataset.raCcschedule); return; }
   const ccg = t.closest('[data-ra-ccgenweek]'); if (ccg) { ccWithStation(ccg.dataset.raCcgenweek, raOpenGenWeek); return; }
   const cca = t.closest('[data-ra-cctaskadd]'); if (cca) { raCcAddTask(cca.dataset.raCctaskadd); return; }
+  if (t.closest('[data-ra-ccplan]')) { raCcPlanEpisode(); return; }
   const cce = t.closest('[data-ra-cctaskedit]'); if (cce) { openEditTask(cce.dataset.raCctaskedit, loadRadioCC); return; }
   const ccn = t.closest('[data-ra-ccnoteadd]'); if (ccn) { raCcAddNote(ccn.dataset.raCcnoteadd); return; }
   const ccclip = t.closest('[data-ra-ccclip]'); if (ccclip) { const s = raState.stations.find(x => x.id === ccclip.dataset.raCcclip); openAssetModal({ station_id: ccclip.dataset.raCcclip, kind: 'clip', label: 'EP ' + (s?.station_no ?? ''), defaultLabel: 'EP ' + (s?.station_no ?? '') + ' — clip' }, loadRadioCC); return; }
@@ -11399,8 +11416,15 @@ function raRenderPlaylist() {
 // team-notes thread — with the actions (details, schedule, generate/create
 // tasks, add links) reachable per episode. Reuses raState.stations (all
 // playlists) and the existing detail/finalize/schedule editors.
-const RA_STATUS_LABEL = { building: '🔨 Building', testing: '🧪 Testing', live: '🟢 Live', archived: '📦 Archived' };
+const RA_STATUS_LABEL = { planned: '🗒 Planned', building: '🔨 Building', testing: '🧪 Testing', live: '🟢 Live', archived: '📦 Archived' };
+function raAssignChip(s) {
+  const u = (raState.epUsers || []).find(x => x.id === s.assigned_to);
+  const dj = (raState.djActors || []).find(x => x.id === s.assigned_actor_id);
+  const who = [u ? (u.full_name || u.email) : null, dj ? '🎧 ' + dj.display_name : null].filter(Boolean).join(' · ');
+  return who ? ` <span class="role-chip" style="cursor:default;background:var(--surface-2);" title="Assigned">👤 ${escapeHtml(who)}</span>` : '';
+}
 async function loadRadioCC() {
+  await raLoadEpLookups();   // resolve assignee names + link the details editor's pickers
   // stations already loaded by raLoadPlaylist; pull this-episode tasks + notes.
   const ids = (raState.stations || []).map(s => s.id);
   const [tasks, notes] = await Promise.all([
@@ -11422,7 +11446,7 @@ function renderRadioCC() {
     const sched = s.scheduled_go_live ? `⏰ ${fmtDateTime(s.scheduled_go_live)}` : (s.drop_date ? `📅 drops ${fmtDate(s.drop_date)}` : (s.published_at ? `published ${fmtDate(s.published_at)}` : 'no date set'));
     const head = `<div class="hub-li" data-ra-ccopen="${s.id}" style="cursor:pointer;">
       <div class="li-main"><strong>EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || 'Untitled')}</strong>
-        <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>
+        <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>${raAssignChip(s)}${s.dj_token ? ' <span class="role-chip" style="cursor:default;background:var(--surface-2);" title="A DJ access link is active">🔗 DJ link</span>' : ''}
         <div class="li-sub">${escapeHtml(sched)}${tks.length ? ` · ${done}/${tks.length} tasks` : ''}${ccNotesFor(s.id).length ? ` · 💬 ${ccNotesFor(s.id).length}` : ''}</div></div>
       <span class="li-sub">${isOpen ? '▾' : '▸'}</span></div>`;
     if (!isOpen) return head;
@@ -11454,13 +11478,29 @@ function renderRadioCC() {
   const nextDrops = stations.filter(s => (s.drop_date || s.scheduled_go_live) && s.status !== 'archived')
     .sort((a, b) => String(a.scheduled_go_live || a.drop_date).localeCompare(String(b.scheduled_go_live || b.drop_date)));
   $('raMarketBody').innerHTML = raModeBar() + `
-    <div class="hub-sec-bar"><h3>🎚 Artist Radio — Control Center</h3><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span></div>
+    <div class="hub-sec-bar"><h3>🎚 Artist Radio — Control Center</h3>
+      <span style="display:flex;gap:8px;align-items:center;"><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span>
+      <button class="hub-btn ghost" data-ra-ccplan title="Create a future episode skeleton you can assign & start working on">➕ Plan a future episode</button></span></div>
     ${nextDrops.length ? `<div class="kpi-hint" style="margin-bottom:10px;">📆 Upcoming: ${nextDrops.slice(0, 4).map(s => `EP ${s.station_no ?? ''} ${escapeHtml(fmtDate(s.scheduled_go_live || s.drop_date))}`).join(' · ')}</div>` : ''}
     <div class="hub-list">${stations.map(card).join('') || '<div class="hub-empty">No episodes yet.</div>'}</div>`;
 }
 // Load a station into raState.playlist so the existing editors act on it.
 async function ccWithStation(id, fn) {
   raState.viewPlaylistId = id; await raLoadPlaylist(); fn();
+}
+// Create a FUTURE episode skeleton (status 'planned') you can assign & work on
+// ahead of time. Numbered next, dropping a week after the latest scheduled one.
+async function raCcPlanEpisode() {
+  const stations = raState.stations || [];
+  const nextNo = Math.max(0, ...stations.map(s => s.station_no || 0)) + 1;
+  const dates = stations.map(s => s.scheduled_go_live || s.drop_date).filter(Boolean).map(d => String(d).slice(0, 10)).sort();
+  let drop;
+  if (dates.length) { const d = new Date(dates[dates.length - 1] + 'T12:00:00'); d.setDate(d.getDate() + 7); drop = d.toISOString().slice(0, 10); }
+  else { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); drop = d.toISOString().slice(0, 10); }  // next Thursday
+  const { data, error } = await sb.from('sc_playlists').insert({ name: `Come With Radio Ep${nextNo}`, station_no: nextNo, status: 'planned', drop_date: drop }).select('id').single();
+  if (error) { toast('Could not create: ' + error.message, 'err'); return; }
+  toast(`Planned EP ${nextNo} · drops ${fmtDate(drop)} — open it to assign & set details`, 'ok');
+  await raLoadPlaylist(); raState.ccOpen = data?.id || null; await loadRadioCC();
 }
 // Ask a teammate something about an episode → posts to the episode thread AND
 // sends them a 🔔 notification. Same handshake pattern as the post workflow.
@@ -12215,10 +12255,28 @@ async function raApplyImport() {
 // The cover lives in the existing public-read/admin-write `radio-mixes` bucket
 // under covers/ — deliberately reusing it rather than adding a bucket + policies
 // the day before launch.
-function raOpenEpisodeDetails() {
+async function raLoadEpLookups() {
+  if (raState.epLookups) return;
+  try {
+    const [pr, ac, sp] = await Promise.all([
+      sb.from('profiles').select('id,full_name,email').is('deleted_at', null),
+      sb.from('actors').select('id,display_name,soundcloud').eq('kind', 'person').is('deleted_at', null).order('display_name'),
+      sb.from('social_posts').select('id,title,scheduled_for,station_id').is('deleted_at', null).order('scheduled_for', { ascending: false, nullsFirst: false }).limit(250),
+    ]);
+    raState.epUsers = pr.data || []; raState.djActors = ac.data || []; raState.epPosts = sp.data || []; raState.epLookups = true;
+  } catch (_) { raState.epUsers = []; raState.djActors = []; raState.epPosts = []; }
+}
+async function raOpenEpisodeDetails() {
   const pl = raState.playlist;
   if (!pl) return;
+  await raLoadEpLookups();
   const v = (x) => escapeHtml(x == null ? '' : String(x));
+  const opt = (id, label, cur) => `<option value="${v(id)}"${cur === id ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  const userOpts = (raState.epUsers || []).map(u => opt(u.id, u.full_name || u.email, pl.assigned_to)).join('');
+  const djOpts = (raState.djActors || []).map(a => opt(a.id, a.display_name, pl.assigned_actor_id)).join('');
+  const linkedPostId = (raState.epPosts || []).find(p => p.station_id === pl.id)?.id || '';
+  const postOpts = '<option value="">— none —</option>' + (raState.epPosts || []).map(p => opt(p.id, (p.title || 'Untitled') + (p.scheduled_for ? ' · ' + fmtDate(p.scheduled_for) : ''), linkedPostId)).join('');
+  const dp = pl.dj_search_params || {};
   const pageUrl = 'https://comewith.org/radio.html?s=' + (pl.slug || raSlugify(pl.name) + '-' + new Date().toISOString().slice(0, 10));
   const descScDefault = `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}`;
   openKpi('✎ Episode details', `EP ${pl.station_no ?? '—'} · ${pl.name}`, `
@@ -12257,7 +12315,24 @@ function raOpenEpisodeDetails() {
       <div class="kpi-hint" style="margin:2px 0 0;">Leave blank and Go live builds one for you, with the full numbered tracklist appended.</div></div>
     <div class="form-row"><label>YouTube link</label>
       <input name="ep_youtube" class="modal-input" value="${v(pl.mix_youtube_url)}" placeholder="https://youtube.com/watch?v=…">
-      <div class="kpi-hint" style="margin:2px 0 0;">Paste it here anytime — <strong>saving does not publish the episode</strong>. Once live it becomes the “▶ Watch on YouTube” button.</div></div>`,
+      <div class="kpi-hint" style="margin:2px 0 0;">Paste it here anytime — <strong>saving does not publish the episode</strong>. Once live it becomes the “▶ Watch on YouTube” button.</div></div>
+    <div class="form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;">
+      <label style="font-size:.86rem;">👤 Assigned to <span class="li-sub">— who owns this episode</span></label>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+        <select name="ep_assigned_to" class="modal-input" style="flex:1 1 170px;"><option value="">— a user —</option>${userOpts}</select>
+        <select name="ep_assigned_actor" class="modal-input" style="flex:1 1 170px;"><option value="">— or a DJ —</option>${djOpts}</select>
+      </div>
+      <div id="djLinkBox" style="margin-top:8px;">${raDjLinkHtml(pl)}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+        <input name="ep_dj_genres" class="modal-input" value="${v((dp.genres || []).join(', '))}" placeholder="scope genres (comma) — blank = all" style="flex:1 1 200px;font-size:.82rem;">
+        <input name="ep_dj_weeks" type="number" class="modal-input" value="${v(dp.weeks || 4)}" min="1" max="12" title="how many weeks of shows the DJ sees" style="max-width:90px;font-size:.82rem;">
+      </div>
+      <div class="kpi-hint" style="margin:4px 0 0;">The DJ link shows only NYC artists playing within the next few weeks (+ any genre filter) so they research within scope.</div></div>
+    <div class="form-row" style="border:1px solid var(--gold);border-radius:8px;padding:11px 13px;background:rgba(181,121,31,0.05);">
+      <label style="font-size:.86rem;">📝 Recap notes <span class="li-sub">— internal only, never public. For Janelle's recap content.</span></label>
+      <textarea name="ep_recap_notes" class="modal-textarea" rows="4" placeholder="Your notes on the set / the night — the story, standout tracks, energy, moments — anything Janelle can turn into recap posts.">${v(pl.recap_notes)}</textarea></div>
+    <div class="form-row"><label>🔗 Linked social post <span class="li-sub">— Janelle sees this episode on that post</span></label>
+      <select name="ep_social_post" class="modal-input">${postOpts}</select></div>`,
     () => raSaveEpisodeDetails(), 'Save details');
   setTimeout(() => {
     const nameEl = document.querySelector('#kpiModalBody [name="ep_name"]');
@@ -12284,6 +12359,10 @@ async function raSaveEpisodeDetails() {
       mix_youtube_url: kpiVal('ep_youtube') || null,
       desc_public: kpiVal('ep_desc_public') || null,
       desc_sc: kpiVal('ep_desc_sc') || null,
+      recap_notes: kpiVal('ep_recap_notes') || null,
+      assigned_to: kpiVal('ep_assigned_to') || null,
+      assigned_actor_id: kpiVal('ep_assigned_actor') || null,
+      dj_search_params: { genres: (kpiVal('ep_dj_genres') || '').split(',').map(g => g.trim()).filter(Boolean), weeks: Number(kpiVal('ep_dj_weeks')) || 4 },
       updated_at: new Date().toISOString(),
     };
     // Station-level artwork lives in site_content (the established in-app-settings
@@ -12313,7 +12392,11 @@ async function raSaveEpisodeDetails() {
     }
     const { error } = await sb.from('sc_playlists').update(patch).eq('id', pl.id);
     if (error) throw error;
-    raState.coverCleared = false;
+    // Linked social post — keep it 1:1: clear whatever pointed here, set the chosen one.
+    const chosenPost = kpiVal('ep_social_post');
+    await sb.from('social_posts').update({ station_id: null }).eq('station_id', pl.id);
+    if (chosenPost) await sb.from('social_posts').update({ station_id: pl.id }).eq('id', chosenPost);
+    raState.coverCleared = false; raState.epLookups = false;
     closeKpi();
     await raLoadPlaylist(); renderRaMarket();
     toast('Episode details saved', 'ok');
@@ -12321,6 +12404,31 @@ async function raSaveEpisodeDetails() {
     toast('Save failed: ' + (e.message || e), 'err');
     btn.disabled = false; btn.textContent = 'Save details';
   }
+}
+function raDjLinkHtml(pl) {
+  if (!pl.dj_token) return `<button type="button" class="hub-mini" data-ra-djgen>🔗 Generate a DJ access link</button>`;
+  const url = 'https://comewith.org/dj.html?ep=' + pl.dj_token;
+  return `<div class="li-sub" style="margin:0 0 4px;">Send this to the assigned DJ — it opens a scoped view of just this week's artists &amp; songs:</div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;"><input class="modal-input" readonly value="${escapeHtml(url)}" style="flex:1 1 240px;font-size:.8rem;" onclick="this.select()">
+    <button type="button" class="hub-mini" data-ra-djcopy="${escapeHtml(url)}">📋 Copy</button>
+    <button type="button" class="hub-mini danger" data-ra-djrevoke>Revoke</button></div>`;
+}
+async function raDjGenLink() {
+  const pl = raState.playlist; if (!pl) return;
+  const token = 'dj_' + Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 10);
+  const { error } = await sb.from('sc_playlists').update({ dj_token: token }).eq('id', pl.id);
+  if (error) { toast('Could not generate: ' + error.message, 'err'); return; }
+  pl.dj_token = token;
+  const box = $('djLinkBox'); if (box) box.innerHTML = raDjLinkHtml(pl);
+  toast('DJ link generated', 'ok');
+}
+async function raDjRevoke() {
+  const pl = raState.playlist; if (!pl) return;
+  if (!confirm('Revoke the DJ link? The current link stops working immediately.')) return;
+  await sb.from('sc_playlists').update({ dj_token: null }).eq('id', pl.id);
+  pl.dj_token = null;
+  const box = $('djLinkBox'); if (box) box.innerHTML = raDjLinkHtml(pl);
+  toast('Link revoked', 'ok');
 }
 
 // ---- Where to buy (Beatport / Bandcamp) --------------------------------------
