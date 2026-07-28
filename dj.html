@@ -32,6 +32,11 @@
   .songs.open{display:block;}
   .song{display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.9rem;}
   .song .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mini{font-family:var(--mono);font-size:.66rem;padding:3px 9px;border-radius:7px;border:1px solid var(--line);cursor:pointer;white-space:nowrap;}
+  .mini.add{background:var(--lime);color:#0f0814;border-color:var(--lime);}
+  .mini.rm{background:none;color:var(--lime);border-color:var(--lime);}
+  .mini.inset{color:var(--faint);cursor:default;}
+  .mini:disabled{opacity:.5;}
   .tl{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px 14px;}
   .tl details summary{cursor:pointer;font-family:var(--mono);font-size:.8rem;color:var(--dim);}
   .tl .t{font-size:.88rem;padding:3px 0;border-top:1px solid var(--line);}
@@ -48,7 +53,23 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
 const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
 const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
-let DATA=null;
+let DATA=null, IN=new Set(), DJADD=new Set();
+
+async function djAction(btn,kind,ai,si){
+  const a=DATA.artists[ai], s=a.songs[si], id=String(s.sc_track_id||''); if(!id) return;
+  btn.disabled=true;
+  const token=new URLSearchParams(location.search).get('ep');
+  const track={sc_track_id:id,title:s.title,url:s.url,artist_name:a.name,duration_ms:s.duration_ms,playback_count:s.playback_count,artwork_url:s.artwork_url};
+  let j={}; try{ const r=await fetch(CWURL+'/functions/v1/dj-station',{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify({token,action:kind,track})}); j=await r.json(); if(!r.ok||!j.ok) throw new Error(j.error||'Could not update.'); }
+  catch(e){ btn.disabled=false; alert(e.message); return; }
+  if(kind==='add'){ IN.add(id); DJADD.add(id); DATA.tracklist.push({sc_track_id:id,artist_name:a.name,title:s.title,permalink_url:s.url,source:'dj'}); btn.outerHTML=`<button class="mini rm" data-rm="${ai}:${si}">✓ added · remove</button>`; }
+  else { IN.delete(id); DJADD.delete(id); DATA.tracklist=DATA.tracklist.filter(t=>String(t.sc_track_id)!==id); btn.outerHTML=`<button class="mini add" data-add="${ai}:${si}">＋ add</button>`; }
+  const c=document.getElementById('inCount'); if(c) c.textContent=DATA.tracklist.length;
+}
+document.addEventListener('click',e=>{
+  const add=e.target.closest('[data-add]'); if(add){ const [ai,si]=add.dataset.add.split(':'); djAction(add,'add',+ai,+si); return; }
+  const rm=e.target.closest('[data-rm]'); if(rm){ const [ai,si]=rm.dataset.rm.split(':'); djAction(rm,'remove',+ai,+si); return; }
+});
 
 async function load(){
   const token=new URLSearchParams(location.search).get('ep');
@@ -66,7 +87,12 @@ function artistCard(a,i){
   const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
   const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
   const songs=(a.songs||[]);
-  const songRows=songs.map(s=>`<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">▶ play</a>`:''}</div>`).join('');
+  const songRows=songs.map((s,si)=>{
+    const id=String(s.sc_track_id||'');
+    const btn = !id ? '' : DJADD.has(id) ? `<button class="mini rm" data-rm="${i}:${si}">✓ added · remove</button>`
+      : IN.has(id) ? `<span class="mini inset">✓ in set</span>` : `<button class="mini add" data-add="${i}:${si}">＋ add</button>`;
+    return `<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">▶</a>`:''}${btn}</div>`;
+  }).join('');
   return `<div class="card">
     <div class="art-top"><strong>${esc(a.name)}</strong>${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
@@ -76,15 +102,17 @@ function artistCard(a,i){
 }
 function render(q){
   const d=DATA, ep=d.episode, sc=d.scope;
+  IN=new Set((d.tracklist||[]).map(t=>String(t.sc_track_id||'')));
+  DJADD=new Set((d.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
   let arts=d.artists;
   if(q){ const ql=q.toLowerCase(); arts=arts.filter(a=>(a.name||'').toLowerCase().includes(ql)||(a.next_venue||'').toLowerCase().includes(ql)||(a.genres||[]).some(g=>g.toLowerCase().includes(ql))); }
   const tl=d.tracklist||[];
   $('#root').innerHTML=`
     <div class="kicker">📻 Come With Radio · your DJ workspace</div>
     <h1>EP ${ep.no??''} — ${esc(ep.name||'')}</h1>
-    <div class="sub">Everything below is scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Research and audition — this is your shortlist to build from.</div>
+    <div class="sub">Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.</div>
     <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
-    ${tl.length?`<div class="tl"><details><summary>▶ Already in this episode — ${tl.length} track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')}</details></div>`:''}
+    <div class="tl"><details><summary>▶ In this episode — <span id="inCount">${tl.length}</span> track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.source==='dj'?' · <span style="color:var(--lime)">your pick</span>':''}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')||'<div class="t">Empty — add songs below.</div>'}</details></div>
     <h2>Artists in scope · ${arts.length}</h2>
     ${arts.map(artistCard).join('')||'<div class="state">No artists match. Clear the search.</div>'}
     <div class="foot">Read-only workspace for the assigned DJ. Links expire when access is revoked.</div>`;

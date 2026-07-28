@@ -10177,7 +10177,7 @@ async function loadRaMarket() {
 // server-side with carried-over songs). The switcher can view any past station.
 // raState.songLog = permanent song memory keyed by sc_track_id (played/passed/
 // carried marks when researching future stations + the 📜 History view).
-const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by,scheduled_go_live,recap_notes,assigned_to,assigned_actor_id,dj_token,dj_search_params';
+const RA_PL_COLS = 'id,name,note,sc_playlist_url,public_token,published,status,slug,station_no,drop_date,mix_file_path,mix_sc_track_id,mix_sc_track_url,mix_youtube_url,desc_public,desc_sc,published_at,cover_url,mix_by,scheduled_go_live,recap_notes,assigned_to,assigned_actor_id,dj_token,dj_search_params,edition_name,edition_seq';
 async function raLoadPlaylist() {
   const { data: all } = await sb.from('sc_playlists').select(RA_PL_COLS).order('station_no', { ascending: false });
   raState.stations = all || [];
@@ -10796,7 +10796,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -10814,6 +10814,7 @@ document.addEventListener('click', async (e) => {
   const ccg = t.closest('[data-ra-ccgenweek]'); if (ccg) { ccWithStation(ccg.dataset.raCcgenweek, raOpenGenWeek); return; }
   const cca = t.closest('[data-ra-cctaskadd]'); if (cca) { raCcAddTask(cca.dataset.raCctaskadd); return; }
   if (t.closest('[data-ra-ccplan]')) { raCcPlanEpisode(); return; }
+  if (t.closest('[data-ra-ccedition]')) { raCcSpecialEdition(); return; }
   const cce = t.closest('[data-ra-cctaskedit]'); if (cce) { openEditTask(cce.dataset.raCctaskedit, loadRadioCC); return; }
   const ccn = t.closest('[data-ra-ccnoteadd]'); if (ccn) { raCcAddNote(ccn.dataset.raCcnoteadd); return; }
   const ccclip = t.closest('[data-ra-ccclip]'); if (ccclip) { const s = raState.stations.find(x => x.id === ccclip.dataset.raCcclip); openAssetModal({ station_id: ccclip.dataset.raCcclip, kind: 'clip', label: 'EP ' + (s?.station_no ?? ''), defaultLabel: 'EP ' + (s?.station_no ?? '') + ' — clip' }, loadRadioCC); return; }
@@ -11394,7 +11395,7 @@ function raRenderPlaylist() {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">${actions}</div>
     ${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;flex-wrap:wrap;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;${t.source === 'dj' ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : t.source === 'dj' ? 'Added by the assigned DJ from their scoped link' : t.source === 'beatport' ? 'Bought / matched on Beatport' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : t.source === 'dj' ? '🎧 DJ pick' : t.source === 'beatport' ? '🛒 beatport' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>` : ''}
         ${t.buy_url || t.beatport_url || t.bandcamp_url ? `<a class="hub-mini" href="${escapeHtml(t.buy_url || t.beatport_url || t.bandcamp_url)}" target="_blank" rel="noopener" title="${t.buy_url ? 'Where you bought it' : 'Buy it — found by “Where to buy”' + (t.beatport_price ? ' · ' + t.beatport_price : '')} (private — never shown on the site)">🛒</a>` : ''}
@@ -11446,7 +11447,7 @@ function renderRadioCC() {
     const sched = s.scheduled_go_live ? `⏰ ${fmtDateTime(s.scheduled_go_live)}` : (s.drop_date ? `📅 drops ${fmtDate(s.drop_date)}` : (s.published_at ? `published ${fmtDate(s.published_at)}` : 'no date set'));
     const head = `<div class="hub-li" data-ra-ccopen="${s.id}" style="cursor:pointer;">
       <div class="li-main"><strong>EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || 'Untitled')}</strong>
-        <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>${raAssignChip(s)}${s.dj_token ? ' <span class="role-chip" style="cursor:default;background:var(--surface-2);" title="A DJ access link is active">🔗 DJ link</span>' : ''}
+        <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>${s.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);border:1px solid var(--gold,#e0b23a);" title="Special edition series">✨ ${escapeHtml(s.edition_name)}${s.edition_seq ? ' · Day ' + s.edition_seq : ''}</span>` : ''}${raAssignChip(s)}${s.dj_token ? ' <span class="role-chip" style="cursor:default;background:var(--surface-2);" title="A DJ access link is active">🔗 DJ link</span>' : ''}
         <div class="li-sub">${escapeHtml(sched)}${tks.length ? ` · ${done}/${tks.length} tasks` : ''}${ccNotesFor(s.id).length ? ` · 💬 ${ccNotesFor(s.id).length}` : ''}</div></div>
       <span class="li-sub">${isOpen ? '▾' : '▸'}</span></div>`;
     if (!isOpen) return head;
@@ -11480,7 +11481,8 @@ function renderRadioCC() {
   $('raMarketBody').innerHTML = raModeBar() + `
     <div class="hub-sec-bar"><h3>🎚 Artist Radio — Control Center</h3>
       <span style="display:flex;gap:8px;align-items:center;"><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span>
-      <button class="hub-btn ghost" data-ra-ccplan title="Create a future episode skeleton you can assign & start working on">➕ Plan a future episode</button></span></div>
+      <button class="hub-btn ghost" data-ra-ccplan title="Create a future episode skeleton you can assign & start working on">➕ Plan a future episode</button>
+      <button class="hub-btn ghost" data-ra-ccedition title="Create a multi-day special edition (festival run) instead of the weekly">✨ Special edition</button></span></div>
     ${nextDrops.length ? `<div class="kpi-hint" style="margin-bottom:10px;">📆 Upcoming: ${nextDrops.slice(0, 4).map(s => `EP ${s.station_no ?? ''} ${escapeHtml(fmtDate(s.scheduled_go_live || s.drop_date))}`).join(' · ')}</div>` : ''}
     <div class="hub-list">${stations.map(card).join('') || '<div class="hub-empty">No episodes yet.</div>'}</div>`;
 }
@@ -11501,6 +11503,55 @@ async function raCcPlanEpisode() {
   if (error) { toast('Could not create: ' + error.message, 'err'); return; }
   toast(`Planned EP ${nextNo} · drops ${fmtDate(drop)} — open it to assign & set details`, 'ok');
   await raLoadPlaylist(); raState.ccOpen = data?.id || null; await loadRadioCC();
+}
+// Create a SPECIAL EDITION — a run of daily drops (e.g. a festival) instead of
+// the weekly, each its own Planned episode with a day title + a DJ assigned.
+async function raCcSpecialEdition() {
+  await raLoadEpLookups();
+  const stations = raState.stations || [];
+  const startNo = Math.max(0, ...stations.map(s => s.station_no || 0)) + 1;
+  const dates = stations.map(s => s.scheduled_go_live || s.drop_date).filter(Boolean).map(d => String(d).slice(0, 10)).sort();
+  let start;
+  if (dates.length) { const d = new Date(dates[dates.length - 1] + 'T12:00:00'); d.setDate(d.getDate() + 7); start = d.toISOString().slice(0, 10); }
+  else { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); start = d.toISOString().slice(0, 10); }
+  const userOpts = (raState.epUsers || []).map(u => `<option value="u:${u.id}">${escapeHtml(u.full_name || u.email)}</option>`).join('');
+  const djOpts = (raState.djActors || []).map(a => `<option value="a:${a.id}">🎧 ${escapeHtml(a.display_name)}</option>`).join('');
+  const rowsHtml = (n, s0) => Array.from({ length: n }, (_, i) => `<div data-se-row style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">
+      <span class="li-sub" style="min-width:120px;">Day ${i + 1} · ${escapeHtml(fmtDate(ccDatePlus(s0, i)))}</span>
+      <input class="modal-input" data-se-title placeholder="Day ${i + 1} — who's mixing" style="flex:1 1 170px;font-size:.85rem;">
+      <select class="modal-input" data-se-assign style="max-width:190px;font-size:.85rem;"><option value="">— assign a DJ —</option>${userOpts}${djOpts}</select></div>`).join('');
+  openKpi('✨ Special edition series', 'A run of daily drops (festival, etc.) — one episode per day', `
+    <label class="modal-label">Edition name</label>
+    <input class="modal-input" data-se-name value="Come With Elements Radio">
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;">
+      <div><label class="modal-label">First drop</label><input class="modal-input" type="date" data-se-start value="${start}" style="max-width:170px;"></div>
+      <div><label class="modal-label"># of drops</label><input class="modal-input" type="number" data-se-days value="4" min="1" max="10" style="max-width:90px;"></div>
+    </div>
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">The drops</h3></div>
+    <div id="seRows">${rowsHtml(4, start)}</div>
+    <div class="kpi-hint" style="margin-top:8px;">Creates <span id="seCount">4</span> Planned episodes (EP ${startNo}+), one per day. Open any afterward to set details, generate its DJ link, add recap notes, etc.</div>`,
+    async () => {
+      const name = (document.querySelector('[data-se-name]')?.value || '').trim() || 'Special edition';
+      const s0 = document.querySelector('[data-se-start]')?.value || start;
+      const rows = [...document.querySelectorAll('#seRows [data-se-row]')];
+      const inserts = rows.map((r, i) => {
+        const title = (r.querySelector('[data-se-title]')?.value || '').trim();
+        const assign = r.querySelector('[data-se-assign]')?.value || '';
+        const row = { name: title ? `${name} — ${title}` : `${name} — Day ${i + 1}`, station_no: startNo + i, status: 'planned', drop_date: ccDatePlus(s0, i), edition_name: name, edition_seq: i + 1 };
+        if (assign.startsWith('u:')) row.assigned_to = assign.slice(2);
+        else if (assign.startsWith('a:')) row.assigned_actor_id = assign.slice(2);
+        return row;
+      });
+      if (!inserts.length) { toast('Add at least one drop', 'err'); return; }
+      const { error } = await sb.from('sc_playlists').insert(inserts);
+      if (error) { toast('Could not create: ' + error.message, 'err'); return; }
+      closeKpi(); toast(`Created “${name}” — ${inserts.length} drops`, 'ok'); await raLoadPlaylist(); await loadRadioCC();
+    }, 'Create the series');
+  setTimeout(() => {
+    const daysEl = document.querySelector('[data-se-days]'), startEl = document.querySelector('[data-se-start]');
+    const rebuild = () => { const n = Math.max(1, Math.min(10, Number(daysEl.value) || 1)); const box = document.getElementById('seRows'); if (box) box.innerHTML = rowsHtml(n, startEl.value); const c = document.getElementById('seCount'); if (c) c.textContent = n; };
+    daysEl?.addEventListener('input', rebuild); startEl?.addEventListener('change', rebuild);
+  }, 60);
 }
 // Ask a teammate something about an episode → posts to the episode thread AND
 // sends them a 🔔 notification. Same handshake pattern as the post workflow.

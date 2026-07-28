@@ -22,13 +22,38 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return err(405, "POST only");
   const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   try {
-    const { token } = await req.json().catch(() => ({}));
+    const { token, action, track } = await req.json().catch(() => ({}));
     if (!token || typeof token !== "string") return err(400, "missing token");
 
     const { data: ep } = await admin.from("sc_playlists")
-      .select("id, station_no, name, drop_date, dj_search_params")
+      .select("id, station_no, name, drop_date, dj_search_params, status")
       .eq("dj_token", token).maybeSingle();
     if (!ep) return err(404, "This link is invalid or has been revoked.");
+
+    // The DJ adds a pick to the episode (source='dj' so it's reviewable + only the
+    // DJ's own adds are theirs to remove). Token is the only credential.
+    if (action === "add") {
+      const id = track && (track.sc_track_id != null) ? String(track.sc_track_id) : "";
+      if (!id) return err(400, "no track");
+      const { data: dup } = await admin.from("sc_playlist_tracks").select("id").eq("playlist_id", ep.id).eq("sc_track_id", id).maybeSingle();
+      if (dup) return new Response(JSON.stringify({ ok: true, already: true }), { headers: JH });
+      const { data: mx } = await admin.from("sc_playlist_tracks").select("sort").eq("playlist_id", ep.id).order("sort", { ascending: false }).limit(1).maybeSingle();
+      const { error } = await admin.from("sc_playlist_tracks").insert({
+        playlist_id: ep.id, sc_track_id: id, title: track.title || null, artist_name: track.artist_name || null,
+        permalink_url: track.url || track.permalink_url || null, duration_ms: track.duration_ms || null,
+        playback_count: track.playback_count || null, artwork_url: track.artwork_url || null,
+        source: "dj", sort: (mx?.sort || 0) + 10,
+      });
+      if (error) return err(500, "Could not add that song.");
+      return new Response(JSON.stringify({ ok: true, added: true }), { headers: JH });
+    }
+    if (action === "remove") {
+      const id = track && (track.sc_track_id != null) ? String(track.sc_track_id) : "";
+      if (!id) return err(400, "no track");
+      // Only the DJ's own picks (source='dj') can be pulled — never the curated set.
+      await admin.from("sc_playlist_tracks").delete().eq("playlist_id", ep.id).eq("sc_track_id", id).eq("source", "dj");
+      return new Response(JSON.stringify({ ok: true, removed: true }), { headers: JH });
+    }
 
     const params = ep.dj_search_params || {};
     const weeks = Math.max(1, Math.min(12, Number(params.weeks) || 4));
@@ -51,7 +76,7 @@ Deno.serve(async (req) => {
     for (let i = 0; i < scUrls.length; i += 200) {
       const { data: cache } = await admin.from("sc_artist_cache")
         .select("soundcloud, songs, is_producer, followers").in("soundcloud", scUrls.slice(i, i + 200));
-      (cache || []).forEach((c) => { songByUrl[norm(c.soundcloud)] = (c.songs || []).slice(0, 12).map((s: any) => ({ title: s.title, url: s.permalink_url })); });
+      (cache || []).forEach((c) => { songByUrl[norm(c.soundcloud)] = (c.songs || []).slice(0, 12).map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url })); });
     }
     const out = (artists || []).map((a) => ({
       name: a.name, soundcloud: a.soundcloud, followers: a.follower_count || 0,
@@ -62,7 +87,7 @@ Deno.serve(async (req) => {
 
     // The episode's current tracklist (what's already in).
     const { data: tracks } = await admin.from("sc_playlist_tracks")
-      .select("artist_name, title, permalink_url, show_date, show_venue, sort")
+      .select("sc_track_id, artist_name, title, permalink_url, source, sort")
       .eq("playlist_id", ep.id).order("sort");
 
     return new Response(JSON.stringify({
