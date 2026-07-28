@@ -49,7 +49,8 @@
   .rec-card .badge{font-family:var(--mono);font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime);}
   .rec-card h2{font-family:var(--disp);font-size:1.7rem;margin:.2em 0 .5em;}
   .rec-step{display:grid;grid-template-columns:34px 1fr;gap:12px;padding:11px 0;border-top:1px solid var(--line);}
-  .rec-step .rn{font-family:var(--disp);font-size:1.3rem;color:var(--lime);}
+  .reclbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);margin:16px 0 4px;}
+  .rec-step .rn{font-family:var(--disp);font-size:1.3rem;color:var(--lime);text-align:center;}
   .rec-step b{color:var(--cream);} .rec-step .t{font-size:.94rem;color:var(--dim);}
   .rec-specs{display:flex;flex-wrap:wrap;gap:7px;margin:16px 0;}
   .rec-specs span{font-family:var(--mono);font-size:.68rem;color:var(--cream);border:1px solid var(--limed);border-radius:999px;padding:4px 10px;}
@@ -60,18 +61,23 @@
 </style>
 </head>
 <body>
-<button class="recbtn" onclick="document.getElementById('recOv').classList.add('on')">📋 How to record</button>
+<button class="recbtn" onclick="document.getElementById('recOv').classList.add('on')">📋 How it works</button>
 <div class="rec-ov" id="recOv" onclick="if(event.target===this)this.classList.remove('on')">
   <div class="rec-card">
     <div class="badge">● Come With Radio · for DJs</div>
-    <h2>Record your set</h2>
-    <div class="rec-step"><span class="rn">1</span><div><b>🎚️ Build it</b><div class="t">Pull tracks from this page, arrange in <b>Rekordbox</b>. Mix it like a real set.</div></div></div>
-    <div class="rec-step"><span class="rn">2</span><div><b>🔴 Record the master</b><div class="t">Rekordbox <b>REC</b>, or master out → your interface. <span class="no">Never a room/phone mic.</span></div></div></div>
-    <div class="rec-step"><span class="rn">3</span><div><b>📊 Watch the levels</b><div class="t">Peaks <b>out of the red</b> — leave ~<b>−6&nbsp;dB</b> headroom.</div></div></div>
-    <div class="rec-step"><span class="rn">4</span><div><b>💾 One clean file</b><div class="t"><b>WAV</b> (or 320&nbsp;MP3) · stereo · one continuous mix.</div></div></div>
-    <div class="rec-step"><span class="rn">5</span><div><b>📤 Send it</b><div class="t">Name it <b>“CWR — Your Name”</b> and send it over.</div></div></div>
-    <div class="rec-specs"><span>~60 MIN</span><span>MASTER OUT</span><span>WAV / 320</span><span>STEREO</span><span>ONE FILE</span></div>
-    <div class="rec-send"><div class="t" style="font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lime);margin-bottom:3px;">Drop it here</div><div class="big">berky@comewith.org</div><div class="t" style="color:var(--dim);font-size:.85rem;">or a WeTransfer / Drive link.</div></div>
+    <h2>How it works</h2>
+    <div class="reclbl">On this page · what the buttons do</div>
+    <div class="rec-step"><span class="rn">▶</span><div><b>Audition</b><div class="t">Play any song right here.</div></div></div>
+    <div class="rec-step"><span class="rn" style="color:#0f0814;background:var(--lime);border-radius:6px;font-size:.8rem;padding:2px 0;">＋</span><div><b>Add to the episode</b><div class="t">It drops into the tracklist instantly. <b>✓ added · remove</b> to pull it back.</div></div></div>
+    <div class="rec-step"><span class="rn" style="font-size:.9rem;">☰</span><div><b>"In this episode"</b><div class="t">Top of the page = the running set (your picks + what's curated).</div></div></div>
+    <div class="t" style="margin:8px 0 4px;color:var(--dim);font-size:.9rem;">Everything's <b style="color:var(--cream)">already scoped</b> — only artists playing NYC this week, in your genres.</div>
+    <div class="reclbl">The flow</div>
+    <div class="rec-step"><span class="rn">🎯</span><div><b>Assigned</b><div class="t">Keith gives you an episode + this link.</div></div></div>
+    <div class="rec-step"><span class="rn">🎧</span><div><b style="color:var(--lime)">Build your set — here</b><div class="t">Audition &amp; ＋add from the pool; picks land live.</div></div></div>
+    <div class="rec-step"><span class="rn">🎚️</span><div><b>Record it</b><div class="t">Arrange &amp; mix in Rekordbox, your way.</div></div></div>
+    <div class="rec-step"><span class="rn">📤</span><div><b>Send the file</b><div class="t">One mix to Keith.</div></div></div>
+    <div class="rec-step"><span class="rn">📻</span><div><b>It goes live</b><div class="t">Becomes the episode — page, Now-Playing video, drops on schedule.</div></div></div>
+    <div class="rec-send"><div class="t" style="font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lime);margin-bottom:3px;">Send your mix to</div><div class="big">berky@comewith.org</div><div class="t" style="color:var(--dim);font-size:.85rem;">or a WeTransfer / Drive link.</div></div>
     <button class="rec-close" onclick="document.getElementById('recOv').classList.remove('on')">Got it — close</button>
   </div>
 </div>
