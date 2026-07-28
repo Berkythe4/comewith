@@ -146,7 +146,9 @@ function render(q){
   $('#root').innerHTML=`
     <div class="kicker">📻 Come With Radio · your DJ workspace</div>
     <h1>EP ${ep.no??''} — ${esc(ep.name||'')}</h1>
-    <div class="sub">Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.</div>
+    <div class="sub">${sc.pool==='elements'
+      ? `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`
+      : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}</div>
     <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
     <div class="tl"><details><summary>▶ In this episode — <span id="inCount">${tl.length}</span> track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.source==='dj'?' · <span style="color:var(--lime)">your pick</span>':''}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')||'<div class="t">Empty — add songs below.</div>'}</details></div>
     <h2>Artists in scope · ${arts.length}</h2>

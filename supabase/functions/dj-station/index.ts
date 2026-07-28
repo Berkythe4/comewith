@@ -56,18 +56,29 @@ Deno.serve(async (req) => {
     }
 
     const params = ep.dj_search_params || {};
-    const weeks = Math.max(1, Math.min(12, Number(params.weeks) || 4));
     const genres: string[] = Array.isArray(params.genres) ? params.genres.filter(Boolean) : [];
+    const artistNames: string[] = Array.isArray(params.artists) ? params.artists.filter(Boolean) : [];
+    const weeks = Math.max(1, Math.min(12, Number(params.weeks) || 4));
     const today = new Date().toISOString().slice(0, 10);
     const to = new Date(Date.now() + weeks * 7 * 86400000).toISOString().slice(0, 10);
+    const SEL = "name, soundcloud, follower_count, genres, city, next_event_date, next_venue, next_event_url";
 
-    // Scoped artist pool: playing NYC within the window, optional genre overlap.
-    let q = admin.from("ra_artists")
-      .select("name, soundcloud, follower_count, genres, city, next_event_date, next_venue, next_event_url")
-      .gte("next_event_date", today).lte("next_event_date", to)
-      .order("next_event_date", { ascending: true }).limit(160);
-    if (genres.length) q = q.overlaps("genres", genres);
-    const { data: artists } = await q;
+    // Two scope modes:
+    //  • FIXED LINEUP (params.artists set, e.g. a festival edition) → exactly those
+    //    artists, in the given order, no date window.
+    //  • DEFAULT → NYC artists playing within the window (+ optional genre filter).
+    let artists;
+    if (artistNames.length) {
+      const { data } = await admin.from("ra_artists").select(SEL).in("name", artistNames);
+      const byName: Record<string, any> = {}; (data || []).forEach((a) => { byName[a.name] = byName[a.name] || a; });
+      artists = artistNames.map((n) => byName[n]).filter(Boolean);
+    } else {
+      let q = admin.from("ra_artists").select(SEL)
+        .gte("next_event_date", today).lte("next_event_date", to)
+        .order("next_event_date", { ascending: true }).limit(160);
+      if (genres.length) q = q.overlaps("genres", genres);
+      artists = (await q).data;
+    }
 
     // Their songs, from the scan cache (keyed by normalized soundcloud URL).
     const norm = (u: string) => (u || "").trim().toLowerCase().replace("://www.", "://").replace(/\/+$/, "").split("?")[0];
@@ -93,7 +104,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true,
       episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date },
-      scope: { weeks, genres, from: today, to },
+      scope: { weeks, genres, from: today, to, pool: params.pool || null, day: params.day || null, count: (artists || []).length },
       artists: out,
       tracklist: tracks || [],
     }), { headers: JH });
