@@ -1366,6 +1366,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
+      <div class="panel" id="panel-scene-map"><div id="sceneMapBody"></div></div>
       <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:fixed;bottom:14px;right:14px;width:min(440px,94vw);z-index:1000;"></div></div>
 
       <div class="panel" id="panel-income">
@@ -1761,6 +1762,7 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'meetings')) MODULES.push({ key: 'meetings', label: 'Meetings', nav_group: 'Pinned', sort_order: 2, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   // Content Center ahead of migration 120 propagating.
   if (!MODULES.some(m => m.key === 'content-center')) MODULES.push({ key: 'content-center', label: 'Content Center', nav_group: 'Marketing', sort_order: 5, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
+  if (!MODULES.some(m => m.key === 'scene-map')) MODULES.push({ key: 'scene-map', label: '🗺️ Scene Map', nav_group: 'Radio', sort_order: 30, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -4130,6 +4132,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
+  if (tab === 'scene-map') { await loadSceneMap(); return; } // custom (internal Scene Map)
   if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Artist Radio)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'content-center') { await loadContentCenter(); return; } // content ops hub
@@ -10128,7 +10131,7 @@ async function loadMarket() {
   const [ev, mine, ven] = await Promise.all([
     sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
     sb.from('events').select('name,event_date,total_attendance').not('total_attendance', 'is', null),
-    sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner').is('deleted_at', null),
+    sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
   ]);
   if (ev.error) { $('marketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
@@ -10247,6 +10250,7 @@ function scVenueData() {
     const rec = vByName[x.name.toLowerCase()];
     x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
     x.ra_url = rec?.ra_url || null; x.ticket_url = rec?.ticket_url || null;
+    x.lat = rec?.lat ?? null; x.lng = rec?.lng ?? null;
   });
   raState._scVenSig = sig; raState._scVenData = list;
   return list;
@@ -10345,7 +10349,7 @@ function renderScArtists() {
 }
 function scArtistExpand(c) {
   const bar = (l, v) => `<div style="display:flex;align-items:center;gap:8px;font-size:.78rem;"><span style="width:64px;color:var(--mid,#888)">${l}</span><span style="flex:1;height:6px;background:#2a1c36;border-radius:4px;overflow:hidden;"><i style="display:block;height:100%;width:${v}%;background:var(--lime,#a7e02e)"></i></span><span style="width:28px;text-align:right;font-variant-numeric:tabular-nums;">${v}</span></div>`;
-  const shows = c.shows.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${escapeHtml(s.venue)} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.pick ? ' · ⭐' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">tickets ↗</a>` : ''}</div>`).join('');
+  const shows = c.shows.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${s.venue ? `<span data-sc-govenue="${escapeHtml(s.venue)}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;" title="Open this venue">${escapeHtml(s.venue)}</span>` : 'NYC'} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.pick ? ' · ⭐' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">tickets ↗</a>` : ''}</div>`).join('');
   return `<div style="display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;padding-top:8px;align-items:start;">
     <div style="display:grid;gap:5px;">
       <div class="li-sub" style="font-weight:700;">Buzz ${c.buzz} — how it's built</div>
@@ -10400,6 +10404,9 @@ function renderScVenues() {
 function scVenueExpand(x) {
   const links = [x.ra_url ? `<a class="hub-mini" href="${escapeHtml(x.ra_url)}" target="_blank" rel="noopener">RA ↗</a>` : '', x.ticket_url ? `<a class="hub-mini" href="${escapeHtml(x.ticket_url)}" target="_blank" rel="noopener">Tickets ↗</a>` : ''].filter(Boolean).join(' ');
   const shows = x.showList.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${escapeHtml(s.title || '')} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">↗</a>` : ''}</div>`).join('');
+  const bz = raBuzzMap();
+  const arts = [...x.artists].map(n => ({ n, b: bz[n.toLowerCase()] || 0 })).sort((a, b) => b.b - a.b).slice(0, 16);
+  const artChips = arts.map(a => `<span data-sc-goartist="${escapeHtml(a.n)}" class="role-chip" style="cursor:pointer;background:#2a1c36;color:var(--cream,#ede4d3);margin:2px 3px;padding:2px 7px;" title="Open this artist">${escapeHtml(a.n)}${a.b ? ` <b style="color:var(--lime,#a7e02e)">${a.b}</b>` : ''}</span>`).join('');
   return `<div style="display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;padding-top:8px;align-items:start;">
     <div style="display:grid;gap:4px;">
       <div class="li-sub"><strong>${x.shows}</strong> shows · <strong>${fmtNum(x.demandSum)}</strong> total RSVP · <strong>${x.artistCount}</strong> artists · ${x.picks} RA picks</div>
@@ -10407,7 +10414,10 @@ function scVenueExpand(x) {
       <div class="li-sub">${x.topGenres.join(' · ') || ''}</div>
       ${links ? `<div style="display:flex;gap:6px;margin-top:4px;">${links}</div>` : ''}
     </div>
-    <div><div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows</div>${shows || '<div class="li-sub">—</div>'}</div>
+    <div>
+      <div class="li-sub" style="font-weight:700;margin-bottom:2px;">Artists here <span style="font-weight:normal;">· click to open (🔥 buzz)</span></div>
+      <div style="margin-bottom:8px;">${artChips || '<span class="li-sub">—</span>'}</div>
+      <div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows</div>${shows || '<div class="li-sub">—</div>'}</div>
   </div>`;
 }
 function renderMarket() {
@@ -10790,15 +10800,120 @@ async function raRefresh(btn) {
     // touches RA/TM rows; failure here doesn't fail the whole pull.
     try { const r = await sb.functions.invoke('pull-dice', { body: { days: 90 } }); dice = r.data?.saved || 0; } catch (_) { /* skip */ }
     toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
-    if (document.querySelector('#panel-market.active')) await loadMarket(); else await loadRaMarket();
+    raState.events = []; raState.venues = [];   // force fresh reload of the scene data
+    if (document.querySelector('#panel-scene-map.active')) await loadSceneMap();
+    else if (document.querySelector('#panel-market.active')) await loadMarket();
+    else await loadRaMarket();
   } catch (e) { toast('Pull failed: ' + (e.message || e), 'err'); if (btn) { btn.disabled = false; btn.textContent = '↻ Pull shows'; } }
 }
+// ════════ Scene Map (panel-scene-map) — internal geographic web of the scene ════
+let sceneMap = null, sceneMarkers = {}, sceneLines = [], sceneState = { sizeBy: 'shows', platform: '', selected: null };
+function ensureLeaflet() {
+  if (window.L) return Promise.resolve();
+  if (window._leafletP) return window._leafletP;
+  window._leafletP = new Promise((res, rej) => {
+    const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.css'; document.head.appendChild(css);
+    const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.js'; s.onload = () => res(); s.onerror = () => rej(new Error('map library blocked')); document.head.appendChild(s);
+  });
+  return window._leafletP;
+}
+async function loadSceneMap() {
+  const body = $('sceneMapBody');
+  body.innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading the scene map…</div>';
+  try {
+    if (!raState.events?.length || !(raState.venues || []).some(v => v.lat != null)) {
+      const [ev, ven] = await Promise.all([
+        raState.events?.length ? Promise.resolve({ data: raState.events }) : sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)),
+        sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
+      ]);
+      raState.events = ev.data || raState.events || []; raState.venues = ven.data || []; raState._scVenSig = null;
+    }
+    if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)); raState.artists = data || []; }
+    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
+    await ensureLeaflet();
+  } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }
+  renderSceneMap();
+}
+function renderSceneMap() {
+  const body = $('sceneMapBody');
+  const venues = scVenueData();
+  const mapped = venues.filter(v => v.lat != null && v.lng != null);
+  const unmapped = venues.length - mapped.length;
+  body.innerHTML = `
+    <div class="hub-sec-bar"><h3>🗺️ Scene Map <span class="li-sub" style="font-weight:normal;">· internal · ${mapped.length} venues plotted${unmapped ? ' · ' + unmapped + ' not yet located' : ''}</span></h3>
+      <span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <label class="li-sub">Size <select class="modal-select" data-sm-size style="max-width:120px;"><option value="shows"${sceneState.sizeBy === 'shows' ? ' selected' : ''}>by shows</option><option value="demand"${sceneState.sizeBy === 'demand' ? ' selected' : ''}>by demand</option></select></label>
+        <select class="modal-select" data-sm-plat style="max-width:150px;"><option value="">All platforms</option>${['ra', 'dice', 'tm'].map(s => `<option value="${s}"${sceneState.platform === s ? ' selected' : ''}>${platformOf(s).l}</option>`).join('')}</select>
+        <button class="hub-btn" data-ra-refresh>↻ Pull shows</button></span></div>
+    <div class="kpi-hint" style="margin-bottom:10px;">Every NYC venue with upcoming shows, on the map. Dot size = activity, color = ticketing platform. Click a venue to see its shows &amp; artists and light up the venues it shares artists with — the scene web.</div>
+    <div id="sceneMapCanvas" style="height:min(64vh,600px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#0e1116;"></div>
+    <div id="sceneMapInfo" style="margin-top:12px;">${mapped.length ? '<div class="li-sub">Tip: click a dot to open a venue.</div>' : '<div class="hub-empty">No venues located yet — the geocoder is still filling these in, or hit “↻ Pull shows”.</div>'}</div>`;
+  const L = window.L; if (!L || !mapped.length) return;
+  if (sceneMap) { try { sceneMap.remove(); } catch (_) {} sceneMap = null; }
+  sceneMarkers = {}; sceneLines = [];
+  sceneMap = L.map('sceneMapCanvas', { zoomControl: true, scrollWheelZoom: true }).setView([40.717, -73.955], 12);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(sceneMap);
+  let list = mapped;
+  if (sceneState.platform) list = list.filter(v => v.platformsArr.includes(sceneState.platform));
+  const sizeVal = v => sceneState.sizeBy === 'demand' ? v.demandMax : v.shows;
+  const maxS = Math.max(1, ...list.map(sizeVal));
+  list.forEach(v => {
+    const p = platformOf(v.platformsArr[0] || 'ra');
+    const m = L.circleMarker([v.lat, v.lng], { radius: 6 + 22 * Math.sqrt(sizeVal(v) / maxS), color: p.c, weight: 1.5, fillColor: p.c, fillOpacity: 0.5 });
+    m.bindTooltip(`${escapeHtml(v.name)} · ${v.shows} show${v.shows === 1 ? '' : 's'}`, { direction: 'top' });
+    m.on('click', () => sceneSelect(v.name));
+    m.addTo(sceneMap); sceneMarkers[v.name] = m;
+  });
+  if (sceneState.selected && sceneMarkers[sceneState.selected]) sceneSelect(sceneState.selected);
+  setTimeout(() => { try { sceneMap.invalidateSize(); } catch (_) {} }, 120);   // container just became visible
+}
+function sceneSelect(name) {
+  const L = window.L; if (!L || !sceneMap) return;
+  const venues = scVenueData();
+  const v = venues.find(x => x.name === name); if (!v || v.lat == null) return;
+  sceneState.selected = name;
+  sceneLines.forEach(l => { try { sceneMap.removeLayer(l); } catch (_) {} }); sceneLines = [];
+  const shared = [];
+  venues.forEach(x => { if (x.name === name || x.lat == null) return; const common = [...x.artists].filter(a => v.artists.has(a)); if (common.length) shared.push({ v: x, common }); });
+  shared.forEach(s => { const line = L.polyline([[v.lat, v.lng], [s.v.lat, s.v.lng]], { color: '#a7e02e', weight: Math.min(4, 1 + s.common.length), opacity: 0.45 }); line.addTo(sceneMap); sceneLines.push(line); });
+  Object.entries(sceneMarkers).forEach(([n, m]) => m.setStyle({ opacity: (n === name || shared.some(s => s.v.name === n)) ? 1 : 0.35, fillOpacity: n === name ? 0.85 : 0.5 }));
+  sceneMap.panTo([v.lat, v.lng]);
+  $('sceneMapInfo').innerHTML = renderSceneInfo(v, shared);
+}
+function renderSceneInfo(v, shared) {
+  const bz = raBuzzMap();
+  const arts = [...v.artists].map(n => ({ n, b: bz[n.toLowerCase()] || 0 })).sort((a, b) => b.b - a.b).slice(0, 16);
+  const artChips = arts.map(a => `<span data-sm-artist="${escapeHtml(a.n)}" class="role-chip" style="cursor:pointer;background:#2a1c36;color:var(--cream,#ede4d3);margin:2px 3px;padding:2px 7px;" title="Open this artist">${escapeHtml(a.n)}${a.b ? ` <b style="color:var(--lime,#a7e02e)">${a.b}</b>` : ''}</span>`).join('');
+  const web = shared.sort((a, b) => b.common.length - a.common.length).slice(0, 8).map(s => `<div class="li-sub"><span data-sm-venue="${escapeHtml(s.v.name)}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;">${escapeHtml(s.v.name)}</span> — ${s.common.length} shared (${escapeHtml(s.common.slice(0, 3).join(', '))}${s.common.length > 3 ? '…' : ''})</div>`).join('');
+  return `<div style="background:var(--card,#20142a);border:1px solid var(--border);border-radius:12px;padding:14px 16px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;">
+      <strong style="font-size:1.1rem;">${escapeHtml(v.name)}</strong>
+      <button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(v.name)}">Open in control center →</button></div>
+    <div class="li-sub">${v.shows} shows · ${fmtNum(v.demandSum)} total RSVP · ${v.artistCount} artists · ${v.platformsArr.map(p => platformOf(p).s).join(' · ')}${v.capacity ? ' · cap ' + fmtNum(v.capacity) : ''}${v.area ? ' · ' + escapeHtml(v.area) : ''}</div>
+    <div class="li-sub" style="margin-top:8px;font-weight:700;">Artists here <span style="font-weight:normal;">· click to open</span></div>
+    <div style="margin:4px 0 8px;">${artChips || '—'}</div>
+    ${web ? `<div class="li-sub" style="font-weight:700;">Connected venues <span style="font-weight:normal;">· share artists (green lines)</span></div>${web}` : '<div class="li-sub">No shared-artist links to other venues yet.</div>'}
+  </div>`;
+}
+$('panel-scene-map').addEventListener('click', (e) => {
+  if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
+  const sv = e.target.closest('[data-sm-venue]'); if (sv) { sceneSelect(sv.dataset.smVenue); return; }
+  const oa = e.target.closest('[data-sm-openvenue]'); if (oa) { const n = oa.dataset.smOpenvenue; activateTab('market'); setTimeout(() => { marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; renderMarket(); }, 140); return; }
+  const sa = e.target.closest('[data-sm-artist]'); if (sa) { const n = sa.dataset.smArtist; activateTab('market'); setTimeout(() => { marketState.tab = 'artists'; marketState.aExpand = n; marketState.aSearch = n; marketState.aSrc = ''; marketState.aGenre = ''; renderMarket(); }, 140); return; }
+});
+$('panel-scene-map').addEventListener('change', (e) => {
+  const sz = e.target.closest('[data-sm-size]'); if (sz) { sceneState.sizeBy = sz.value; renderSceneMap(); return; }
+  const pl = e.target.closest('[data-sm-plat]'); if (pl) { sceneState.platform = pl.value; renderSceneMap(); return; }
+});
 // Best Nights (panel-market) controls.
 $('panel-market').addEventListener('click', (e) => {
   const v = e.target.closest('[data-mk-view]'); if (v) { marketState.view = v.dataset.mkView; renderMarket(); return; }
   // ── NYC Scene control center ──
   const sct = e.target.closest('[data-sc-tab]'); if (sct) { marketState.tab = sct.dataset.scTab; marketState.aExpand = null; marketState.vExpand = null; renderMarket(); return; }
   if (e.target.closest('[data-sc-golocal]')) { marketState.tab = 'artists'; marketState.aNyc = true; renderMarket(); return; }
+  // Cross-navigation: jump between an artist and a venue (the data web).
+  const gv = e.target.closest('[data-sc-govenue]'); if (gv) { const n = gv.dataset.scGovenue; marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; marketState.vPlatform = ''; renderMarket(); return; }
+  const ga = e.target.closest('[data-sc-goartist]'); if (ga) { const n = ga.dataset.scGoartist; marketState.tab = 'artists'; marketState.aExpand = n; marketState.aSearch = n; marketState.aSrc = ''; marketState.aGenre = ''; marketState.aNyc = false; marketState.aProd = false; marketState.aHasSc = false; renderMarket(); return; }
   const sas = e.target.closest('[data-sc-asort]'); if (sas) { const k = sas.dataset.scAsort; if (marketState.aSort === k) marketState.aDir = -marketState.aDir; else { marketState.aSort = k; marketState.aDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
   const svt = e.target.closest('[data-sc-vsort]'); if (svt) { const k = svt.dataset.scVsort; if (marketState.vSort === k) marketState.vDir = -marketState.vDir; else { marketState.vSort = k; marketState.vDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
   if (e.target.closest('[data-sc-anyc]')) { marketState.aNyc = !marketState.aNyc; renderMarket(); return; }
