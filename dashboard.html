@@ -9526,17 +9526,77 @@ $('kpiModalOverlay').addEventListener('change', async (e) => {
   const tt = e.target.closest('[data-epop-toggletask]');
   if (tt) { const st = tt.checked ? 'done' : 'todo'; await sb.from('tasks').update({ status: st }).eq('id', tt.dataset.epopToggletask); const t = epop.tasks.find(x => x.id === tt.dataset.epopToggletask); if (t) t.status = st; document.getElementById('epopTasks').innerHTML = epopTaskHtml(); }
 });
-function radioPopup(id) {
-  const r = (eventsDash.radio || []).find(x => x.id === id);
-  if (!r) return;
-  const line = (l, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border);"><span class="li-sub">${l}</span><span style="font-weight:600;">${v}</span></div>` : '';
-  const body = `
-    <div style="margin-bottom:8px;"><span class="role-chip" style="cursor:default;background:#a7e02e33;color:var(--cream,#ede4d3);">${escapeHtml(RA_STATUS_LABEL[r.status] || r.status)}</span>${r.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);">✨ ${escapeHtml(r.edition_name)}</span>` : ''}</div>
-    ${line('📻 Episode', 'EP ' + (r.station_no ?? '—'))}
-    ${line('📅 Drops', escapeHtml(fmtDate(r.drop_date)))}
-    ${r.slug ? line('🌐 Page', `<a href="https://comewith.org/radio.html?s=${escapeHtml(r.slug)}" target="_blank" rel="noopener">radio.html ↗</a>`) : ''}`;
-  openKpi('📻 ' + (r.name || 'Radio episode'), 'Come With Radio', body, () => { closeKpi(); activateTab('ra-market'); setTimeout(() => { raState.ccMode = true; raState.ccOpen = id; loadRadioCC(); }, 160); }, 'Open in Artist Radio →');
+// Radio episode = a calendared item the team works on, so its popup is a mini
+// control center: edit core details, see the tracklist with BPM/Key/Camelot +
+// buy links, and reach the final-prep tools — all without leaving the calendar.
+let rpop = null;
+async function radioPopup(id) {
+  raState.viewPlaylistId = id;
+  await raLoadPlaylist();
+  await raLoadEpLookups();
+  const pl = raState.playlist;
+  if (!pl || pl.id !== id) { toast('Could not load that episode', 'err'); return; }
+  rpop = { id, pl };
+  renderRadioPopup();
 }
+function rpopTrackList() {
+  const tracks = rpop.pl.tracks || [];
+  if (!tracks.length) return '<div class="li-sub">No songs yet.</div>';
+  const withBuy = tracks.filter(t => t.buy_url || t.beatport_url || t.bandcamp_url).length;
+  const withKey = tracks.filter(t => t.camelot || t.bpm).length;
+  return `<div class="li-sub" style="margin-bottom:4px;">${tracks.length} songs · ${withKey} with BPM/key · ${withBuy} with buy links</div>
+    <div class="hub-list" style="max-height:230px;overflow:auto;">${tracks.map((t, i) => `<div class="hub-li" style="padding:3px 0;">
+      <div class="li-main"><span style="font-size:.86rem;">${i + 1}. ${escapeHtml(t.title || '')}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:0 6px;font-size:.6rem;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : (t.bpm ? ` <span class="li-sub">${t.bpm}bpm</span>` : '')}</span>
+        <div class="li-sub">${escapeHtml(t.artist_name || '')}${t.label ? ' · ' + escapeHtml(t.label) : ''}${t.beatport_price ? ' · ' + escapeHtml(t.beatport_price) : ''}</div></div>
+      <span style="display:flex;gap:4px;">${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}" style="padding:1px 6px;">▶</button>` : ''}${(t.buy_url || t.beatport_url || t.bandcamp_url) ? `<a class="hub-mini" href="${escapeHtml(t.buy_url || t.beatport_url || t.bandcamp_url)}" target="_blank" rel="noopener" title="Buy" style="padding:1px 6px;">🛒</a>` : ''}</span></div>`).join('')}</div>`;
+}
+function renderRadioPopup() {
+  const pl = rpop.pl;
+  const userOpts = '<option value="">— a user —</option>' + (raState.epUsers || []).map(u => `<option value="${escapeHtml(u.id)}"${pl.assigned_to === u.id ? ' selected' : ''}>${escapeHtml(u.full_name || u.email)}</option>`).join('');
+  const djOpts = '<option value="">— or a DJ —</option>' + (raState.djActors || []).map(a => `<option value="${escapeHtml(a.id)}"${pl.assigned_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
+  const isWorking = pl.status === 'building' || pl.status === 'testing';
+  const body = `
+    <div style="margin-bottom:8px;"><span class="role-chip" style="cursor:default;background:#a7e02e33;color:var(--cream,#ede4d3);">${escapeHtml(RA_STATUS_LABEL[pl.status] || pl.status)}</span>${pl.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);">✨ ${escapeHtml(pl.edition_name)}</span>` : ''}${pl.slug ? ` <a class="hub-mini" href="https://comewith.org/radio.html?s=${escapeHtml(pl.slug)}" target="_blank" rel="noopener">🌐 Page ↗</a>` : ''}</div>
+    <div class="modal-form-row"><label class="modal-label">Episode name</label><input class="modal-input" id="rpopName" value="${escapeHtml(pl.name || '')}"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Drop date</label><input class="modal-input" type="date" id="rpopDrop" value="${escapeHtml(pl.drop_date || '')}"></div>
+      <div><label class="modal-label">Mixed by</label><input class="modal-input" id="rpopMixby" value="${escapeHtml(pl.mix_by || '')}" placeholder="e.g. Berky"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Assigned to</label><select class="modal-input" id="rpopUser">${userOpts}</select></div>
+      <div><label class="modal-label">or DJ</label><select class="modal-input" id="rpopDj">${djOpts}</select></div>
+    </div>
+    <div class="hub-sec-bar" style="margin-top:8px;"><h3 style="font-size:.85rem;">🎵 Tracklist</h3><button type="button" class="hub-mini" data-rpop-details title="Full episode details — cover, descriptions, DJ link, recap notes">✎ Full details</button></div>
+    ${rpopTrackList()}
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">🛠 Final-prep tools</h3></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button type="button" class="hub-btn ghost" data-rpop-buy title="Check Beatport & Bandcamp — prices + fill BPM/key/Camelot">🛒 Where to buy</button>
+      ${isWorking ? `<button type="button" class="hub-btn ghost" data-rpop-fs title="Full-screen puzzle view — reorder, energy, comments">⛶ Arrange</button>
+      <button type="button" class="hub-btn ghost" data-rpop-import title="Import the Rekordbox order">🎛 Rekordbox</button>
+      <button type="button" class="hub-btn" data-rpop-golive style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the mix, write descriptions, publish">🚀 Go live</button>` : ''}
+      <button type="button" class="hub-btn ghost" data-rpop-open title="Open the full builder in Artist Radio">Open in Artist Radio →</button>
+    </div>`;
+  openKpi('📻 EP ' + (pl.station_no ?? '—') + ' · ' + (pl.name || ''), 'Come With Radio · quick edit', body, saveRadioPopup, 'Save');
+}
+async function saveRadioPopup() {
+  const g = (id) => (document.getElementById(id)?.value || '').trim();
+  const name = g('rpopName'); if (!name) { toast('Name is required', 'err'); return; }
+  const patch = { name, drop_date: g('rpopDrop') || null, mix_by: g('rpopMixby') || null, assigned_to: g('rpopUser') || null, assigned_actor_id: g('rpopDj') || null, updated_at: new Date().toISOString() };
+  const { error } = await sb.from('sc_playlists').update(patch).eq('id', rpop.id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  closeKpi(); toast('Episode saved', 'ok'); await loadEventsDash();
+}
+// Radio-popup tool buttons (raState.playlist is already loaded on that episode).
+$('kpiModalOverlay').addEventListener('click', (e) => {
+  if (!rpop) return;
+  const tp = e.target.closest('[data-ra-trackplay]'); if (tp) { raPlay(tp.dataset.raTrackplay, tp.dataset.raName); return; }
+  if (e.target.closest('[data-rpop-buy]')) { raCheckSources(); return; }
+  if (e.target.closest('[data-rpop-fs]')) { closeKpi(); raOpenFsPlaylist(); return; }
+  if (e.target.closest('[data-rpop-import]')) { raOpenImport(); return; }
+  if (e.target.closest('[data-rpop-golive]')) { raOpenFinalize(); return; }
+  if (e.target.closest('[data-rpop-details]')) { raOpenEpisodeDetails(); return; }
+  if (e.target.closest('[data-rpop-open]')) { closeKpi(); activateTab('ra-market'); setTimeout(() => { raState.ccMode = false; raState.stationOpen = true; renderRaMarket(); }, 160); return; }
+});
 function renderEventsOverview() {
   const list = eventsFiltered();
   const isDI = (e) => e.type === 'dance_infusion' || e.series === 'Dance Infusion';
