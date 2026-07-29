@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Your Come With Radio workspace</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg0:#140a17;--bg1:#241534;--cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;
+    --lime:#a7e02e;--limed:#8fb339;--hot:#ff5ca8;--sky:#5aa9e6;--line:#3a2850;
+    --disp:"Arial Black","Arial Narrow",Arial,sans-serif;--body:"Segoe UI",system-ui,-apple-system,sans-serif;--mono:"Consolas",ui-monospace,monospace;}
+  html{background:var(--bg0)}
+  .page{max-width:660px;margin:0 auto;min-height:100vh;padding:40px 26px 48px;color:var(--cream);font-family:var(--body);
+    background:radial-gradient(130% 55% at 88% -5%,rgba(167,224,46,.12),transparent 55%),linear-gradient(180deg,var(--bg1),var(--bg0) 46%);}
+  .badge{font-family:var(--mono);font-size:.72rem;letter-spacing:.24em;text-transform:uppercase;color:var(--lime);}
+  h1{font-family:var(--disp);font-weight:900;font-size:clamp(1.9rem,6.5vw,2.9rem);line-height:.98;margin:.28em 0 .16em;letter-spacing:-.01em;text-wrap:balance;}
+  .lede{color:var(--dim);font-size:1.02rem;max-width:46ch;}
+  .lbl{font-family:var(--mono);font-size:.72rem;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);margin:30px 0 12px;}
+  .acts{display:flex;flex-direction:column;gap:1px;}
+  .act{display:grid;grid-template-columns:88px 1fr;gap:14px;align-items:center;padding:12px 0;border-top:1px solid var(--line);}
+  .act:first-child{border-top:0;}
+  .pill{font-family:var(--mono);font-size:.74rem;font-weight:700;text-align:center;padding:6px 4px;border-radius:8px;}
+  .pill.add{background:var(--lime);color:#0f0814;}
+  .pill.play{background:none;border:1px solid var(--line);color:var(--cream);}
+  .pill.top{background:rgba(90,169,230,.15);color:var(--sky);border:1px solid var(--sky);}
+  .act b{color:var(--cream);} .act .d{color:var(--dim);font-size:.94rem;}
+  .flow{position:relative;padding-left:6px;}
+  .node{display:grid;grid-template-columns:44px 1fr;gap:14px;padding:0 0 22px;position:relative;}
+  .node:last-child{padding-bottom:0;}
+  .node::before{content:"";position:absolute;left:21px;top:34px;bottom:-4px;width:2px;background:var(--line);}
+  .node:last-child::before{display:none;}
+  .dot{width:44px;height:44px;border-radius:50%;background:var(--bg1);border:2px solid var(--limed);display:flex;align-items:center;justify-content:center;font-size:1.2rem;z-index:1;}
+  .node h2{font-family:var(--disp);font-weight:900;font-size:1.08rem;line-height:1.1;}
+  .node p{color:var(--dim);font-size:.95rem;margin-top:3px;line-height:1.45;}
+  .node b{color:var(--cream);}
+  .you .dot{border-color:var(--lime);box-shadow:0 0 0 4px rgba(167,224,46,.12);}
+  .you h2{color:var(--lime);}
+  .send{margin-top:26px;background:rgba(167,224,46,.08);border:1px solid var(--limed);border-radius:14px;padding:14px 18px;}
+  .send .k{font-family:var(--mono);font-size:.68rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lime);margin-bottom:4px;}
+  .send .big{font-family:var(--disp);font-weight:900;font-size:1.1rem;}
+  .send .sub{color:var(--dim);font-size:.88rem;margin-top:2px;}
+  .foot{margin-top:22px;font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;color:var(--faint);text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="badge">● Come With Radio · for DJs</div>
+  <h1>Your workspace,<br>start to finish.</h1>
+  <p class="lede">Keith sends you a link. It's your crate for one episode — here's what it does and where your picks go.</p>
+
+  <div class="lbl">On your link · what the buttons do</div>
+  <div class="acts">
+    <div class="act"><span class="pill play">▶</span><div><b>Audition</b> <span class="d">— play any song right there.</span></div></div>
+    <div class="act"><span class="pill add">＋ add</span><div><b>Put it in the episode</b> <span class="d">— it drops into the tracklist instantly. <b>✓ added · remove</b> to pull it back.</span></div></div>
+    <div class="act"><span class="pill top">In this episode</span><div><b>The running set</b> <span class="d">— top of the page. Your picks + what's already curated.</span></div></div>
+  </div>
+  <p class="lede" style="margin-top:12px;font-size:.9rem;">Everything on the page is <b>already scoped</b> — only artists playing NYC that week, in your genres. No digging.</p>
+
+  <div class="lbl">How it all flows</div>
+  <div class="flow">
+    <div class="node"><span class="dot">🎯</span><div><h2>Assigned</h2><p>Keith gives you an episode + this link.</p></div></div>
+    <div class="node you"><span class="dot">🎧</span><div><h2>Build your set — here</h2><p><b>Audition &amp; ＋add</b> from the scoped pool. Your picks land in the episode live.</p></div></div>
+    <div class="node"><span class="dot">🎚️</span><div><h2>Record it</h2><p>Arrange &amp; mix your set in <b>Rekordbox</b>, your way.</p></div></div>
+    <div class="node"><span class="dot">📤</span><div><h2>Send the file</h2><p>One mix over to Keith.</p></div></div>
+    <div class="node"><span class="dot">📻</span><div><h2>It goes live</h2><p>Becomes the episode — <b>episode page, Now-Playing video</b>, drops on the schedule. Every track links to that artist's next NYC show.</p></div></div>
+  </div>
+
+  <div class="send">
+    <div class="k">Send your mix to</div>
+    <div class="big">berky@comewith.org</div>
+    <div class="sub">or a WeTransfer / Drive link — whatever's easiest.</div>
+  </div>
+  <div class="foot">Questions? Ask Keith. Plug in &amp; Come With.</div>
+</div>
+</body>
+</html>
