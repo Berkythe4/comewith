@@ -9432,31 +9432,100 @@ function renderEventsCalendar() {
     <div class="cal-grid">${hdr}${cells.join('')}</div>
     ${sel || '<div class="li-sub" style="margin-top:10px;">Click a day to see its events · click an event to open it.</div>'}`;
 }
-// Quick details popup — stay on the calendar; open the full page only if you want.
-function eventPopup(id) {
-  const e = (eventsDash.rows || []).find(x => x.id === id);
-  if (!e) { openEventHub(id); return; }
-  const f = e.f || {}, c = calSeriesColor(e.series);
-  const multi = e.end_date && e.end_date > e.event_date;
-  const done = (e.status || '') === 'completed';
-  const line = (l, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border);"><span class="li-sub">${l}</span><span style="font-weight:600;">${v}</span></div>` : '';
-  const r = eventResult(e);
-  const body = `
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
-      <span class="role-chip" style="cursor:default;background:${c}33;color:var(--cream,#ede4d3);">${escapeHtml(e.series || e.type || '')}</span>
-      <span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span>
-      ${e.is_public ? '<span class="badge badge-public">🌐 Live</span>' : ''}</div>
-    ${line('📅 Date', multi ? escapeHtml(fmtDate(e.event_date)) + ' → ' + escapeHtml(fmtDate(e.end_date)) : escapeHtml(fmtDate(e.event_date)))}
-    ${line('🎫 Tickets', f.tickets_sold ? fmtNum(f.tickets_sold) : (done ? '0' : ''))}
-    ${line('👥 Attendance', e.total_attendance != null ? fmtNum(e.total_attendance) : '')}
-    ${line('💵 Revenue', f.gross_revenue ? money(f.gross_revenue) : (done ? money(0) : ''))}
-    ${line('📈 ' + r.lbl, r.html)}
-    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-      <button type="button" class="hub-btn ghost" data-event-edit="${escapeHtml(id)}">✎ Edit</button>
-      <button type="button" class="hub-btn ghost" data-event-money="${escapeHtml(id)}">💰 Money</button>
-    </div>`;
-  openKpi(e.name || 'Event', multi ? 'Multi-day event' : escapeHtml(fmtDate(e.event_date)), body, () => { closeKpi(); openEventHub(id); }, 'Open full page →');
+// Quick-EDIT popup — the core details right on the calendar, editable in place:
+// name/date/series/status/venue + people (lineup) + tasks. Open the full hub only
+// if you want more.
+let epop = null;
+async function eventPopup(id) {
+  const [ev, pp, tk, ac, vn] = await Promise.all([
+    sb.from('events').select('id, name, event_date, end_date, series, status, venue_id').eq('id', id).single(),
+    sb.from('event_participants').select('id, role, bill_order, actor:actors(id, display_name)').eq('event_id', id).order('bill_order', { nullsFirst: false }),
+    sb.from('tasks').select('id, title, status, due_date').eq('event_id', id).is('deleted_at', null).order('due_date', { nullsFirst: false }),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+    sb.from('venues').select('id, name').is('deleted_at', null).order('name'),
+  ]);
+  if (ev.error) { toast('Load failed: ' + ev.error.message, 'err'); return; }
+  epop = { id, e: ev.data, participants: pp.data || [], tasks: tk.data || [], actors: ac.data || [], venues: vn.data || [] };
+  renderEventPopup();
 }
+function epopPeopleHtml() {
+  const rows = epop.participants.map(p => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><span>${escapeHtml(p.actor?.display_name || '—')}${p.role ? ` <span class="li-sub">· ${escapeHtml(p.role)}</span>` : ''}</span></div>
+    <button type="button" class="hub-mini danger" data-epop-rmperson="${escapeHtml(p.id)}" title="Remove">✕</button></div>`).join('') || '<div class="li-sub">No one added yet.</div>';
+  const opts = '<option value="">— add a person —</option>' + epop.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  return `${rows}<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+    <select class="modal-input" id="epopActor" style="flex:1 1 150px;font-size:.82rem;">${opts}</select>
+    <input class="modal-input" id="epopRole" placeholder="role (DJ, host…)" style="flex:1 1 110px;font-size:.82rem;">
+    <button type="button" class="hub-mini" data-epop-addperson>Add</button></div>`;
+}
+function epopTaskHtml() {
+  const rows = epop.tasks.map(t => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><label style="display:flex;gap:7px;align-items:center;cursor:pointer;"><input type="checkbox" data-epop-toggletask="${escapeHtml(t.id)}"${t.status === 'done' ? ' checked' : ''} style="width:auto;margin:0;"><span style="${t.status === 'done' ? 'text-decoration:line-through;opacity:.6;' : ''}">${escapeHtml(t.title)}</span></label>${t.due_date ? `<div class="li-sub">due ${escapeHtml(fmtDate(t.due_date))}</div>` : ''}</div></div>`).join('') || '<div class="li-sub">No tasks yet.</div>';
+  return `${rows}<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+    <input class="modal-input" id="epopTaskTitle" placeholder="add a task…" style="flex:1 1 160px;font-size:.82rem;">
+    <input class="modal-input" type="date" id="epopTaskDue" style="max-width:145px;font-size:.82rem;">
+    <button type="button" class="hub-mini" data-epop-addtask>Add</button></div>`;
+}
+function renderEventPopup() {
+  const e = epop.e, c = calSeriesColor(e.series);
+  const seriesVals = SERIES_OPTIONS.includes(e.series) ? SERIES_OPTIONS : [e.series, ...SERIES_OPTIONS];
+  const seriesOpts = seriesVals.map(s => `<option value="${escapeHtml(s)}"${s === e.series ? ' selected' : ''}>${escapeHtml(s)}</option>`).join('');
+  const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'].map(s => `<option value="${s}"${s === e.status ? ' selected' : ''}>${s.replace('_', ' ')}</option>`).join('');
+  const venueOpts = '<option value="">— no venue —</option>' + epop.venues.map(v => `<option value="${escapeHtml(v.id)}"${v.id === e.venue_id ? ' selected' : ''}>${escapeHtml(v.name)}</option>`).join('');
+  const body = `
+    <div class="modal-form-row"><label class="modal-label">Name</label><input class="modal-input" id="epopName" value="${escapeHtml(e.name || '')}"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Date</label><input class="modal-input" type="date" id="epopDate" value="${escapeHtml(e.event_date || '')}"></div>
+      <div><label class="modal-label">End date <span class="li-sub">— multi-day</span></label><input class="modal-input" type="date" id="epopEnd" value="${escapeHtml(e.end_date || '')}"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Series</label><select class="modal-input" id="epopSeries">${seriesOpts}</select></div>
+      <div><label class="modal-label">Status</label><select class="modal-input" id="epopStatus">${statusOpts}</select></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Venue</label><select class="modal-input" id="epopVenue">${venueOpts}</select></div>
+    <div class="hub-sec-bar" style="margin-top:8px;"><h3 style="font-size:.85rem;">👥 People</h3></div>
+    <div id="epopPeople">${epopPeopleHtml()}</div>
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">✅ Tasks</h3></div>
+    <div id="epopTasks">${epopTaskHtml()}</div>
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <button type="button" class="hub-btn ghost" data-event-open="${escapeHtml(epop.id)}">Open full page →</button>
+      <button type="button" class="hub-btn ghost" data-event-money="${escapeHtml(epop.id)}">💰 Money</button>
+    </div>`;
+  openKpi(e.name || 'Event', `<span style="color:${c}">●</span> quick edit`, body, saveEventPopup, 'Save');
+}
+async function saveEventPopup() {
+  const g = (id) => (document.getElementById(id)?.value || '').trim();
+  const name = g('epopName'), event_date = g('epopDate');
+  if (!name || !event_date) { toast('Name and date are required', 'err'); return; }
+  const series = g('epopSeries'), end = g('epopEnd');
+  const patch = { name, event_date, end_date: (end && end > event_date) ? end : null, series, status: g('epopStatus') || 'planning', venue_id: g('epopVenue') || null, type: seriesToType(series), is_content_event: seriesToType(series) === 'showcase' };
+  const { error } = await sb.from('events').update(patch).eq('id', epop.id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  closeKpi(); toast('Saved', 'ok'); await loadEventsDash();
+}
+// People + task controls inside the popup — immediate writes, re-render the sub-list.
+$('kpiModalOverlay').addEventListener('click', async (e) => {
+  if (!epop) return;
+  if (e.target.closest('[data-epop-addperson]')) {
+    const actorId = document.getElementById('epopActor')?.value; if (!actorId) return;
+    const role = (document.getElementById('epopRole')?.value || '').trim();
+    const { data, error } = await sb.from('event_participants').insert({ event_id: epop.id, actor_id: actorId, role: role || null }).select('id, role, actor:actors(id, display_name)').single();
+    if (error) { toast('Add failed: ' + error.message, 'err'); return; }
+    epop.participants.push(data); document.getElementById('epopPeople').innerHTML = epopPeopleHtml(); return;
+  }
+  const rp = e.target.closest('[data-epop-rmperson]');
+  if (rp) { await sb.from('event_participants').delete().eq('id', rp.dataset.epopRmperson); epop.participants = epop.participants.filter(p => p.id !== rp.dataset.epopRmperson); document.getElementById('epopPeople').innerHTML = epopPeopleHtml(); return; }
+  if (e.target.closest('[data-epop-addtask]')) {
+    const title = (document.getElementById('epopTaskTitle')?.value || '').trim(); if (!title) return;
+    const due = document.getElementById('epopTaskDue')?.value || null;
+    const { data, error } = await sb.from('tasks').insert({ event_id: epop.id, title, status: 'todo', source: 'manual', due_date: due }).select('id, title, status, due_date').single();
+    if (error) { toast('Add failed: ' + error.message, 'err'); return; }
+    epop.tasks.push(data); document.getElementById('epopTasks').innerHTML = epopTaskHtml(); return;
+  }
+});
+$('kpiModalOverlay').addEventListener('change', async (e) => {
+  if (!epop) return;
+  const tt = e.target.closest('[data-epop-toggletask]');
+  if (tt) { const st = tt.checked ? 'done' : 'todo'; await sb.from('tasks').update({ status: st }).eq('id', tt.dataset.epopToggletask); const t = epop.tasks.find(x => x.id === tt.dataset.epopToggletask); if (t) t.status = st; document.getElementById('epopTasks').innerHTML = epopTaskHtml(); }
+});
 function radioPopup(id) {
   const r = (eventsDash.radio || []).find(x => x.id === id);
   if (!r) return;
@@ -11606,28 +11675,33 @@ function raRenderFsBody() {
       <button class="hub-btn ghost" data-fs-add>＋ Add song</button>
       <button class="hub-btn" data-fs-close>✓ Done</button></span>`;
   const body = document.getElementById('raFsBody'); if (!body) return;
-  body.innerHTML = tracks.map((t, i) => {
-    const meta = [t.camelot ? t.camelot + (t.bpm ? ' · ' + t.bpm : '') : (t.bpm ? t.bpm + ' bpm' : ''), Math.round((t.duration_ms || 0) / 60000) + 'min', (t.genres || []).slice(0, 2).join(', ')].filter(Boolean).join(' · ');
-    return `<div data-fs-row="${t.id}" draggable="true" style="display:flex;gap:12px;align-items:flex-start;padding:11px 12px;margin-bottom:7px;border:1px solid var(--border);border-radius:10px;background:var(--card,#20142a);">
-      <span style="cursor:grab;font-size:1.2rem;color:var(--faint);user-select:none;padding-top:2px;" title="Drag to reorder">⠿</span>
-      <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--faint);min-width:24px;padding-top:3px;">${i + 1}</span>
-      <div style="flex:1;min-width:0;">
-        <div style="font-weight:600;">${escapeHtml(t.title || '')}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:0 5px;font-size:.55rem;${t.source === 'dj' ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}">${t.source === 'dj' ? '🎧 DJ' : t.source === 'rekordbox' ? '🎛' : t.source === 'beatport' ? '🛒' : '✎'}</span>` : ''}</div>
-        <div class="li-sub">${escapeHtml(t.artist_name || '')}${meta ? ' · ' + escapeHtml(meta) : ''}</div>
-        <div style="display:flex;gap:5px;align-items:center;margin-top:7px;flex-wrap:wrap;">
-          <span class="li-sub" title="Your 1–5 read on where this sits in a set. Click again to clear.">⚡</span>
-          ${[1, 2, 3, 4, 5].map(n => `<button class="hub-mini${t.energy === n ? ' on' : ''}" data-ra-energy="${t.id}:${n}" style="${t.energy === n ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}padding:2px 9px;">${n}</button>`).join('')}
-          <input class="modal-input" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="comment — energy, mix notes, where it fits…" style="flex:1 1 260px;font-size:.8rem;padding:5px 9px;margin-left:6px;">
-        </div>
+  const nrg = { 1: '#5aa9e6', 2: '#57b894', 3: '#e0b23a', 4: '#e07a3a', 5: '#ff5ca8' };  // cool→hot
+  const cards = tracks.map((t, i) => {
+    const srcTag = t.source && t.source !== 'soundcloud' ? `<span style="font-size:.6rem;color:var(--faint);">${t.source === 'dj' ? '🎧' : t.source === 'rekordbox' ? '🎛' : t.source === 'beatport' ? '🛒' : '✎'}</span>` : '';
+    const key = t.camelot ? `${t.camelot}${t.bpm ? ' · ' + t.bpm : ''}` : (t.bpm ? t.bpm + ' bpm' : '');
+    return `<div class="fs-card" data-fs-row="${t.id}" style="border:1px solid var(--border);border-radius:11px;background:var(--card,#20142a);padding:9px 10px;display:flex;flex-direction:column;gap:6px;${t.energy ? `box-shadow:inset 3px 0 0 ${nrg[t.energy]};` : ''}">
+      <div style="display:flex;gap:7px;align-items:center;">
+        <span class="fs-handle" draggable="true" style="cursor:grab;color:var(--faint);user-select:none;" title="Drag to reorder">⠿</span>
+        <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--faint);font-size:.78rem;">${String(i + 1).padStart(2, '0')}</span>
+        ${key ? `<span class="role-chip" style="cursor:default;padding:0 6px;font-size:.6rem;">${escapeHtml(key)}</span>` : ''}${srcTag}
+        <span style="margin-left:auto;display:flex;gap:3px;">
+          ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}" title="Play" style="padding:1px 6px;">▶</button>` : ''}
+          <button class="hub-mini" data-ra-edittrack="${t.id}" title="Edit" style="padding:1px 6px;">✎</button>
+          <button class="hub-mini" data-fs-remove="${t.id}" title="Remove" style="padding:1px 6px;">✕</button></span>
       </div>
-      <span style="display:flex;gap:5px;flex-shrink:0;">
-        ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}" title="Play">▶</button>` : ''}
-        <button class="hub-mini" data-ra-edittrack="${t.id}" title="Edit details">✎</button>
-        <button class="hub-mini" data-fs-up="${t.id}" title="Move up">↑</button>
-        <button class="hub-mini" data-fs-down="${t.id}" title="Move down">↓</button>
-        <button class="hub-mini" data-fs-remove="${t.id}" title="Remove — logged as passed">✕</button>
-      </span></div>`;
-  }).join('') || '<div class="li-sub" style="padding:20px;text-align:center;">No songs yet — hit ＋ Add song, or add from the artist list.</div>';
+      <div style="min-width:0;">
+        <div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '')}</div>
+        <div class="li-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.artist_name || '')}</div>
+      </div>
+      <div style="display:flex;gap:3px;align-items:center;">
+        ${[1, 2, 3, 4, 5].map(n => `<button class="hub-mini" data-ra-energy="${t.id}:${n}" title="Energy ${n}" style="flex:1;padding:3px 0;font-size:.7rem;${t.energy === n ? `background:${nrg[n]};color:#0f0814;border-color:${nrg[n]};font-weight:700;` : 'opacity:.65;'}">${n}</button>`).join('')}
+      </div>
+      <input class="modal-input" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="＋ comment…" style="font-size:.76rem;padding:4px 7px;">
+    </div>`;
+  }).join('');
+  body.innerHTML = tracks.length
+    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:9px;">${cards}</div>`
+    : '<div class="li-sub" style="padding:24px;text-align:center;">No songs yet — hit ＋ Add song, or add from the artist list.</div>';
 }
 function raFsClick(e) {
   if (e.target.closest('[data-fs-close]')) { raCloseFs(); return; }
