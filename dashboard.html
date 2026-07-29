@@ -1403,7 +1403,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       </div>
 
       <div class="panel" id="panel-events">
-        <button class="add-btn" id="addEventBtn">+ Add event</button>
+        <button class="add-btn" id="addEventBtn" style="display:none;">+ Add event</button>
         <div id="eventsBody"></div>
       </div>
 
@@ -9265,7 +9265,7 @@ $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.close
 // EVENTS DASHBOARD — the command center. Aggregates + filters + per-event metrics
 // that adapt to the event type (parties / Dance Infusion / production / content).
 // ============================================================
-const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false };
+const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false, tab: 'calendar', calMonth: null, selDate: null };
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
   const [ev, fin, mk, ig] = await Promise.all([
@@ -9307,25 +9307,95 @@ function eventResult(e) {
     : { lbl: 'IG reach', html: e.ig ? fmtNum(e.ig) : muted };
   return { lbl: 'net P&L', html: `<span class="${cls}">${money(net)}</span>` };
 }
+function eventsSnapshot() {
+  const rows = eventsDash.rows, today = new Date().toISOString().slice(0, 10);
+  const yr = String(new Date().getFullYear());
+  const upcoming = rows.filter(e => (e.event_date || '') >= today && (e.status || '') !== 'cancelled');
+  const next = upcoming.slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''))[0];
+  const bySeries = {}; rows.forEach(e => { const s = e.series || '—'; bySeries[s] = (bySeries[s] || 0) + 1; });
+  return { total: rows.length, upcoming: upcoming.length, thisYear: rows.filter(e => (e.event_date || '').slice(0, 4) === yr).length, next, bySeries };
+}
+function renderEventsSnapshot() {
+  const s = eventsSnapshot();
+  const stat = (icon, label, value, sub) => `<div style="flex:1 1 130px;background:var(--card,#20142a);border:1px solid var(--border);border-radius:12px;padding:9px 13px;">
+    <div class="li-sub" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;">${icon} ${label}</div>
+    <div style="font-weight:800;font-size:1.15rem;line-height:1.15;">${value}</div><div class="li-sub" style="font-size:.66rem;">${sub || '&nbsp;'}</div></div>`;
+  const seriesStr = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings']
+    .filter(k => s.bySeries[k]).map(k => `${k.split(' ').map(w => w[0]).join('')} ${s.bySeries[k]}`).join(' · ') || '—';
+  return `<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;">
+    ${stat('🎫', 'Events', fmtNum(s.total), seriesStr)}
+    ${stat('📅', 'Upcoming', fmtNum(s.upcoming), s.next ? 'next: ' + fmtDate(s.next.event_date) : 'none scheduled')}
+    ${stat('🗓', 'This year', fmtNum(s.thisYear), new Date().getFullYear())}
+    ${stat('▶️', 'Next up', s.next ? escapeHtml((s.next.name || '').slice(0, 22)) : '—', s.next ? escapeHtml(s.next.series || '') : '')}</div>`;
+}
 function renderEventsDash() {
   const s = eventsDash;
   const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
   const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'];
   const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'];
+  const tab = (k, l) => `<button class="hub-btn ghost" data-ev-tab="${k}" style="${s.tab === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
+  const anyFilter = s.q || s.series || s.status || s.year || s.completedOnly;
   $('eventsBody').innerHTML = `
-    <div id="eventsAgg"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
-      <input class="modal-input" data-evq placeholder="Search events…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+    <div class="hub-sec-bar"><h3>🎫 Events · control center</h3>
+      <button class="hub-btn" data-ev-add>➕ Add event</button></div>
+    ${renderEventsSnapshot()}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tab('calendar', '📅 Calendar')}${tab('list', '▤ List')}${tab('overview', '📊 Money')}</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px;">
+      <input class="modal-input" data-evq placeholder="🔎 Search events…" style="max-width:220px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-evseries><option value="">All series</option>${seriesOpts.map(o => `<option value="${o}"${s.series === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
       <select class="hub-status-sel" data-evstatus><option value="">All statuses</option>${statusOpts.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o.replace('_', ' ')}</option>`).join('')}</select>
       <select class="hub-status-sel" data-evyear><option value="">All years</option>${years.map(y => `<option value="${y}"${s.year === y ? ' selected' : ''}>${y}</option>`).join('')}</select>
       <label class="li-sub" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;"><input type="checkbox" data-evcompleted${s.completedOnly ? ' checked' : ''} style="width:auto;margin:0;"> Completed only</label>
-      <button class="hub-mini" data-evclear>clear</button>
+      ${anyFilter ? '<button class="hub-mini" data-evclear>✕ clear</button>' : ''}
     </div>
-    <div id="eventsTable"></div>`;
-  renderEventsBody();
+    <div id="eventsView"></div>`;
+  renderEventsView();
 }
-function renderEventsBody() {
+function renderEventsView() {
+  if (eventsDash.tab === 'calendar') return renderEventsCalendar();
+  if (eventsDash.tab === 'overview') return renderEventsOverview();
+  return renderEventsTable();
+}
+// Month calendar — events placed on their date, colored by series; click a day for
+// its events with actions, click an event to open its hub.
+function renderEventsCalendar() {
+  const s = eventsDash;
+  if (!s.calMonth) s.calMonth = new Date().toISOString().slice(0, 7);
+  const list = eventsFiltered();
+  const [y, m] = s.calMonth.split('-').map(Number);
+  const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), startDow = first.getDay();
+  const monthLbl = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  const byDay = {}; list.forEach(e => { const d = (e.event_date || '').slice(0, 10); if (d) (byDay[d] ||= []).push(e); });
+  const today = new Date().toISOString().slice(0, 10);
+  const cells = [];
+  for (let i = 0; i < startDow; i++) cells.push('<div></div>');
+  for (let d = 1; d <= days; d++) {
+    const ds = `${s.calMonth}-${String(d).padStart(2, '0')}`;
+    const items = (byDay[ds] || []).slice(0, 4).map(e => {
+      const c = calSeriesColor(e.series);
+      return `<div class="cal-chip" data-event-open="${escapeHtml(e.id)}" title="${escapeHtml(e.name || '')}" style="cursor:pointer;border-left:3px solid ${c};background:${c}22;">${escapeHtml((e.name || 'event').slice(0, 20))}</div>`;
+    }).join('');
+    const more = (byDay[ds] || []).length > 4 ? `<div class="cal-more">+${byDay[ds].length - 4}</div>` : '';
+    cells.push(`<div class="cal-cell${ds < today ? ' past' : ''}${ds === today ? ' today' : ''}${s.selDate === ds ? ' sel' : ''}" data-ev-day="${ds}"><div class="cal-dnum"><span>${d}</span></div>${items}${more}</div>`);
+  }
+  const hdr = CAL_DOW.map(dw => `<div class="li-sub" style="text-align:center;font-size:.68rem;">${dw}</div>`).join('');
+  const legend = Object.entries(CAL_SERIES_COLORS).map(([k, c]) => `<span style="font-size:.68rem;color:var(--dim);"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};vertical-align:middle;"></span> ${escapeHtml(k)}</span>`).join(' &nbsp; ');
+  let sel = '';
+  if (s.selDate && byDay[s.selDate]) {
+    sel = `<div class="hub-sec-bar" style="margin-top:14px;"><h3 style="font-size:.9rem;">${escapeHtml(fmtDate(s.selDate))}</h3></div>
+      <div class="hub-list">${byDay[s.selDate].map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name || '')}</strong> <span class="role-chip" style="cursor:default;background:${calSeriesColor(e.series)}33;">${escapeHtml(e.series || e.type || '')}</span> <span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span></div>
+        <span style="display:flex;gap:5px;"><button class="row-btn primary" data-event-open="${escapeHtml(e.id)}">Open</button><button class="row-btn" data-event-edit="${escapeHtml(e.id)}">Edit</button></span></div>`).join('')}</div>`;
+  }
+  $('eventsView').innerHTML = `
+    <div class="cal-toolbar">
+      <button class="hub-mini" data-ev-mon="-1">‹</button><strong style="min-width:150px;text-align:center;">${monthLbl}</strong><button class="hub-mini" data-ev-mon="1">›</button>
+      <button class="hub-mini" data-ev-today>Today</button>
+      <span class="li-sub" style="margin-left:auto;">${legend}</span>
+    </div>
+    <div class="cal-grid">${hdr}${cells.join('')}</div>
+    ${sel || '<div class="li-sub" style="margin-top:10px;">Click a day to see its events · click an event to open it.</div>'}`;
+}
+function renderEventsOverview() {
   const list = eventsFiltered();
   const isDI = (e) => e.type === 'dance_infusion' || e.series === 'Dance Infusion';
   const sum = (arr, fn) => arr.reduce((t, e) => t + (Number(fn(e)) || 0), 0);
@@ -9347,7 +9417,7 @@ function renderEventsBody() {
     </div>`;
   };
   const diRaised = sum(di, e => e.f.total_raised), diMS = sum(di, e => e.f.net_pl), diMktg = sum(di, e => e.marketing);
-  $('eventsAgg').innerHTML = `
+  $('eventsView').innerHTML = `
     ${grp('Come With Parties')}
     ${moneyGroup(parties)}
     ${grp('Production, bookings &amp; content — service &amp; gig work', true)}
@@ -9361,6 +9431,9 @@ function renderEventsBody() {
       ${card('To MS Society', money(diMS), diMS > 0 ? 'pos' : '')}
       ${card('Marketing spend', money(diMktg), diMktg > 0 ? 'neg' : '')}
     </div>`;
+}
+function renderEventsTable() {
+  const list = eventsFiltered();
   const typeChip = (e) => { const t = e.series || e.type || ''; return t ? `<span class="role-chip" style="cursor:default;">${escapeHtml(t)}</span>` : ''; };
   const rows = list.map(e => {
     const f = e.f, r = eventResult(e);
@@ -9389,19 +9462,24 @@ function renderEventsBody() {
       </td>
     </tr>`;
   }).join('') || `<tr><td colspan="10" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
-  $('eventsTable').innerHTML = `<table class="data-table"><thead><tr>
+  $('eventsView').innerHTML = `<div style="overflow-x:auto;"><table class="data-table"><thead><tr>
     <th>Date</th><th>Event</th><th>Status</th><th>Public</th><th class="num">Attendance</th><th class="num">Tickets</th>
     <th class="num">Revenue</th><th class="num">Result</th><th class="num">Mktg $</th><th>Actions</th>
-  </tr></thead><tbody>${rows}</tbody></table>`;
+  </tr></thead><tbody>${rows}</tbody></table></div>`;
 }
-$('panel-events').addEventListener('input', (e) => { const q = e.target.closest('[data-evq]'); if (q) { eventsDash.q = q.value; renderEventsBody(); } });
+$('panel-events').addEventListener('input', (e) => { const q = e.target.closest('[data-evq]'); if (q) { eventsDash.q = q.value; renderEventsView(); } });
 $('panel-events').addEventListener('change', (e) => {
-  const se = e.target.closest('[data-evseries]'); if (se) { eventsDash.series = se.value; renderEventsBody(); return; }
-  const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsBody(); return; }
-  const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsBody(); return; }
-  const cp = e.target.closest('[data-evcompleted]'); if (cp) { eventsDash.completedOnly = cp.checked; renderEventsBody(); return; }
+  const se = e.target.closest('[data-evseries]'); if (se) { eventsDash.series = se.value; renderEventsView(); return; }
+  const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsView(); return; }
+  const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsView(); return; }
+  const cp = e.target.closest('[data-evcompleted]'); if (cp) { eventsDash.completedOnly = cp.checked; renderEventsView(); return; }
 });
 $('panel-events').addEventListener('click', (e) => {
+  const tb = e.target.closest('[data-ev-tab]'); if (tb) { eventsDash.tab = tb.dataset.evTab; renderEventsDash(); return; }
+  if (e.target.closest('[data-ev-add]')) { openLogEvent(); return; }
+  const mon = e.target.closest('[data-ev-mon]'); if (mon) { const [y, m] = eventsDash.calMonth.split('-').map(Number); const d = new Date(y, m - 1 + Number(mon.dataset.evMon), 1); eventsDash.calMonth = d.toISOString().slice(0, 7); eventsDash.selDate = null; renderEventsCalendar(); return; }
+  if (e.target.closest('[data-ev-today]')) { eventsDash.calMonth = new Date().toISOString().slice(0, 7); eventsDash.selDate = new Date().toISOString().slice(0, 10); renderEventsCalendar(); return; }
+  const day = e.target.closest('[data-ev-day]'); if (day && !e.target.closest('[data-event-open]')) { const ds = day.dataset.evDay; eventsDash.selDate = eventsDash.selDate === ds ? null : ds; renderEventsCalendar(); return; }
   if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; eventsDash.completedOnly = false; renderEventsDash(); }
 });
 
