@@ -241,6 +241,57 @@ body::before {
 .cal-dd .cal-dd-pop label { display: flex; gap: 7px; align-items: center; font-size: 0.72rem; padding: 3px 0; cursor: pointer; color: rgba(242,237,230,0.75); }
 #raFsBody [data-fs-row].fs-dragging { opacity: 0.4; border-color: var(--lime, #a7e02e); }
 #raFsBody [data-fs-row] { transition: border-color .1s; }
+/* ---- ⛶ Arrange = Rekordbox-style track list -------------------------------
+   Deliberately NEUTRAL greys instead of the app's plum palette: the point is
+   that this screen reads like the deck software Keith arranges in, so the
+   column grid, row density and blue selection are copied from rekordbox.
+   Order here IS the play order, so the header does not sort — you drag. */
+#raFsOverlay.rbx { background: #17181b; }
+#raFsOverlay.rbx #raFsHead { background: #232529; border-bottom: 1px solid #0d0e10; }
+#raFsBody .rbx-wrap { overflow: auto; border: 1px solid #2c2f34; border-radius: 3px; background: #1b1d20; }
+/* table-layout:fixed + a <colgroup> is what makes the columns draggable: every
+   width lives in one place, so a resize is one style write and no reflow. */
+table.rbx-tbl { table-layout: fixed; border-collapse: collapse; font-size: 0.76rem; white-space: nowrap; }
+table.rbx-tbl th, table.rbx-tbl td { overflow: hidden; text-overflow: ellipsis; }
+table.rbx-tbl thead th {
+  position: sticky; top: 0; z-index: 2; background: #2a2d32; color: rgba(255,255,255,0.62);
+  font-weight: 600; font-size: 0.66rem; letter-spacing: 0.04em; text-transform: uppercase;
+  text-align: left; padding: 6px 8px; border-right: 1px solid #202226; border-bottom: 1px solid #0d0e10;
+  user-select: none;
+}
+/* Grab strip straddling the column divider, like rekordbox's header dividers.
+   (th is sticky, which is a positioned ancestor, so absolute anchors to it.) */
+.rbx-rsz { position: absolute; top: 0; right: -3px; width: 7px; height: 100%; cursor: col-resize; z-index: 3; }
+.rbx-rsz:hover, .rbx-rsz.dragging { background: var(--accent, #5b7fb3); }
+body.rbx-resizing { cursor: col-resize !important; user-select: none !important; }
+table.rbx-tbl tbody td { padding: 0 8px; height: 30px; border-bottom: 1px solid #23262a; border-right: 1px solid #202226; color: rgba(255,255,255,0.82); }
+table.rbx-tbl tbody tr:nth-child(even) { background: rgba(255,255,255,0.018); }
+table.rbx-tbl tbody tr:hover { background: #24313d; }
+table.rbx-tbl tbody tr.ra-playing { background: #1d4b73; }
+table.rbx-tbl tbody tr.fs-dragging { opacity: 0.35; }
+table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e02e); }
+.rbx-num { font-family: var(--mono, monospace); color: rgba(255,255,255,0.42); text-align: right; }
+.rbx-ttl { color: #fff; font-weight: 600; }
+.rbx-art { color: rgba(255,255,255,0.66); }
+.rbx-bpm { font-family: var(--mono, monospace); text-align: right; color: rgba(255,255,255,0.9); }
+.rbx-time { font-family: var(--mono, monospace); text-align: right; color: rgba(255,255,255,0.5); }
+.rbx-meta { color: rgba(255,255,255,0.45); }
+/* Camelot chip — rekordbox colours the key, so wheel position drives the hue. */
+.rbx-key { font-family: var(--mono, monospace); font-weight: 700; font-size: 0.7rem; padding: 1px 5px; border-radius: 3px; color: #10131a; }
+.rbx-thumb { width: 22px; height: 22px; border-radius: 2px; object-fit: cover; display: block; background: #2a2d32; }
+.rbx-grip { cursor: grab; color: rgba(255,255,255,0.3); user-select: none; }
+.rbx-grip:active { cursor: grabbing; }
+.rbx-stars { display: inline-flex; gap: 1px; }
+.rbx-star { background: none; border: 0; padding: 0 1px; cursor: pointer; font-size: 0.8rem; line-height: 1; color: rgba(255,255,255,0.22); }
+.rbx-star.on { color: #d8b24a; }
+.rbx-star:hover { color: #f0c95e; }
+.rbx-cmt { background: transparent; border: 1px solid transparent; border-radius: 2px; color: rgba(255,255,255,0.6); font: inherit; font-size: 0.72rem; padding: 2px 4px; width: 100%; min-width: 90px; }
+.rbx-cmt:hover { border-color: #33373d; }
+.rbx-cmt:focus { border-color: var(--accent, #5b7fb3); background: #101215; color: #fff; outline: none; }
+.rbx-act { background: none; border: 0; color: rgba(255,255,255,0.5); cursor: pointer; padding: 0 3px; font-size: 0.78rem; }
+.rbx-act:hover { color: #fff; }
+/* Energy bar in the leftmost cell, like a rekordbox colour tag. */
+.rbx-tag { display: block; width: 4px; height: 20px; border-radius: 1px; background: #2f3338; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-cell { min-height: 92px; border: 1px solid rgba(237,228,211,0.12); border-radius: 6px; padding: 4px 5px; cursor: pointer; overflow: hidden; }
 .cal-cell:hover { border-color: rgba(237,228,211,0.35); }
@@ -4259,7 +4310,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
   if (tab === 'scene-map') { await loadSceneMap(); return; } // custom (internal Scene Map)
-  if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Artist Radio)
+  if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Come With Radio)
   if (tab === 'team') { await loadTeam(); return; } // master-only team management
   if (tab === 'content-center') { await loadContentCenter(); return; } // content ops hub
   if (tab === 'social-calendar') { await loadSocialCalendar(); return; } // content planner
@@ -5528,7 +5579,7 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
   setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
-function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); }
+function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
 // Keep the floating brief reader in sync if the brief is edited while it's open.
 document.addEventListener('input', (e) => { if (e.target.matches('#kpiModalBody [name="brief"]')) { const b = document.getElementById('briefPopBody'); if (b) b.textContent = (e.target.value || '').trim() || '(No brief written yet — type it in the form.)'; } });
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
@@ -9589,7 +9640,7 @@ function renderRadioPopup() {
       ${isWorking ? `<button type="button" class="hub-btn ghost" data-rpop-fs title="Full-screen puzzle view — reorder, energy, comments">⛶ Arrange</button>
       <button type="button" class="hub-btn ghost" data-rpop-import title="Import the Rekordbox order">🎛 Rekordbox</button>
       <button type="button" class="hub-btn" data-rpop-golive style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the mix, write descriptions, publish">🚀 Go live</button>` : ''}
-      <button type="button" class="hub-btn ghost" data-rpop-open title="Open the full builder in Artist Radio">Open in Artist Radio →</button>
+      <button type="button" class="hub-btn ghost" data-rpop-open title="Open the full builder in Come With Radio">Open in Come With Radio →</button>
     </div>`;
   openKpi('📻 EP ' + (pl.station_no ?? '—') + ' · ' + (pl.name || ''), 'Come With Radio · quick edit', body, saveRadioPopup, 'Save');
 }
@@ -10441,7 +10492,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // genres, benchmarked against YOUR events) and a weekly radio station built from the
 // SoundCloud profiles of artists playing NYC in the next few weeks.
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', sourceFilter: '', nycOnly: false, producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: false, ccOpen: null, ccTasks: [], ccNotes: [] };
+let raState = { events: [], artists: [], mine: [], radioWeeks: 4, radioStart: '', sort: 'name', search: '', genre: '', venue: '', sourceFilter: '', nycOnly: false, producersOnly: true, showNoSc: false, maxMin: 15, songSort: 'recent', openArtist: null, cache: {}, playlist: null, sc: {}, scanning: false, scanCancel: false, scanDone: 0, scanTotal: 0, stations: [], songLog: {}, bpCatalog: {}, bpCatKey: null, bpCatName: null, viewPlaylistId: null, hidePlayed: false, histFilter: 'all', histSearch: '', stationOpen: false, playing: null, ccMode: true, ccOpen: null, ccTasks: [], ccNotes: [] };
 const raKey = (u) => (u || '').trim().toLowerCase().replace(/^http:\/\//, 'https://').replace('://www.', '://').replace(/\/+$/, '').split('?')[0];
 // The radio window: [start (default today), start + N weeks].
 function raWindow() {
@@ -10457,7 +10508,7 @@ function ensureScWidget() {
   _scWidgetReady = new Promise((res) => { const s = document.createElement('script'); s.src = 'https://w.soundcloud.com/player/api.js'; s.onload = res; document.head.appendChild(s); });
   return _scWidgetReady;
 }
-// ===== ARTIST RADIO module (panel-ra-market) =====
+// ===== COME WITH RADIO module (panel-ra-market) =====
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social, ev] = await Promise.all([
@@ -10480,7 +10531,9 @@ async function loadRaMarket() {
   try { const { data: st } = await sb.functions.invoke('sc-connect', { body: { action: 'status' } }); raState.sc = st || { configured: false, connected: false }; }
   catch (_) { raState.sc = { configured: false, connected: false }; }
   await raLoadWatch();
-  renderRaMarket();
+  // Control Center is the landing view (raState.ccMode defaults true), so pull
+  // its tasks/notes before the first paint instead of rendering an empty shell.
+  if (raState.ccMode) await loadRadioCC(); else renderRaMarket();
 }
 // Stations are numbered (EP 1, 2, …) and all persist. The WORKING station is
 // the building/testing row (auto-created with the next number when everything's
@@ -10511,14 +10564,16 @@ async function raLoadPlaylist() {
   raState.playlist = { ...pl, tracks: tracks || [] };
   raState.songLog = {}; (log || []).forEach(r => { raState.songLog[r.sc_track_id] = r; });
 }
-// Artist Radio panel = just the radio UI now (market intel moved to its own module).
+// Come With Radio panel = just the radio UI now (market intel moved to its own module).
+// Control Center is the landing view, so it renders before the artists check —
+// the builder needs artists, the episode list doesn't.
 function renderRaMarket() {
+  if (raState.ccMode) { renderRadioCC(); return; }
   if (!raState.artists.length) {
-    $('raMarketBody').innerHTML = `<div class="hub-sec-bar"><h3>Artist Radio</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
+    $('raMarketBody').innerHTML = raModeBar() + `<div class="hub-sec-bar"><h3>Come With Radio</h3><button class="hub-btn" data-ra-refresh>↻ Pull shows</button></div>
       <div class="hub-empty">No artists yet. Hit “↻ Pull shows” (or run it from Best Nights) to load upcoming NYC lineups, then scan for producers.</div>`;
     return;
   }
-  if (raState.ccMode) { renderRadioCC(); return; }
   $('raMarketBody').innerHTML = raModeBar() + renderRaRadio();
   raMarkPlaying(); // the rebuild wiped the class; the dock is still playing
 }
@@ -10660,7 +10715,7 @@ function scArtistData() {
   raState._scArtSig = sig; raState._scArtData = list;
   return list;
 }
-// Buzz-by-name, memoized on (events, cache) size, so Artist Radio can sort by it too.
+// Buzz-by-name, memoized on (events, cache) size, so Come With Radio can sort by it too.
 function raBuzzMap() {
   const sig = (raState.events || []).length + ':' + Object.keys(raState.cache || {}).length;
   if (raState._buzzSig === sig && raState._buzzMap) return raState._buzzMap;
@@ -11107,7 +11162,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -11168,6 +11223,7 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-addmanual]')) { raOpenTrackEdit(null); return; }
   if (t.closest('[data-ra-fsplaylist]')) { raOpenFsPlaylist(); return; }
   if (t.closest('[data-ra-sources]')) { raCheckSources(); return; }
+  if (t.closest('[data-ra-bpnet]')) { toggleBpNetPopup(); return; }
   if (t.closest('[data-ra-bptoken]')) {
     const el = document.querySelector('#kpiModalBody [name="bp_token"]');
     const v = (el && el.value || '').trim();
@@ -11731,16 +11787,101 @@ function raRenderPlaylist() {
 // as the inline builder (raMoveTrack/raSetEnergy/raSaveNote/raRemoveTrack) and
 // re-renders itself via raAfterTrackOp while it's open.
 let raFsDragId = null;
+// ---- ⛶ Arrange column widths ------------------------------------------------
+// One source of truth for the table's columns, in render order. Widths are px and
+// PERSISTED: raRenderFsBody() rebuilds innerHTML on every energy click, comment
+// save and reorder, so anything held only in the DOM would snap back constantly.
+const RBX_COLS = [
+  { k: 'tag',    t: '',            w: 14,  min: 8  },
+  { k: 'grip',   t: '',            w: 24,  min: 18 },
+  { k: 'no',     t: '#',           w: 36,  min: 28 },
+  { k: 'play',   t: '',            w: 28,  min: 24 },
+  { k: 'art',    t: '',            w: 32,  min: 26 },
+  { k: 'title',  t: 'Track title', w: 300, min: 80, flex: 1 },
+  { k: 'artist', t: 'Artist',      w: 190, min: 70, flex: 1 },
+  { k: 'bpm',    t: 'BPM',         w: 56,  min: 40 },
+  { k: 'key',    t: 'Key',         w: 50,  min: 36 },
+  { k: 'time',   t: 'Time',        w: 54,  min: 42 },
+  { k: 'rating', t: 'Rating',      w: 84,  min: 62 },
+  { k: 'genre',  t: 'Genre',       w: 130, min: 50, flex: 1 },
+  { k: 'label',  t: 'Label',       w: 140, min: 50, flex: 1 },
+  { k: 'src',    t: 'Src',         w: 36,  min: 28 },
+  { k: 'cmt',    t: 'Comments',    w: 220, min: 80, flex: 1 },
+  { k: 'act',    t: '',            w: 54,  min: 46 },
+];
+const RBX_LS = 'cw.radio.arrangeCols';
+function rbxWidths() {
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(RBX_LS) || '{}') || {}; } catch (_) { saved = {}; }
+  const out = {};
+  for (const c of RBX_COLS) out[c.k] = Math.max(c.min, Number(saved[c.k]) || c.w);
+  return out;
+}
+function rbxSaveWidths(w) { try { localStorage.setItem(RBX_LS, JSON.stringify(w)); } catch (_) {} }
+function rbxResetWidths() { try { localStorage.removeItem(RBX_LS); } catch (_) {} raRenderFsBody(); }
+// "Depending on screen size": scale every column proportionally so the table exactly
+// fills the window — the flexible text columns absorb the slack, since the icon
+// columns are already at their minimums and shouldn't grow.
+function rbxFitToScreen() {
+  const body = document.getElementById('raFsBody'); if (!body) return;
+  const avail = body.clientWidth - 34;                    // padding + wrap border
+  const W = rbxWidths();
+  const fixed = RBX_COLS.filter(c => !c.flex), flex = RBX_COLS.filter(c => c.flex);
+  const fixedTotal = fixed.reduce((s, c) => s + W[c.k], 0);
+  const flexTotal = flex.reduce((s, c) => s + W[c.k], 0);
+  const room = Math.max(flex.reduce((s, c) => s + c.min, 0), avail - fixedTotal);
+  const scale = flexTotal ? room / flexTotal : 1;
+  for (const c of flex) W[c.k] = Math.max(c.min, Math.round(W[c.k] * scale));
+  rbxSaveWidths(W); raRenderFsBody();
+}
+function rbxResetOneColumn(k) {
+  const col = RBX_COLS.find(c => c.k === k); if (!col) return;
+  const W = rbxWidths(); W[k] = col.w; rbxSaveWidths(W); raRenderFsBody();
+}
+function rbxApply(el, k, px) {                       // live-resize without a re-render
+  const col = el.querySelector(`col[data-col="${k}"]`); if (col) col.style.width = px + 'px';
+  const tbl = el.querySelector('table.rbx-tbl');
+  if (tbl) {
+    const total = RBX_COLS.reduce((s, c) => s + (parseInt(
+      (el.querySelector(`col[data-col="${c.k}"]`) || {}).style?.width, 10) || c.w), 0);
+    tbl.style.width = total + 'px';
+  }
+}
+// Drag a header divider. Delegated on the overlay because the table is rebuilt often;
+// move/up listeners live only for the duration of one drag.
+function rbxResizeStart(ev) {
+  const h = ev.target.closest('.rbx-rsz'); if (!h) return;
+  const wrap = document.getElementById('raFsBody'); if (!wrap) return;
+  const k = h.dataset.rsz;
+  const col = RBX_COLS.find(c => c.k === k); if (!col) return;
+  const startX = ev.clientX;
+  const startW = parseInt((wrap.querySelector(`col[data-col="${k}"]`) || {}).style?.width, 10) || col.w;
+  h.classList.add('dragging'); document.body.classList.add('rbx-resizing');
+  ev.preventDefault();
+  const move = (e2) => rbxApply(wrap, k, Math.max(col.min, Math.round(startW + (e2.clientX - startX))));
+  const up = (e2) => {
+    document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
+    h.classList.remove('dragging'); document.body.classList.remove('rbx-resizing');
+    const w = rbxWidths();
+    w[k] = Math.max(col.min, Math.round(startW + (e2.clientX - startX)));
+    rbxSaveWidths(w);
+  };
+  document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+}
 function raOpenFsPlaylist() {
   if (!raState.playlist) return;
   let ov = document.getElementById('raFsOverlay');
   if (!ov) {
-    ov = document.createElement('div'); ov.id = 'raFsOverlay';
-    ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:var(--bg,#140a17);display:none;flex-direction:column;';
-    ov.innerHTML = `<div id="raFsHead" style="flex:0 0 auto;padding:12px 16px;border-bottom:1px solid var(--border-strong);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface-2);"></div>
+    ov = document.createElement('div'); ov.id = 'raFsOverlay'; ov.className = 'rbx';
+    // Neutral greys set inline (an inline background would otherwise beat the .rbx
+    // stylesheet rule) so the arrange screen reads like rekordbox, not the dashboard.
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:#17181b;display:none;flex-direction:column;';
+    ov.innerHTML = `<div id="raFsHead" style="flex:0 0 auto;padding:12px 16px;border-bottom:1px solid #0d0e10;display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:#232529;"></div>
       <div id="raFsBody" style="flex:1 1 auto;overflow:auto;padding:12px 16px 60px;"></div>`;
     document.body.appendChild(ov);
     ov.addEventListener('click', raFsClick);
+    ov.addEventListener('pointerdown', rbxResizeStart);
+    ov.addEventListener('dblclick', (e) => { const h = e.target.closest('.rbx-rsz'); if (h) rbxResetOneColumn(h.dataset.rsz); });
     ov.addEventListener('change', (e) => { const nt = e.target.closest('[data-ra-note]'); if (nt) { raSaveNote(nt.dataset.raNote, nt.value.trim()); const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(nt.dataset.raNote)); if (tr) tr.comment = nt.value.trim(); } });
     ov.addEventListener('dragstart', (e) => { const r = e.target.closest('[data-fs-row]'); if (r) { raFsDragId = r.dataset.fsRow; setTimeout(() => r.classList.add('fs-dragging'), 0); } });
     ov.addEventListener('dragend', (e) => { const r = e.target.closest('[data-fs-row]'); if (r) r.classList.remove('fs-dragging'); raFsDragId = null; });
@@ -11756,44 +11897,63 @@ function raRenderFsBody() {
   const pl = raState.playlist; if (!pl) return;
   const tracks = pl.tracks || [];
   const totalMin = Math.round(tracks.reduce((s, t) => s + (t.duration_ms || 0), 0) / 60000);
+  const totalStr = `${Math.floor(totalMin / 60)}:${String(totalMin % 60).padStart(2, '0')}`;
   const head = document.getElementById('raFsHead'); if (head) head.innerHTML = `
     <strong style="font-size:1.05rem;">🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong>
-    <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
-    <span class="li-sub" style="color:var(--dim);">— drag ⠿ to reorder</span>
+    <span class="li-sub">${tracks.length} tracks · ${totalStr} total</span>
+    <span class="li-sub" style="color:var(--dim);">— drag ⠿ to set the play order</span>
     <span style="margin-left:auto;display:flex;gap:8px;">
+      <button class="hub-btn ghost" data-fs-fit title="Scale the text columns so the table exactly fills this window">↔ Fit to screen</button>
+      <button class="hub-btn ghost" data-fs-colreset title="Put every column back to its default width">⟲ Columns</button>
       <button class="hub-btn ghost" data-fs-add>＋ Add song</button>
       <button class="hub-btn" data-fs-close>✓ Done</button></span>`;
   const body = document.getElementById('raFsBody'); if (!body) return;
   const nrg = { 1: '#5aa9e6', 2: '#57b894', 3: '#e0b23a', 4: '#e07a3a', 5: '#ff5ca8' };  // cool→hot
-  const cards = tracks.map((t, i) => {
-    const srcTag = t.source && t.source !== 'soundcloud' ? `<span style="font-size:.6rem;color:var(--faint);">${t.source === 'dj' ? '🎧' : t.source === 'rekordbox' ? '🎛' : t.source === 'beatport' ? '🛒' : '✎'}</span>` : '';
-    const key = t.camelot ? `${t.camelot}${t.bpm ? ' · ' + t.bpm : ''}` : (t.bpm ? t.bpm + ' bpm' : '');
-    return `<div class="fs-card" data-fs-row="${t.id}" style="border:1px solid var(--border);border-radius:11px;background:var(--card,#20142a);padding:9px 10px;display:flex;flex-direction:column;gap:6px;${t.energy ? `box-shadow:inset 3px 0 0 ${nrg[t.energy]};` : ''}">
-      <div style="display:flex;gap:7px;align-items:center;">
-        <span class="fs-handle" draggable="true" style="cursor:grab;color:var(--faint);user-select:none;" title="Drag to reorder">⠿</span>
-        <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--faint);font-size:.78rem;">${String(i + 1).padStart(2, '0')}</span>
-        ${key ? `<span class="role-chip" style="cursor:default;padding:0 6px;font-size:.6rem;">${escapeHtml(key)}</span>` : ''}${srcTag}
-        <span style="margin-left:auto;display:flex;gap:3px;">
-          ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}" title="Play" style="padding:1px 6px;">▶</button>` : ''}
-          <button class="hub-mini" data-ra-edittrack="${t.id}" title="Edit" style="padding:1px 6px;">✎</button>
-          <button class="hub-mini" data-fs-remove="${t.id}" title="Remove" style="padding:1px 6px;">✕</button></span>
-      </div>
-      <div style="min-width:0;">
-        <div style="font-weight:600;font-size:.9rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '')}</div>
-        <div class="li-sub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(t.artist_name || '')}</div>
-      </div>
-      <div style="display:flex;gap:3px;align-items:center;">
-        ${[1, 2, 3, 4, 5].map(n => `<button class="hub-mini" data-ra-energy="${t.id}:${n}" title="Energy ${n}" style="flex:1;padding:3px 0;font-size:.7rem;${t.energy === n ? `background:${nrg[n]};color:#0f0814;border-color:${nrg[n]};font-weight:700;` : 'opacity:.65;'}">${n}</button>`).join('')}
-      </div>
-      <input class="modal-input" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="＋ comment…" style="font-size:.76rem;padding:4px 7px;">
-    </div>`;
+  // Camelot hue by wheel position (1..12) so neighbouring keys sit near each other
+  // in colour, the way rekordbox tints its KEY column.
+  const keyHue = (cam) => { const n = parseInt(cam, 10); return Number.isFinite(n) ? `hsl(${((n - 1) * 30) % 360} 62% 62%)` : '#8a929c'; };
+  const mmss = (ms) => ms ? `${Math.floor(ms / 60000)}:${String(Math.floor((ms % 60000) / 1000)).padStart(2, '0')}` : '';
+  const SRC_ICON = { dj: '🎧', rekordbox: '🎛', beatport: '🛒', manual: '✎' };
+  const rows = tracks.map((t, i) => {
+    const genre = Array.isArray(t.genres) ? t.genres[0] : (t.genres || '');
+    const stars = [1, 2, 3, 4, 5].map(n =>
+      `<button class="rbx-star${t.energy >= n ? ' on' : ''}" data-ra-energy="${t.id}:${n}" title="Energy ${n}">★</button>`).join('');
+    return `<tr data-fs-row="${t.id}">
+      <td style="padding-right:0;"><span class="rbx-tag" style="${t.energy ? `background:${nrg[t.energy]};` : ''}" title="${t.energy ? 'Energy ' + t.energy : 'No energy set'}"></span></td>
+      <td><span class="rbx-grip" draggable="true" title="Drag to reorder">⠿</span></td>
+      <td class="rbx-num">${String(i + 1).padStart(2, '0')}</td>
+      <td>${t.permalink_url ? `<button class="rbx-act" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title || '')}" title="Preview">▶</button>` : ''}</td>
+      <td style="padding-right:0;">${t.artwork_url ? `<img class="rbx-thumb" src="${escapeHtml(t.artwork_url)}" alt="">` : '<span class="rbx-thumb"></span>'}</td>
+      <td class="rbx-ttl" title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '')}</td>
+      <td class="rbx-art" title="${escapeHtml(t.artist_name || '')}">${escapeHtml(t.artist_name || '')}</td>
+      <td class="rbx-bpm">${t.bpm || ''}</td>
+      <td>${t.camelot ? `<span class="rbx-key" style="background:${keyHue(t.camelot)};" title="${escapeHtml(t.song_key || '')}">${escapeHtml(t.camelot)}</span>` : (t.song_key ? `<span class="rbx-meta">${escapeHtml(t.song_key)}</span>` : '')}</td>
+      <td class="rbx-time">${mmss(t.duration_ms)}</td>
+      <td><span class="rbx-stars">${stars}</span></td>
+      <td class="rbx-meta" title="${escapeHtml(genre || '')}">${escapeHtml(genre || '')}</td>
+      <td class="rbx-meta" title="${escapeHtml(t.label || '')}">${escapeHtml(t.label || '')}</td>
+      <td class="rbx-meta" style="text-align:center;" title="Source: ${escapeHtml(t.source || 'soundcloud')}">${SRC_ICON[t.source] || '☁'}</td>
+      <td><input class="rbx-cmt" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="comment…"></td>
+      <td style="white-space:nowrap;">
+        <button class="rbx-act" data-ra-edittrack="${t.id}" title="Edit">✎</button>
+        <button class="rbx-act" data-fs-remove="${t.id}" title="Remove">✕</button></td>
+    </tr>`;
   }).join('');
+  const W = rbxWidths();
+  const total = RBX_COLS.reduce((s, c) => s + W[c.k], 0);
+  const cg = RBX_COLS.map(c => `<col data-col="${c.k}" style="width:${W[c.k]}px;">`).join('');
+  const TH = RBX_COLS.map((c, i) => `<th title="${c.t ? escapeHtml(c.t) + ' — drag the right edge to resize' : ''}">${escapeHtml(c.t)}${
+    i < RBX_COLS.length - 1 ? `<span class="rbx-rsz" data-rsz="${c.k}" title="Drag to resize · double-click to reset this column"></span>` : ''}</th>`).join('');
   body.innerHTML = tracks.length
-    ? `<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:9px;">${cards}</div>`
+    ? `<div class="rbx-wrap"><table class="rbx-tbl" style="width:${total}px;"><colgroup>${cg}</colgroup><thead><tr>${TH}</tr></thead><tbody>${rows}</tbody></table></div>`
     : '<div class="li-sub" style="padding:24px;text-align:center;">No songs yet — hit ＋ Add song, or add from the artist list.</div>';
+  raMarkPlaying();  // the rebuild dropped the highlight; the dock may still be playing
 }
 function raFsClick(e) {
+  if (e.target.closest('.rbx-rsz')) return;                 // divider drag, not a click
   if (e.target.closest('[data-fs-close]')) { raCloseFs(); return; }
+  if (e.target.closest('[data-fs-fit]')) { rbxFitToScreen(); return; }
+  if (e.target.closest('[data-fs-colreset]')) { rbxResetWidths(); return; }
   if (e.target.closest('[data-fs-add]')) { raOpenTrackEdit(null); return; }
   const en = e.target.closest('[data-ra-energy]'); if (en) { const [id, n] = en.dataset.raEnergy.split(':'); raSetEnergy(id, Number(n)); return; }
   const ed = e.target.closest('[data-ra-edittrack]'); if (ed) { raOpenTrackEdit(ed.dataset.raEdittrack); return; }
@@ -11885,7 +12045,7 @@ function renderRadioCC() {
   const nextDrops = stations.filter(s => (s.drop_date || s.scheduled_go_live) && s.status !== 'archived')
     .sort((a, b) => String(a.scheduled_go_live || a.drop_date).localeCompare(String(b.scheduled_go_live || b.drop_date)));
   $('raMarketBody').innerHTML = raModeBar() + `
-    <div class="hub-sec-bar"><h3>🎚 Artist Radio — Control Center</h3>
+    <div class="hub-sec-bar"><h3>🎚 Come With Radio — Control Center</h3>
       <span style="display:flex;gap:8px;align-items:center;"><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span>
       <button class="hub-btn ghost" data-ra-ccplan title="Create a future episode skeleton you can assign & start working on">➕ Plan a future episode</button>
       <button class="hub-btn ghost" data-ra-ccedition title="Create a multi-day special edition (festival run) instead of the weekly">✨ Special edition</button></span></div>
@@ -12092,7 +12252,8 @@ function raMarkPlaying() {
   if (!raState.playing) return;
   document.querySelectorAll('[data-ra-play],[data-ra-trackplay]').forEach(b => {
     const u = b.dataset.raPlay || b.dataset.raTrackplay;
-    if (u && raKey(u) === raState.playing) b.closest('.hub-li')?.classList.add('ra-playing');
+    // tr[data-fs-row] = a row in the ⛶ Arrange table, which isn't a .hub-li
+    if (u && raKey(u) === raState.playing) b.closest('.hub-li, tr[data-fs-row]')?.classList.add('ra-playing');
   });
 }
 async function raPlay(scUrl, name) {
@@ -12141,7 +12302,18 @@ function keyToCamelot(key) {
   if (pitch == null) return null;
   return (m[3] ? CAMELOT_MIN : CAMELOT_MAJ)[pitch];
 }
+// A live/archived episode is closed to new songs — migration 135 enforces that with
+// a trigger (the service-role callers bypass RLS, so it has to be a trigger). This
+// is the front-end half: a plain sentence instead of a raw postgres error, checked
+// in all three add paths. Removing/editing on a live episode stays allowed — that's
+// how you fix a mistake like the EP1 stray on 2026-07-29.
+function raStationClosed(pl) {
+  pl = pl || raState.playlist;
+  if (!pl || (pl.status !== 'live' && pl.status !== 'archived')) return null;
+  return `EP ${pl.station_no ?? '?'} is ${pl.status} — reopen it (set the status back to testing) before adding songs.`;
+}
 async function raAddTrack(scTrackId) {
+  const shut = raStationClosed(); if (shut) { toast(shut, 'err'); return; }
   const c = raState.cache[raState.openArtist];
   const t = c && c.songs && c.songs.find(x => x.sc_track_id === scTrackId); if (!t) return;
   // The show this artist is playing (soonest match — artists are ordered by date).
@@ -12943,6 +13115,7 @@ function raPlaySample(url, name) {
 async function raAddBeatportTrack(key, bpId) {
   const pl = raState.playlist;
   if (!pl) { toast('Open a station first', 'err'); return; }
+  const shut = raStationClosed(pl); if (shut) { toast(shut, 'err'); return; }
   const cat = raState.bpCatalog?.[key];
   const t = (cat?.tracks || []).find(x => String(x.bp_id) === String(bpId));
   if (!t) { toast('Track not found in the catalogue', 'err'); return; }
@@ -13035,10 +13208,89 @@ function raBeatportPasteBox(msg) {
     </ol>
     <div class="kpi-hint" style="margin:0 0 8px;">Doing this often? Drag this to your bookmarks bar and it becomes one click on beatport.com instead of steps 2–3 →
       <a href="${escapeHtml(RA_BP_GRAB)}" onclick="return false;" style="border:1px solid var(--border-strong);border-radius:5px;padding:1px 7px;cursor:grab;">🔑 Copy Beatport token</a></div>
+    <div class="kpi-hint" style="margin:0 0 8px;padding-top:7px;border-top:1px solid var(--border);">Getting the <strong>same expired token</strong> every time? That copy line reads a snapshot Beatport only rewrites on its own schedule, so a sitting tab hands you a dead one forever. →
+      <button type="button" class="hub-mini" data-ra-bpnet title="Step-by-step: take the token off a live request header in DevTools instead">🌐 Grab a live token from the Network tab</button></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <input name="bp_token" class="modal-input" placeholder="Paste the Beatport token here" style="flex:1 1 240px;font-family:monospace;font-size:.72rem;">
       <button type="button" class="hub-btn" data-ra-bptoken>Run with this token</button>
     </div></div>`;
+}
+// The localStorage route above goes STALE: `token-refresh-result` is only rewritten
+// when Beatport's own refresh timer fires, so on a tab that's been sitting you copy
+// the same dead JWT forever and every paste reads as "expired" (cost a buy run on
+// 2026-07-29). The cure is to take the token off a live request header instead —
+// that always reflects the current session. Floating + draggable + non-blocking on
+// purpose: you read it WHILE inside DevTools, then paste into the box behind it.
+const BP_NET_FLOW_STEPS = (() => {
+  const k = (s) => `<b style="color:var(--lime,#a7e02e);">${s}</b>`;      // what to type / look for
+  const w = (s) => `<b style="color:var(--gold,#e0b23a);">${s}</b>`;      // the gotcha
+  return `START
+  │
+  ├─▶ In Network filter box, replace "api" with:  ${k('api.beatport.com')}
+  │
+  ├─▶ Click the ${k('[Fetch/XHR]')} chip  (kills sentry/img/doc noise)
+  │
+  ├─▶ Keep DevTools open → trigger fresh data:
+  │       • type in the search bar, OR
+  │       • click a genre / "View all"
+  │       (a cold page load is server-rendered → may produce no XHR)
+  │
+  ├─▶ Any row appear?
+  │      │
+  │      ├─ NO ──▶ clear the filter, sort by Name, look for
+  │      │          rows starting  ${k('v4/')}  → those are api.beatport.com
+  │      │
+  │      └─ YES ─▶ click row → Headers tab
+  │                    │
+  │                    └─▶ scroll to ▼ Request Headers
+  │                            │
+  │                            ├─ see ${w('"Provisional headers are shown"')}?
+  │                            │     └─▶ wrong row, pick another v4/ row
+  │                            │
+  │                            └─ see  ${k('authorization: Bearer eyJ…')}
+  │                                  └─▶ right-click value → ${k('Copy value')}
+  │
+  └─▶ Paste in the token box behind this popup → ${k('Run with this token')}`;
+})();
+// Same token, for the desktop cart tool instead of the dashboard: strips a leading
+// "Bearer " and any stray whitespace, because "Copy value" often brings both.
+const BP_NET_PS = `$t=(Get-Clipboard) -replace '^\\s*Bearer\\s+','' -replace '\\s',''; @{access_token=$t} | ConvertTo-Json | Set-Content -Encoding utf8 ".beatport_token.json"; $t.Substring(0,12)`;
+function toggleBpNetPopup() {
+  const existing = document.getElementById('bpNetPopup');
+  if (existing) { existing.remove(); return; }
+  const el = document.createElement('div');
+  el.id = 'bpNetPopup';
+  el.style.cssText = 'position:fixed;top:16px;right:16px;width:min(560px,94vw);max-height:82vh;z-index:100000;background:var(--card,#20142a);border:1px solid var(--border-strong,#3a2a48);border-radius:12px;box-shadow:0 18px 52px rgba(0,0,0,.55);display:flex;flex-direction:column;overflow:hidden;';
+  el.innerHTML = `<div id="bpNetHdr" style="display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--border);background:rgba(167,224,46,.10);cursor:move;user-select:none;">
+      <strong style="font-size:.85rem;">🌐 Grab a LIVE Beatport token</strong>
+      <span class="li-sub" style="margin-left:auto;font-size:.66rem;">drag aside · stays open while you work in DevTools</span>
+      <button type="button" class="hub-mini" id="bpNetClose" title="Close">✕</button></div>
+    <div style="padding:12px 15px;overflow:auto;">
+      <div class="kpi-hint" style="margin:0 0 9px;">Use this when the console/bookmarklet keeps handing you the <strong>same expired token</strong>. That value is a snapshot Beatport only rewrites when its own refresh timer fires — a request header is always current. Open DevTools on beatport.com (<code>F12</code>) while logged in.</div>
+      <pre style="margin:0;padding:11px 12px;background:var(--surface-2,#181022);border:1px solid var(--border);border-radius:8px;overflow-x:auto;font-size:.72rem;line-height:1.45;white-space:pre;">${BP_NET_FLOW_STEPS}</pre>
+      <div class="kpi-hint" style="margin:10px 0 5px;">Building the cart with the <strong>desktop tool</strong> instead? Paste this in PowerShell at the repo root — it writes <code>.beatport_token.json</code>, then run <code>"Build Beatport Cart.bat"</code>.</div>
+      <div style="display:flex;gap:7px;align-items:flex-start;">
+        <code id="bpNetPs" style="flex:1;user-select:all;font-size:.66rem;line-height:1.5;word-break:break-all;background:var(--surface-2,#181022);border:1px solid var(--border);border-radius:6px;padding:7px 9px;"></code>
+        <button type="button" class="hub-mini" id="bpNetCopy" title="Copy the PowerShell line">📋 Copy</button>
+      </div>
+      <div class="kpi-hint" style="margin:9px 0 0;">Whichever route: the token lives <strong>10 minutes</strong> from when Beatport minted it — not from when you copied it. If a run still says expired, trigger one more request and take a fresher header.</div>
+    </div>`;
+  document.body.appendChild(el);
+  $('bpNetPs').textContent = BP_NET_PS;   // textContent so the quotes/$ stay literal
+  $('bpNetClose').onclick = () => el.remove();
+  $('bpNetCopy').onclick = async () => {
+    try { await navigator.clipboard.writeText(BP_NET_PS); toast('PowerShell line copied'); }
+    catch (_) { toast('Copy failed — select it and press Ctrl+C', 'err'); }
+  };
+  // Drag by the header; move/up listeners live only for the duration of a drag.
+  $('bpNetHdr').addEventListener('pointerdown', (ev) => {
+    if (ev.target.closest('button')) return;
+    const r = el.getBoundingClientRect(); const ox = ev.clientX - r.left, oy = ev.clientY - r.top;
+    el.style.right = 'auto'; el.style.left = r.left + 'px'; el.style.top = r.top + 'px';
+    const move = (e2) => { el.style.left = Math.max(0, e2.clientX - ox) + 'px'; el.style.top = Math.max(0, e2.clientY - oy) + 'px'; };
+    const up = () => { document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up); };
+    document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); ev.preventDefault();
+  });
 }
 // The last check's findings are stored ON each track, so the summary can be
 // rebuilt any time without re-scanning — open "Where to buy" tomorrow and it's
@@ -13183,6 +13435,7 @@ async function raCheckSources(accessToken, skipProbe) {
 // Insert a station track that didn't come from the SoundCloud pull, and mirror it
 // into the permanent song memory the same way raAddTrack does.
 async function raInsertTrack(fields) {
+  const shut = raStationClosed(); if (shut) throw new Error(shut);   // caller shows it
   const sc_track_id = raManualId();
   const row = { playlist_id: raState.playlist.id, sc_track_id, source: 'manual', ...fields };
   const { error } = await sb.from('sc_playlist_tracks').insert(row);
@@ -16557,10 +16810,10 @@ const WORKFLOW = [
     short: 'Live team chat + every email, logged.',
     detail: `The 💬 button (any tab) opens team chat: a team-wide channel, DMs and per-event threads, delivered live with unread badges — minimize it to a docked counter. Emailing a teammate from Users mirrors into your DM thread; team broadcasts (like an event's task list) land in # Team as a notice until someone marks them ✓ complete. Every outbound email lives as a Conversations thread — and replies you receive can be logged back in (paste or .eml upload, no mailbox access). Users (master-only) manages logins, module access, aliases and deactivation.`,
     links: [{ t: 'Open Conversations', tab: 'conversations' }, { t: 'Open Users', tab: 'team' }] },
-  { lane: 'mkt', n: 27, ico: '📡', t: 'RA Market + Radio', where: 'Artist Radio',
+  { lane: 'mkt', n: 27, ico: '📡', t: 'RA Market + Radio', where: 'Come With Radio',
     short: 'Scout the NYC scene; run the weekly radio show.',
-    detail: `Two things live here. RA Market: ~3 months of public Resident Advisor + Ticketmaster (EDM-only) NYC shows — which nights have demand vs competition (the Best-Nights score weights day of week so Monday never tops the list), venue + genre benchmarks, RA-picks, your own attendance alongside, and a Watchlist of artists/venues/collaborators. And Come With Radio, a full weekly show: build a station from artists playing NYC soon, 🛒 check where to buy, buy + arrange + record the mix, auto-render the "Now Playing" YouTube video, and publish the episode page — now or on a schedule — with listener accounts, ♡ saving, and playing-soon alerts. For the whole weekly run, step by step, open the 🗺️ Weekly run map inside Artist Radio (comewith.org/radio-workflow.html).`,
-    links: [{ t: 'Open Artist Radio', tab: 'ra-market' }] },
+    detail: `Two things live here. RA Market: ~3 months of public Resident Advisor + Ticketmaster (EDM-only) NYC shows — which nights have demand vs competition (the Best-Nights score weights day of week so Monday never tops the list), venue + genre benchmarks, RA-picks, your own attendance alongside, and a Watchlist of artists/venues/collaborators. And Come With Radio, a full weekly show: build a station from artists playing NYC soon, 🛒 check where to buy, buy + arrange + record the mix, auto-render the "Now Playing" YouTube video, and publish the episode page — now or on a schedule — with listener accounts, ♡ saving, and playing-soon alerts. For the whole weekly run, step by step, open the 🗺️ Weekly run map inside Come With Radio (comewith.org/radio-workflow.html).`,
+    links: [{ t: 'Open Come With Radio', tab: 'ra-market' }] },
 ];
 const WF_LANES = { crm: 'A · Lead & deal', hub: 'B · Build the event', money: 'C · Run the money', mkt: 'D · Amplify', kpi: '★ · It all rolls up' };
 const WF_ORDER = ['crm', 'hub', 'money', 'mkt', 'kpi'];

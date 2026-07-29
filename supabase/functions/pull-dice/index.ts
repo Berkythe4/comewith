@@ -1,6 +1,6 @@
 // pull-dice
 //
-// Widens the Artist Radio / Market data with DICE (dice.fm) EDM shows in NYC.
+// Widens the Come With Radio / Market data with DICE (dice.fm) EDM shows in NYC.
 // DICE has no official public API, so this uses the SAME endpoints their own
 // website calls (reverse-engineered, no auth):
 //   • POST https://api.dice.fm/unified_search  {tag:"gig:<genre>", lat, lng}
@@ -10,7 +10,7 @@
 //
 // Writes ra_events + ra_artists with source='dice' ONLY. It deletes just its own
 // source='dice' rows before upserting, so it can never touch the RA ('ra') or
-// Ticketmaster ('tm') data — those pulls are untouched. The Artist Radio reads
+// Ticketmaster ('tm') data — those pulls are untouched. The Come With Radio reads
 // ra_events regardless of source, so DICE shows flow in automatically.
 //
 // Admin JWT OR service-role. No secret required (DICE endpoints are open).
