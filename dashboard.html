@@ -292,6 +292,14 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .rbx-act:hover { color: #fff; }
 /* Energy bar in the leftmost cell, like a rekordbox colour tag. */
 .rbx-tag { display: block; width: 4px; height: 20px; border-radius: 1px; background: #2f3338; }
+/* Shared-pool collaboration (136): who added it + everyone's call. */
+.rbx-who { display: inline-block; min-width: 18px; text-align: center; border-radius: 3px; padding: 1px 3px;
+  font-size: 0.6rem; font-weight: 700; color: #fff; letter-spacing: 0.02em; }
+.rbx-calls { display: inline-flex; gap: 2px; cursor: pointer; }
+.rbx-call { border: 1px solid #3a3f47; border-radius: 3px; padding: 0 3px; font-size: 0.62rem;
+  color: rgba(255,255,255,0.8); white-space: nowrap; }
+.rbx-call-empty { color: rgba(255,255,255,0.28); border-style: dashed; }
+.rbx-calls:hover .rbx-call { border-color: var(--accent, #5b7fb3); }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-cell { min-height: 92px; border: 1px solid rgba(237,228,211,0.12); border-radius: 6px; padding: 4px 5px; cursor: pointer; overflow: hidden; }
 .cal-cell:hover { border-color: rgba(237,228,211,0.35); }
@@ -10563,6 +10571,56 @@ async function raLoadPlaylist() {
   raState.radioArt = (art && art.value) || '';
   raState.playlist = { ...pl, tracks: tracks || [] };
   raState.songLog = {}; (log || []).forEach(r => { raState.songLog[r.sc_track_id] = r; });
+  await raLoadMarks();                       // who added what + everyone's claim/veto
+}
+// ---- Shared-pool collaboration (136) ---------------------------------------
+// added_by answers "who put this in the set"; sc_track_marks holds one row per
+// (track, person) so Keith and Martin can disagree visibly instead of one of them
+// silently overwriting the other. Keyed by track id for O(1) render lookups.
+const RA_MARKS = { claimed: { i: '✋', l: 'Claimed', c: '#57b894' },
+                   maybe:   { i: '🤔', l: 'Maybe',   c: '#e0b23a' },
+                   veto:    { i: '⛔', l: 'Veto',    c: '#e0553a' } };
+const RA_MARK_ORDER = ['claimed', 'maybe', 'veto'];
+async function raLoadMarks() {
+  const ids = (raState.playlist?.tracks || []).map(t => t.id);
+  raState.marks = {};
+  if (!ids.length) return;
+  if (!raState.epLookups) await raLoadEpLookups();     // names for the chips
+  const { data } = await sb.from('sc_track_marks').select('id,track_id,user_id,mark').in('track_id', ids);
+  (data || []).forEach(m => { (raState.marks[m.track_id] = raState.marks[m.track_id] || []).push(m); });
+}
+function raUserName(id) {
+  if (!id) return '';
+  const u = (raState.epUsers || []).find(x => x.id === id);
+  return u ? (u.full_name || u.email || '') : '';
+}
+function raInitials(id) {
+  const n = raUserName(id);
+  if (!n) return '?';
+  return n.trim().split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+}
+// Stable colour per person so the same teammate is the same hue on every row.
+function raUserColor(id) {
+  let h = 0; for (const ch of String(id || '')) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return `hsl(${h} 45% 45%)`;
+}
+function raMyMark(trackId) {
+  const me = ME.id;
+  return (raState.marks?.[trackId] || []).find(m => m.user_id === me) || null;
+}
+// Click cycles YOUR mark: none → claimed → maybe → veto → none. Only ever writes
+// your own row; RLS enforces that server-side too.
+async function raCycleMark(trackId) {
+  if (!ME.id) { toast('Not signed in', 'err'); return; }
+  const mine = raMyMark(trackId);
+  const next = !mine ? 'claimed' : RA_MARK_ORDER[RA_MARK_ORDER.indexOf(mine.mark) + 1] || null;
+  let err;
+  if (!mine) ({ error: err } = await sb.from('sc_track_marks').insert({ track_id: trackId, user_id: ME.id, mark: next }));
+  else if (next) ({ error: err } = await sb.from('sc_track_marks').update({ mark: next, updated_at: new Date().toISOString() }).eq('id', mine.id));
+  else ({ error: err } = await sb.from('sc_track_marks').delete().eq('id', mine.id));
+  if (err) { toast(err.message, 'err'); return; }
+  await raLoadMarks();
+  if (document.getElementById('raFsOverlay')?.classList.contains('on')) raRenderFsBody(); else renderRaMarket();
 }
 // Come With Radio panel = just the radio UI now (market intel moved to its own module).
 // Control Center is the landing view, so it renders before the artists check —
@@ -11806,6 +11864,8 @@ const RBX_COLS = [
   { k: 'genre',  t: 'Genre',       w: 130, min: 50, flex: 1 },
   { k: 'label',  t: 'Label',       w: 140, min: 50, flex: 1 },
   { k: 'src',    t: 'Src',         w: 36,  min: 28 },
+  { k: 'by',     t: 'Added by',    w: 96,  min: 40 },
+  { k: 'marks',  t: 'Calls',       w: 104, min: 44 },
   { k: 'cmt',    t: 'Comments',    w: 220, min: 80, flex: 1 },
   { k: 'act',    t: '',            w: 54,  min: 46 },
 ];
@@ -11933,6 +11993,13 @@ function raRenderFsBody() {
       <td class="rbx-meta" title="${escapeHtml(genre || '')}">${escapeHtml(genre || '')}</td>
       <td class="rbx-meta" title="${escapeHtml(t.label || '')}">${escapeHtml(t.label || '')}</td>
       <td class="rbx-meta" style="text-align:center;" title="Source: ${escapeHtml(t.source || 'soundcloud')}">${SRC_ICON[t.source] || '☁'}</td>
+      <td>${t.added_by
+        ? `<span class="rbx-who" style="background:${raUserColor(t.added_by)};" title="Added by ${escapeHtml(raUserName(t.added_by))}">${escapeHtml(raInitials(t.added_by))}</span><span class="rbx-meta"> ${escapeHtml((raUserName(t.added_by) || '').split(' ')[0])}</span>`
+        : '<span class="rbx-meta" title="Added before attribution existed, or by a sync / DJ link">—</span>'}</td>
+      <td><span class="rbx-calls" data-ra-mark="${t.id}" title="Click to set YOUR call: claimed → maybe → veto → clear">${
+        (raState.marks?.[t.id] || []).length
+          ? (raState.marks[t.id]).map(m => `<span class="rbx-call" style="border-color:${RA_MARKS[m.mark].c};" title="${escapeHtml(raUserName(m.user_id))}: ${RA_MARKS[m.mark].l}">${RA_MARKS[m.mark].i}${escapeHtml(raInitials(m.user_id))}</span>`).join('')
+          : '<span class="rbx-call rbx-call-empty">＋</span>'}</span></td>
       <td><input class="rbx-cmt" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="comment…"></td>
       <td style="white-space:nowrap;">
         <button class="rbx-act" data-ra-edittrack="${t.id}" title="Edit">✎</button>
@@ -11951,6 +12018,7 @@ function raRenderFsBody() {
 }
 function raFsClick(e) {
   if (e.target.closest('.rbx-rsz')) return;                 // divider drag, not a click
+  const mk = e.target.closest('[data-ra-mark]'); if (mk) { raCycleMark(mk.dataset.raMark); return; }
   if (e.target.closest('[data-fs-close]')) { raCloseFs(); return; }
   if (e.target.closest('[data-fs-fit]')) { rbxFitToScreen(); return; }
   if (e.target.closest('[data-fs-colreset]')) { rbxResetWidths(); return; }
