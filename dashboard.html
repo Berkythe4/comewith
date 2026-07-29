@@ -9445,6 +9445,7 @@ async function eventPopup(id) {
     sb.from('venues').select('id, name').is('deleted_at', null).order('name'),
   ]);
   if (ev.error) { toast('Load failed: ' + ev.error.message, 'err'); return; }
+  rpop = null;
   epop = { id, e: ev.data, participants: pp.data || [], tasks: tk.data || [], actors: ac.data || [], venues: vn.data || [] };
   renderEventPopup();
 }
@@ -9452,9 +9453,10 @@ function epopPeopleHtml() {
   const rows = epop.participants.map(p => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><span>${escapeHtml(p.actor?.display_name || '—')}${p.role ? ` <span class="li-sub">· ${escapeHtml(p.role)}</span>` : ''}</span></div>
     <button type="button" class="hub-mini danger" data-epop-rmperson="${escapeHtml(p.id)}" title="Remove">✕</button></div>`).join('') || '<div class="li-sub">No one added yet.</div>';
   const opts = '<option value="">— add a person —</option>' + epop.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  const roleOpts = '<option value="">role…</option>' + ROLE_VOCAB.map(r => `<option value="${r}">${r}</option>`).join('');
   return `${rows}<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
     <select class="modal-input" id="epopActor" style="flex:1 1 150px;font-size:.82rem;">${opts}</select>
-    <input class="modal-input" id="epopRole" placeholder="role (DJ, host…)" style="flex:1 1 110px;font-size:.82rem;">
+    <select class="modal-input" id="epopRole" style="flex:1 1 110px;font-size:.82rem;">${roleOpts}</select>
     <button type="button" class="hub-mini" data-epop-addperson>Add</button></div>`;
 }
 function epopTaskHtml() {
@@ -9486,8 +9488,8 @@ function renderEventPopup() {
     <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">✅ Tasks</h3></div>
     <div id="epopTasks">${epopTaskHtml()}</div>
     <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
-      <button type="button" class="hub-btn ghost" data-event-open="${escapeHtml(epop.id)}">Open full page →</button>
-      <button type="button" class="hub-btn ghost" data-event-money="${escapeHtml(epop.id)}">💰 Money</button>
+      <button type="button" class="hub-btn ghost" data-epop-open>Open full page →</button>
+      <button type="button" class="hub-btn ghost" data-epop-money>💰 Money</button>
     </div>`;
   openKpi(e.name || 'Event', `<span style="color:${c}">●</span> quick edit`, body, saveEventPopup, 'Save');
 }
@@ -9504,10 +9506,12 @@ async function saveEventPopup() {
 // People + task controls inside the popup — immediate writes, re-render the sub-list.
 $('kpiModalOverlay').addEventListener('click', async (e) => {
   if (!epop) return;
+  if (e.target.closest('[data-epop-open]')) { const id = epop.id; closeKpi(); openEventHub(id); return; }
+  if (e.target.closest('[data-epop-money]')) { const id = epop.id; closeKpi(); openMoneyPanel(id); return; }
   if (e.target.closest('[data-epop-addperson]')) {
     const actorId = document.getElementById('epopActor')?.value; if (!actorId) return;
     const role = (document.getElementById('epopRole')?.value || '').trim();
-    const { data, error } = await sb.from('event_participants').insert({ event_id: epop.id, actor_id: actorId, role: role || null }).select('id, role, actor:actors(id, display_name)').single();
+    const { data, error } = await sb.from('event_participants').insert({ event_id: epop.id, actor_id: actorId, role: role || null, roles: role ? [role] : null }).select('id, role, actor:actors(id, display_name)').single();
     if (error) { toast('Add failed: ' + error.message, 'err'); return; }
     epop.participants.push(data); document.getElementById('epopPeople').innerHTML = epopPeopleHtml(); return;
   }
@@ -9536,8 +9540,17 @@ async function radioPopup(id) {
   await raLoadEpLookups();
   const pl = raState.playlist;
   if (!pl || pl.id !== id) { toast('Could not load that episode', 'err'); return; }
-  rpop = { id, pl };
+  const { data: tk } = await sb.from('tasks').select('id, title, status, due_date').eq('station_id', id).is('deleted_at', null).order('due_date', { nullsFirst: false });
+  epop = null;
+  rpop = { id, pl, tasks: tk || [] };
   renderRadioPopup();
+}
+function rpopTaskHtml() {
+  const rows = (rpop.tasks || []).map(t => `<div class="hub-li" style="padding:3px 0;"><div class="li-main"><label style="display:flex;gap:7px;align-items:center;cursor:pointer;"><input type="checkbox" data-rpop-toggletask="${escapeHtml(t.id)}"${t.status === 'done' ? ' checked' : ''} style="width:auto;margin:0;"><span style="${t.status === 'done' ? 'text-decoration:line-through;opacity:.6;' : ''}">${escapeHtml(t.title)}</span></label>${t.due_date ? `<div class="li-sub">due ${escapeHtml(fmtDate(t.due_date))}</div>` : ''}</div></div>`).join('') || '<div class="li-sub">No tasks yet.</div>';
+  return `${rows}<div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+    <input class="modal-input" id="rpopTaskTitle" placeholder="add a task…" style="flex:1 1 160px;font-size:.82rem;">
+    <input class="modal-input" type="date" id="rpopTaskDue" style="max-width:145px;font-size:.82rem;">
+    <button type="button" class="hub-mini" data-rpop-addtask>Add</button></div>`;
 }
 function rpopTrackList() {
   const tracks = rpop.pl.tracks || [];
@@ -9566,7 +9579,9 @@ function renderRadioPopup() {
       <div><label class="modal-label">Assigned to</label><select class="modal-input" id="rpopUser">${userOpts}</select></div>
       <div><label class="modal-label">or DJ</label><select class="modal-input" id="rpopDj">${djOpts}</select></div>
     </div>
-    <div class="hub-sec-bar" style="margin-top:8px;"><h3 style="font-size:.85rem;">🎵 Tracklist</h3><button type="button" class="hub-mini" data-rpop-details title="Full episode details — cover, descriptions, DJ link, recap notes">✎ Full details</button></div>
+    <div class="hub-sec-bar" style="margin-top:8px;"><h3 style="font-size:.85rem;">✅ Tasks</h3></div>
+    <div id="rpopTasks">${rpopTaskHtml()}</div>
+    <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">🎵 Tracklist</h3><button type="button" class="hub-mini" data-rpop-details title="Full episode details — cover, descriptions, DJ link, recap notes">✎ Full details</button></div>
     ${rpopTrackList()}
     <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">🛠 Final-prep tools</h3></div>
     <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -9596,6 +9611,20 @@ $('kpiModalOverlay').addEventListener('click', (e) => {
   if (e.target.closest('[data-rpop-golive]')) { raOpenFinalize(); return; }
   if (e.target.closest('[data-rpop-details]')) { raOpenEpisodeDetails(); return; }
   if (e.target.closest('[data-rpop-open]')) { closeKpi(); activateTab('ra-market'); setTimeout(() => { raState.ccMode = false; raState.stationOpen = true; renderRaMarket(); }, 160); return; }
+  if (e.target.closest('[data-rpop-addtask]')) {
+    const title = (document.getElementById('rpopTaskTitle')?.value || '').trim(); if (!title) return;
+    const due = document.getElementById('rpopTaskDue')?.value || null;
+    sb.from('tasks').insert({ station_id: rpop.id, title, status: 'todo', source: 'manual', pillar: 'audience', due_date: due }).select('id, title, status, due_date').single().then(({ data, error }) => {
+      if (error) { toast('Add failed: ' + error.message, 'err'); return; }
+      rpop.tasks.push(data); document.getElementById('rpopTasks').innerHTML = rpopTaskHtml();
+    });
+    return;
+  }
+});
+$('kpiModalOverlay').addEventListener('change', async (e) => {
+  if (!rpop) return;
+  const tt = e.target.closest('[data-rpop-toggletask]');
+  if (tt) { const st = tt.checked ? 'done' : 'todo'; await sb.from('tasks').update({ status: st }).eq('id', tt.dataset.rpopToggletask); const t = rpop.tasks.find(x => x.id === tt.dataset.rpopToggletask); if (t) t.status = st; document.getElementById('rpopTasks').innerHTML = rpopTaskHtml(); }
 });
 function renderEventsOverview() {
   const list = eventsFiltered();
