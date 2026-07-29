@@ -239,6 +239,8 @@ body::before {
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
 .cal-dd .cal-dd-pop label { display: flex; gap: 7px; align-items: center; font-size: 0.72rem; padding: 3px 0; cursor: pointer; color: rgba(242,237,230,0.75); }
+#raFsBody [data-fs-row].fs-dragging { opacity: 0.4; border-color: var(--lime, #a7e02e); }
+#raFsBody [data-fs-row] { transition: border-color .1s; }
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
 .cal-cell { min-height: 92px; border: 1px solid rgba(237,228,211,0.12); border-radius: 6px; padding: 4px 5px; cursor: pointer; overflow: hidden; }
 .cal-cell:hover { border-color: rgba(237,228,211,0.35); }
@@ -5504,12 +5506,12 @@ $('strat-manage-list').addEventListener('change', async (e) => {
 // ---- KPI entry forms (Phase 13 — Part B) ----
 // Series feed the KPI views by EXACT string (CLAUDE.md series contract). 'Come With
 // Production' = events produced as a service for other people (e.g. Maxwell House 4/20).
-const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings']; // no CWF
+const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings', 'Growth & Networking']; // no CWF
 // Keep events.type (axis for templates / content flag) in sync with the series choice.
 // Bookings = we're the booked talent at someone else's event ('gig'), vs Come With
 // Production = we run their production.
 function seriesToType(series) {
-  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase', 'Bookings': 'gig' })[series] || 'showcase';
+  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase', 'Bookings': 'gig', 'Growth & Networking': 'growth' })[series] || 'showcase';
 }
 const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
 let kpiSubmit = null;
@@ -5802,8 +5804,12 @@ function openLogEvent() {
       <div><label class="modal-label">Date *</label><input class="modal-input" type="date" name="event_date" value="${TODAY()}" required></div>
     </div>
     <div class="modal-form-row half-row">
+      <div><label class="modal-label">End date <span class="li-sub">— only for multi-day</span></label><input class="modal-input" type="date" name="end_date"></div>
       <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity"></div>
+    </div>
+    <div class="modal-form-row half-row">
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance"></div>
+      <div></div>
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
@@ -5879,6 +5885,7 @@ async function submitLogEvent() {
   let slug = kpiVal('slug');
   if (!slug) slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60) || ('event-' + Date.now());
   const evRow = { name, series, event_date, slug, status: kpiVal('status') || 'completed', type: seriesToType(series), is_content_event: seriesToType(series) === 'showcase' };
+  const endD = kpiVal('end_date'); if (endD && endD > event_date) evRow.end_date = endD;
   const cap = kpiVal('capacity'); if (cap !== '') evRow.capacity = Number(cap);
   const att = kpiVal('total_attendance'); if (att !== '') evRow.total_attendance = Number(att);
   evRow.is_public = !!$('kpiModalBody').querySelector('[name="is_public"]')?.checked;
@@ -6056,7 +6063,7 @@ async function checkRecapVids(btn) {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }, { data: artistRoles }, { data: allActors }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path, owner_actor_id').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, end_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path, owner_actor_id').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
     sb.from('actor_roles').select('actor:actors(id, display_name)').in('role', ['dj', 'artist']),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
@@ -6081,6 +6088,10 @@ async function openEditEvent(id) {
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Series *</label><select class="modal-select" name="series" required>${seriesOpts}</select></div>
       <div><label class="modal-label">Date *</label><input class="modal-input" type="date" name="event_date" value="${escapeHtml(ev.event_date || '')}" required></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">End date <span class="li-sub">— only for multi-day</span></label><input class="modal-input" type="date" name="end_date" value="${escapeHtml(ev.end_date || '')}"></div>
+      <div></div>
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Capacity</label><input class="modal-input" type="number" min="0" step="1" name="capacity" value="${ev.capacity ?? ''}"></div>
@@ -6157,6 +6168,7 @@ async function submitEditEvent(id) {
   if (!series) throw new Error('Series is required');
   if (!event_date) throw new Error('Date is required');
   const patch = { name, series, event_date, status: kpiVal('status') || 'planning' };
+  const endD = kpiVal('end_date'); patch.end_date = (endD && endD > event_date) ? endD : null;
   patch.type = seriesToType(series); patch.is_content_event = seriesToType(series) === 'showcase';
   const cap = kpiVal('capacity'); patch.capacity = cap === '' ? null : Number(cap);
   const att = kpiVal('total_attendance'); patch.total_attendance = att === '' ? null : Number(att);
@@ -9268,12 +9280,14 @@ $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.close
 const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false, tab: 'calendar', calMonth: null, selDate: null };
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
-  const [ev, fin, mk, ig] = await Promise.all([
-    sb.from('events').select('id, name, series, type, status, event_date, capacity, total_attendance, is_public').is('deleted_at', null).order('event_date', { ascending: false }),
+  const [ev, fin, mk, ig, radio] = await Promise.all([
+    sb.from('events').select('id, name, series, type, status, event_date, end_date, capacity, total_attendance, is_public').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('v_kpi_event_financials').select('event_id, gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, total_expenses'),
     sb.from('expenses').select('event_id, amount').is('deleted_at', null).ilike('category', '%marketing%'),
     sb.from('metric_snapshots').select('metric_key, value, source').like('source', 'event:%'),
+    sb.from('sc_playlists').select('id, name, station_no, status, drop_date, slug, edition_name, edition_seq').not('drop_date', 'is', null),
   ]);
+  eventsDash.radio = (radio.data || []);
   if (ev.error) { $('eventsBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   const finBy = {}; (fin.data || []).forEach(r => { finBy[r.event_id] = r; });
   const mkBy = {}; (mk.data || []).forEach(x => { mkBy[x.event_id] = (mkBy[x.event_id] || 0) + Number(x.amount || 0); });
@@ -9331,7 +9345,7 @@ function renderEventsSnapshot() {
 function renderEventsDash() {
   const s = eventsDash;
   const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'];
+  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings', 'Growth & Networking'];
   const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'];
   const tab = (k, l) => `<button class="hub-btn ghost" data-ev-tab="${k}" style="${s.tab === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
   const anyFilter = s.q || s.series || s.status || s.year || s.completedOnly;
@@ -9365,26 +9379,49 @@ function renderEventsCalendar() {
   const [y, m] = s.calMonth.split('-').map(Number);
   const first = new Date(y, m - 1, 1), days = new Date(y, m, 0).getDate(), startDow = first.getDay();
   const monthLbl = first.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-  const byDay = {}; list.forEach(e => { const d = (e.event_date || '').slice(0, 10); if (d) (byDay[d] ||= []).push(e); });
+  // Events placed on every day they span (event_date..end_date). Radio drops too.
+  const byDay = {};
+  const push = (d, item) => { if (d) (byDay[d] ||= []).push(item); };
+  list.forEach(e => {
+    const start = (e.event_date || '').slice(0, 10); if (!start) return;
+    const end = (e.end_date || '').slice(0, 10);
+    if (end && end > start) {
+      for (let dt = new Date(start + 'T12:00:00'); dt.toISOString().slice(0, 10) <= end; dt.setDate(dt.getDate() + 1)) {
+        const ds = dt.toISOString().slice(0, 10);
+        push(ds, { kind: 'event', e, span: true, first: ds === start, last: ds === end });
+      }
+    } else push(start, { kind: 'event', e });
+  });
+  if (!s.series) (eventsDash.radio || []).forEach(r => push((r.drop_date || '').slice(0, 10), { kind: 'radio', r }));
   const today = new Date().toISOString().slice(0, 10);
+  const chipFor = (it) => {
+    if (it.kind === 'radio') {
+      const r = it.r;
+      return `<div class="cal-chip" data-ev-radiopop="${escapeHtml(r.id)}" title="Radio: ${escapeHtml(r.name || '')}" style="cursor:pointer;border-left:3px solid #a7e02e;background:#a7e02e1f;">📻 ${escapeHtml((r.edition_name ? 'EP' + (r.station_no ?? '') : (r.name || 'Radio')).slice(0, 18))}</div>`;
+    }
+    const e = it.e, c = calSeriesColor(e.series);
+    const pre = it.span ? (it.first ? '▐ ' : (it.last ? '▌ ' : '│ ')) : '';
+    return `<div class="cal-chip" data-ev-pop="${escapeHtml(e.id)}" title="${escapeHtml(e.name || '')}" style="cursor:pointer;border-left:3px solid ${c};background:${c}22;">${pre}${escapeHtml((e.name || 'event').slice(0, 18))}</div>`;
+  };
   const cells = [];
   for (let i = 0; i < startDow; i++) cells.push('<div></div>');
   for (let d = 1; d <= days; d++) {
     const ds = `${s.calMonth}-${String(d).padStart(2, '0')}`;
-    const items = (byDay[ds] || []).slice(0, 4).map(e => {
-      const c = calSeriesColor(e.series);
-      return `<div class="cal-chip" data-event-open="${escapeHtml(e.id)}" title="${escapeHtml(e.name || '')}" style="cursor:pointer;border-left:3px solid ${c};background:${c}22;">${escapeHtml((e.name || 'event').slice(0, 20))}</div>`;
-    }).join('');
-    const more = (byDay[ds] || []).length > 4 ? `<div class="cal-more">+${byDay[ds].length - 4}</div>` : '';
+    const dayItems = byDay[ds] || [];
+    const items = dayItems.slice(0, 4).map(chipFor).join('');
+    const more = dayItems.length > 4 ? `<div class="cal-more">+${dayItems.length - 4}</div>` : '';
     cells.push(`<div class="cal-cell${ds < today ? ' past' : ''}${ds === today ? ' today' : ''}${s.selDate === ds ? ' sel' : ''}" data-ev-day="${ds}"><div class="cal-dnum"><span>${d}</span></div>${items}${more}</div>`);
   }
   const hdr = CAL_DOW.map(dw => `<div class="li-sub" style="text-align:center;font-size:.68rem;">${dw}</div>`).join('');
-  const legend = Object.entries(CAL_SERIES_COLORS).map(([k, c]) => `<span style="font-size:.68rem;color:var(--dim);"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};vertical-align:middle;"></span> ${escapeHtml(k)}</span>`).join(' &nbsp; ');
+  const legend = Object.entries(CAL_SERIES_COLORS).map(([k, c]) => `<span style="font-size:.68rem;color:var(--dim);"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:${c};vertical-align:middle;"></span> ${escapeHtml(k)}</span>`).join(' &nbsp; ') + ' &nbsp; <span style="font-size:.68rem;color:var(--dim);"><span style="display:inline-block;width:9px;height:9px;border-radius:2px;background:#a7e02e;vertical-align:middle;"></span> 📻 Radio</span>';
   let sel = '';
   if (s.selDate && byDay[s.selDate]) {
     sel = `<div class="hub-sec-bar" style="margin-top:14px;"><h3 style="font-size:.9rem;">${escapeHtml(fmtDate(s.selDate))}</h3></div>
-      <div class="hub-list">${byDay[s.selDate].map(e => `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(e.name || '')}</strong> <span class="role-chip" style="cursor:default;background:${calSeriesColor(e.series)}33;">${escapeHtml(e.series || e.type || '')}</span> <span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span></div>
-        <span style="display:flex;gap:5px;"><button class="row-btn primary" data-event-open="${escapeHtml(e.id)}">Open</button><button class="row-btn" data-event-edit="${escapeHtml(e.id)}">Edit</button></span></div>`).join('')}</div>`;
+      <div class="hub-list">${byDay[s.selDate].map(it => it.kind === 'radio'
+        ? `<div class="hub-li"><div class="li-main"><strong>📻 ${escapeHtml(it.r.name || '')}</strong> <span class="role-chip" style="cursor:default;background:#a7e02e33;">${escapeHtml(RA_STATUS_LABEL[it.r.status] || it.r.status)}</span></div>
+          <span style="display:flex;gap:5px;"><button class="row-btn primary" data-ev-radiopop="${escapeHtml(it.r.id)}">Details</button></span></div>`
+        : `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(it.e.name || '')}</strong> <span class="role-chip" style="cursor:default;background:${calSeriesColor(it.e.series)}33;">${escapeHtml(it.e.series || it.e.type || '')}</span> <span class="badge badge-${escapeHtml((it.e.status || 'planning').toLowerCase())}">${escapeHtml((it.e.status || '').replace('_', ' '))}</span></div>
+          <span style="display:flex;gap:5px;"><button class="row-btn primary" data-ev-pop="${escapeHtml(it.e.id)}">Details</button></span></div>`).join('')}</div>`;
   }
   $('eventsView').innerHTML = `
     <div class="cal-toolbar">
@@ -9394,6 +9431,42 @@ function renderEventsCalendar() {
     </div>
     <div class="cal-grid">${hdr}${cells.join('')}</div>
     ${sel || '<div class="li-sub" style="margin-top:10px;">Click a day to see its events · click an event to open it.</div>'}`;
+}
+// Quick details popup — stay on the calendar; open the full page only if you want.
+function eventPopup(id) {
+  const e = (eventsDash.rows || []).find(x => x.id === id);
+  if (!e) { openEventHub(id); return; }
+  const f = e.f || {}, c = calSeriesColor(e.series);
+  const multi = e.end_date && e.end_date > e.event_date;
+  const done = (e.status || '') === 'completed';
+  const line = (l, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border);"><span class="li-sub">${l}</span><span style="font-weight:600;">${v}</span></div>` : '';
+  const r = eventResult(e);
+  const body = `
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px;">
+      <span class="role-chip" style="cursor:default;background:${c}33;color:var(--cream,#ede4d3);">${escapeHtml(e.series || e.type || '')}</span>
+      <span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span>
+      ${e.is_public ? '<span class="badge badge-public">🌐 Live</span>' : ''}</div>
+    ${line('📅 Date', multi ? escapeHtml(fmtDate(e.event_date)) + ' → ' + escapeHtml(fmtDate(e.end_date)) : escapeHtml(fmtDate(e.event_date)))}
+    ${line('🎫 Tickets', f.tickets_sold ? fmtNum(f.tickets_sold) : (done ? '0' : ''))}
+    ${line('👥 Attendance', e.total_attendance != null ? fmtNum(e.total_attendance) : '')}
+    ${line('💵 Revenue', f.gross_revenue ? money(f.gross_revenue) : (done ? money(0) : ''))}
+    ${line('📈 ' + r.lbl, r.html)}
+    <div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">
+      <button type="button" class="hub-btn ghost" data-event-edit="${escapeHtml(id)}">✎ Edit</button>
+      <button type="button" class="hub-btn ghost" data-event-money="${escapeHtml(id)}">💰 Money</button>
+    </div>`;
+  openKpi(e.name || 'Event', multi ? 'Multi-day event' : escapeHtml(fmtDate(e.event_date)), body, () => { closeKpi(); openEventHub(id); }, 'Open full page →');
+}
+function radioPopup(id) {
+  const r = (eventsDash.radio || []).find(x => x.id === id);
+  if (!r) return;
+  const line = (l, v) => v ? `<div style="display:flex;justify-content:space-between;gap:12px;padding:5px 0;border-top:1px solid var(--border);"><span class="li-sub">${l}</span><span style="font-weight:600;">${v}</span></div>` : '';
+  const body = `
+    <div style="margin-bottom:8px;"><span class="role-chip" style="cursor:default;background:#a7e02e33;color:var(--cream,#ede4d3);">${escapeHtml(RA_STATUS_LABEL[r.status] || r.status)}</span>${r.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);">✨ ${escapeHtml(r.edition_name)}</span>` : ''}</div>
+    ${line('📻 Episode', 'EP ' + (r.station_no ?? '—'))}
+    ${line('📅 Drops', escapeHtml(fmtDate(r.drop_date)))}
+    ${r.slug ? line('🌐 Page', `<a href="https://comewith.org/radio.html?s=${escapeHtml(r.slug)}" target="_blank" rel="noopener">radio.html ↗</a>`) : ''}`;
+  openKpi('📻 ' + (r.name || 'Radio episode'), 'Come With Radio', body, () => { closeKpi(); activateTab('ra-market'); setTimeout(() => { raState.ccMode = true; raState.ccOpen = id; loadRadioCC(); }, 160); }, 'Open in Artist Radio →');
 }
 function renderEventsOverview() {
   const list = eventsFiltered();
@@ -9477,6 +9550,8 @@ $('panel-events').addEventListener('change', (e) => {
 $('panel-events').addEventListener('click', (e) => {
   const tb = e.target.closest('[data-ev-tab]'); if (tb) { eventsDash.tab = tb.dataset.evTab; renderEventsDash(); return; }
   if (e.target.closest('[data-ev-add]')) { openLogEvent(); return; }
+  const evp = e.target.closest('[data-ev-pop]'); if (evp) { eventPopup(evp.dataset.evPop); return; }
+  const evr = e.target.closest('[data-ev-radiopop]'); if (evr) { radioPopup(evr.dataset.evRadiopop); return; }
   const mon = e.target.closest('[data-ev-mon]'); if (mon) { const [y, m] = eventsDash.calMonth.split('-').map(Number); const d = new Date(y, m - 1 + Number(mon.dataset.evMon), 1); eventsDash.calMonth = d.toISOString().slice(0, 7); eventsDash.selDate = null; renderEventsCalendar(); return; }
   if (e.target.closest('[data-ev-today]')) { eventsDash.calMonth = new Date().toISOString().slice(0, 7); eventsDash.selDate = new Date().toISOString().slice(0, 10); renderEventsCalendar(); return; }
   const day = e.target.closest('[data-ev-day]'); if (day && !e.target.closest('[data-event-open]')) { const ds = day.dataset.evDay; eventsDash.selDate = eventsDash.selDate === ds ? null : ds; renderEventsCalendar(); return; }
@@ -10874,7 +10949,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -10933,6 +11008,7 @@ document.addEventListener('click', async (e) => {
   const mv = t.closest('[data-ra-plmove]'); if (mv) { const [id, dir] = mv.dataset.raPlmove.split(':'); raMoveTrack(id, dir); return; }
   if (t.closest('[data-ra-rekordbox]')) { raOpenImport(); return; }
   if (t.closest('[data-ra-addmanual]')) { raOpenTrackEdit(null); return; }
+  if (t.closest('[data-ra-fsplaylist]')) { raOpenFsPlaylist(); return; }
   if (t.closest('[data-ra-sources]')) { raCheckSources(); return; }
   if (t.closest('[data-ra-bptoken]')) {
     const el = document.querySelector('#kpiModalBody [name="bp_token"]');
@@ -11465,6 +11541,7 @@ function raRenderPlaylist() {
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
       <a class="hub-mini" href="${ARTIST_ORIGIN}radio-workflow.html" target="_blank" rel="noopener" title="The weekly run, end to end — build → record → video → go live">🗺️ Weekly run</a>
       ${isWorking ? `<button class="hub-mini" data-ra-genweek title="Create this week's production tasks — playlist, record, post, recap — dated off the record day, on the shared board">🗓 Generate week's tasks</button>` : ''}
+      ${isWorking && tracks.length ? `<button class="hub-btn ghost" data-ra-fsplaylist title="Full-screen playlist manager — drag to reorder, rate energy, add comments">⛶ Manage full-screen</button>` : ''}
       <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
       ${sc.connected ? `<span class="li-sub">· SoundCloud: ${escapeHtml(sc.username || 'connected')}</span>` : ''}
     </div>
@@ -11490,6 +11567,94 @@ function raRenderPlaylist() {
       </div>`; }).join('')}</div>` : (isWorking ? '<div class="li-sub">Build a station: turn on “Producers only”, expand an artist’s 🎵 songs, and hit + add — or use <strong>＋ Add song</strong> for anything you bought, and <strong>🎛 Import Rekordbox order</strong> once the set is arranged.</div>' : '<div class="li-sub">No tracks on this one.</div>')}
   </div>`;
 }
+// ============================ FULL-SCREEN PLAYLIST MANAGER ==================
+// A big, distraction-free view of the working station: drag to reorder, rate
+// energy 1–5, jot a comment per track, play, remove, add. Reuses the same DB ops
+// as the inline builder (raMoveTrack/raSetEnergy/raSaveNote/raRemoveTrack) and
+// re-renders itself via raAfterTrackOp while it's open.
+let raFsDragId = null;
+function raOpenFsPlaylist() {
+  if (!raState.playlist) return;
+  let ov = document.getElementById('raFsOverlay');
+  if (!ov) {
+    ov = document.createElement('div'); ov.id = 'raFsOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:9000;background:var(--bg,#140a17);display:none;flex-direction:column;';
+    ov.innerHTML = `<div id="raFsHead" style="flex:0 0 auto;padding:12px 16px;border-bottom:1px solid var(--border-strong);display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--surface-2);"></div>
+      <div id="raFsBody" style="flex:1 1 auto;overflow:auto;padding:12px 16px 60px;"></div>`;
+    document.body.appendChild(ov);
+    ov.addEventListener('click', raFsClick);
+    ov.addEventListener('change', (e) => { const nt = e.target.closest('[data-ra-note]'); if (nt) { raSaveNote(nt.dataset.raNote, nt.value.trim()); const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(nt.dataset.raNote)); if (tr) tr.comment = nt.value.trim(); } });
+    ov.addEventListener('dragstart', (e) => { const r = e.target.closest('[data-fs-row]'); if (r) { raFsDragId = r.dataset.fsRow; setTimeout(() => r.classList.add('fs-dragging'), 0); } });
+    ov.addEventListener('dragend', (e) => { const r = e.target.closest('[data-fs-row]'); if (r) r.classList.remove('fs-dragging'); raFsDragId = null; });
+    ov.addEventListener('dragover', (e) => { e.preventDefault(); });
+    ov.addEventListener('drop', (e) => { e.preventDefault(); const r = e.target.closest('[data-fs-row]'); if (r && raFsDragId && r.dataset.fsRow !== raFsDragId) raFsReorder(raFsDragId, r.dataset.fsRow); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && document.getElementById('raFsOverlay')?.classList.contains('on')) raCloseFs(); });
+  }
+  ov.classList.add('on'); ov.style.display = 'flex';
+  raRenderFsBody();
+}
+function raCloseFs() { const ov = document.getElementById('raFsOverlay'); if (ov) { ov.classList.remove('on'); ov.style.display = 'none'; } renderRaMarket(); }
+function raRenderFsBody() {
+  const pl = raState.playlist; if (!pl) return;
+  const tracks = pl.tracks || [];
+  const totalMin = Math.round(tracks.reduce((s, t) => s + (t.duration_ms || 0), 0) / 60000);
+  const head = document.getElementById('raFsHead'); if (head) head.innerHTML = `
+    <strong style="font-size:1.05rem;">🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong>
+    <span class="li-sub">${tracks.length} songs · ${totalMin} min</span>
+    <span class="li-sub" style="color:var(--dim);">— drag ⠿ to reorder</span>
+    <span style="margin-left:auto;display:flex;gap:8px;">
+      <button class="hub-btn ghost" data-fs-add>＋ Add song</button>
+      <button class="hub-btn" data-fs-close>✓ Done</button></span>`;
+  const body = document.getElementById('raFsBody'); if (!body) return;
+  body.innerHTML = tracks.map((t, i) => {
+    const meta = [t.camelot ? t.camelot + (t.bpm ? ' · ' + t.bpm : '') : (t.bpm ? t.bpm + ' bpm' : ''), Math.round((t.duration_ms || 0) / 60000) + 'min', (t.genres || []).slice(0, 2).join(', ')].filter(Boolean).join(' · ');
+    return `<div data-fs-row="${t.id}" draggable="true" style="display:flex;gap:12px;align-items:flex-start;padding:11px 12px;margin-bottom:7px;border:1px solid var(--border);border-radius:10px;background:var(--card,#20142a);">
+      <span style="cursor:grab;font-size:1.2rem;color:var(--faint);user-select:none;padding-top:2px;" title="Drag to reorder">⠿</span>
+      <span style="font-family:var(--mono,monospace);font-weight:700;color:var(--faint);min-width:24px;padding-top:3px;">${i + 1}</span>
+      <div style="flex:1;min-width:0;">
+        <div style="font-weight:600;">${escapeHtml(t.title || '')}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:0 5px;font-size:.55rem;${t.source === 'dj' ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}">${t.source === 'dj' ? '🎧 DJ' : t.source === 'rekordbox' ? '🎛' : t.source === 'beatport' ? '🛒' : '✎'}</span>` : ''}</div>
+        <div class="li-sub">${escapeHtml(t.artist_name || '')}${meta ? ' · ' + escapeHtml(meta) : ''}</div>
+        <div style="display:flex;gap:5px;align-items:center;margin-top:7px;flex-wrap:wrap;">
+          <span class="li-sub" title="Your 1–5 read on where this sits in a set. Click again to clear.">⚡</span>
+          ${[1, 2, 3, 4, 5].map(n => `<button class="hub-mini${t.energy === n ? ' on' : ''}" data-ra-energy="${t.id}:${n}" style="${t.energy === n ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}padding:2px 9px;">${n}</button>`).join('')}
+          <input class="modal-input" data-ra-note="${t.id}" value="${escapeHtml(t.comment || '')}" placeholder="comment — energy, mix notes, where it fits…" style="flex:1 1 260px;font-size:.8rem;padding:5px 9px;margin-left:6px;">
+        </div>
+      </div>
+      <span style="display:flex;gap:5px;flex-shrink:0;">
+        ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}" title="Play">▶</button>` : ''}
+        <button class="hub-mini" data-ra-edittrack="${t.id}" title="Edit details">✎</button>
+        <button class="hub-mini" data-fs-up="${t.id}" title="Move up">↑</button>
+        <button class="hub-mini" data-fs-down="${t.id}" title="Move down">↓</button>
+        <button class="hub-mini" data-fs-remove="${t.id}" title="Remove — logged as passed">✕</button>
+      </span></div>`;
+  }).join('') || '<div class="li-sub" style="padding:20px;text-align:center;">No songs yet — hit ＋ Add song, or add from the artist list.</div>';
+}
+function raFsClick(e) {
+  if (e.target.closest('[data-fs-close]')) { raCloseFs(); return; }
+  if (e.target.closest('[data-fs-add]')) { raOpenTrackEdit(null); return; }
+  const en = e.target.closest('[data-ra-energy]'); if (en) { const [id, n] = en.dataset.raEnergy.split(':'); raSetEnergy(id, Number(n)); return; }
+  const ed = e.target.closest('[data-ra-edittrack]'); if (ed) { raOpenTrackEdit(ed.dataset.raEdittrack); return; }
+  const tp = e.target.closest('[data-ra-trackplay]'); if (tp) { raPlay(tp.dataset.raTrackplay, tp.dataset.raName); return; }
+  const up = e.target.closest('[data-fs-up]'); if (up) { raMoveTrack(up.dataset.fsUp, 'up'); return; }
+  const dn = e.target.closest('[data-fs-down]'); if (dn) { raMoveTrack(dn.dataset.fsDown, 'down'); return; }
+  const rm = e.target.closest('[data-fs-remove]'); if (rm) { if (confirm('Remove this song? It’s logged as passed (carries into next week).')) raRemoveTrack(rm.dataset.fsRemove); return; }
+}
+// Drag-drop reorder: move dragId to just before targetId, then renumber sort.
+async function raFsReorder(dragId, targetId) {
+  const ts = (raState.playlist?.tracks || []).slice();
+  const from = ts.findIndex(t => String(t.id) === String(dragId));
+  const to = ts.findIndex(t => String(t.id) === String(targetId));
+  if (from < 0 || to < 0 || from === to) return;
+  const [moved] = ts.splice(from, 1);
+  ts.splice(to, 0, moved);
+  raState.playlist.tracks = ts;           // optimistic
+  raRenderFsBody();
+  const updates = ts.map((t, i) => sb.from('sc_playlist_tracks').update({ sort: (i + 1) * 10 }).eq('id', t.id));
+  const res = await Promise.all(updates);
+  if (res.some(r => r.error)) toast('Could not save the new order', 'err');
+  await raLoadPlaylist(); raRenderFsBody();
+}
+
 // ============================ RADIO CONTROL CENTER (118) ====================
 // One view of every episode: status, dates, links, its production tasks, and a
 // team-notes thread — with the actions (details, schedule, generate/create
@@ -12077,7 +12242,7 @@ async function raRemoveTrack(id) {
   const t = (raState.playlist?.tracks || []).find(x => x.id === id);
   await sb.from('sc_playlist_tracks').delete().eq('id', id);
   await raLogPassed(t);
-  await raLoadPlaylist(); renderRaMarket();
+  await raLoadPlaylist(); raAfterTrackOp();
 }
 async function raMoveTrack(id, dir) {
   const ts = raState.playlist.tracks; const i = ts.findIndex(t => t.id === id); const j = dir === 'up' ? i - 1 : i + 1;
@@ -12086,7 +12251,7 @@ async function raMoveTrack(id, dir) {
     sb.from('sc_playlist_tracks').update({ sort: ts[j].sort }).eq('id', ts[i].id),
     sb.from('sc_playlist_tracks').update({ sort: ts[i].sort }).eq('id', ts[j].id),
   ]);
-  await raLoadPlaylist(); renderRaMarket();
+  await raLoadPlaylist(); raAfterTrackOp();
 }
 async function raClearPlaylist() {
   if (!confirm('Clear all songs from your station?')) return;
@@ -12645,9 +12810,15 @@ async function raSetEnergy(id, n) {
   const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(id));
   const next = tr && tr.energy === n ? null : n;     // click the same number to clear
   if (tr) tr.energy = next;
-  renderRaMarket();
+  raAfterTrackOp();
   const { error } = await sb.from('sc_playlist_tracks').update({ energy: next, notes_at: new Date().toISOString() }).eq('id', id);
   if (error) toast('Could not save energy: ' + error.message, 'err');
+}
+// After a track op, refresh whichever view is showing — the full-screen manager
+// if it's open, otherwise the normal panel.
+function raAfterTrackOp() {
+  if (document.getElementById('raFsOverlay')?.classList.contains('on')) raRenderFsBody();
+  else renderRaMarket();
 }
 async function raSaveNote(id, text) {
   const tr = (raState.playlist?.tracks || []).find(x => String(x.id) === String(id));
@@ -14723,6 +14894,8 @@ const CAL_SERIES_COLORS = {
   // Bookings (we're the booked talent, e.g. July Jewels) gets a distinct
   // magenta — the old blue-grey was too close to the new "ours elsewhere" teal.
   'Bookings': '#C264A0',
+  // Growth & Networking (Keith attending industry events to DJ/practice/network) — teal.
+  'Growth & Networking': '#3E9AA8',
 };
 const calSeriesColor = (series) => CAL_SERIES_COLORS[series] || '#8a8a8a';
 const CAL_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
