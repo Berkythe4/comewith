@@ -74,7 +74,16 @@ Deno.serve(async (req) => {
           ...p,
           track_count: agg[id]?.n || 0,
           total_min: Math.round((agg[id]?.ms || 0) / 60000),
-          artwork_url: p.cover_url || agg[id]?.art || stationArt,
+          // Episode cover -> SHOW artwork -> a track's cover, in that order. Track
+          // art is the last resort only: an episode without its own cover must fall
+          // back to "Come With Radio" branding, not to whatever song happens to sit
+          // at sort 10. Getting this order wrong put a SoundCloud single's cover on
+          // the homepage lead card for EP1 (2026-07-30). radio.html's episode page
+          // already used cover_url || station_artwork — this makes the hub, the
+          // all-episodes grid and the homepage agree with it.
+          artwork_url: p.cover_url || stationArt || agg[id]?.art || null,
+          // Exposed so a client can tell a real cover from the branded fallback.
+          has_own_cover: !!p.cover_url,
         })),
         next_drop: nd || null,
       }), { headers: JH });
