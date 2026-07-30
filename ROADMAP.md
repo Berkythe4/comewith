@@ -878,3 +878,74 @@ inbound address (no mailbox) → an Email Worker POSTs to
 `…/functions/v1/ingest-email?key=<INGEST_SECRET>`. Template + parser already
 support EVENT / EXPENSE / TASK. Function + secret remain in place; just wire an
 inbound route to activate. See `supabase/functions/ingest-email/index.ts`.
+
+---
+
+## Reconciled 2026-07-30 — EP 2 release, Come With Radio module, shared-song-pool
+
+Session ran with **Martin** (sub_admin) rather than Keith. Standing asks captured in
+memory: give a severity read before structural changes; reproduce artist names
+byte-for-byte; flag a 0-track/low-follower SoundCloud match instead of storing it.
+
+**Shipped to prod**
+
+- **Migration 134** — nav label `Artist Radio` → **Come With Radio** (module key stays
+  `ra-market`; role grants and the workflow map reference it).
+- **Migration 135** — trigger blocking track INSERTs on a **live/archived** episode. A
+  trigger, not RLS, because `dj-station` and `sc-connect` insert with the service role
+  and bypass RLS. Removing/editing stays allowed — that is the fix-a-mistake path.
+- **Migration 136** — shared song pool: `sc_playlist_tracks.added_by` (default
+  `auth.uid()`) + `sc_track_marks` (claimed/maybe/veto, one row per person, admins read
+  all / write only their own). Episode-scoped by choice.
+- **`radio-publish-due` edge function (new)** — the scheduled release now oembeds the
+  mix, flips `sharing=public` when needed, then publishes. pg_cron repointed to it;
+  `radio-publish-backstop` keeps the SQL path as a safety net. This is the EP 1
+  dead-embed fix.
+- **`sc-connect` v15** — action `find_mix` retrieves the mix from `/me/tracks`
+  (including private uploads) by runtime match. Pasting a link is now the fallback.
+- **`get-station` v14** — episode-list artwork order fixed to
+  `cover_url → SHOW artwork → track art`; a track's cover was appearing as the
+  homepage lead card.
+- **`dj-station` v5** + dashboard — songs-not-DJ-sets enforced at READ time.
+
+**Come With Radio module (dashboard)**
+
+Control Center is now the landing view. The ⛶ Arrange pop-out is a rekordbox-style
+track table — sticky columns, Camelot tinted by wheel position, energy as a star
+rating, **resizable columns persisted in localStorage** — plus "Added by" and "Calls"
+columns for the shared pool. Beatport panel gained a Network-tab token walkthrough.
+
+**Elements pool clean-up**
+
+`elements_tool.py` was writing DJ sets as songs (45s floor, no ceiling): 251 rows
+across 73 artists. Rule extracted to `elements_sc.py` and now enforces length +
+ownership + **publisher credit** (`publisher_metadata.artist`, which caught
+`LEVEL UP - The Other Side` sitting on Zingara's profile) + **duplicate collapse by
+clout** (likes+reposts+comments). 157 artists re-pulled. KETTAMA was matched to a
+9-follower impostor — real profile pinned.
+
+**Beatport**
+
+The cart API **works** (14-track cart filled). Contract recorded in the APIs map and
+memory; the map's "NO purchase API" claim is corrected.
+
+**EP 2 released** — 19 tracks, video at `Radio/Week 2/CWR_Ep2_YouTube.mp4`, tracklist
+synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
+`Radio/NOTES_WEEKLY_RELEASE.md` is the new runbook.
+
+**Open / next**
+
+- **Supabase auth email is capped at 2/hour** — no custom SMTP. This blocked Martin's
+  magic link AND silently throttles listener signups. Needs Resend SMTP in the
+  Supabase dashboard, then raise `rate_limit_email_sent`. **Highest priority.**
+- Marks show only in ⛶ Arrange — not the main tracklist or `dj.html`.
+- 13 Elements artists have suspicious 0-track SoundCloud matches (MLE, Cloud
+  Conductor, Diis, Funky Pickles, Elkind, DJ Dad + 7 low-follower).
+- Version variants (`Toys` vs `Toys (Extended)`) deliberately NOT collapsed — 306 rows;
+  awaiting a decision.
+- EP 2 artwork is portrait 3:4, so covers letterbox inside the square. Square export
+  wanted.
+- EP 2 auto-post has no caption — **left to Janelle**. Instagram posting still isn't
+  wired, so social posts are reminders.
+- Beatport metadata write-back for stations generally; 2 EP 2 tracks have no release
+  date (a DJ edit and a Bandcamp-only remix — genuinely absent).

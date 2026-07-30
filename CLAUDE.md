@@ -139,6 +139,40 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **Phase 1.1/2 pending:** YouTube auto-post at finalize; listener "export my
   saved playlist to my own SoundCloud" (OAuth per listener — designed, not built).
 
+## Weekly radio release (see `Radio/NOTES_WEEKLY_RELEASE.md`)
+
+- **A private SoundCloud track will NOT embed.** `oembed` 404s on it, so the site's
+  player renders nothing — and a `200` on the track PAGE proves nothing. EP 1 shipped
+  with a dead embed this way. The link being saved early is fine; the track must be
+  **public at publish time**.
+- **The scheduled release goes through the `radio-publish-due` EDGE FUNCTION**, not
+  the SQL function directly — SQL can't make HTTP calls, so it could never check the
+  embed. It oembeds, flips `sharing=public` if needed, then publishes. A SoundCloud
+  failure NEVER blocks the drop; it's written to `station_notes`. `cron
+  radio-publish-backstop` still calls the SQL path so a broken function can't hold a
+  release.
+- **`/resolve?url=` does not return a PRIVATE track** from its plain permalink. Only
+  `/me/tracks` lists an account's own private uploads. Env: `SC_CLIENT_ID` /
+  `SC_CLIENT_SECRET`.
+- **Never ask for a SoundCloud link** — retrieve it (`sc-connect` action `find_mix`,
+  or ☁ Find my upload). A private upload has no shareable URL to give.
+- **The Rekordbox export is the tracklist, not the dashboard.** The dashboard holds
+  what was planned; the export holds what was played (EP 2: 19 planned vs 23 played,
+  different order). Build cues from the export, then sync the dashboard. Export is
+  UTF-16, tab separated, columns located BY HEADER NAME, and the Artist column is
+  sometimes empty with the artist folded into the title.
+- **Rekordbox owns bpm/key.** Store metadata only fills what's missing.
+- **A missing cues column fails silently.** `render_card` needs `genres`,
+  `release_date`, `show_date`, `show_venue` or that part of the card just isn't drawn.
+- **Verify a render by pulling a real frame** (`ffmpeg -sseof -1.2 … -frames:v 1`),
+  never by reading the code — a hardcoded stage cap silently dropped a new closing
+  line from a finished 65-minute video.
+- **Beatport access tokens live 600s FROM MINT**, not from copy; take one off a live
+  request header, not `localStorage`. The **cart API works** — see the APIs map for
+  the item shape.
+- Episode material lives in **`Radio/Week N/`**, MP4 included. Show name in the video
+  header is **Come With NYC Radio**.
+
 ## Media / recap links (must be publicly embeddable)
 
 - **Validate every recap/media URL through `resolve-media` before storing.**
