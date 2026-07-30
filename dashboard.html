@@ -11687,9 +11687,19 @@ function raRenderArtistTracks(key) {
   if (!c.ok) return '<div class="li-sub" style="padding:6px 0;">SoundCloud profile unavailable (renamed or private).</div>';
   if (!c.songs || !c.songs.length) return `<div class="li-sub" style="padding:6px 0;">No original songs — this artist only posts DJ sets (${c.set_count || 0} sets). They're a DJ, not a producer.</div>`;
   const inPl = new Set((raState.playlist?.tracks || []).map(t => t.sc_track_id));
-  const songs = [...c.songs].sort((a, b) => raState.songSort === 'popular'
+  // SONGS ONLY, re-checked at read time. `songs` was filtered when the artist was
+  // scanned, but with whatever maxMin was set THEN — the 2026-07-28 Elements batch
+  // ran with it wide open, so 73 artists have multi-hour DJ sets cached as songs
+  // (Otternonsense 279 min). Filtering here means the slider actually governs what
+  // you see, and a bad scan can't put a mix in the crate.
+  const capMs = Math.max(1, raState.maxMin || 15) * 60000;
+  const allSongs = [...c.songs];
+  const hiddenMixes = allSongs.filter(s => s.duration_ms && s.duration_ms > capMs).length;
+  const songs = allSongs.filter(s => !s.duration_ms || s.duration_ms <= capMs)
+    .sort((a, b) => raState.songSort === 'popular'
     ? (b.playback_count || 0) - (a.playback_count || 0)
     : (b.created_at || '').localeCompare(a.created_at || '')); // recent
+  if (!songs.length && hiddenMixes) return `<div class="li-sub" style="padding:6px 0;">All ${hiddenMixes} cached upload${hiddenMixes === 1 ? '' : 's'} for this artist ${hiddenMixes === 1 ? 'is' : 'are'} longer than ${raState.maxMin || 15} min — DJ sets, not songs. Re-scan them or raise the length cap to see them.</div>`;
   const sortBtn = (v, l) => `<button class="hub-mini" data-ra-songsort="${v}" style="${raState.songSort === v ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
   // Say so when SoundCloud's own profile claims more tracks than it will serve.
   // Silence here is what let "18 songs" look like the whole catalogue.
@@ -11708,7 +11718,7 @@ function raRenderArtistTracks(key) {
     <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;"><span class="li-sub">Sort:</span>${sortBtn('recent', 'Recent')}${sortBtn('popular', 'Popular')}
       ${played ? `<button class="hub-mini" data-ra-hideplayed style="${raState.hidePlayed ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}" title="Hide songs you already played on the radio">${raState.hidePlayed ? '👁 show' : '🙈 hide'} ${played} played</button>` : ''}
       <button class="hub-mini" data-ra-bpcat="${escapeHtml(c.username || '')}" data-ra-bpkey="${escapeHtml(key)}" title="Ask Beatport what this artist has released — catches the label releases SoundCloud won't serve">🛒 Beatport catalogue</button>
-      <span class="li-sub" style="margin-left:auto;"${shortfall ? ` title="SoundCloud's profile says ${c.sc_track_count} tracks, but it only serves ${songs.length + (c.set_count || 0)} to a logged-out reader — the rest are label-restricted or region-locked and no amount of paging reaches them. Not a bug on our side; check Beatport for the full catalogue."` : ''}>${songs.length} songs${shortfall ? ` <span style="color:var(--gold,#B5791F)">· SoundCloud lists ${c.sc_track_count}</span>` : ''}</span></div>
+      <span class="li-sub" style="margin-left:auto;"${shortfall ? ` title="SoundCloud's profile says ${c.sc_track_count} tracks, but it only serves ${songs.length + (c.set_count || 0)} to a logged-out reader — the rest are label-restricted or region-locked and no amount of paging reaches them. Not a bug on our side; check Beatport for the full catalogue."` : ''}>${songs.length} songs${hiddenMixes ? ` <span style="color:var(--dim)" title="Cached uploads longer than ${raState.maxMin || 15} min — DJ sets, not songs. Hidden so they can't end up in the crate.">· ${hiddenMixes} mix${hiddenMixes === 1 ? '' : 'es'} hidden</span>` : ''}${shortfall ? ` <span style="color:var(--gold,#B5791F)">· SoundCloud lists ${c.sc_track_count}</span>` : ''}</span></div>
     <!-- Song rows get their own .ra-zebra container so the stripe counts songs
          only — inside the outer div the sort bar would be child 1 and offset
          every stripe by one. The rows carry 6px of side padding (they had none)

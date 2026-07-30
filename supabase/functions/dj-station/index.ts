@@ -9,6 +9,12 @@
 // Body: { token: string }
 import { createClient } from "npm:@supabase/supabase-js@2";
 
+// A "song" is at most this long; anything above it is a DJ set / mix / livestream.
+// Same 15-minute contract sc-enrich and sc-tracks document, enforced here at read
+// time because the cache holds whatever cap was in force when each artist was
+// scanned. Keep these in step if the contract ever changes.
+const SONG_MAX_MS = 15 * 60 * 1000;
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -87,7 +93,19 @@ Deno.serve(async (req) => {
     for (let i = 0; i < scUrls.length; i += 200) {
       const { data: cache } = await admin.from("sc_artist_cache")
         .select("soundcloud, songs, is_producer, followers").in("soundcloud", scUrls.slice(i, i + 200));
-      (cache || []).forEach((c) => { songByUrl[norm(c.soundcloud)] = (c.songs || []).slice(0, 12).map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url })); });
+      // SONGS ONLY — never DJ sets. sc-enrich already applies this cut when it
+      // scans, but the cap it used is whatever maxMinutes the operator had set at
+      // the time: the Elements lineup was scanned on 2026-07-28 with it wide open,
+      // so 73 artists have multi-HOUR uploads sitting in `songs` (Otternonsense
+      // 279 min, Cloonee 238). Re-apply the cut at READ time so a bad scan can
+      // never put a mix in front of the DJ. Duration is the real distinguisher —
+      // mixes are still kind=track on SoundCloud.
+      (cache || []).forEach((c) => {
+        songByUrl[norm(c.soundcloud)] = (c.songs || [])
+          .filter((s: any) => !s.duration_ms || Number(s.duration_ms) <= SONG_MAX_MS)
+          .slice(0, 12)
+          .map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url }));
+      });
     }
     // A sub-group (e.g. the festival's Disco Den stage) so the DJ can sort it out.
     const discoSet = new Set((Array.isArray(params.disco) ? params.disco : []).map((n: string) => n));
