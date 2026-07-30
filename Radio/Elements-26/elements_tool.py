@@ -4,6 +4,8 @@
 # to their day's lineup. Also renames Day N -> Ep N.
 import os, json, re, urllib.request, urllib.parse, unicodedata, time, sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from elements_sc import fetch_songs, SONG_MAX_MS   # the songs-not-sets rule
 ROOT = r"C:\Users\Admin\Documents\Comewith"
 env = {}
 for line in open(os.path.join(ROOT, ".env"), encoding="utf-8"):
@@ -51,20 +53,12 @@ def match(name):
     ex = [c for c in js.get("collection", []) if q in [strip_affix(norm(c.get(f) or ""), q) for f in ("permalink","username","full_name")]]
     ex.sort(key=lambda c: (not c.get("verified"), -(c.get("followers_count") or 0), -(c.get("track_count") or 0)))
     return ex[0] if ex else None
-def tracks(uid):
-    u = f"{api}/users/{uid}/tracks?limit=20&client_id={cid}"
-    try: js = json.load(urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=15))
-    except Exception: return []
-    out = []
-    for t in js.get("collection", []):
-        if t.get("kind") != "track": continue
-        d = t.get("duration") or 0
-        if d < 45000: continue
-        out.append({"sc_track_id": str(t["id"]), "title": t.get("title"), "permalink_url": t.get("permalink_url"),
-                    "duration_ms": d, "playback_count": t.get("playback_count") or 0,
-                    "created_at": t.get("created_at"), "artwork_url": t.get("artwork_url")})
-        if len(out) >= 15: break
-    return out
+# SONGS, NOT DJ SETS — one shared definition, in elements_sc.py, matching the
+# contract sc-enrich enforces (45s <= d <= 15 min). This used to be inline here
+# with only the 45-second floor and no ceiling, which put 251 multi-hour sets in
+# sc_artist_cache as "songs" on 2026-07-28.
+def tracks(uid, want=15):
+    return fetch_songs(api, cid, uid, want=want)
 
 # unique names, remember all days each belongs to
 name_days = {}
@@ -80,15 +74,15 @@ for nm in name_days:
     if not m: print(f"  · {nm}: no match"); continue
     scu = (m.get("permalink_url") or "").replace("://www.", "://")
     if not scu: continue
-    songs = tracks(m["id"]); time.sleep(0.15)
+    songs, set_count = tracks(m["id"]); time.sleep(0.15)
     matched[nm] = scu; hit += 1
     key_norm = scu.strip().lower().replace("://www.", "://").rstrip("/").split("?")[0]
     city = (m.get("city") or "").replace("'", "''") or None
     # upsert sc_artist_cache
     sj = json.dumps(songs).replace("'", "''")
-    sql(f"""insert into sc_artist_cache (soundcloud, sc_user_id, username, avatar_url, city, followers, is_producer, song_count, sc_track_count, songs, ok, scanned_at)
-      values ('{esc(key_norm)}','{m['id']}','{esc(m.get('username') or '')}',{('null' if not m.get('avatar_url') else "'"+esc(m['avatar_url'])+"'")},{('null' if not city else "'"+city+"'")},{m.get('followers_count') or 0},{str(len(songs)>0).lower()},{len(songs)},{m.get('track_count') or 0},'{sj}'::jsonb,true,now())
-      on conflict (soundcloud) do update set songs=excluded.songs, song_count=excluded.song_count, followers=excluded.followers, city=excluded.city, is_producer=excluded.is_producer, scanned_at=now();""")
+    sql(f"""insert into sc_artist_cache (soundcloud, sc_user_id, username, avatar_url, city, followers, is_producer, song_count, set_count, sc_track_count, songs, ok, scanned_at)
+      values ('{esc(key_norm)}','{m['id']}','{esc(m.get('username') or '')}',{('null' if not m.get('avatar_url') else "'"+esc(m['avatar_url'])+"'")},{('null' if not city else "'"+city+"'")},{m.get('followers_count') or 0},{str(len(songs)>0).lower()},{len(songs)},{set_count},{m.get('track_count') or 0},'{sj}'::jsonb,true,now())
+      on conflict (soundcloud) do update set songs=excluded.songs, song_count=excluded.song_count, set_count=excluded.set_count, followers=excluded.followers, city=excluded.city, is_producer=excluded.is_producer, scanned_at=now();""")
     # upsert ra_artists (source='elements'; no next_event_date so it stays out of the NYC scope)
     slug = re.sub(r'[^a-z0-9]+','-', nm.lower()).strip('-')
     gj = None
