@@ -134,7 +134,34 @@ Current closing tease: `TEASE_LINE` in `render_episode.py`, one line to edit.
 
 ---
 
-## 6 · The SoundCloud link is RETRIEVED, never pasted
+## 6 · The SoundCloud link, and why the embed died on EP 1
+
+**The link is never the problem — the track's PRIVACY is.** A permalink saved while
+the track is private stays correct forever; what fails is `oembed`, which 404s on a
+private track, so the site's player renders nothing. EP 1 shipped with a dead embed
+for exactly this reason: link saved early, page auto-published on schedule, nobody
+ever checked the embed.
+
+`oembed` is the ground truth. A `200` on the track PAGE means nothing —
+`soundcloud.com/comewithnyc/cwr_ep2-073026` answered 200 while its oembed 404'd.
+
+**The scheduled path now handles it.** pg_cron calls the edge function
+**`radio-publish-due`** (not the SQL function directly, which cannot make HTTP calls):
+
+1. oembed the stored URL — if it answers, change nothing
+2. if not, find the track on the account and flip `sharing=public`, then re-check
+3. if there's no URL at all, find the upload by title/runtime and store it
+4. publish either way — a SoundCloud problem must never hold the drop; the failure is
+   written to `station_notes` so it is visible instead of silent
+
+`cron.radio-publish-backstop` calls the SQL function on a slower cadence, so a broken
+edge function delays the SoundCloud fix but never blocks the release.
+
+**API trap:** `/resolve?url=` does **NOT** return a private track from its plain
+permalink. Only `/me/tracks` lists an account's private uploads — match on permalink
+there as the fallback. Env names are `SC_CLIENT_ID` / `SC_CLIENT_SECRET`.
+
+## 6b · Retrieving a link by hand
 
 **Standard as of 2026-07-30.** A private upload has no shareable URL, so asking for
 one was always the wrong ask. `sc-connect` action **`find_mix`** reads
