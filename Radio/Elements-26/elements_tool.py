@@ -28,7 +28,7 @@ LINEUP = {
  "Thu": ["Sunni D","Jack What?","Ardalan","San Pacho","Mersiv","Chris Lorenzo","Wooli","Crankdat","Saka","Austeria"],
  "Fri": ["Chris Lake","Above & Beyond","It's Murph","Jigitz","Kaleena Zanders","Dirtwire","Excision","Crankdat","Atliens","Zingara",
    "Ganja White Night","Mersiv","Dice Man","Mikayli","Mickman","Big Gigantic","Gorillat","Ivy Lab","Effin","Wonkywilla","Subfeels",
-   "Rudashi","DJ Shakey","Illexxandra","Kattana","Jelly Bean","Boys Noize","MCR-T","Kettama","X Club","Dreya V","Bardo","Ammo Amor","Gavin Blac","Fable"],
+   "Rudashi","DJ Shakey","Illexxandra","Kattana","Jelly Bean","Boys Noize","MCR-T","KETTAMA","X Club","Dreya V","Bardo","Ammo Amor","Gavin Blac","Fable"],
  "Sat": ["Subtronics","Of The Trees","Level Up","Clozee","Opiuo","Probcause","Skysia","Cloonee","Matroda","Ayybo","Westend","Louis The Child",
    "9b49","Earth Signs","Alec","Ecamp","Svdden Death","Ray Volpe","Hol!","Hedex","Sippy","Nikita The Wicked","MLE","MPH","Henry Pope","DCAL",
    "Biscits","Linska","Discip","Roddy Lima","Papyon","A-Trak","Sirens","Refrakt","Eric Remy"],
@@ -45,8 +45,19 @@ def strip_affix(n, q):
         if len(n) > len(q) and n.startswith(s) and n[len(s):] == q: return q
         if len(n) > len(q) and n.endswith(s) and n[:-len(s)] == q: return q
     return n
+# Profiles the name matcher CANNOT reach, because the artist appended a tagline to
+# their SoundCloud display name. "KETTAMA (G-TOWN FOREVER)" normalises to
+# kettamagtownforever, so an exact-name match instead found a 9-follower, 0-track
+# impostor at /kettama and that lineup act had an empty crate (caught 2026-07-30).
+# Value = the handle to pin. We reference him as KETTAMA — the tagline is not his name.
+HANDLE_PINS = {"kettama": "kettamabro"}
 def match(name):
     q = norm(name)
+    pin = HANDLE_PINS.get(q)
+    if pin:
+        u = f"{api}/resolve?url=https://soundcloud.com/{pin}&client_id={cid}"
+        try: return json.load(urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=15))
+        except Exception: pass          # fall through to the normal search
     u = f"{api}/search/users?q={urllib.parse.quote(name)}&limit=8&client_id={cid}"
     try: js = json.load(urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=15))
     except Exception: return None
@@ -58,9 +69,11 @@ def match(name):
 # with only the 45-second floor and no ceiling, which put 251 multi-hour sets in
 # sc_artist_cache as "songs" on 2026-07-28.
 def tracks(uid, want=15, names=()):
-    songs, sets, dropped = fetch_songs(api, cid, uid, artist_names=names, want=want)
+    songs, sets, dropped, dupes = fetch_songs(api, cid, uid, artist_names=names, want=want)
     for title, who in dropped:
         print(f"      skipped (credited to {who}): {title}")
+    for lost, kept in dupes:
+        print(f"      duplicate, kept the higher-clout upload: {lost!r} -> {kept!r}")
     return songs, sets
 
 # unique names, remember all days each belongs to
@@ -80,6 +93,12 @@ for nm in name_days:
     # Pass every name this profile goes by so a collaboration isn't mistaken for
     # someone else's release (nm = lineup name, username = SoundCloud handle).
     songs, set_count = tracks(m["id"], names=(nm, m.get("username") or "")); time.sleep(0.15)
+    # A booked festival artist with no tracks or a handful of followers is almost
+    # always a WRONG match, not an artist without music. Say so; do not bury it.
+    if not (m.get("track_count") or 0) or (m.get("followers_count") or 0) < 500:
+        print(f"  ?? CHECK {nm}: matched {m.get('username')!r} "
+              f"({m.get('followers_count') or 0} followers, {m.get('track_count') or 0} tracks, "
+              f"{len(songs)} songs) -> {scu}")
     matched[nm] = scu; hit += 1
     key_norm = scu.strip().lower().replace("://www.", "://").rstrip("/").split("?")[0]
     city = (m.get("city") or "").replace("'", "''") or None

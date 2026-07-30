@@ -31,6 +31,42 @@ def _norm(s):
     return re.sub(r"[^a-z0-9]", "", (s or "").lower())
 
 
+def clout(track):
+    """Engagement, for choosing between duplicate uploads of the same song.
+
+    Likes + reposts + comments, because those are deliberate acts; plays are the
+    tiebreak only. Keith asked for "the song with the most clout on SoundCloud".
+    """
+    g = lambda k: int(track.get(k) or 0)
+    return (g("likes_count") + g("reposts_count") + g("comment_count"),
+            g("playback_count"))
+
+
+def dupe_key(title, artist_names=()):
+    """Identity of a SONG, so two uploads of it collapse but two VERSIONS do not.
+
+    Artists re-post their own material: Big Gigantic have "Hot Mic" twice (54,409
+    plays and 2,158), and Boys Noize have 'Boys Noize "Shut It Down" ft. TAICHU,
+    Taube' alongside a plain "Shut It Down". So the key ignores the artist's own
+    name, surrounding quotes, a "(feat. X)" group and the no-op "(Original Mix)".
+
+    It deliberately KEEPS version qualifiers — "(Extended VIP Mix)" is a different
+    record, not a duplicate, and must survive as its own entry.
+    """
+    t = (title or "").lower()
+    for n in artist_names:
+        n = (n or "").strip().lower()
+        if len(n) >= 3:
+            t = t.replace(n, " ")
+    t = re.sub(r"[\"“”'’]", " ", t)
+    # bracketed feature group first, so a trailing "[Extended Mix]" is not eaten
+    t = re.sub(r"[\(\[][^)\]]*\b(?:feat|ft|featuring)\b[^)\]]*[\)\]]", " ", t)
+    # then a bare trailing "ft. A, B" with no bracket left after it
+    t = re.sub(r"\b(?:feat|ft)\.?\s+[^\[\(]*$", " ", t)
+    t = re.sub(r"[\(\[]\s*original mix\s*[\)\]]", " ", t)
+    return _norm(t)
+
+
 def credited_elsewhere(track, artist_names):
     """Return the crediting artist string if this track is someone ELSE's release.
 
@@ -90,7 +126,11 @@ def fetch_songs(api, cid, uid, artist_names=(), want=15, max_pages=6):
         except Exception:
             return None
 
+    # `best` keys on the SONG, not the upload, so a re-post loses to whichever copy
+    # has the most engagement. Insertion order (SoundCloud's own, newest first) is
+    # preserved via `order` so a dedupe never silently reshuffles the crate.
     out, sets, dropped, seen = [], 0, [], set()
+    best, order, dupes = {}, [], []
 
     def consider(t):
         nonlocal sets
@@ -110,42 +150,51 @@ def fetch_songs(api, cid, uid, artist_names=(), want=15, max_pages=6):
         if who:
             seen.add(tid); dropped.append((t.get("title"), who)); return   # CREDIT
         seen.add(tid)
-        out.append({
+        row = {
             "sc_track_id": tid, "title": t.get("title"),
             "permalink_url": t.get("permalink_url"), "duration_ms": d,
             "playback_count": t.get("playback_count") or 0,
+            "likes_count": t.get("likes_count") or 0,
+            "reposts_count": t.get("reposts_count") or 0,
+            "comment_count": t.get("comment_count") or 0,
             "created_at": t.get("created_at"), "artwork_url": t.get("artwork_url"),
             "credited_artist": ((t.get("publisher_metadata") or {}).get("artist") or None),
-        })
+        }
+        k = dupe_key(t.get("title"), artist_names)
+        prev = best.get(k)
+        if prev is None:
+            best[k] = row; order.append(k)
+        elif clout(t) > clout(prev):
+            dupes.append((prev["title"], row["title"]))      # loser, winner
+            best[k] = row
+        else:
+            dupes.append((row["title"], prev["title"]))
 
     url, pages = f"{api}/users/{uid}/tracks?limit=50&client_id={cid}", 0
-    while url and len(out) < want and pages < max_pages:
+    while url and len(best) < want and pages < max_pages:
         pages += 1
         js = get(url)
         if not js:
             break
         for t in js.get("collection", []):
-            consider(t)
-            if len(out) >= want:
-                break
+            consider(t)          # no early break: a later upload may out-clout an earlier one
         nxt = js.get("next_href")
-        url = (nxt + f"&client_id={cid}") if nxt and len(out) < want else None
+        url = (nxt + f"&client_id={cid}") if nxt and len(best) < want else None
         if url:
             time.sleep(0.15)
 
     # Still short? Their catalogue may live in albums/playlists instead.
-    if len(out) < want:
+    if len(best) < want:
         for path in CONTAINERS:
-            if len(out) >= want:
+            if len(best) >= want:
                 break
             js = get(f"{api}/users/{uid}/{path}?limit=50&client_id={cid}")
             for c in (js.get("collection", []) if isinstance(js, dict) else []) or []:
                 for t in (c.get("tracks") or []):
                     consider(t)
-                    if len(out) >= want:
-                        break
-                if len(out) >= want:
+                if len(best) >= want:
                     break
             time.sleep(0.15)
 
-    return out, sets, dropped
+    out = [best[k] for k in order][:want]
+    return out, sets, dropped, dupes

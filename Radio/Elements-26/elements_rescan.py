@@ -70,21 +70,23 @@ rows = sql(f"""
 print(f"{len(rows)} artist(s) to re-pull{' (DRY RUN)' if DRY else ''}{' [--all]' if ALL else ''}\n")
 
 fixed = failed = 0
-tot_before = tot_after = tot_dropped = 0
+tot_before = tot_after = tot_dropped = tot_dupes = 0
 for i, r in enumerate(rows, 1):
     name = r["username"] or r["soundcloud"]
     # Both names, so a collaboration isn't read as someone else's release.
     names = tuple(n for n in (r.get("artist_name"), r.get("username")) if n)
     try:
-        songs, sets, dropped = fetch_songs(api, cid, r["sc_user_id"], artist_names=names)
+        songs, sets, dropped, dupes = fetch_songs(api, cid, r["sc_user_id"], artist_names=names)
     except Exception as e:
         print(f"  !! {name}: {e}"); failed += 1; continue
     over = [s for s in songs if (s["duration_ms"] or 0) > SONG_MAX_MS]
     assert not over, f"{name}: filter let {len(over)} long track(s) through"
-    tot_before += r["mixes"]; tot_after += len(songs); tot_dropped += len(dropped)
+    tot_before += r["mixes"]; tot_after += len(songs); tot_dropped += len(dropped); tot_dupes += len(dupes)
     print(f"  {i:>3}/{len(rows)} {str(name)[:26]:<26} was {r['cached']:>2} cached ({r['mixes']} mixes) -> now {len(songs):>2} songs, {sets} sets")
     for title, who in dropped:
         print(f"          dropped, credited to {who}: {str(title)[:50]}")
+    for lost, kept in dupes:
+        print(f"          duplicate -> kept higher clout: {str(lost)[:40]!r} lost to {str(kept)[:40]!r}")
     if not DRY:
         sj = json.dumps(songs).replace("'", "''")
         sql(f"""update public.sc_artist_cache set songs='{sj}'::jsonb,
@@ -95,6 +97,7 @@ for i, r in enumerate(rows, 1):
 
 print(f"\n{'would fix' if DRY else 'updated'} {fixed if not DRY else len(rows)} artist(s), {failed} failed")
 print(f"mix rows removed: {tot_before} · wrongly-credited tracks dropped: {tot_dropped}"
+      f" · duplicate uploads collapsed: {tot_dupes}"
       f" · real songs now cached across them: {tot_after}")
 if not DRY:
     left = sql(f"""select count(*) as artists from public.sc_artist_cache c
