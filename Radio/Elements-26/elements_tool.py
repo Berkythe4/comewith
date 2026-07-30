@@ -57,8 +57,11 @@ def match(name):
 # contract sc-enrich enforces (45s <= d <= 15 min). This used to be inline here
 # with only the 45-second floor and no ceiling, which put 251 multi-hour sets in
 # sc_artist_cache as "songs" on 2026-07-28.
-def tracks(uid, want=15):
-    return fetch_songs(api, cid, uid, want=want)
+def tracks(uid, want=15, names=()):
+    songs, sets, dropped = fetch_songs(api, cid, uid, artist_names=names, want=want)
+    for title, who in dropped:
+        print(f"      skipped (credited to {who}): {title}")
+    return songs, sets
 
 # unique names, remember all days each belongs to
 name_days = {}
@@ -74,7 +77,9 @@ for nm in name_days:
     if not m: print(f"  · {nm}: no match"); continue
     scu = (m.get("permalink_url") or "").replace("://www.", "://")
     if not scu: continue
-    songs, set_count = tracks(m["id"]); time.sleep(0.15)
+    # Pass every name this profile goes by so a collaboration isn't mistaken for
+    # someone else's release (nm = lineup name, username = SoundCloud handle).
+    songs, set_count = tracks(m["id"], names=(nm, m.get("username") or "")); time.sleep(0.15)
     matched[nm] = scu; hit += 1
     key_norm = scu.strip().lower().replace("://www.", "://").rstrip("/").split("?")[0]
     city = (m.get("city") or "").replace("'", "''") or None
