@@ -38,3 +38,5 @@ Radio/Week */*.m4a
 Radio/Week */*.flac
 Radio/Week */*.aac
 Radio/Week */*.aiff
+
+supabase/.temp/
