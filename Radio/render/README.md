@@ -1,5 +1,10 @@
 # Come With Radio — video render + weekly prep
 
+> **Read `Radio/NOTES_WEEKLY_RELEASE.md` first.** It carries the hard-won bits: the
+> Rekordbox export is the tracklist (not the dashboard), every field a card draws,
+> the reveal-beat stage cap, why the SoundCloud link is retrieved and never pasted,
+> and the Beatport 600-second token. Written after EP 2, 2026-07-30.
+
 Self-contained tools that turn a recorded mix into the **Option 4 "Now Playing"**
 YouTube video, and assemble the paperwork for a release. All local, all
 read-only against prod except where noted. Nothing here changes the live site.
@@ -39,7 +44,7 @@ python Radio/render/make_episode.py --audio "Radio/Video/EP1_mix.wav"
 
 `make_episode.py` does the whole thing for the working station: pulls the cues,
 takes the times (from `--history`, or the cues if already filled, or stops and
-tells you to tap them in), and renders `Radio/Video/EP{N}.mp4`. If you'd rather
+tells you to tap them in), and renders `Radio/Week {N}/CWR_Ep{N}_YouTube.mp4`. If you'd rather
 run the pieces yourself, they're below.
 
 ## Making the video — the pieces
@@ -65,13 +70,14 @@ half-timed video by accident.
 ```
 python Radio/render/render_episode.py \
     --cues Radio/render/EP1_cues.csv \
-    --audio "Radio/Video/EP1_mix.wav" \
+    --audio "Radio/Week 1/CWR_Ep1.wav" \
     --cover Radio/Artwork/Radio_Thumbnail.jpg \
-    --out Radio/Video/EP1.mp4 \
+    --out "Radio/Week 1/CWR_Ep1_YouTube.mp4" \
     --ep "EP 1"
 ```
 
-Out comes a 1920×1080 H.264 MP4 in `Radio/Video/`. Upload it to YouTube, paste
+Out comes a 1920×1080 H.264 MP4 in **that week's folder** (`Radio/Week N/`), so the
+render lives beside the mix, cues and paperwork it came from. Upload it to YouTube, paste
 the link into the dashboard (✎ Details → YouTube link).
 
 Flags: `--dry` renders the cards + a 1-second preview (fast sanity check);

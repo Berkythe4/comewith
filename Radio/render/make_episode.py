@@ -3,20 +3,20 @@
 make_episode.py — ONE command for the whole video. Wraps the tested pieces so you
 don't run three scripts by hand.
 
-    python Radio/render/make_episode.py --audio "Radio/Video/EP1_mix.wav"
+    python Radio/render/make_episode.py --week 2   # finds the mix + cues in Radio/Week 2/
 
 It will, for the current working station (or --station N):
   1. pull the tracklist cues from prod (unless a filled --cues is given),
   2. get the start times — from --history <deck export> if provided, else from
      the cues if you already filled them, else stop and tell you to tap them in,
-  3. render Radio/Video/EP{N}.mp4.
+  3. render Radio/Week {N}/CWR_Ep{N}_YouTube.mp4.
 
 Options:
   --station N     specific station (default: working)
   --cues FILE     use this cues CSV as-is (skip the DB pull)
   --history FILE  a Rekordbox/Engine history export to read times from
   --cover FILE    cover image (default Radio/Artwork/Radio_Thumbnail.jpg)
-  --out FILE      output mp4 (default Radio/Video/EP{N}.mp4)
+  --out FILE      output mp4 (default Radio/Week {N}/CWR_Ep{N}_YouTube.mp4)
   --dry           quick 1-second preview render
 
 Nothing here writes to prod or the site.

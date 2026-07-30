@@ -1,0 +1,182 @@
+[
+  {
+    "artist": "Afroman",
+    "title": "Colt 45 (NIcole Fiallo Edit)",
+    "start_sec": 2.16,
+    "confidence": 0.459,
+    "tempo_shift_pct": 3,
+    "source_file": "Afroman - Colt 45 (NIcole Fiallo Edit).wav",
+    "order": 1,
+    "start_hms": "00:00:02"
+  },
+  {
+    "artist": "Charlotte de Witte",
+    "title": "The Realm (Original Mix)",
+    "start_sec": 278.81,
+    "confidence": 0.317,
+    "tempo_shift_pct": -8,
+    "source_file": "Charlotte de Witte - The Realm (Original Mix).aiff",
+    "order": 2,
+    "start_hms": "00:04:39"
+  },
+  {
+    "artist": "tama gucci",
+    "title": "Sweater (Swami Sound & Age Remix)",
+    "start_sec": 393.59,
+    "confidence": 0.755,
+    "tempo_shift_pct": -3,
+    "source_file": "tama gucci - Sweater (Swami Sound & Age Remix).aiff",
+    "order": 3,
+    "start_hms": "00:06:34"
+  },
+  {
+    "artist": "YOTTO, Lane 8",
+    "title": "Buggy (Extended Mix)",
+    "start_sec": 524.45,
+    "confidence": 0.54,
+    "tempo_shift_pct": 3,
+    "source_file": "YOTTO, Lane 8 - Buggy (Extended Mix).aiff",
+    "order": 4,
+    "start_hms": "00:08:44"
+  },
+  {
+    "artist": "AC Slater",
+    "title": "For The Funk",
+    "start_sec": 785.97,
+    "confidence": 0.41,
+    "tempo_shift_pct": -3,
+    "source_file": "AC Slater - For The Funk.wav",
+    "order": 5,
+    "start_hms": "00:13:06"
+  },
+  {
+    "artist": "Nick Curly",
+    "title": "A Little Conversation (Franky Rizardo Extended Remix)",
+    "start_sec": 857.56,
+    "confidence": 0.405,
+    "tempo_shift_pct": -1,
+    "source_file": "Nick Curly - A Little Conversation (Franky Rizardo Extended Remix).aiff",
+    "order": 6,
+    "start_hms": "00:14:18"
+  },
+  {
+    "artist": "Chris Lake, Sammy Virji, RoRo",
+    "title": "925 (Extended Mix)",
+    "start_sec": 925.36,
+    "confidence": 0.346,
+    "tempo_shift_pct": 4,
+    "source_file": "Chris Lake, Sammy Virji, RoRo - 925 (Extended Mix).aiff",
+    "order": 7,
+    "start_hms": "00:15:25"
+  },
+  {
+    "artist": "Sara Landry, Godtripper",
+    "title": "Reality Check  (Original Mix)",
+    "start_sec": 1047.9,
+    "confidence": 0.301,
+    "tempo_shift_pct": -6,
+    "source_file": "Sara Landry, Godtripper - Reality Check  (Original Mix).aiff",
+    "order": 8,
+    "start_hms": "00:17:28"
+  },
+  {
+    "artist": "X-Coast",
+    "title": "Synthetic Dreams (Anetha Remix)",
+    "start_sec": 1141.78,
+    "confidence": 0.204,
+    "tempo_shift_pct": -3,
+    "source_file": "X-Coast - Synthetic Dreams (Anetha Remix).aiff",
+    "order": 9,
+    "start_hms": "00:19:02"
+  },
+  {
+    "artist": "Cloonee",
+    "title": "Holla (Extended Mix)",
+    "start_sec": 1647.15,
+    "confidence": 0.418,
+    "tempo_shift_pct": 1,
+    "source_file": "Cloonee - Holla (Extended Mix).aiff",
+    "order": 10,
+    "start_hms": "00:27:27"
+  },
+  {
+    "artist": "Skepta, Sammy Virji",
+    "title": "Cops & Robbers (Extended Mix)",
+    "start_sec": 1867.62,
+    "confidence": 0.23,
+    "tempo_shift_pct": -4,
+    "source_file": "Skepta, Sammy Virji - Cops & Robbers (Extended Mix).aiff",
+    "order": 11,
+    "start_hms": "00:31:08"
+  },
+  {
+    "artist": "Traumer",
+    "title": "Round Circle (Original Mix)",
+    "start_sec": 1965.9,
+    "confidence": 0.332,
+    "tempo_shift_pct": 1,
+    "source_file": "Traumer - Round Circle (Original Mix).aiff",
+    "order": 12,
+    "start_hms": "00:32:46"
+  },
+  {
+    "artist": "Spencer Brown",
+    "title": "Good Times (Extended Mix)",
+    "start_sec": 2016.98,
+    "confidence": 0.608,
+    "tempo_shift_pct": 2,
+    "source_file": "Spencer Brown - Good Times (Extended Mix).aiff",
+    "order": 13,
+    "start_hms": "00:33:37"
+  },
+  {
+    "artist": "Claude VonStroke, Honeycomb",
+    "title": "Bam Bam (Original Mix)",
+    "start_sec": 2269.56,
+    "confidence": 0.565,
+    "tempo_shift_pct": 4,
+    "source_file": "Claude VonStroke, Honeycomb - Bam Bam (Original Mix).aiff",
+    "order": 14,
+    "start_hms": "00:37:50"
+  },
+  {
+    "artist": "Vintage Culture, ARTBAT",
+    "title": "She The Last One (Original Mix)",
+    "start_sec": 2283.87,
+    "confidence": 0.356,
+    "tempo_shift_pct": 2,
+    "source_file": "Vintage Culture, ARTBAT - She The Last One (Original Mix).aiff",
+    "order": 15,
+    "start_hms": "00:38:04"
+  },
+  {
+    "artist": "Gui Boratto, Alok, House of EL",
+    "title": "Love Will Find A Way (feat. House Of EL) (feat. House Of EL)",
+    "start_sec": 2527.94,
+    "confidence": 0.423,
+    "tempo_shift_pct": 1,
+    "source_file": "Gui Boratto, Alok, House of EL - Love Will Find A Way (feat. House Of EL) (feat. House Of EL).aiff",
+    "order": 16,
+    "start_hms": "00:42:08"
+  },
+  {
+    "artist": "Infected Mushroom",
+    "title": "Release Me REBORN (Original Mix)",
+    "start_sec": 2797.74,
+    "confidence": 0.189,
+    "tempo_shift_pct": -6,
+    "source_file": "Infected Mushroom - Release Me REBORN (Original Mix).aiff",
+    "order": 17,
+    "start_hms": "00:46:38"
+  },
+  {
+    "artist": "Hannah Laing, Rhys from the Sticks",
+    "title": "4am In A Rave (feat. rhys from the sticks) feat. rhys from the sticks (Extended Mix)",
+    "start_sec": 3276.41,
+    "confidence": 0.258,
+    "tempo_shift_pct": -8,
+    "source_file": "Hannah Laing, Rhys from the Sticks - 4am In A Rave (feat. rhys from the sticks) feat. rhys from the sticks (Extended Mix).aiff",
+    "order": 18,
+    "start_hms": "00:54:36"
+  }
+]

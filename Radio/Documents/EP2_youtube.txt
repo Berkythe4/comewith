@@ -1,0 +1,29 @@
+TITLE:
+Come With Radio — EP 2 · Come With NYC Radio Ep2.073026
+
+DESCRIPTION:
+Come With Radio — EP 2. Mixed by Berky.
+A monthly mix of artists playing New York soon.
+Full tracklist, dates & tickets: https://comewith.org/radio.html?s=come-with-radio-ep2
+
+CHAPTERS (YouTube turns 0:00-style lines into clickable chapters).
+Fill EP2_cues.csv with start times first — then re-run this to bake them in:
+0:00 Infected Mushroom — Release Me REBORN
+(time) Claude VonStroke & Honeycomb — Bam Bam
+(time) ARTBAT & Vintage Culture — She The Last One
+(time) Charlotte de Witte — The Realm
+(time) Hannah Laing — 4am In A Rave (feat. rhys from the sticks) [Extended Mix]
+(time) X-Coast — Synthetic Dreams (Anetha Remix)
+(time) Sammy Virji — 925
+(time) Afroman — Colt 45 (Nicole Fiallo Edit)
+(time) tama gucci — Sweater (Swami Sound & Age Remix)
+(time) YOTTO — Buggy (Extended Mix)
+(time) Nick Curly — A Little Conversation (Franky Rizardo Remix)
+(time) AC Slater — For The Funk
+(time) Anetha — Let me d&be
+(time) Sara Landry — Reality Check
+(time) Cloonee — Holla
+(time) Traumer — Round Circle
+(time) Spencer Brown — Good Times (Extended Mix)
+(time) Alok & Gui Boratto — Love Will Find A Way (feat. House Of EL)
+(time) Sammy Virji — Cops & Robbers

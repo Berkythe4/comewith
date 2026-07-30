@@ -76,11 +76,34 @@ def main():
 
     # 1) cues CSV (same as make_cues) ----------------------------------------
     cues = os.path.join(RENDER, "EP%d_cues.csv" % N)
+    # Carry forward any start times ALREADY typed in. This used to overwrite the
+    # file with blanks and then read it back two steps later, so the chapters were
+    # always "(time)" and re-running - which this file tells you to do - silently
+    # threw away the timings you had just entered. Keyed on artist+title so a
+    # re-ordered tracklist can't shift a time onto the wrong song.
+    prior, prior_idx = {}, {}
+    if os.path.exists(cues):
+        try:
+            with open(cues, newline="", encoding="utf-8") as pf:
+                for n, row in enumerate(csv.DictReader(pf), 1):
+                    if (row.get("start") or "").strip():
+                        k = ((row.get("artist") or "").strip().lower(),
+                             (row.get("title") or "").strip().lower())
+                        prior[k] = row["start"].strip()
+                        prior_idx[n] = row["start"].strip()
+        except Exception:
+            prior, prior_idx = {}, {}
     with open(cues, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot", "duration_ms"])
         for i, r in enumerate(tr, 1):
-            w.writerow([i, "", r["artist_name"] or "", r["title"] or "", r["bpm"] or "",
+            # Name match first; fall back to POSITION. Cues built from a Rekordbox
+            # export carry the raw deck titles ("Bam Bam (Original Mix)") while the
+            # dashboard holds the cleaned ones ("Bam Bam"), so a name-only match
+            # dropped 14 of 19 times on EP2. Same length + same order = index is safe.
+            kept = prior.get(((r["artist_name"] or "").strip().lower(),
+                              (r["title"] or "").strip().lower()), "") or prior_idx.get(i, "")
+            w.writerow([i, kept, r["artist_name"] or "", r["title"] or "", r["bpm"] or "",
                         r["song_key"] or "", r["camelot"] or "", r["duration_ms"] or ""])
 
     # 2) YouTube text (title + description + chapters) ------------------------

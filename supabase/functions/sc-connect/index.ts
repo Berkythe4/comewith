@@ -256,6 +256,89 @@ Deno.serve(async (req) => {
   //    (best for big high-quality files) — resolve the link to a track id.
   //  - stored file: stream the mix from the radio-mixes bucket to POST /tracks
   //    as a PRIVATE track (flips public at finalize).
+  // Find the mix Keith uploaded to SoundCloud HIMSELF, so nobody has to paste a
+  // link. This exists because a PRIVATE track can't be shared as a URL yet — the
+  // whole point is that the system fetches it rather than waiting on a human.
+  // /me/tracks returns the authenticated user's own uploads INCLUDING private
+  // ones, with secret_token, which no public lookup can see.
+  //
+  // Body: { playlist_id, duration_ms?, apply? }
+  //   duration_ms  optional length of the local mix — the strongest signal there
+  //                is, because two uploads never share a runtime to the second.
+  //   apply        store the winner on the station (otherwise just report).
+  if (action === "find_mix") {
+    if (!row?.access_token) return err(400, "Connect SoundCloud first.");
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const { data: pl } = await admin.from("sc_playlists")
+      .select("id, name, slug, station_no, status, mix_sc_track_url").eq("id", playlistId).single();
+    if (!pl) return err(404, "station not found");
+    const token = await freshToken();
+    if (!token) return err(401, "SoundCloud connection expired — reconnect.");
+
+    const r = await fetch("https://api.soundcloud.com/me/tracks?limit=50&linked_partitioning=true",
+      { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return err(502, "SoundCloud wouldn't list your uploads (" + r.status + ").");
+    const mine: any[] = Array.isArray(j) ? j : (j.collection || []);
+    if (!mine.length) return ok({ success: true, candidates: [], note: "No uploads found on your SoundCloud account." });
+
+    const want = Number(body.duration_ms || 0);
+    const norm = (x: string) => (x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    // Episode fingerprints: its name, its slug, and "ep<N>" — the upload is
+    // usually named after the same thing the WAV was.
+    const keys = [norm(pl.name), norm(pl.slug || ""), "ep" + (pl.station_no ?? "")].filter((k) => k.length > 2);
+    const scored = mine.map((t) => {
+      const nt = norm(t.title);
+      let score = 0;
+      for (const k of keys) if (k && (nt.includes(k) || k.includes(nt))) score += 0.4;
+      // Runtime match is decisive: same length to within 5s is the same audio.
+      const dd = want && t.duration ? Math.abs(t.duration - want) : null;
+      if (dd !== null && dd <= 5000) score += 1.0;
+      else if (dd !== null && dd <= 30000) score += 0.35;
+      // Newest first as a weak tiebreak.
+      return { t, score, delta_ms: dd };
+    }).sort((a, b) => (b.score - a.score) ||
+        (String(b.t.created_at || "").localeCompare(String(a.t.created_at || ""))));
+
+    const shape = (x: any) => ({
+      id: String(x.t.id), title: x.t.title,
+      // A private track is only reachable WITH its secret token — that is the
+      // link a human could not have given us.
+      url: x.t.permalink_url,
+      share_url: x.t.sharing === "private" && x.t.secret_token
+        ? x.t.permalink_url + "?secret_token=" + x.t.secret_token : x.t.permalink_url,
+      sharing: x.t.sharing, duration_ms: x.t.duration ?? null,
+      created_at: x.t.created_at ?? null, artwork_url: x.t.artwork_url ?? null,
+      match: Number(x.score.toFixed(2)), delta_ms: x.delta_ms,
+    });
+    const best = scored[0];
+    const confident = best && best.score >= 1.0;      // i.e. the runtime matched
+    const out = {
+      success: true,
+      candidates: scored.slice(0, 8).map(shape),
+      picked: confident ? shape(best) : null,
+      applied: false as boolean,
+      // The public episode page embeds via oembed, which 404s on a private
+      // track. Retrieval works now; the embed only works once it is public —
+      // "finalize" flips it, so say so rather than letting it fail silently.
+      warning: confident && best.t.sharing === "private"
+        ? "That upload is still PRIVATE. The link is stored, but the episode page can't embed it until it goes public — Go live does that for you."
+        : null,
+    };
+    if (body.apply && confident) {
+      await admin.from("sc_playlists").update({
+        mix_sc_track_id: String(best.t.id),
+        mix_sc_track_url: best.t.permalink_url,
+        cover_url: best.t.artwork_url || undefined,
+        status: pl.status === "building" ? "testing" : pl.status,
+        updated_at: new Date().toISOString(),
+      }).eq("id", playlistId);
+      out.applied = true;
+    }
+    return ok(out);
+  }
+
   if (action === "upload_mix") {
     if (!row?.access_token) return err(400, "Connect SoundCloud first.");
     const playlistId = (body.playlist_id || "").toString();

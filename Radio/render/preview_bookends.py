@@ -41,7 +41,7 @@ def main():
 
     # INTRO beats
     for i, base in enumerate(R.INTRO_BEATS):
-        stage = min(i, 4)
+        stage = min(i, len(R.INTRO_BEATS) - 2)
         p = os.path.join(OUT, "intro_%02d.png" % i)
         R.draw_intro(bg, cover_sm, EP, MIXED_BY, DROP, stage).save(p)
         frames.append((p, base, "intro-beat-%d" % i))
@@ -54,7 +54,7 @@ def main():
 
     # CLOSING beats
     for i, base in enumerate(R.OUTRO_BEATS):
-        stage = min(i, 4)
+        stage = min(i, len(R.OUTRO_BEATS) - 2)
         p = os.path.join(OUT, "outro_%02d.png" % i)
         R.draw_outro(bg, cover_sm, NEXT, stage).save(p)
         frames.append((p, base, "closing-beat-%d" % i))

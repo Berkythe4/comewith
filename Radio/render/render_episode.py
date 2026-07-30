@@ -273,6 +273,9 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
     return im.convert("RGB")
 
 # ---- CLOSING: sincere thanks, tracklist download, follow, next Thursday ------
+# Cryptic tease on the closing slide. One place to edit, week to week.
+TEASE_LINE = "SOMETHING ELEMENTAL IS COMING"
+
 def draw_outro(bg, cover_sm, next_date, stage):
     im = bg.copy(); d = ImageDraw.Draw(im); cx = W // 2
     tag = "● THAT'S THE SHOW"
@@ -296,18 +299,24 @@ def draw_outro(bg, cover_sm, next_date, stage):
         d.rounded_rectangle([cx - tw2 / 2 - pad, 772, cx + tw2 / 2 + pad, 772 + 78],
                             radius=40, outline=LIME_DK, width=2)
         d.text((cx - tw2 / 2, 772 + 20), txt, font=F_mono(38), fill=LIME)
+    # A cryptic tease for the Elements run — four consecutive nights starting on the
+    # very Thursday the chip above names, so the slide raises the question and the
+    # Elements Ep1 intro answers it. Its OWN line under the pill, dimmer and smaller,
+    # so the chip stays a clean single line. Reveals last, after the date lands.
+    if stage >= 5:
+        _ctext(d, cx, 892, TEASE_LINE, F_mono(30), DIM)
     return im.convert("RGB")
 
 # reveal cadence (seconds per beat); last beat is the full-slide hold.
 INTRO_BEATS = [1.7, 1.7, 2.4, 2.4, 2.4, 5.0]     # stages 0,1,2,3,4, then hold@4
-OUTRO_BEATS = [1.8, 2.4, 2.2, 2.2, 2.6, 5.0]     # stages 0,1,2,3,4, then hold@4
+OUTRO_BEATS = [1.8, 2.4, 2.2, 2.2, 2.6, 2.2, 5.0]  # stages 0..5, then hold@5
 
 def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs):
     """PNG frames for the intro, scaled to fit total_secs. Returns [(png,dur)]."""
     scale = total_secs / sum(INTRO_BEATS)
     out = []
     for i, base in enumerate(INTRO_BEATS):
-        stage = min(i, 4)
+        stage = min(i, len(INTRO_BEATS) - 2)      # last beat = hold on the final stage
         png = os.path.join(work, "intro_%02d.png" % i)
         draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage).save(png)
         out.append((png, max(0.1, base * scale)))
@@ -317,7 +326,7 @@ def build_outro(work, bg, cover_sm, next_date, total_secs):
     scale = total_secs / sum(OUTRO_BEATS)
     out = []
     for i, base in enumerate(OUTRO_BEATS):
-        stage = min(i, 4)
+        stage = min(i, len(OUTRO_BEATS) - 2)      # last beat = hold on the final stage
         png = os.path.join(work, "outro_%02d.png" % i)
         draw_outro(bg, cover_sm, next_date, stage).save(png)
         out.append((png, max(0.1, base * scale)))
