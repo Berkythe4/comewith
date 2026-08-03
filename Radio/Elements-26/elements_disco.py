@@ -2,6 +2,8 @@
 # tagged so DJs can filter them out from the main lineup.
 import os, json, re, urllib.request, urllib.parse, unicodedata, time, sys
 sys.stdout.reconfigure(encoding="utf-8")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from elements_sc import fetch_songs          # the ONE songs-not-sets rule
 ROOT = r"C:\Users\Admin\Documents\Comewith"
 env = {}
 for line in open(os.path.join(ROOT, ".env"), encoding="utf-8"):
@@ -42,18 +44,18 @@ def match(name):
     ex = [c for c in js.get("collection", []) if q in [strip_affix(norm(c.get(f) or ""), q) for f in ("permalink","username","full_name")]]
     ex.sort(key=lambda c: (not c.get("verified"), -(c.get("followers_count") or 0), -(c.get("track_count") or 0)))
     return ex[0] if ex else None
-def tracks(uid):
-    u = f"{api}/users/{uid}/tracks?limit=20&client_id={cid}"
-    try: js = json.load(urllib.request.urlopen(urllib.request.Request(u, headers=UA), timeout=15))
-    except Exception: return []
-    out = []
-    for t in js.get("collection", []):
-        if t.get("kind") != "track" or (t.get("duration") or 0) < 45000: continue
-        out.append({"sc_track_id": str(t["id"]), "title": t.get("title"), "permalink_url": t.get("permalink_url"),
-                    "duration_ms": t.get("duration"), "playback_count": t.get("playback_count") or 0,
-                    "created_at": t.get("created_at"), "artwork_url": t.get("artwork_url")})
-        if len(out) >= 15: break
-    return out
+# This used to be a second, WEAKER copy of the song rule inline: one page, a
+# 15-item cap and only the 45-second floor — no 15-minute ceiling, no ownership
+# or credit check — so Disco Den artists got DJ sets stored as songs while the
+# main lineup got the real rule. That is exactly the drift elements_sc.py exists
+# to prevent. One definition, imported.
+def tracks(uid, names=()):
+    songs, sets, dropped, dupes = fetch_songs(api, cid, uid, artist_names=names)
+    for title, who in dropped:
+        print(f"      skipped (credited to {who}): {title}")
+    for lost, kept in dupes:
+        print(f"      duplicate, kept the higher-clout upload: {lost!r} -> {kept!r}")
+    return songs, sets
 
 matched = {}
 for i, nm in enumerate(dict.fromkeys(DISCO), 1):
@@ -61,14 +63,18 @@ for i, nm in enumerate(dict.fromkeys(DISCO), 1):
     if not m: print(f"  · {nm}: no match"); continue
     scu = (m.get("permalink_url") or "").replace("://www.", "://")
     if not scu: continue
-    songs = tracks(m["id"]); time.sleep(0.15)
+    songs, set_count = tracks(m["id"], names=(nm, m.get("username") or "")); time.sleep(0.15)
+    if not (m.get("track_count") or 0) or (m.get("followers_count") or 0) < 500:
+        print(f"  ?? CHECK {nm}: matched {m.get('username')!r} "
+              f"({m.get('followers_count') or 0} followers, {m.get('track_count') or 0} tracks, "
+              f"{len(songs)} songs) -> {scu}")
     matched[nm] = scu
     key = scu.strip().lower().replace("://www.", "://").rstrip("/").split("?")[0]
     city = (m.get("city") or "").replace("'", "''") or None
     sj = json.dumps(songs).replace("'", "''")
-    sql(f"""insert into sc_artist_cache (soundcloud, sc_user_id, username, avatar_url, city, followers, is_producer, song_count, sc_track_count, songs, ok, scanned_at)
-      values ('{esc(key)}','{m['id']}','{esc(m.get('username') or '')}',{('null' if not m.get('avatar_url') else "'"+esc(m['avatar_url'])+"'")},{('null' if not city else "'"+city+"'")},{m.get('followers_count') or 0},{str(len(songs)>0).lower()},{len(songs)},{m.get('track_count') or 0},'{sj}'::jsonb,true,now())
-      on conflict (soundcloud) do update set songs=excluded.songs, song_count=excluded.song_count, followers=excluded.followers, city=excluded.city, is_producer=excluded.is_producer, scanned_at=now();""")
+    sql(f"""insert into sc_artist_cache (soundcloud, sc_user_id, username, avatar_url, city, followers, is_producer, song_count, set_count, sc_track_count, songs, ok, scanned_at)
+      values ('{esc(key)}','{m['id']}','{esc(m.get('username') or '')}',{('null' if not m.get('avatar_url') else "'"+esc(m['avatar_url'])+"'")},{('null' if not city else "'"+city+"'")},{m.get('followers_count') or 0},{str(len(songs)>0).lower()},{len(songs)},{set_count},{m.get('track_count') or 0},'{sj}'::jsonb,true,now())
+      on conflict (soundcloud) do update set songs=excluded.songs, song_count=excluded.song_count, set_count=excluded.set_count, followers=excluded.followers, city=excluded.city, is_producer=excluded.is_producer, scanned_at=now();""")
     slug = re.sub(r'[^a-z0-9]+','-', nm.lower()).strip('-')
     sql(f"""insert into ra_artists (ra_id, name, soundcloud, city, follower_count, source)
       values ('elem_{esc(slug)}','{esc(nm)}','{esc(scu)}',{('null' if not city else "'"+city+"'")},{m.get('followers_count') or 0},'elements')

@@ -76,7 +76,19 @@ Deno.serve(async (req) => {
     let artists;
     if (artistNames.length) {
       const { data } = await admin.from("ra_artists").select(SEL).in("name", artistNames);
-      const byName: Record<string, any> = {}; (data || []).forEach((a) => { byName[a.name] = byName[a.name] || a; });
+      // The SAME artist name can exist under several sources — Brainrack and
+      // Flash Gea are on the Elements bill AND have a thin RA row with no
+      // soundcloud. Taking whichever row arrived first silently served those
+      // acts an EMPTY crate (35 and 25 songs cached, 0 delivered). Prefer the
+      // row that actually has a profile, then the better-followed one.
+      const byName: Record<string, any> = {};
+      (data || []).forEach((a) => {
+        const cur = byName[a.name];
+        if (!cur) { byName[a.name] = a; return; }
+        const rank = (x: any) => [x.soundcloud ? 1 : 0, x.follower_count || 0];
+        const [as, af] = rank(a), [cs, cf] = rank(cur);
+        if (as > cs || (as === cs && af > cf)) byName[a.name] = a;
+      });
       artists = artistNames.map((n) => byName[n]).filter(Boolean);
     } else {
       let q = admin.from("ra_artists").select(SEL)
@@ -101,18 +113,28 @@ Deno.serve(async (req) => {
       // never put a mix in front of the DJ. Duration is the real distinguisher —
       // mixes are still kind=track on SoundCloud.
       (cache || []).forEach((c) => {
+        // NO per-artist cap. There was a .slice(0, 12) here, and it was invisible:
+        // twelve songs reads as "that's their catalogue" whether the artist has
+        // twelve or a hundred and twelve, so the DJ never knew to look further.
+        // The length filter stays — that removes DJ sets, which is a different
+        // thing from hiding songs.
         songByUrl[norm(c.soundcloud)] = (c.songs || [])
           .filter((s: any) => !s.duration_ms || Number(s.duration_ms) <= SONG_MAX_MS)
-          .slice(0, 12)
           .map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url }));
       });
     }
     // A sub-group (e.g. the festival's Disco Den stage) so the DJ can sort it out.
     const discoSet = new Set((Array.isArray(params.disco) ? params.disco : []).map((n: string) => n));
+    // Which festival day each artist actually plays. Only set when an edition is
+    // scoped WIDER than its own day (Ep1 carries the whole festival because it is
+    // the early slot) — without it 138 artists arrive as one undifferentiated
+    // list and the DJ can't tell their own night from the rest of the weekend.
+    const dayOf: Record<string, string> = (params.day_of && typeof params.day_of === "object") ? params.day_of : {};
     const out = (artists || []).map((a) => ({
       name: a.name, soundcloud: a.soundcloud, followers: a.follower_count || 0,
       genres: a.genres || [], city: a.city || null,
       group: discoSet.has(a.name) ? "disco" : "main",
+      day: dayOf[a.name] || null,
       next_event_date: a.next_event_date, next_venue: a.next_venue, next_event_url: a.next_event_url,
       songs: a.soundcloud ? (songByUrl[norm(a.soundcloud)] || []) : [],
     }));
@@ -125,7 +147,12 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       ok: true,
       episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date },
-      scope: { weeks, genres, from: today, to, pool: params.pool || null, day: params.day || null, count: (artists || []).length },
+      scope: {
+        weeks, genres, from: today, to, pool: params.pool || null, day: params.day || null,
+        // 'all-producers' = this edition deliberately reaches past its own day.
+        reach: params.scope || null,
+        count: (artists || []).length,
+      },
       artists: out,
       tracklist: tracks || [],
     }), { headers: JH });

@@ -23,6 +23,7 @@
   .gchip{font-family:var(--mono);font-size:.72rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--dim);cursor:pointer;}
   .gchip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
   .g.disco{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
+  .g.day{color:var(--lime);border-color:var(--limed,var(--lime));}
   h2{font-family:var(--disp);font-size:1.05rem;margin:22px 0 8px;}
   .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
   .art-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
@@ -34,8 +35,21 @@
   .btn{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:4px 11px;border-radius:8px;border:1px solid var(--line);color:var(--cream);margin-top:8px;cursor:pointer;background:none;}
   .songs{margin-top:8px;display:none;}
   .songs.open{display:block;}
-  .song{display:flex;gap:8px;padding:4px 0;border-top:1px solid var(--line);font-size:.9rem;}
+  .song{display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line);font-size:.9rem;}
   .song .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .song.playing{background:rgba(167,224,46,.10);}
+  .song.playing .n{color:var(--lime);}
+  .mini.play{background:none;color:var(--cream);border-color:var(--line);}
+  .song.playing .mini.play{background:var(--lime);color:#0f0814;border-color:var(--lime);}
+  .dock{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:8px;display:none;}
+  .dock.on{display:block;}
+  .dock-in{max-width:760px;margin:0 auto;background:var(--panel2,#1a0f22);border:1px solid var(--line);
+    border-radius:14px;padding:9px 12px;box-shadow:0 8px 28px rgba(0,0,0,.55);}
+  .dock-top{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
+  .dock-top .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;}
+  .dock iframe{display:block;border:0;border-radius:8px;}
+  .dock-hint{font-size:.7rem;color:var(--faint);margin-top:4px;}
+  body.docked{padding-bottom:190px;}
   .mini{font-family:var(--mono);font-size:.66rem;padding:3px 9px;border-radius:7px;border:1px solid var(--line);cursor:pointer;white-space:nowrap;}
   .mini.add{background:var(--lime);color:#0f0814;border-color:var(--lime);}
   .mini.rm{background:none;color:var(--lime);border-color:var(--lime);}
@@ -86,6 +100,10 @@
   </div>
 </div>
 <div class="wrap" id="root"><div class="state">Loading your episode…</div></div>
+<!-- The player sits OUTSIDE #root on purpose. render() replaces #root wholesale
+     on every search keystroke and filter click; an iframe inside it would be
+     rebuilt each time and the audio would restart from zero. -->
+<div class="dock" id="djDock"></div>
 <script>
 const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
 const $=s=>document.querySelector(s);
@@ -93,7 +111,53 @@ const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;',
 const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
 const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
 const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
-let DATA=null, IN=new Set(), DJADD=new Set(), GRP='';
+let DATA=null, IN=new Set(), DJADD=new Set(), GRP='', DAY='', PLAYING='';
+
+// ---- in-page player, same as the dashboard's dock ---------------------------
+// Auditioning used to mean target="_blank" — a new tab per track, and you lost
+// your place in the list every time. Now it plays here and the ＋ add button is
+// still under your thumb.
+const pkey=u=>String(u||'').trim().toLowerCase().replace('://www.','://').replace(/\/+$/,'').split('?')[0];
+let _scw=null;
+function ensureScWidget(){
+  if(window.SC&&window.SC.Widget) return Promise.resolve();
+  if(_scw) return _scw;
+  _scw=new Promise(res=>{const s=document.createElement('script');s.src='https://w.soundcloud.com/player/api.js';s.onload=res;s.onerror=res;document.head.appendChild(s);});
+  return _scw;
+}
+// Highlight the row that's playing by toggling a class — never by re-rendering,
+// which would rebuild the iframe and restart the track.
+function markPlaying(){
+  document.querySelectorAll('.song.playing').forEach(el=>el.classList.remove('playing'));
+  if(!PLAYING) return;
+  document.querySelectorAll('[data-play]').forEach(b=>{
+    if(pkey(b.dataset.play)===PLAYING) b.closest('.song')?.classList.add('playing');
+  });
+}
+function closePlayer(){
+  PLAYING=''; const el=$('#djDock');
+  if(el){ el.classList.remove('on'); el.innerHTML=''; }
+  document.body.classList.remove('docked'); markPlaying();
+}
+async function djPlay(url,name){
+  const el=$('#djDock'); if(!el||!url) return;
+  PLAYING=pkey(url); markPlaying();
+  const src='https://w.soundcloud.com/player/?url='+encodeURIComponent(url)
+    +'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&visual=false';
+  el.innerHTML=`<div class="dock-in">
+    <div class="dock-top"><span class="nm">▶ ${esc(name||'')}</span>
+      <a class="mini" href="${esc(url)}" target="_blank" rel="noopener" title="Open on SoundCloud">open ↗</a>
+      <button class="mini" data-closeplayer title="Close player">✕</button></div>
+    <iframe id="djPlayerFrame" width="100%" height="120" scrolling="no" allow="autoplay; encrypted-media" src="${src}"></iframe>
+    <div class="dock-hint">Not starting? Tap ▶ in the player (some browsers block autoplay), or use “open ↗”.</div>
+  </div>`;
+  el.classList.add('on'); document.body.classList.add('docked');
+  // Best-effort autoplay; the player's own ▶ always works.
+  try{ await ensureScWidget();
+    if(window.SC&&window.SC.Widget){ const w=window.SC.Widget(document.getElementById('djPlayerFrame'));
+      w.bind(window.SC.Widget.Events.READY,()=>{try{w.play();}catch(_){}}); }
+  }catch(_){}
+}
 
 async function djAction(btn,kind,ai,si){
   const a=DATA.artists[ai], s=a.songs[si], id=String(s.sc_track_id||''); if(!id) return;
@@ -110,6 +174,9 @@ document.addEventListener('click',e=>{
   const add=e.target.closest('[data-add]'); if(add){ const [ai,si]=add.dataset.add.split(':'); djAction(add,'add',+ai,+si); return; }
   const rm=e.target.closest('[data-rm]'); if(rm){ const [ai,si]=rm.dataset.rm.split(':'); djAction(rm,'remove',+ai,+si); return; }
   const g=e.target.closest('[data-grp]'); if(g){ GRP=g.dataset.grp; const y=window.scrollY; render($('#q')?.value||''); window.scrollTo(0,y); return; }
+  const dy=e.target.closest('[data-day]'); if(dy){ DAY=dy.dataset.day; const y=window.scrollY; render($('#q')?.value||''); window.scrollTo(0,y); return; }
+  const pl=e.target.closest('[data-play]'); if(pl){ djPlay(pl.dataset.play,pl.dataset.t); return; }
+  if(e.target.closest('[data-closeplayer]')){ closePlayer(); return; }
 });
 
 async function load(){
@@ -123,22 +190,33 @@ async function load(){
   }catch(e){ $('#root').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
   DATA=j; render('');
 }
+// Song rows are built when the artist is OPENED, not when the list renders.
+// Removing the per-artist cap took Above & Beyond from 15 songs to 404; across a
+// festival-wide crate that is ~13,000 rows, and building them all up front locked
+// the page for seconds on a phone. Lazy keeps every song reachable — which is the
+// point — without paying for the ones nobody expanded.
+function songRowsHtml(i){
+  const a=DATA.artists[i];
+  return (a.songs||[]).map((s,si)=>{
+    const id=String(s.sc_track_id||'');
+    const btn = !id ? '' : DJADD.has(id) ? `<button class="mini rm" data-rm="${i}:${si}">✓ added · remove</button>`
+      : IN.has(id) ? `<span class="mini inset">✓ in set</span>` : `<button class="mini add" data-add="${i}:${si}">＋ add</button>`;
+    return `<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<button class="mini play" data-play="${esc(s.url)}" data-t="${esc(s.title||'')}" title="Play here">▶</button>`:''}${btn}</div>`;
+  }).join('');
+}
 function artistCard(a,i){
   const nyc=NYC.test(a.city||'');
   const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
   const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
   const songs=(a.songs||[]);
-  const songRows=songs.map((s,si)=>{
-    const id=String(s.sc_track_id||'');
-    const btn = !id ? '' : DJADD.has(id) ? `<button class="mini rm" data-rm="${i}:${si}">✓ added · remove</button>`
-      : IN.has(id) ? `<span class="mini inset">✓ in set</span>` : `<button class="mini add" data-add="${i}:${si}">＋ add</button>`;
-    return `<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<a href="${esc(s.url)}" target="_blank" rel="noopener">▶</a>`:''}${btn}</div>`;
-  }).join('');
+  // The day chip only appears on an edition scoped past its own night — otherwise
+  // every card would carry the same label and say nothing.
+  const dayChip=a.day?`<span class="g day">${esc(a.day)}</span>`:'';
   return `<div class="card">
-    <div class="art-top"><strong>${esc(a.name)}</strong>${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
+    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
     <div>${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a> `:''}${songs.length?`<button class="btn" data-songs="${i}">🎵 ${songs.length} song${songs.length===1?'':'s'}</button>`:'<span class="meta" style="margin-left:2px;">no songs scanned yet</span>'}</div>
-    ${songs.length?`<div class="songs" id="songs-${i}">${songRows}</div>`:''}
+    ${songs.length?`<div class="songs" id="songs-${i}" data-ai="${i}"></div>`:''}
   </div>`;
 }
 function render(q){
@@ -147,16 +225,25 @@ function render(q){
   DJADD=new Set((d.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
   let arts=d.artists;
   const hasDisco=d.artists.some(a=>a.group==='disco');
+  // Distinct festival days present, in lineup order (not alphabetical — Thu
+  // before Fri). Only rendered when the crate spans more than one.
+  const days=[...new Set(d.artists.map(a=>a.day).filter(Boolean))];
   if(GRP) arts=arts.filter(a=>(a.group||'main')===GRP);
+  if(DAY) arts=arts.filter(a=>a.day===DAY);
   if(q){ const ql=q.toLowerCase(); arts=arts.filter(a=>(a.name||'').toLowerCase().includes(ql)||(a.next_venue||'').toLowerCase().includes(ql)||(a.genres||[]).some(g=>g.toLowerCase().includes(ql))); }
   const tl=d.tracklist||[];
   $('#root').innerHTML=`
     <div class="kicker">📻 Come With Radio · your DJ workspace</div>
     <h1>EP ${ep.no??''} — ${esc(ep.name||'')}</h1>
     <div class="sub">${sc.pool==='elements'
-      ? `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`
+      ? (sc.reach==='all-producers'
+        ? `Your crate = <b>every producer on the Elements bill</b>, all four days${sc.count?` · ${sc.count} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}. Filter by day below, or just dig. Hit <b>＋ add</b> to build the episode.`
+        : `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`)
       : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}</div>
     <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
+    ${days.length>1?`<div class="grpf">
+      <button class="gchip${DAY===''?' on':''}" data-day="">All days</button>
+      ${days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join('')}</div>`:''}
     ${hasDisco?`<div class="grpf">
       <button class="gchip${GRP===''?' on':''}" data-grp="">All</button>
       <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main lineup</button>
@@ -166,7 +253,14 @@ function render(q){
     ${arts.map(artistCard).join('')||'<div class="state">No artists match. Clear the search.</div>'}
     <div class="foot">Read-only workspace for the assigned DJ. Links expire when access is revoked.</div>`;
   $('#q').addEventListener('input',e=>{ const v=e.target.value; render(v); const el=$('#q'); if(el){el.focus();el.setSelectionRange(v.length,v.length);} });
-  document.querySelectorAll('[data-songs]').forEach(b=>b.addEventListener('click',()=>{ const el=document.getElementById('songs-'+b.dataset.songs); if(el) el.classList.toggle('open'); }));
+  document.querySelectorAll('[data-songs]').forEach(b=>b.addEventListener('click',()=>{
+    const el=document.getElementById('songs-'+b.dataset.songs); if(!el) return;
+    if(!el.dataset.filled){ el.innerHTML=songRowsHtml(+el.dataset.ai); el.dataset.filled='1'; markPlaying(); }
+    el.classList.toggle('open');
+  }));
+  // A filter or keystroke rebuilds every row, so re-apply the highlight. The dock
+  // itself lives outside #root and keeps playing throughout.
+  markPlaying();
 }
 load();
 </script>

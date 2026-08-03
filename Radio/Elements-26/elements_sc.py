@@ -16,7 +16,7 @@
 #     rights credit in publisher_metadata.artist, which said "LEVEL UP" — that is
 #     authoritative, so a track whose credit omits this artist is dropped.
 #     Collaborations keep working: "Zingara, LEVEL UP" still names Zingara.
-import json, re, time, urllib.request
+import json, math, re, time, urllib.request
 
 SONG_MIN_MS = 45_000            # below this it's a clip / ID snippet
 SONG_MAX_MS = 15 * 60 * 1000    # above this it's a DJ set / mix / livestream
@@ -108,17 +108,22 @@ def credited_elsewhere(track, artist_names):
     return pm
 
 
-def fetch_songs(api, cid, uid, artist_names=(), want=15, max_pages=6):
-    """Return (songs, set_count, dropped) for a SoundCloud user id.
+def fetch_songs(api, cid, uid, artist_names=(), want=None, max_pages=40):
+    """Return (songs, set_count, dropped, dupes) for a SoundCloud user id.
 
     `artist_names` = every name this profile is known by (SoundCloud username and
     the festival lineup name); used for the CREDIT rule.
     `dropped` = [(title, crediting_artist)] so callers can report what was skipped.
 
-    Pages until `want` real SONGS are collected rather than `want` uploads: an
-    artist who mostly posts sets used to come back mix-only or empty, because the
-    item cap filled with sets before any song was reached.
+    `want=None` means EVERY song the profile serves — that is the default, because
+    a cap here is invisible downstream: a crate showing 15 songs looks complete
+    whether the artist has 15 or 150. Pass an int only when a caller deliberately
+    wants a sample. Pages until `want` real SONGS are collected rather than `want`
+    uploads: an artist who mostly posts sets used to come back mix-only or empty,
+    because the item cap filled with sets before any song was reached.
     """
+    want = math.inf if want is None else want
+
     def get(url):
         try:
             with urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=20) as r:
@@ -126,21 +131,52 @@ def fetch_songs(api, cid, uid, artist_names=(), want=15, max_pages=6):
         except Exception:
             return None
 
+    def hydrate(items):
+        """Fill in container items that came back as bare {id, kind} references.
+
+        A playlist/album payload is NOT reliably hydrated: SoundCloud serves the
+        first few entries in full and the rest as id-only stubs. A stub has no
+        duration, so the length rule read it as 0 ms and dropped it as a clip —
+        silently costing artists whose catalogue lives in albums the very tracks
+        the container merge was added to reach. /tracks?ids= resolves 50 at a time.
+        """
+        out, stub_ids = [], []
+        for t in items:
+            if t.get("title") and t.get("duration") is not None:
+                out.append(t)
+            elif t.get("id"):
+                stub_ids.append(str(t["id"]))
+        for i in range(0, len(stub_ids), 50):
+            js = get(f"{api}/tracks?ids={','.join(stub_ids[i:i + 50])}&client_id={cid}")
+            if isinstance(js, list):
+                out.extend(js)
+            time.sleep(0.1)
+        return out
+
     # `best` keys on the SONG, not the upload, so a re-post loses to whichever copy
     # has the most engagement. Insertion order (SoundCloud's own, newest first) is
     # preserved via `order` so a dedupe never silently reshuffles the crate.
     out, sets, dropped, seen = [], 0, [], set()
     best, order, dupes = {}, [], []
 
-    def consider(t):
+    def consider(t, strict_owner=False):
         nonlocal sets
         if t.get("kind") != "track" or not t.get("id"):
             return
         tid = str(t["id"])
         if tid in seen:
             return
-        if str((t.get("user") or {}).get("id") or uid) != str(uid):
-            return                                    # OWNERSHIP: not this profile's
+        owner = (t.get("user") or {}).get("id")
+        # OWNERSHIP. /users/{id}/tracks is already scoped to this profile, so a
+        # missing `user` there is just a thin payload and we keep the track. A
+        # CONTAINER is not scoped — a DJ's playlists are mostly other people's
+        # music (Elkind's hold 1,364 tracks, none of them theirs) — so there an
+        # unprovable owner is a reject, not an assumption.
+        if owner is None:
+            if strict_owner:
+                return
+        elif str(owner) != str(uid):
+            return
         d = t.get("duration") or 0
         if d > SONG_MAX_MS:
             seen.add(tid); sets += 1; return           # LENGTH: a DJ set
@@ -183,18 +219,20 @@ def fetch_songs(api, cid, uid, artist_names=(), want=15, max_pages=6):
         if url:
             time.sleep(0.15)
 
-    # Still short? Their catalogue may live in albums/playlists instead.
+    # Their catalogue may ALSO live in albums/playlists — /tracks does not return
+    # everything (LEVEL UP: track_count=46, 0 served). Always merged, not only when
+    # /tracks came up short, because "short" was measured against a cap.
     if len(best) < want:
         for path in CONTAINERS:
             if len(best) >= want:
                 break
             js = get(f"{api}/users/{uid}/{path}?limit=50&client_id={cid}")
             for c in (js.get("collection", []) if isinstance(js, dict) else []) or []:
-                for t in (c.get("tracks") or []):
-                    consider(t)
+                for t in hydrate(c.get("tracks") or []):
+                    consider(t, strict_owner=True)
                 if len(best) >= want:
                     break
             time.sleep(0.15)
 
-    out = [best[k] for k in order][:want]
-    return out, sets, dropped, dupes
+    out = [best[k] for k in order]
+    return (out if want is math.inf else out[:want]), sets, dropped, dupes

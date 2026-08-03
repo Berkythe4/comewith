@@ -881,6 +881,84 @@ inbound route to activate. See `supabase/functions/ingest-email/index.ts`.
 
 ---
 
+## Reconciled 2026-08-03 — Elements: uncapped songs + Thursday scope
+
+**Every song cap removed.** Three of them, all invisible in the UI — a short crate
+reads as "that's their catalogue", so nobody knew to look further:
+
+| where | was | now |
+|---|---|---|
+| `elements_sc.fetch_songs` | `want=15`, `max_pages=6` | `want=None` (whole catalogue), 40 pages |
+| `dj-station` per artist | `.slice(0, 12)` | none — the 15-min length filter stays |
+| `elements_disco.py` | its own 15-item, one-page copy of the rule | imports `fetch_songs` |
+
+Above & Beyond went 15 → **404** songs, A-Trak → 222, ATLiens → 208. `sc-enrich`'s
+`.slice(0, 200)` is left alone: it is a jsonb storage guard and nobody is near it.
+
+Two real bugs fixed inside the fetch:
+- **Album/playlist tracks came back as id-only stubs.** No duration → the length rule
+  read 0 ms and dropped them as clips, so the container merge (added precisely to
+  reach catalogues that live in albums) was silently losing them. Now hydrated 50 at
+  a time via `/tracks?ids=`.
+- **Ownership fell back to "assume ours"** when a track carried no `user`. Harmless on
+  `/users/{id}/tracks`, wrong on a container — a DJ's playlists are mostly other
+  people's music (Elkind's hold 1,364 tracks, none of them theirs). Containers now
+  reject an unprovable owner; `/tracks` still assumes.
+
+**The 0-track artists were three different problems, not one.** Of 19 (not 13):
+- **13 are correct matches with genuinely no short-form music** — Lightcode posts
+  20-minute guided meditations, Sirens a 60-minute podcast series, Koopmusik live
+  sets. 0 songs is the right answer; they are DJs, and `is_producer=false` says so.
+- **2 were wrong profiles, conclusively** — repointed by `elements_repoint.py`:
+  `Diis` → `@diisdiis` (Brooklyn, credits read "Diis", one track titled *Practice
+  Before Elements*); `Cloud Conductor` → `@mderagon`, whose display name is literally
+  "Michael Deragon/Cloud Conductor" → **18 songs** recovered. The shell rows were
+  deleted so they can't be read as those artists again.
+- **3 are still unresolved and deliberately NOT auto-repointed** (see Open / next) —
+  a confident-looking wrong guess is worse than a blank, because nobody re-checks a
+  profile that looks filled in.
+
+**Thursday (Ep1) now carries the whole festival.** Fri/Sat/Sun stay scoped to their
+own night; Thursday is the early slot with a 10-act bill, so `elements_thursday.py`
+scopes it to **every producer on the bill, all four days** — 139 artists, ordered
+Thu → Fri → Sat → Sun → Disco Den, each tagged with the day it plays. Mix-only acts
+are left out rather than padding the crate with dead ends. The day map is derived
+from what Ep1–4 already hold, not re-declared, so there is no third copy of the
+lineup to drift.
+
+`dj-station` v8 emits `day` per artist + `scope.reach`; `dj.html` gained day filter
+chips and a matching blurb. Song rows now render **on expand** — 139 artists × all
+their songs is ~8k rows, and building them up front locked the page on a phone.
+
+**Third bug, caught by reconciling the live response against the cache** (8,138
+served vs 8,198 stored — worth chasing, not rounding off): a name that exists under
+more than one source matched the wrong `ra_artists` row. Brainrack and Flash Gea are
+on the Elements bill *and* have thin RA rows with `soundcloud = null`; `byName[n] =
+byName[n] || a` kept whichever PostgREST returned first, so both were served an
+EMPTY crate while 35 and 25 songs sat in the cache. Now ranks candidates by
+"has a profile", then followers. This was hitting **every** edition, not just Ep1.
+
+Verified live on all four: Ep1 139 artists / 8,198 songs, Ep2 (Martin) 85 / 3,704,
+Ep3 (Henry) 83 / 3,057, Ep4 82 / 2,816 — cache and wire agree exactly, no DJ sets
+leaking through, every artist day-tagged. Ep1's payload is 2.0 MB.
+
+`elements_thursday.py` is re-runnable. The first cut derived the day map from the
+episodes' own `dj_search_params`, which meant a second run read back the 139 artists
+it had just written into Ep1 and collapsed Fri/Sat/Sun into "Thu". It now parses the
+`LINEUP` / `DISCO` literals straight out of the sibling scripts with `ast` (they
+execute at import, so they can't be imported) — never take your own output as input.
+
+Files: `Radio/Elements-26/elements_sc.py`, `elements_disco.py`, `elements_tool.py`,
+`elements_repoint.py` (new), `elements_thursday.py` (new), `dj.html`,
+`supabase/functions/dj-station/index.ts`.
+
+> **Deploying edge functions:** the CLI (2.111.0) rejects the newer `sbp_v0_…` PAT
+> with `LegacyInvalidAccessTokenError`. Use the Management API multipart endpoint
+> `POST /v1/projects/<ref>/functions/deploy?slug=<slug>` with `metadata` + `file`
+> parts — and send a browser `User-Agent`, or Cloudflare answers 403 code 1010.
+
+---
+
 ## Reconciled 2026-07-30 — EP 2 release, Come With Radio module, shared-song-pool
 
 Session ran with **Martin** (sub_admin) rather than Keith. Standing asks captured in
@@ -939,8 +1017,12 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
   magic link AND silently throttles listener signups. Needs Resend SMTP in the
   Supabase dashboard, then raise `rate_limit_email_sent`. **Highest priority.**
 - Marks show only in ⛶ Arrange — not the main tracklist or `dj.html`.
-- 13 Elements artists have suspicious 0-track SoundCloud matches (MLE, Cloud
-  Conductor, Diis, Funky Pickles, Elkind, DJ Dad + 7 low-follower).
+- ~~13 Elements artists have suspicious 0-track SoundCloud matches~~ — **resolved
+  2026-08-03**, see "Elements: uncapped songs + Thursday scope" below. 18 acts still
+  show 0 songs and that is the CORRECT answer: they only ever post DJ sets.
+  Still worth a human eye: **MLE** (verified `@mlemusicc` has 0 uploads; `@mle8`,
+  same city, holds the music), **Sirens** (`@sirens_la` is an LA podcast — may be a
+  different act than the one billed), and **DJ Dad** (no confident match exists).
 - Version variants (`Toys` vs `Toys (Extended)`) deliberately NOT collapsed — 306 rows;
   awaiting a decision.
 - EP 2 artwork is portrait 3:4, so covers letterbox inside the square. Square export

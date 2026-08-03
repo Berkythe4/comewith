@@ -68,7 +68,9 @@ def match(name):
 # contract sc-enrich enforces (45s <= d <= 15 min). This used to be inline here
 # with only the 45-second floor and no ceiling, which put 251 multi-hour sets in
 # sc_artist_cache as "songs" on 2026-07-28.
-def tracks(uid, want=15, names=()):
+def tracks(uid, want=None, names=()):
+    # want=None -> the artist's whole catalogue. A cap here is invisible in the
+    # crate: 15 songs looks complete whether they have 15 or 150.
     songs, sets, dropped, dupes = fetch_songs(api, cid, uid, artist_names=names, want=want)
     for title, who in dropped:
         print(f"      skipped (credited to {who}): {title}")
