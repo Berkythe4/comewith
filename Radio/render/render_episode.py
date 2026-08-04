@@ -27,7 +27,7 @@ are reported and abort, so you never render a half-timed video by accident.
   --mixed-by TEXT  intro credit;  --drop-date / --next-date  YYYY-MM-DD (bookends)
   --no-bookends    skip the intro + closing;  --intro-secs / --outro-secs  retime
 """
-import argparse, csv, os, re, subprocess, sys, tempfile
+import argparse, csv, os, random, re, subprocess, sys, tempfile
 import sys as _sys
 try:
     _sys.stdout.reconfigure(encoding="utf-8")
@@ -116,6 +116,126 @@ def make_background():
     bg = Image.alpha_composite(bg.convert("RGBA"), glow).convert("RGB")
     return bg
 
+def make_background_elements():
+    """The weekly backdrop with the four elements worked into it.
+
+    The brief was "keep the purple subtle" — so this does NOT replace the ground,
+    it breathes four presences into the same gradient at very low alpha. Each one
+    is placed where the card layout is EMPTY, so nothing ever competes with type:
+    the cover sits left-of-centre, the track text right of it, the progress rail
+    across the bottom.
+
+        fire   low left, under the cover — embers, warm, heaviest blur
+        water  low right — a cool pool with slow horizontal ripples
+        air    top centre — a pale lifted haze, the lightest touch of the four
+        wind   upper right — long thin streaks, carrying the brand lime
+
+    Everything is drawn oversized and Gaussian-blurred, so there is no visible
+    edge anywhere — at this alpha the eye reads atmosphere, not shapes.
+    """
+    import math
+    bg = make_background()                       # same purple, same lime glow
+
+    def layer():
+        return Image.new("RGBA", (W, H), (0, 0, 0, 0))
+
+    def veil(im, blur):
+        """Any large colour field gets blurred until its EDGE is gone. A pool this
+        size at blur 26 leaves a visible arc across the frame — the giveaway that
+        it is a drawn ellipse rather than light."""
+        return im.filter(ImageFilter.GaussianBlur(blur))
+
+    # Two kinds of layer, treated very differently.
+    #   WASHES are broad colour fields. They are what tint the ground, so they are
+    #     kept weak and pulled back hard — a wide orange wash over purple just
+    #     makes brown, which is what went wrong first time.
+    #   MARKS are thin: embers, ripples, streaks, motes. They carry almost no
+    #     colour area, so they can be much brighter without moving the ground at
+    #     all — and STRUCTURE is what actually reads as an element. Depicting the
+    #     four is a drawing problem, not an opacity problem.
+    washes, marks = [], []
+
+    # FIRE — low left, tight into the corner, heat rising out of it.
+    f = layer(); fd = ImageDraw.Draw(f)
+    fd.ellipse([-W * 0.20, H * 0.78, W * 0.32, H * 1.42], fill=(206, 48, 18, 52))
+    fd.ellipse([-W * 0.12, H * 0.90, W * 0.22, H * 1.30], fill=(255, 122, 30, 40))
+    washes.append(veil(f, 200))
+
+    # Scatter from a FIXED SEED: identical on every render (a backdrop that
+    # shimmered between frames would be unusable) but with no structure.
+    # The first version stepped both x and y by golden-ratio multiples of the
+    # same index, which puts every particle on a lattice — the embers came out
+    # as three straight diagonal lines across the frame, reading as scratches
+    # rather than sparks. Two irrationals do not make a random 2-D scatter.
+    rnd = random.Random(20260806)
+
+    em = layer(); ed = ImageDraw.Draw(em)
+    for _ in range(130):
+        x = W * rnd.uniform(0.0, 0.34)
+        y = H * (1.03 - 0.62 * rnd.random() ** 0.62)
+        r = rnd.uniform(1.4, 5.0)
+        a = int(235 * max(0.0, 1.0 - (H - y) / (H * 0.62)) ** 1.35 * rnd.uniform(0.55, 1.0))
+        if a > 5:
+            ed.ellipse([x - r, y - r, x + r, y + r], fill=(255, 196, 108, min(235, a)))
+    marks.append(veil(em, 3))
+
+    # WATER — low right. The pool is veiled to nothing; the ripples do the work.
+    w = layer(); wd = ImageDraw.Draw(w)
+    wd.ellipse([W * 0.62, H * 0.72, W * 1.30, H * 1.42], fill=(30, 132, 190, 58))
+    washes.append(veil(w, 200))
+
+    rip = layer(); rd = ImageDraw.Draw(rip)
+    for k in range(9):
+        y0 = H * (0.775 + k * 0.032)
+        amp = 9 + k * 2.2
+        a = int(120 - k * 10)
+        pts = [(x, y0 + amp * math.sin(x / 150.0 + k * 0.85))
+               for x in range(int(W * 0.58), W + 40, 10)]
+        rd.line(pts, fill=(158, 232, 246, max(24, a)), width=3, joint="curve")
+    marks.append(veil(rip, 5))
+
+    # AIR — NOT a haze. A pale wash across the top is what greyed the whole upper
+    # frame first time and fought the lime glow. Air is drift instead: motes
+    # lifting up the left side, clear of the header and the track text.
+    ai = layer(); ad = ImageDraw.Draw(ai)
+    for _ in range(72):
+        t = rnd.random()
+        x = W * rnd.uniform(0.01, 0.33)
+        y = H * (0.06 + 0.62 * t)
+        r = rnd.uniform(1.1, 3.6)
+        ad.ellipse([x - r, y - r, x + r, y + r],
+                   fill=(230, 226, 250, int((60 + 80 * (1 - t)) * rnd.uniform(0.5, 1.0))))
+    marks.append(veil(ai, 4))
+
+    # WIND — long streaks off the upper right in the brand lime, so the fourth
+    # element and the accent are one gesture. Held below the header line and
+    # above the artist name, where the card is empty.
+    # Brighter and paler than the pure brand lime: these sit inside the existing
+    # lime glow in the top-right corner, and at the accent's own value they
+    # simply vanished into it.
+    wi = layer(); wid = ImageDraw.Draw(wi)
+    for k in range(12):
+        y0 = H * (0.105 + k * 0.025)
+        amp = 14 + k * 3.2
+        a = int(150 - k * 9)
+        pts = [(x, y0 + amp * math.sin(x / 330.0 + k * 0.55))
+               for x in range(int(W * 0.44), W + 60, 12)]
+        wid.line(pts, fill=(206, 240, 140, max(34, a)), width=2, joint="curve")
+    marks.append(veil(wi, 3))
+
+    lay = layer()
+    for p in washes:                             # colour first, pulled back
+        lay = Image.alpha_composite(lay, p)
+    al = lay.split()[3]
+    lay.putalpha(al.point(lambda v: int(v * 0.62)))
+    for p in marks:                              # then the drawing, at full weight
+        lay = Image.alpha_composite(lay, p)
+    return Image.alpha_composite(bg.convert("RGBA"), lay).convert("RGB")
+
+
+BACKDROPS = {"weekly": make_background, "elements": make_background_elements}
+
+
 def chip(draw, x, y, text, fnt, accent=False):
     tw = draw.textlength(text, font=fnt)
     ascent, descent = fnt.getmetrics(); th = ascent + descent
@@ -152,10 +272,27 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     mx = cx + cs + 96
     mw = W - BAR_X - mx
     d.text((mx, cy + 8), "%02d / %02d" % (idx, ntracks), font=F_mono(32), fill=FAINT)
-    artist = truncate(d, track["artist"] or "—", F_disp(132), mw)
-    d.text((mx, cy + 58), artist, font=F_disp(132), fill=CREAM)
-    ttitle = truncate(d, track["title"] or "", F_body(58), mw)
-    d.text((mx, cy + 214), ttitle, font=F_body(58), fill=DIM)
+    # Shrink the artist to fit before resorting to an ellipsis. "Louis The Child,
+    # Joey Purp" came out as "Louis The Chil…", which loses the second artist
+    # entirely — on a card whose whole job is to credit them. Collaborations are
+    # common enough that the name has to flex. Truncation stays as the last
+    # resort for a single name genuinely too long at the floor size.
+    aname = track["artist"] or "—"
+    asize = 132
+    while asize > 60 and d.textlength(aname, font=F_disp(asize)) > mw:
+        asize -= 3
+    artist = truncate(d, aname, F_disp(asize), mw)
+    # Keep the baseline where it was at full size, so shorter names don't shift.
+    d.text((mx, cy + 58 + (132 - asize) * 0.62), artist, font=F_disp(asize), fill=CREAM)
+    # Same for the title — these run long once a track is credited as
+    # "Dom Dolla & Tiga - Don't Worry Baby (Sam Sidewayz Remix)", and the remixer
+    # is exactly the part an ellipsis eats.
+    tname = track["title"] or ""
+    tsize = 58
+    while tsize > 38 and d.textlength(tname, font=F_body(tsize)) > mw:
+        tsize -= 2
+    ttitle = truncate(d, tname, F_body(tsize), mw)
+    d.text((mx, cy + 214 + (58 - tsize) * 0.5), ttitle, font=F_body(tsize), fill=DIM)
 
     # song facts — genre + release year (about the SONG). Shown above the show
     # chips (which are about the artist's upcoming gig).
@@ -184,9 +321,12 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     if fw > BAR_H:
         d.rounded_rectangle([BAR_X, BAR_Y, BAR_X + fw, BAR_Y + BAR_H],
                             radius=BAR_H // 2, fill=LIME)
-    # up next
-    up = ("UP NEXT — %s" % nxt) if nxt else "LAST TRACK"
-    d.text((BAR_X, BAR_Y + 40), up, font=F_mono(30), fill=FAINT)
+    # No "UP NEXT". Naming the next track spoils the set for anyone who hasn't
+    # read the tracklist — the whole point of listening through is not knowing
+    # what's coming. "LAST TRACK" stays: it gives the ending its shape without
+    # revealing a single thing.
+    if not nxt:
+        d.text((BAR_X, BAR_Y + 40), "LAST TRACK", font=F_mono(30), fill=FAINT)
     site = "comewith.org"
     sw = d.textlength(site, font=F_mono(30))
     d.text((W - BAR_X - sw, BAR_Y + 40), site, font=F_mono(30), fill=(179, 167, 184))
@@ -381,6 +521,8 @@ def main():
                                        "Defaults to the last cue's start + its own length.")
     ap.add_argument("--edition", default="weekly", choices=sorted(EDITIONS),
                     help="which bookend copy to use")
+    ap.add_argument("--backdrop", default="weekly", choices=sorted(BACKDROPS),
+                    help="'elements' works fire / air / wind / water into the same purple ground")
     ap.add_argument("--cover", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--ep", default="EP 1")
@@ -466,7 +608,7 @@ def main():
     ends = starts[1:] + [total]
 
     work = tempfile.mkdtemp(prefix="cwr_render_")
-    bg = make_background()
+    bg = BACKDROPS[a.backdrop]()
     cover = rounded_cover(a.cover, 470, 34)
     print("Rendering %d track cards…" % len(tracks))
     cards = []
