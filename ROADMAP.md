@@ -952,6 +952,26 @@ Files: `Radio/Elements-26/elements_sc.py`, `elements_disco.py`, `elements_tool.p
 `elements_repoint.py` (new), `elements_thursday.py` (new), `dj.html`,
 `supabase/functions/dj-station/index.ts`.
 
+**The station builder was hiding its whole toolset on planned episodes.** ⇪ To
+SoundCloud, ↺ Sync from SoundCloud, 🎛 Import Rekordbox, ＋ Add song, 🛒 Where to
+buy, ⛶ Arrange, ✎ Details, 📅 drop date, 🗓 tasks and 🚀 Go live were all behind
+`isWorking = status === 'building' || 'testing'`. Every episode created by
+"➕ Plan a future episode" (130) has status **`planned`** — which is all four
+Elements editions — so those opened a builder with only ▶ Play and 📋 Copy.
+Nothing had been removed; it was gated on the wrong states.
+
+Replaced by one helper, `raIsEditable()` = **not live and not archived**, which is
+exactly what migration 135's trigger enforces, so the buttons you can see and the
+writes the database accepts can no longer disagree. It now backs both `isWorking`
+sites, the add-track guard (`raStationClosed`), the Rekordbox import and the track
+editor. Verified across all five statuses — planned/building/testing editable,
+live/archived not, guard agreeing with the gate in every case.
+
+Nothing was needed server-side: `sc-connect`'s export / sync / upload_mix /
+finalize carry no status check, and `radio_publish_station` / `radio_publish_due`
+accept anything that isn't already live. The ④ Release tick now keys on a mix
+being attached rather than `status === 'testing'`, so it lights for every edition.
+
 > **Deploying edge functions:** the CLI (2.111.0) rejects the newer `sbp_v0_…` PAT
 > with `LegacyInvalidAccessTokenError`. Use the Management API multipart endpoint
 > `POST /v1/projects/<ref>/functions/deploy?slug=<slug>` with `metadata` + `file`

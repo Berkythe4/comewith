@@ -9626,7 +9626,7 @@ function renderRadioPopup() {
   const pl = rpop.pl;
   const userOpts = '<option value="">— a user —</option>' + (raState.epUsers || []).map(u => `<option value="${escapeHtml(u.id)}"${pl.assigned_to === u.id ? ' selected' : ''}>${escapeHtml(u.full_name || u.email)}</option>`).join('');
   const djOpts = '<option value="">— or a DJ —</option>' + (raState.djActors || []).map(a => `<option value="${escapeHtml(a.id)}"${pl.assigned_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('');
-  const isWorking = pl.status === 'building' || pl.status === 'testing';
+  const isWorking = raIsEditable(pl);
   const body = `
     <div style="margin-bottom:8px;"><span class="role-chip" style="cursor:default;background:#a7e02e33;color:var(--cream,#ede4d3);">${escapeHtml(RA_STATUS_LABEL[pl.status] || pl.status)}</span>${pl.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);">✨ ${escapeHtml(pl.edition_name)}</span>` : ''}${pl.slug ? ` <a class="hub-mini" href="https://comewith.org/radio.html?s=${escapeHtml(pl.slug)}" target="_blank" rel="noopener">🌐 Page ↗</a>` : ''}</div>
     <div class="modal-form-row"><label class="modal-label">Episode name</label><input class="modal-input" id="rpopName" value="${escapeHtml(pl.name || '')}"></div>
@@ -11745,7 +11745,7 @@ function raRenderPlaylist() {
   const totalMin = Math.round(tracks.reduce((s, t) => s + (t.duration_ms || 0), 0) / 60000);
   const sc = raState.sc || {};
   const exportLabel = !sc.configured ? '⇪ To SoundCloud' : !sc.connected ? '🔗 Connect SoundCloud' : '⇪ To SoundCloud';
-  const isWorking = pl.status === 'building' || pl.status === 'testing';
+  const isWorking = raIsEditable(pl);
   const statusChip = pl.status === 'live'
     ? `<span class="role-chip" style="cursor:default;background:${pl.published ? 'var(--green,#1f7a1f)' : 'var(--mid,#888)'};color:#fff;">${pl.published ? 'LIVE' : 'LIVE · page hidden'}</span>`
     : pl.status === 'archived' ? '<span class="role-chip" style="cursor:default;">ARCHIVED</span>'
@@ -11792,7 +11792,7 @@ function raRenderPlaylist() {
         ${has ? '<button class="hub-btn ghost" data-ra-refreshshows title="Re-match every track to the latest RA/Ticketmaster pull — fills in missing show dates, venues, prices and genres (also fixes sync-added and carried tracks, which start blank)">↻ Show info</button>' : ''}
         ${has ? '<button class="hub-btn ghost" data-ra-preview title="See the public episode page exactly as a listener will">🌐 Preview page</button>' : ''}
         ${has ? '<button class="hub-btn ghost" data-ra-publish title="Copy the tracklist as text — every song plus where that artist plays next. For your caption, the SoundCloud description, or anywhere you want to share it.">📋 Copy tracklist text</button>' : ''}`)}
-      ${grp('release', '④', 'Release', pl.status === 'testing', `
+      ${grp('release', '④', 'Release', pl.status === 'testing' || !!pl.mix_sc_track_url || !!pl.mix_file_path, `
         ${has ? '<button class="hub-btn" data-ra-finalize style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`)}
       ${has ? '<span class="ra-danger"><button class="hub-mini" data-ra-clearpl title="Remove every song from this station. They are logged as passed and carried into next week.">🗑 Clear all songs</button></span>' : ''}`
     : `${has ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
@@ -12387,9 +12387,27 @@ function keyToCamelot(key) {
 // is the front-end half: a plain sentence instead of a raw postgres error, checked
 // in all three add paths. Removing/editing on a live episode stays allowed — that's
 // how you fix a mistake like the EP1 stray on 2026-07-29.
+// ONE definition of "this episode is still being worked on", so the buttons you
+// can see and the writes the database will accept can never disagree.
+//
+// It used to be `status === 'building' || 'testing'`, which silently hid the
+// ENTIRE toolset — ⇪ To SoundCloud, ↺ Sync, 🎛 Rekordbox, ＋ Add song, 🛒 Where
+// to buy, ⛶ Arrange, ✎ Details, 🚀 Go live — on any episode with status
+// 'planned'. Every episode created by "➕ Plan a future episode" (130) is
+// planned, which is all four Elements editions, so those DJs got a builder with
+// nothing in it. Nothing was ever removed; it was gated on the wrong states.
+//
+// The rule now mirrors migration 135's trigger exactly: editable unless live or
+// archived. Removing/editing on a live episode stays allowed — that's how you
+// fix a mistake like the EP1 stray on 2026-07-29.
+function raIsEditable(pl) {
+  pl = pl || raState.playlist;
+  return !!pl && pl.status !== 'live' && pl.status !== 'archived';
+}
 function raStationClosed(pl) {
   pl = pl || raState.playlist;
-  if (!pl || (pl.status !== 'live' && pl.status !== 'archived')) return null;
+  if (raIsEditable(pl)) return null;
+  if (!pl) return null;
   return `EP ${pl.station_no ?? '?'} is ${pl.status} — reopen it (set the status back to testing) before adding songs.`;
 }
 async function raAddTrack(scTrackId) {
@@ -12843,7 +12861,7 @@ async function raReadTextFile(file) {
 // ---- Import flow -------------------------------------------------------------
 function raOpenImport() {
   const pl = raState.playlist;
-  if (!pl || (pl.status !== 'building' && pl.status !== 'testing')) { toast('Only the working station can be reordered', 'err'); return; }
+  if (!raIsEditable(pl)) { toast('A live or archived episode can\'t be reordered — set it back to testing first.', 'err'); return; }
   openKpi('🎛 Import order from Rekordbox', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${(pl.tracks || []).length} songs in the station`, `
     <div class="kpi-hint">In Rekordbox: right-click the playlist → <strong>Export a playlist to a file</strong> → save as <strong>.txt</strong>. Drop it here and the station gets put in that exact order, with BPM and key pulled across. Anything in the file that isn't in the station yet (songs you bought outside the SoundCloud pull) can be added in the same pass. Also accepts .m3u8, CSV, or any pasted numbered tracklist.</div>
     <div id="raRbDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drop the Rekordbox export here — or click to browse</div>
@@ -13534,7 +13552,7 @@ async function raInsertTrack(fields) {
 // artist and SoundCloud link are left alone unless you change them.
 function raOpenTrackEdit(id) {
   const pl = raState.playlist;
-  if (!pl || (pl.status !== 'building' && pl.status !== 'testing')) { toast('Only the working station can be edited', 'err'); return; }
+  if (!raIsEditable(pl)) { toast('A live or archived episode can\'t be edited — set it back to testing first.', 'err'); return; }
   const t = id ? (pl.tracks || []).find(x => x.id === id) : null;
   if (id && !t) return;
   const mmss = t && t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.round((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : '';
