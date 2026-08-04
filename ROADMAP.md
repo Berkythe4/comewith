@@ -881,6 +881,52 @@ inbound route to activate. See `supabase/functions/ingest-email/index.ts`.
 
 ---
 
+## Reconciled 2026-08-04 — SHOW counter (global) vs episode number (per series)
+
+Two numbers had been sharing one word. **`station_no` = the SHOW counter** — every
+broadcast we have ever put out. **`edition_seq` = the episode number inside a
+series.** While the NYC weekly was the only series those were the same number, so
+both rendered "EP n". The Elements edition broke it: its Ep1 is the 4th show, so
+the Control Center read `EP 4 · Come With Elements Radio — Ep1`.
+
+- **Renamed to SHOW** wherever the global counter is displayed: `dashboard.html`
+  (44 sites, incl. the per-track ✓ played / ✋ passed / ↩ carried-from badges),
+  `radio.html`, `dj.html`, `index.html`, `sc-connect`'s social-post title. Every
+  `EP ` occurrence was audited first — all were the global counter.
+- **The rendered video deliberately keeps "EP"** — that label is audience-facing,
+  so `make_episode.py` now draws the EDITION's sequence when there is one. An
+  Elements video says EP 1, not SHOW 4.
+- **Migration 137** (APPLIED to prod) rewords the two functions that had the
+  string baked in: `radio_publish_station`'s auto social-post title and
+  `sc_tracks_block_closed`'s error. Introspected first — those were the only two.
+  Post-apply checks: 0 functions still say `EP `, both revokes survived the
+  `create or replace` (anon/authenticated still cannot execute
+  `radio_publish_station`), trigger still bound, and the guard was fired against a
+  live episode inside a rolled-back probe → `SHOW 1 is live — reopen the episode…`.
+
+**Renumbered to broadcast order** (`scripts/renumber_shows.py --apply`, signed off
+by Keith). `station_no` is handed out at CREATION, not at airtime, and the Elements
+editions were planned after NYC Ep3 but drop two weeks earlier — so the counter ran
+3=NYC Ep3 (Aug 20), 4–7=Elements (Aug 6–9). A count of total shows that runs out of
+order isn't one.
+
+| | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| **was** | NYC 1 | NYC 2 | NYC 3 | Elem 1 | Elem 2 | Elem 3 | Elem 4 |
+| **now** | NYC 1 | NYC 2 | Elem 1 | Elem 2 | Elem 3 | Elem 4 | NYC 3 |
+
+Elements Ep4 is now **SHOW 6** — 2 NYC + 4 Elements, which is the count Keith was
+working from. The script refuses to move a published episode (1 and 2 never
+moved; their slugs are untouched), parks numbers in a high range first because
+`station_no` is uniquely indexed, and remaps
+`sc_song_log.played_station_no` / `passed_station_no` / `sc_playlist_tracks.carried_from`
+— those store the NUMBER, not a foreign key, so they would otherwise point at the
+wrong show (2 rows moved 3→7). Verified after: 0 out-of-order, 10 distinct numbers
+for 10 rows, 39 played rows for shows 1–2 intact. Inverse mapping to undo:
+`3->4 4->5 5->6 6->7 7->3`.
+
+---
+
 ## Reconciled 2026-08-03 — Elements: uncapped songs + Thursday scope
 
 **Every song cap removed.** Three of them, all invisible in the UI — a short crate
