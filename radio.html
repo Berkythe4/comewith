@@ -325,7 +325,7 @@ function downloadCsv(name,rows){
 }
 function episodeCsv(){
   const rows=[['#','Title','Artist','Genre','BPM','Key','Camelot','Minutes','SoundCloud link','Show date','Venue','Price','Show link','Episode','Published']];
-  tracks.forEach((t,i)=>rows.push([i+1,t.title||'',t.artist_name||'',(t.genres||[]).join(' / '),t.bpm||'',t.song_key||'',t.camelot||'',t.duration_ms?Math.round(t.duration_ms/60000):'',t.permalink_url||'',t.show_date||'',t.show_venue||'',t.show_cost||'',t.show_url||'',(station?.station_no!=null?'EP '+station.station_no+' — ':'')+(station?.name||''),station?.published_at?String(station.published_at).slice(0,10):'']));
+  tracks.forEach((t,i)=>rows.push([i+1,t.title||'',t.artist_name||'',(t.genres||[]).join(' / '),t.bpm||'',t.song_key||'',t.camelot||'',t.duration_ms?Math.round(t.duration_ms/60000):'',t.permalink_url||'',t.show_date||'',t.show_venue||'',t.show_cost||'',t.show_url||'',(station?.station_no!=null?'SHOW '+station.station_no+' — ':'')+(station?.name||''),station?.published_at?String(station.published_at).slice(0,10):'']));
   downloadCsv('come-with-radio-'+(station?.slug||'episode')+'.csv',rows);
 }
 
@@ -426,7 +426,7 @@ async function toggleSave(t){
     await sb.from('listener_playlist_tracks').delete().eq('playlist_id',pl.id).eq('permalink_url',t.permalink_url);
     saved.delete(t.permalink_url);toast('Removed from your playlist');
   }else{
-    const row={playlist_id:pl.id,title:t.title,artist_name:t.artist_name,permalink_url:t.permalink_url,artwork_url:t.artwork_url||null,bpm:t.bpm||null,song_key:t.song_key||null,camelot:t.camelot||null,station_slug:station?.slug||null,station_name:station?(station.station_no!=null?'EP '+station.station_no+' — '+station.name:station.name):null};
+    const row={playlist_id:pl.id,title:t.title,artist_name:t.artist_name,permalink_url:t.permalink_url,artwork_url:t.artwork_url||null,bpm:t.bpm||null,song_key:t.song_key||null,camelot:t.camelot||null,station_slug:station?.slug||null,station_name:station?(station.station_no!=null?'SHOW '+station.station_no+' — '+station.name:station.name):null};
     const {data,error}=await sb.from('listener_playlist_tracks').insert(row).select().maybeSingle();
     if(error&&error.code!=='23505'){toast('Could not save: '+error.message);return;}
     saved.set(t.permalink_url,data||row);toast('♡ Saved to your playlist');
@@ -456,7 +456,7 @@ async function saveAll(){
   const btn=$('#saveAllBtn');if(btn){btn.disabled=true;btn.textContent='Saving…';}
   const rows=todo.map(t=>({playlist_id:pl.id,title:t.title,artist_name:t.artist_name,permalink_url:t.permalink_url,artwork_url:t.artwork_url||null,
     bpm:t.bpm||null,song_key:t.song_key||null,camelot:t.camelot||null,station_slug:station?.slug||null,
-    station_name:station?(station.station_no!=null?'EP '+station.station_no+' — '+station.name:station.name):null}));
+    station_name:station?(station.station_no!=null?'SHOW '+station.station_no+' — '+station.name:station.name):null}));
   const {error}=await sb.from('listener_playlist_tracks').upsert(rows,{onConflict:'playlist_id,permalink_url',ignoreDuplicates:true});
   if(btn){btn.disabled=false;btn.textContent='♡ Save all';}
   if(error){toast('Could not save: '+error.message);return;}
@@ -525,7 +525,7 @@ $('#dList').addEventListener('click',e=>{
 async function logVisit(){
   if(!user||!station)return;
   const slug=station.slug||('preview:'+(TOKEN||'').slice(0,8));if(!slug)return;
-  const name=(station.station_no!=null?'EP '+station.station_no+' — ':'')+(station.name||'');
+  const name=(station.station_no!=null?'SHOW '+station.station_no+' — ':'')+(station.name||'');
   const {data:ex}=await sb.from('listener_station_history').select('visits').eq('user_id',user.id).eq('station_slug',slug).maybeSingle();
   if(ex)await sb.from('listener_station_history').update({last_seen_at:new Date().toISOString(),visits:(ex.visits||1)+1,station_name:name}).eq('user_id',user.id).eq('station_slug',slug);
   else await sb.from('listener_station_history').insert({user_id:user.id,station_slug:slug,station_name:name});
@@ -548,11 +548,11 @@ async function loadHub(){
   const eps=j.stations||[];
   if(j.next_drop&&j.next_drop.drop_date){
     const d=new Date(j.next_drop.drop_date+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
-    $('#preview').innerHTML='<span class="banner" style="background:var(--lime);color:#180c12">Next episode · EP '+esc(j.next_drop.station_no??'')+' drops '+esc(d)+'</span>';
+    $('#preview').innerHTML='<span class="banner" style="background:var(--lime);color:#180c12">Next episode · SHOW '+esc(j.next_drop.station_no??'')+' drops '+esc(d)+'</span>';
   }
   if(!eps.length){$('#root').innerHTML='<div class="state">First episode coming soon — check back, or follow <a href="https://instagram.com/comewithnyc" target="_blank" rel="noopener">@comewithnyc</a>.</div>';return;}
   $('#root').innerHTML='<div class="epgrid">'+eps.map(e=>`<article class="ep" data-slug="${esc(e.slug||'')}">
-      <div class="art" ${e.artwork_url?`style="background-image:url('${esc(e.artwork_url)}')"`:''}><span class="no">EP ${e.station_no??'—'}${e.published_at?' · '+fmtDate(e.published_at):''}</span></div>
+      <div class="art" ${e.artwork_url?`style="background-image:url('${esc(e.artwork_url)}')"`:''}><span class="no">SHOW ${e.station_no??'—'}${e.published_at?' · '+fmtDate(e.published_at):''}</span></div>
       <div class="bd"><h3>${esc(e.name)}</h3>
       <div class="meta">${e.mix_by?'Mixed by '+esc(e.mix_by)+' · ':''}${e.track_count} tracks · ${e.total_min} min${e.mix_sc_track_url?' · mix on SoundCloud':''}</div>
       ${e.desc_public?`<div class="blurb">${esc(e.desc_public)}</div>`:''}
@@ -620,9 +620,9 @@ async function loadEpisode(){
     const r=await fetch(FN+q,{headers:H});j=await r.json();if(!r.ok)throw new Error(j.error||'error');
   }catch(e){$('#hd').textContent='Come With Radio';$('#root').innerHTML='<div class="state">'+esc(e.message||'Could not load this station.')+' · <a href="radio.html">All episodes →</a></div>';return;}
   station=j.station;tracks=j.tracks||[];
-  document.title=(station.station_no!=null?('EP '+station.station_no+' — '):'')+(station.name||'Come With Radio')+' · Come With Radio';
+  document.title=(station.station_no!=null?('SHOW '+station.station_no+' — '):'')+(station.name||'Come With Radio')+' · Come With Radio';
   $('#allEps').style.display='';
-  $('#hd').textContent=(station.station_no!=null?('EP '+station.station_no+' · '):'')+(station.name||'Come With Radio');
+  $('#hd').textContent=(station.station_no!=null?('SHOW '+station.station_no+' · '):'')+(station.name||'Come With Radio');
   $('#sub').textContent=(station.mix_by?('Mixed by '+station.mix_by+' · '):'')+(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
   if(!station.published)$('#preview').innerHTML='<span class="banner">Preview · unlisted — only people with this link can see it</span>';
   render();

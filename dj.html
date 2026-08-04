@@ -234,7 +234,7 @@ function render(q){
   const tl=d.tracklist||[];
   $('#root').innerHTML=`
     <div class="kicker">📻 Come With Radio · your DJ workspace</div>
-    <h1>EP ${ep.no??''} — ${esc(ep.name||'')}</h1>
+    <h1>SHOW ${ep.no??''} — ${esc(ep.name||'')}</h1>
     <div class="sub">${sc.pool==='elements'
       ? (sc.reach==='all-producers'
         ? `Your crate = <b>every producer on the Elements bill</b>, all four days${sc.count?` · ${sc.count} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}. Filter by day below, or just dig. Hit <b>＋ add</b> to build the episode.`

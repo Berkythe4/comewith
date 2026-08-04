@@ -449,7 +449,7 @@ Deno.serve(async (req) => {
       scWarning = "No SoundCloud mix track linked yet — the page is live without one.";
     }
 
-    // Permanent song memory: everything in a live episode is PLAYED (in EP n, on
+    // Permanent song memory: everything in a live episode is PLAYED (in SHOW n, on
     // this date). Clears nothing else — a song's earlier passed history stays.
     const nowIso = new Date().toISOString();
     for (const t of plTracks) {
@@ -489,7 +489,7 @@ Deno.serve(async (req) => {
     // the rest of the content plan. Best-effort — never blocks going live.
     try {
       await admin.from("social_posts").insert({
-        title: `📻 Come With Radio EP ${pl.station_no ?? ""} — ${pl.name || ""}`.trim(),
+        title: `📻 Come With Radio SHOW ${pl.station_no ?? ""} — ${pl.name || ""}`.trim(),
         caption: (descSc || "").slice(0, 1000) || null,
         channels: ["other"], series: "Come With Radio", content_pillar: "radio episode",
         stage: "posted", scheduled_for: nowIso, posted_at: nowIso,

@@ -108,6 +108,11 @@ def main():
             raise SystemExit("Could not find the generated cues CSV.")
         cues = found[-1]
     ep_no = station_no_from_cues(cues)
+    # What gets drawn ON the video. This stays "EP n" and stays the number the
+    # AUDIENCE knows — the episode's place in its own series, not the global show
+    # counter. For a special edition those differ: Elements Ep1 is show 4, and
+    # burning "SHOW 4" onto a video the world knows as Elements Ep1 would be
+    # wrong. Filled in from the edition below, once we've read the episode meta.
     ep_label = "EP %s" % ep_no
 
     # 2) times. A hand-verified tracklist.json (from match_mix + your corrections)
@@ -137,7 +142,7 @@ def main():
         from make_cues import env as _env, q as _q
         E = _env()
         meta = _q(E, """
-            select mix_by, drop_date::text,
+            select mix_by, drop_date::text, edition_name, edition_seq,
                    (select drop_date::text from sc_playlists n
                     where n.drop_date > p.drop_date order by n.drop_date limit 1) as next_drop
             from sc_playlists p where p.station_no = %s limit 1;""" % ep_no)
@@ -145,6 +150,9 @@ def main():
             mixed_by = meta[0].get("mix_by") or ""
             drop_date = meta[0].get("drop_date") or ""
             next_date = meta[0].get("next_drop") or ""
+            # A special edition numbers its own episodes; use that on screen.
+            if meta[0].get("edition_seq"):
+                ep_label = "EP %s" % meta[0]["edition_seq"]
     except Exception as ex:
         print("(couldn't read episode meta for the intro/closing — rendering with what we have: %s)" % ex)
 

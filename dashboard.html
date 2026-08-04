@@ -1754,7 +1754,7 @@ const AUDIT_WHAT = {
   event_participants: r => [(r.roles || []).join(', ') || r.role, auditMoney(r.fee)],
   conversations: r => [r.subject, r.recipient_email],
   survey_responses: r => [r.source, r.anonymous ? 'anonymous' : ''],
-  sc_playlists: r => [r.station_no != null ? 'EP ' + r.station_no : '', r.name, r.status],
+  sc_playlists: r => [r.station_no != null ? 'SHOW ' + r.station_no : '', r.name, r.status],
   sc_playlist_tracks: r => [r.artist_name, r.title],
   listener_playlists: r => [r.name],
   site_content: r => [r.key],
@@ -2649,7 +2649,7 @@ async function raLoadPostEpisode(stationId) {
   if (!data) return;
   const url = data.slug ? 'https://comewith.org/radio.html?s=' + data.slug : null;
   box.innerHTML = `<div class="modal-form-row" style="border:1px solid var(--gold);border-radius:8px;padding:10px;background:rgba(181,121,31,0.06);">
-    <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">🎧 Linked episode — EP ${data.station_no ?? ''} · ${escapeHtml(data.name || '')}</strong>${url ? ` <a href="${url}" target="_blank" rel="noopener" class="hub-mini" style="margin-left:auto;">page ↗</a>` : ''}</div>
+    <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">🎧 Linked episode — SHOW ${data.station_no ?? ''} · ${escapeHtml(data.name || '')}</strong>${url ? ` <a href="${url}" target="_blank" rel="noopener" class="hub-mini" style="margin-left:auto;">page ↗</a>` : ''}</div>
     ${data.recap_notes ? `<div class="modal-label" style="margin-top:6px;">📝 Recap notes from the episode</div><div class="li-sub" style="white-space:pre-wrap;line-height:1.55;">${escapeHtml(data.recap_notes)}</div>` : '<div class="li-sub" style="margin-top:4px;">No recap notes on this episode yet.</div>'}</div>`;
 }
 // Floating, NON-blocking reader for the brief so a long note doesn't crowd the
@@ -9650,7 +9650,7 @@ function renderRadioPopup() {
       <button type="button" class="hub-btn" data-rpop-golive style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the mix, write descriptions, publish">🚀 Go live</button>` : ''}
       <button type="button" class="hub-btn ghost" data-rpop-open title="Open the full builder in Come With Radio">Open in Come With Radio →</button>
     </div>`;
-  openKpi('📻 EP ' + (pl.station_no ?? '—') + ' · ' + (pl.name || ''), 'Come With Radio · quick edit', body, saveRadioPopup, 'Save');
+  openKpi('📻 SHOW ' + (pl.station_no ?? '—') + ' · ' + (pl.name || ''), 'Come With Radio · quick edit', body, saveRadioPopup, 'Save');
 }
 async function saveRadioPopup() {
   const g = (id) => (document.getElementById(id)?.value || '').trim();
@@ -10543,7 +10543,7 @@ async function loadRaMarket() {
   // its tasks/notes before the first paint instead of rendering an empty shell.
   if (raState.ccMode) await loadRadioCC(); else renderRaMarket();
 }
-// Stations are numbered (EP 1, 2, …) and all persist. The WORKING station is
+// Stations are numbered (SHOW 1, 2, …) and all persist. The WORKING station is
 // the building/testing row (auto-created with the next number when everything's
 // live — i.e. right after an episode goes live you get a fresh one, pre-seeded
 // server-side with carried-over songs). The switcher can view any past station.
@@ -11243,7 +11243,7 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-ccedition]')) { raCcSpecialEdition(); return; }
   const cce = t.closest('[data-ra-cctaskedit]'); if (cce) { openEditTask(cce.dataset.raCctaskedit, loadRadioCC); return; }
   const ccn = t.closest('[data-ra-ccnoteadd]'); if (ccn) { raCcAddNote(ccn.dataset.raCcnoteadd); return; }
-  const ccclip = t.closest('[data-ra-ccclip]'); if (ccclip) { const s = raState.stations.find(x => x.id === ccclip.dataset.raCcclip); openAssetModal({ station_id: ccclip.dataset.raCcclip, kind: 'clip', label: 'EP ' + (s?.station_no ?? ''), defaultLabel: 'EP ' + (s?.station_no ?? '') + ' — clip' }, loadRadioCC); return; }
+  const ccclip = t.closest('[data-ra-ccclip]'); if (ccclip) { const s = raState.stations.find(x => x.id === ccclip.dataset.raCcclip); openAssetModal({ station_id: ccclip.dataset.raCcclip, kind: 'clip', label: 'SHOW ' + (s?.station_no ?? ''), defaultLabel: 'SHOW ' + (s?.station_no ?? '') + ' — clip' }, loadRadioCC); return; }
   const ccnotify = t.closest('[data-ra-ccnotify]'); if (ccnotify) { raCcNotify(ccnotify.dataset.raCcnotify); return; }
   if (t.closest('[data-ra-genweek]')) { raOpenGenWeek(); return; }
   if (t.closest('[data-ra-history]')) { raOpenHistory(); return; }
@@ -11712,8 +11712,8 @@ function raRenderArtistTracks(key) {
   const visible = raState.hidePlayed ? songs.filter(t => !raState.songLog?.[t.sc_track_id]?.played_at) : songs;
   const songMark = (t) => {
     const l = raState.songLog?.[t.sc_track_id]; if (!l) return '';
-    if (l.played_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;background:var(--green,#1f7a1f);color:#fff;" title="Played on Come With Radio EP ${l.played_station_no ?? '?'} · ${fmtDate(l.played_at)}">✓ played EP ${l.played_station_no ?? '?'}</span>`;
-    if (l.passed_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Considered and passed on EP ${l.passed_station_no ?? '?'} · ${fmtDate(l.passed_at)}${l.carried_to ? ' — auto-carried to a later station' : ''}">✋ passed${l.passed_station_no != null ? ' EP ' + l.passed_station_no : ''}</span>`;
+    if (l.played_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;background:var(--green,#1f7a1f);color:#fff;" title="Played on Come With Radio SHOW ${l.played_station_no ?? '?'} · ${fmtDate(l.played_at)}">✓ played SHOW ${l.played_station_no ?? '?'}</span>`;
+    if (l.passed_at) return ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Considered and passed on SHOW ${l.passed_station_no ?? '?'} · ${fmtDate(l.passed_at)}${l.carried_to ? ' — auto-carried to a later station' : ''}">✋ passed${l.passed_station_no != null ? ' SHOW ' + l.passed_station_no : ''}</span>`;
     return '';
   };
   return `<div style="border-left:2px solid var(--border-strong);padding-left:10px;">
@@ -11754,7 +11754,7 @@ function raRenderPlaylist() {
         : '<span class="role-chip" style="cursor:default;" title="Building the tracklist">BUILDING</span>';
   // Numbered-station switcher — all playlists are saved; flip between them here.
   const switcher = (raState.stations || []).length > 1 ? `<select class="modal-select" data-ra-plselect style="max-width:220px;">
-      ${(raState.stations || []).map(p => `<option value="${p.id}"${p.id === pl.id ? ' selected' : ''}>EP ${p.station_no ?? '—'} · ${escapeHtml(p.name)} (${p.status})</option>`).join('')}
+      ${(raState.stations || []).map(p => `<option value="${p.id}"${p.id === pl.id ? ' selected' : ''}>SHOW ${p.station_no ?? '—'} · ${escapeHtml(p.name)} (${p.status})</option>`).join('')}
     </select>` : '';
   // Release pipeline: ① build the tracklist here (SoundCloud research + hand-added
   // buys) → ② buy the songs and arrange the set in Rekordbox, then import that
@@ -11805,7 +11805,7 @@ function raRenderPlaylist() {
   if (!open) {
     return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:9px 12px;background:var(--surface-2);margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
       ${chev}
-      <strong data-ra-stationtoggle style="cursor:pointer;">🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${statusChip}
+      <strong data-ra-stationtoggle style="cursor:pointer;">🎧 SHOW ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${statusChip}
       <span class="li-sub" data-ra-stationtoggle style="cursor:pointer;">${tracks.length} song${tracks.length === 1 ? '' : 's'} · ${totalMin} min</span>
       ${switcher}
       <span style="margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;">
@@ -11818,9 +11818,9 @@ function raRenderPlaylist() {
   return `<div style="border:1px solid var(--border-strong);border-radius:10px;padding:12px;background:var(--surface-2);margin-bottom:8px;">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">
       ${chev}
-      <strong>🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-epdetails title="Episode name, cover image and both descriptions — editable any time, saving does not publish anything">✎ Details</button>' : ''} ${statusChip}${pl.scheduled_go_live ? ` <span class="role-chip" style="cursor:default;background:var(--green-bg);color:var(--green);border:1px solid var(--green);" title="Publishes automatically at this time">⏰ ${escapeHtml(fmtDateTime(pl.scheduled_go_live))}</span>` : ''}
+      <strong>🎧 SHOW ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong> ${isWorking ? '<button class="hub-mini" data-ra-epdetails title="Episode name, cover image and both descriptions — editable any time, saving does not publish anything">✎ Details</button>' : ''} ${statusChip}${pl.scheduled_go_live ? ` <span class="role-chip" style="cursor:default;background:var(--green-bg);color:var(--green);border:1px solid var(--green);" title="Publishes automatically at this time">⏰ ${escapeHtml(fmtDateTime(pl.scheduled_go_live))}</span>` : ''}
       ${isWorking && (!pl.desc_public || !pl.cover_url || /^weekly station$/i.test(pl.name || '')) ? `<span class="li-sub" style="color:var(--amber);" title="These show publicly the moment you go live">⚠ needs ${[/^weekly station$/i.test(pl.name || '') ? 'a real name' : '', !pl.cover_url ? 'cover' : '', !pl.desc_public ? 'description' : ''].filter(Boolean).join(' · ')}</span>` : ''}
-      ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'EP drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
+      ${isWorking ? `<label class="li-sub" style="display:flex;align-items:center;gap:4px;" title="Scheduled release date — shows as 'SHOW drops <date>' on the homepage + radio hub until you go live">📅 drops <input type="date" class="modal-input" data-ra-dropdate value="${escapeHtml(pl.drop_date || '')}" style="max-width:145px;padding:3px 6px;"></label>` : (pl.drop_date ? `<span class="li-sub">📅 dropped ${escapeHtml(fmtDate(pl.drop_date))}</span>` : '')}
       ${switcher}
       <button class="hub-mini" data-ra-history title="Every song ever considered — played / passed / carried, with dates">📜 History</button>
       <a class="hub-mini" href="${ARTIST_ORIGIN}radio-workflow.html" target="_blank" rel="noopener" title="The weekly run, end to end — build → record → video → go live">🗺️ Weekly run</a>
@@ -11834,7 +11834,7 @@ function raRenderPlaylist() {
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:${tracks.length ? '10px' : '0'};">${actions}</div>
     ${liveLinks}
     ${tracks.length ? `<div class="hub-list">${tracks.map((t, i) => { const show = [t.show_date ? '🗓 ' + fmtDate(t.show_date) : '', t.show_venue ? '📍 ' + escapeHtml(t.show_venue) : '', t.show_cost ? '🎟 ' + escapeHtml(t.show_cost) : ''].filter(Boolean).join(' · '); return `<div class="hub-li" style="padding:4px 0;flex-wrap:wrap;">
-      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;${t.source === 'dj' ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : t.source === 'dj' ? 'Added by the assigned DJ from their scoped link' : t.source === 'beatport' ? 'Bought / matched on Beatport' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : t.source === 'dj' ? '🎧 DJ pick' : t.source === 'beatport' ? '🛒 beatport' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from EP ${t.carried_from} while testing — auto-carried into this station">↩ from EP ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
+      <div class="li-main"><span>${i + 1}. ${escapeHtml(t.title)}${t.camelot ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;">${escapeHtml(t.camelot)}${t.bpm ? ' · ' + t.bpm : ''}</span>` : ''}${t.source && t.source !== 'soundcloud' ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;${t.source === 'dj' ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="${t.source === 'rekordbox' ? 'Added by the Rekordbox import — not from the SoundCloud pull' : t.source === 'dj' ? 'Added by the assigned DJ from their scoped link' : t.source === 'beatport' ? 'Bought / matched on Beatport' : 'Added by hand — bought / promo / not on SoundCloud'}">${t.source === 'rekordbox' ? '🎛 rekordbox' : t.source === 'dj' ? '🎧 DJ pick' : t.source === 'beatport' ? '🛒 beatport' : '✎ manual'}</span>` : ''}${t.carried_from != null ? ` <span class="role-chip" style="cursor:default;padding:1px 6px;" title="Cut from SHOW ${t.carried_from} while testing — auto-carried into this station">↩ from SHOW ${t.carried_from}</span>` : ''}</span><div class="li-sub">${escapeHtml(t.artist_name || '')} · ${Math.round((t.duration_ms || 0) / 60000)}min${t.source === 'soundcloud' ? ' · ' + fmtNum(t.playback_count || 0) + ' plays' : ''}${t.label ? ' · ' + escapeHtml(t.label) : ''}${(t.genres || []).length ? ' · ' + escapeHtml(t.genres.slice(0, 2).join(', ')) : ''}${!t.permalink_url ? ' · <span title="No public link — shows as a text-only row on the episode page">no listen link</span>' : ''}${show ? '<br>' + show : ''}</div></div>
       <span style="display:flex;gap:4px;">
         ${t.permalink_url ? `<button class="hub-mini" data-ra-trackplay="${escapeHtml(t.permalink_url)}" data-ra-name="${escapeHtml(t.title)}">▶</button>` : ''}
         ${t.buy_url || t.beatport_url || t.bandcamp_url ? `<a class="hub-mini" href="${escapeHtml(t.buy_url || t.beatport_url || t.bandcamp_url)}" target="_blank" rel="noopener" title="${t.buy_url ? 'Where you bought it' : 'Buy it — found by “Where to buy”' + (t.beatport_price ? ' · ' + t.beatport_price : '')} (private — never shown on the site)">🛒</a>` : ''}
@@ -11971,7 +11971,7 @@ function raRenderFsBody() {
   const totalMin = Math.round(tracks.reduce((s, t) => s + (t.duration_ms || 0), 0) / 60000);
   const totalStr = `${Math.floor(totalMin / 60)}:${String(totalMin % 60).padStart(2, '0')}`;
   const head = document.getElementById('raFsHead'); if (head) head.innerHTML = `
-    <strong style="font-size:1.05rem;">🎧 EP ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong>
+    <strong style="font-size:1.05rem;">🎧 SHOW ${pl.station_no ?? '—'} · ${escapeHtml(pl.name)}</strong>
     <span class="li-sub">${tracks.length} tracks · ${totalStr} total</span>
     <span class="li-sub" style="color:var(--dim);">— drag ⠿ to set the play order</span>
     <span style="margin-left:auto;display:flex;gap:8px;">
@@ -12092,7 +12092,7 @@ function renderRadioCC() {
     const isOpen = open === s.id;
     const sched = s.scheduled_go_live ? `⏰ ${fmtDateTime(s.scheduled_go_live)}` : (s.drop_date ? `📅 drops ${fmtDate(s.drop_date)}` : (s.published_at ? `published ${fmtDate(s.published_at)}` : 'no date set'));
     const head = `<div class="hub-li" data-ra-ccopen="${s.id}" style="cursor:pointer;">
-      <div class="li-main"><strong>EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || 'Untitled')}</strong>
+      <div class="li-main"><strong>SHOW ${s.station_no ?? '—'} · ${escapeHtml(s.name || 'Untitled')}</strong>
         <span class="role-chip" style="cursor:default;">${RA_STATUS_LABEL[s.status] || s.status}</span>${s.edition_name ? ` <span class="role-chip" style="cursor:default;background:var(--gold-bg,#3a2a1a);color:var(--gold,#e0b23a);border:1px solid var(--gold,#e0b23a);" title="Special edition series">✨ ${escapeHtml(s.edition_name)}${s.edition_seq ? ' · Day ' + s.edition_seq : ''}</span>` : ''}${raAssignChip(s)}${s.dj_token ? ' <span class="role-chip" style="cursor:default;background:var(--surface-2);" title="A DJ access link is active">🔗 DJ link</span>' : ''}
         <div class="li-sub">${escapeHtml(sched)}${tks.length ? ` · ${done}/${tks.length} tasks` : ''}${ccNotesFor(s.id).length ? ` · 💬 ${ccNotesFor(s.id).length}` : ''}</div></div>
       <span class="li-sub">${isOpen ? '▾' : '▸'}</span></div>`;
@@ -12129,7 +12129,7 @@ function renderRadioCC() {
       <span style="display:flex;gap:8px;align-items:center;"><span class="li-sub">${stations.length} episode${stations.length === 1 ? '' : 's'}</span>
       <button class="hub-btn ghost" data-ra-ccplan title="Create a future episode skeleton you can assign & start working on">➕ Plan a future episode</button>
       <button class="hub-btn ghost" data-ra-ccedition title="Create a multi-day special edition (festival run) instead of the weekly">✨ Special edition</button></span></div>
-    ${nextDrops.length ? `<div class="kpi-hint" style="margin-bottom:10px;">📆 Upcoming: ${nextDrops.slice(0, 4).map(s => `EP ${s.station_no ?? ''} ${escapeHtml(fmtDate(s.scheduled_go_live || s.drop_date))}`).join(' · ')}</div>` : ''}
+    ${nextDrops.length ? `<div class="kpi-hint" style="margin-bottom:10px;">📆 Upcoming: ${nextDrops.slice(0, 4).map(s => `SHOW ${s.station_no ?? ''} ${escapeHtml(fmtDate(s.scheduled_go_live || s.drop_date))}`).join(' · ')}</div>` : ''}
     <div class="hub-list">${stations.map(card).join('') || '<div class="hub-empty">No episodes yet.</div>'}</div>`;
 }
 // Load a station into raState.playlist so the existing editors act on it.
@@ -12147,7 +12147,7 @@ async function raCcPlanEpisode() {
   else { const d = new Date(); d.setDate(d.getDate() + ((4 - d.getDay() + 7) % 7 || 7)); drop = d.toISOString().slice(0, 10); }  // next Thursday
   const { data, error } = await sb.from('sc_playlists').insert({ name: `Come With Radio Ep${nextNo}`, station_no: nextNo, status: 'planned', drop_date: drop }).select('id').single();
   if (error) { toast('Could not create: ' + error.message, 'err'); return; }
-  toast(`Planned EP ${nextNo} · drops ${fmtDate(drop)} — open it to assign & set details`, 'ok');
+  toast(`Planned SHOW ${nextNo} · drops ${fmtDate(drop)} — open it to assign & set details`, 'ok');
   await raLoadPlaylist(); raState.ccOpen = data?.id || null; await loadRadioCC();
 }
 // Create a SPECIAL EDITION — a run of daily drops (e.g. a festival) instead of
@@ -12175,7 +12175,7 @@ async function raCcSpecialEdition() {
     </div>
     <div class="hub-sec-bar" style="margin-top:10px;"><h3 style="font-size:.85rem;">The drops</h3></div>
     <div id="seRows">${rowsHtml(4, start)}</div>
-    <div class="kpi-hint" style="margin-top:8px;">Creates <span id="seCount">4</span> Planned episodes (EP ${startNo}+), one per day. Open any afterward to set details, generate its DJ link, add recap notes, etc.</div>`,
+    <div class="kpi-hint" style="margin-top:8px;">Creates <span id="seCount">4</span> Planned episodes (SHOW ${startNo}+), one per day. Open any afterward to set details, generate its DJ link, add recap notes, etc.</div>`,
     async () => {
       const name = (document.querySelector('[data-se-name]')?.value || '').trim() || 'Special edition';
       const s0 = document.querySelector('[data-se-start]')?.value || start;
@@ -12205,14 +12205,14 @@ async function raCcNotify(stationId) {
   const s = raState.stations.find(x => x.id === stationId);
   await ensureSocialLookups();
   const opts = socialPeople.filter(p => p.id !== ME.id).map(p => `<option value="${p.id}">${escapeHtml(p.full_name || p.email)}</option>`).join('');
-  openKpi('🔔 Ask a teammate', `EP ${s?.station_no ?? '—'} · ${escapeHtml(s?.name || '')}`, `
+  openKpi('🔔 Ask a teammate', `SHOW ${s?.station_no ?? '—'} · ${escapeHtml(s?.name || '')}`, `
     <label class="modal-label">Who</label><select class="modal-select" name="rn_who" style="width:100%;">${opts}</select>
     <label class="modal-label" style="margin-top:8px;">What do you need?</label>
     <textarea class="modal-input" name="rn_msg" rows="3" style="width:100%;" placeholder="e.g. Can you cut a 30s clip from the drop for the Tuesday post?"></textarea>`,
     async () => {
       const who = kpiVal('rn_who'), msg = kpiVal('rn_msg'); if (!who || !msg) { toast('Pick someone and write the ask', 'err'); return; }
       await sb.from('station_notes').insert({ station_id: stationId, body: '🔔 → ' + (socialPeople.find(p => p.id === who)?.full_name || '') + ': ' + msg, created_by: ME.id });
-      await notify(who, 'assigned', `Radio EP ${s?.station_no ?? ''}: action needed`, msg, 'station', stationId);
+      await notify(who, 'assigned', `Radio SHOW ${s?.station_no ?? ''}: action needed`, msg, 'station', stationId);
       closeKpi(); toast('Sent + notified', 'ok'); await loadRadioCC();
     }, 'Send');
 }
@@ -12224,16 +12224,16 @@ async function raCcAddNote(id) {
 }
 async function raCcAddTask(id) {
   const s = (raState.stations || []).find(x => x.id === id);
-  const { data, error } = await sb.from('tasks').insert({ title: `EP ${s?.station_no ?? ''} — new task`, status: 'todo', source: 'manual', pillar: 'radio', station_id: id }).select('id').single();
+  const { data, error } = await sb.from('tasks').insert({ title: `SHOW ${s?.station_no ?? ''} — new task`, status: 'todo', source: 'manual', pillar: 'radio', station_id: id }).select('id').single();
   if (error) { toast('Could not create: ' + error.message, 'err'); return; }
   openEditTask(data.id, loadRadioCC);
 }
 // The teased release date (drop_date) + optional auto-publish time. drop_date
-// shows as "EP drops <date>" on the site until go-live; scheduled_go_live is the
+// shows as "SHOW drops <date>" on the site until go-live; scheduled_go_live is the
 // DB-only auto-publish moment (the finalize flow owns the full SoundCloud push).
 function raCcSchedule(id) {
   const s = (raState.stations || []).find(x => x.id === id); if (!s) return;
-  openKpi('📅 Schedule release', `EP ${s.station_no ?? '—'} · ${escapeHtml(s.name || '')}`, `
+  openKpi('📅 Schedule release', `SHOW ${s.station_no ?? '—'} · ${escapeHtml(s.name || '')}`, `
     <label class="modal-label">Teased drop date (shown on the site until live)</label>
     <input class="modal-input" type="date" name="cc_drop" value="${escapeHtml(s.drop_date || '')}" style="max-width:200px;">
     <label class="modal-label" style="margin-top:10px;">Auto-publish at (optional)</label>
@@ -12279,7 +12279,7 @@ function raOpenGenWeek() {
   const pl = raState.playlist;
   const wed = raNextWednesday();
   const preview = RADIO_CADENCE.map(s => `<div class="hub-li" style="padding:4px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${s.day} · <span data-gw-date="${s.off}">${escapeHtml(fmtDate(raDatePlus(wed, s.off)))}</span></div></div></div>`).join('');
-  openKpi('🗓 Generate week\'s production tasks', `EP ${pl?.station_no ?? '—'} · anchored on the record day`, `
+  openKpi('🗓 Generate week\'s production tasks', `SHOW ${pl?.station_no ?? '—'} · anchored on the record day`, `
     <label class="modal-label">Record day (Wednesday)</label>
     <input class="modal-input" type="date" name="gw_wed" value="${wed}" data-ra-genweek-date style="max-width:200px;">
     <div class="kpi-hint" style="margin:8px 0;">Six tasks land on the shared board, bucketed <strong>Radio</strong>, dated off this Wednesday. Record + Post are milestones (they show on the calendar).</div>
@@ -12301,7 +12301,7 @@ async function raGenWeekRun() {
   const wed = (document.querySelector('[data-ra-genweek-date]')?.value) || '';
   if (!wed) throw new Error('Pick the record Wednesday');
   const pl = raState.playlist;
-  const epLabel = pl ? `EP ${pl.station_no ?? ''}${pl.name ? ' · ' + pl.name : ''}`.trim() : 'Radio';
+  const epLabel = pl ? `SHOW ${pl.station_no ?? ''}${pl.name ? ' · ' + pl.name : ''}`.trim() : 'Radio';
   // The episode PREVIEW link (?t=<token>) — works before AND after go-live, so
   // Janelle gets the tracklist + copy while it's still unpublished.
   const epLink = pl?.public_token ? `${ARTIST_ORIGIN}radio.html?t=${encodeURIComponent(pl.public_token)}` : null;
@@ -12408,7 +12408,7 @@ function raStationClosed(pl) {
   pl = pl || raState.playlist;
   if (raIsEditable(pl)) return null;
   if (!pl) return null;
-  return `EP ${pl.station_no ?? '?'} is ${pl.status} — reopen it (set the status back to testing) before adding songs.`;
+  return `SHOW ${pl.station_no ?? '?'} is ${pl.status} — reopen it (set the status back to testing) before adding songs.`;
 }
 async function raAddTrack(scTrackId) {
   const shut = raStationClosed(); if (shut) { toast(shut, 'err'); return; }
@@ -12862,7 +12862,7 @@ async function raReadTextFile(file) {
 function raOpenImport() {
   const pl = raState.playlist;
   if (!raIsEditable(pl)) { toast('A live or archived episode can\'t be reordered — set it back to testing first.', 'err'); return; }
-  openKpi('🎛 Import order from Rekordbox', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${(pl.tracks || []).length} songs in the station`, `
+  openKpi('🎛 Import order from Rekordbox', `SHOW ${pl.station_no ?? '—'} · ${pl.name} · ${(pl.tracks || []).length} songs in the station`, `
     <div class="kpi-hint">In Rekordbox: right-click the playlist → <strong>Export a playlist to a file</strong> → save as <strong>.txt</strong>. Drop it here and the station gets put in that exact order, with BPM and key pulled across. Anything in the file that isn't in the station yet (songs you bought outside the SoundCloud pull) can be added in the same pass. Also accepts .m3u8, CSV, or any pasted numbered tracklist.</div>
     <div id="raRbDrop" style="border:2px dashed var(--border-strong);border-radius:10px;padding:20px;text-align:center;cursor:pointer;background:var(--off);margin-bottom:8px;">⬇ Drop the Rekordbox export here — or click to browse</div>
     <input type="file" id="raRbFile" accept=".txt,.csv,.m3u,.m3u8,.tsv,text/plain" style="display:none">
@@ -13005,8 +13005,8 @@ async function raOpenEpisodeDetails() {
   const postOpts = '<option value="">— none —</option>' + (raState.epPosts || []).map(p => opt(p.id, (p.title || 'Untitled') + (p.scheduled_for ? ' · ' + fmtDate(p.scheduled_for) : ''), linkedPostId)).join('');
   const dp = pl.dj_search_params || {};
   const pageUrl = 'https://comewith.org/radio.html?s=' + (pl.slug || raSlugify(pl.name) + '-' + new Date().toISOString().slice(0, 10));
-  const descScDefault = `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}`;
-  openKpi('✎ Episode details', `EP ${pl.station_no ?? '—'} · ${pl.name}`, `
+  const descScDefault = `${pl.name} — Come With Radio SHOW ${pl.station_no ?? ''}.\nEvery artist in this mix is playing NYC soon.\nFull tracklist + gig guide: ${pageUrl}`;
+  openKpi('✎ Episode details', `SHOW ${pl.station_no ?? '—'} · ${pl.name}`, `
     <div class="kpi-hint">Saved as you go — nothing here publishes anything. Go live picks all of it up.</div>
     <div class="form-row"><label>Mixed by (DJ)</label>
       <input name="ep_mix_by" class="modal-input" value="${v(pl.mix_by)}" placeholder="e.g. Berky — who recorded this mix">
@@ -13233,7 +13233,7 @@ async function raAddBeatportTrack(key, bpId) {
       label: t.label || null, source: 'beatport', sort,
     });
     if (error) throw error;
-    toast(`Added "${full}" to EP ${pl.station_no ?? ''}`, 'ok');
+    toast(`Added "${full}" to SHOW ${pl.station_no ?? ''}`, 'ok');
     await raLoadPlaylist(); renderRaMarket();
   } catch (e) { toast('Could not add: ' + (e.message || e), 'err'); }
 }
@@ -13427,7 +13427,7 @@ function raCopyBuyList() {
     return `${i + 1}. ${t.artist_name || ''} — ${t.title}${t.beatport_price ? ' · ' + t.beatport_price : ''}\n   ${where}`;
   });
   const money = tr.reduce((s, t) => s + (Number(String(t.beatport_price || '').replace(/[^\d.]/g, '')) || 0), 0);
-  const txt = [`Buy list — EP ${raState.playlist.station_no ?? '—'} · ${raState.playlist.name}`, '',
+  const txt = [`Buy list — SHOW ${raState.playlist.station_no ?? '—'} · ${raState.playlist.name}`, '',
     ...lines, '', money ? `Total (Beatport): $${money.toFixed(2)}` : ''].join('\n').trim();
   navigator.clipboard.writeText(txt).then(() => toast('Buy list copied', 'ok'), () => toast('Copy failed', 'err'));
 }
@@ -13460,7 +13460,7 @@ async function raCheckSources(accessToken, skipProbe) {
     try {
       const { data: st } = await sb.functions.invoke('track-sources', { body: { playlist_id: pl.id, probe: true } });
       if (st && st.beatport_ok === false) {
-        openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${n} tracks`, `
+        openKpi('🛒 Where to buy', `SHOW ${pl.station_no ?? '—'} · ${pl.name} · ${n} tracks`, `
           ${raSourcesSummary(pl.tracks || [])}
           ${raBeatportPasteBox('Beatport needs a token before it can give you prices, BPM and key.')}
           <div class="kpi-hint">Or skip it — Bandcamp alone still works, but for club/commercial releases it finds very little.</div>
@@ -13472,7 +13472,7 @@ async function raCheckSources(accessToken, skipProbe) {
   }
   const progress = (done, tot) => {
     const pct = tot ? Math.round((done / tot) * 100) : 0;
-    openKpi('🛒 Where to buy', `EP ${pl.station_no ?? '—'} · ${pl.name}`, `
+    openKpi('🛒 Where to buy', `SHOW ${pl.station_no ?? '—'} · ${pl.name}`, `
       <div class="kpi-hint" style="display:flex;align-items:center;gap:8px;"><span class="spinner"></span> Checking Beatport &amp; Bandcamp — <strong>${done} of ${tot || n}</strong> tracks…</div>
       <div style="height:8px;border-radius:999px;background:var(--surface-2);overflow:hidden;margin-top:8px;">
         <div style="height:100%;width:${pct}%;background:var(--green,#1f7a1f);transition:width .3s;"></div></div>
@@ -13557,7 +13557,7 @@ function raOpenTrackEdit(id) {
   if (id && !t) return;
   const mmss = t && t.duration_ms ? `${Math.floor(t.duration_ms / 60000)}:${String(Math.round((t.duration_ms % 60000) / 1000)).padStart(2, '0')}` : '';
   const v = (x) => escapeHtml(x == null ? '' : String(x));
-  openKpi(t ? '✎ Edit song' : '＋ Add song', t ? (t.title || '') : `EP ${pl.station_no ?? '—'} · ${pl.name} — added to the end of the tracklist`, `
+  openKpi(t ? '✎ Edit song' : '＋ Add song', t ? (t.title || '') : `SHOW ${pl.station_no ?? '—'} · ${pl.name} — added to the end of the tracklist`, `
     <div class="kpi-hint">For songs you bought or were sent — anything that never came through the SoundCloud pull. Only the title is required.</div>
     <div class="form-row"><label>Title *</label><input name="title" class="modal-input" value="${t ? v(t.title) : ''}" placeholder="Sunburst (Extended Mix)"></div>
     <div class="form-row"><label>Artist</label><input name="artist_name" class="modal-input" value="${t ? v(t.artist_name) : ''}" placeholder="Kettama"></div>
@@ -13798,9 +13798,9 @@ function raOpenFinalize() {
   // up. Printing it in the SoundCloud description gives it away and removes the
   // reason to click through. The TEST push still carries the full list, because
   // that one is private and only Keith reads it.
-  const descSc = pl.desc_sc || `${pl.name} — Come With Radio EP ${pl.station_no ?? ''}.${pl.mix_by ? `\nMixed by ${pl.mix_by}.` : ''}\n\nEvery artist in this mix is playing NYC in the next couple of weeks.\nFull tracklist with dates, venues, door prices and tickets:\n${pageUrl}\n\nCome With — Brooklyn parties that give back.`;
+  const descSc = pl.desc_sc || `${pl.name} — Come With Radio SHOW ${pl.station_no ?? ''}.${pl.mix_by ? `\nMixed by ${pl.mix_by}.` : ''}\n\nEvery artist in this mix is playing NYC in the next couple of weeks.\nFull tracklist with dates, venues, door prices and tickets:\n${pageUrl}\n\nCome With — Brooklyn parties that give back.`;
   const mixDone = !!(pl.mix_sc_track_url || pl.mix_sc_track_id);
-  openKpi('🚀 Finalize & go live', `EP ${pl.station_no ?? '—'} · ${pl.name} · ${tr.length} tracks`, `
+  openKpi('🚀 Finalize & go live', `SHOW ${pl.station_no ?? '—'} · ${pl.name} · ${tr.length} tracks`, `
     <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-bottom:10px;">
       <strong style="font-size:.9rem;">1 · The mix</strong>
       ${mixDone ? `<div class="kpi-hint" style="margin:6px 0 0;">✓ Mix track linked: <a href="${escapeHtml(pl.mix_sc_track_url || '#')}" target="_blank">${escapeHtml(pl.mix_sc_track_url || pl.mix_sc_track_id)}</a> — you can re-link below to replace it.</div>` : ''}
@@ -13833,7 +13833,7 @@ function raOpenFinalize() {
         <textarea name="desc_sc" class="modal-textarea" rows="7" style="font-family:monospace;font-size:.8rem;">${escapeHtml(descSc)}</textarea></div>
       <div class="form-row"><label>YouTube link (optional — paste the video URL if you posted one)</label>
         <input name="youtube_url" class="modal-input" value="${escapeHtml(pl.mix_youtube_url || '')}" placeholder="https://youtube.com/watch?v=…"></div>
-      <div class="kpi-hint">Go live = the episode page appears on comewith.org/radio.html, the mix track flips <strong>public</strong> on SoundCloud with the description above, every track is logged as <strong>played</strong> in the song history, and a fresh EP ${(raState.stations || []).reduce((m, p) => Math.max(m, p.station_no || 0), 0) + 1} station opens pre-loaded with the songs you cut this cycle.</div>
+      <div class="kpi-hint">Go live = the episode page appears on comewith.org/radio.html, the mix track flips <strong>public</strong> on SoundCloud with the description above, every track is logged as <strong>played</strong> in the song history, and a fresh SHOW ${(raState.stations || []).reduce((m, p) => Math.max(m, p.station_no || 0), 0) + 1} station opens pre-loaded with the songs you cut this cycle.</div>
     </div>
     <div style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;margin-top:10px;">
       <strong style="font-size:.9rem;">⏰ Or schedule it</strong>
@@ -13972,9 +13972,9 @@ async function raDoFinalize() {
     if (error) throw new Error((await fnErrorDetail(error)) || error.message);
     if (data?.error) throw new Error(data.error);
     closeKpi();
-    toast(`📻 EP ${pl.station_no ?? ''} is LIVE`, 'ok');
+    toast(`📻 SHOW ${pl.station_no ?? ''} is LIVE`, 'ok');
     if (data.sc_warning) toast(data.sc_warning, 'warn');
-    if (data.next?.carried) toast(`EP ${data.next.station_no} started with ${data.next.carried} carried-over song${data.next.carried === 1 ? '' : 's'}`, 'ok');
+    if (data.next?.carried) toast(`SHOW ${data.next.station_no} started with ${data.next.carried} carried-over song${data.next.carried === 1 ? '' : 's'}`, 'ok');
     if (data.page_url) window.open(data.page_url, '_blank');
     raState.viewPlaylistId = null;
     await raLoadPlaylist(); renderRaMarket();
@@ -14080,9 +14080,9 @@ function raHistRows() {
   if (!rows.length) return '<div class="hub-empty">Nothing here yet — songs land in the history when you add, cut or play them.</div>';
   return rows.map(r => {
     const st = r.played_at
-      ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">✓ played EP ${r.played_station_no ?? '?'} · ${fmtDate(r.played_at)}</span>`
+      ? `<span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;">✓ played SHOW ${r.played_station_no ?? '?'} · ${fmtDate(r.played_at)}</span>`
       : r.passed_at
-        ? `<span class="role-chip" style="cursor:default;">✋ passed${r.passed_station_no != null ? ' EP ' + r.passed_station_no : ''} · ${fmtDate(r.passed_at)}${r.carried_to ? ' · ↩ carried forward' : ''}</span>`
+        ? `<span class="role-chip" style="cursor:default;">✋ passed${r.passed_station_no != null ? ' SHOW ' + r.passed_station_no : ''} · ${fmtDate(r.passed_at)}${r.carried_to ? ' · ↩ carried forward' : ''}</span>`
         : '<span class="role-chip" style="cursor:default;">🕐 considered</span>';
     return `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(r.title || '')}</strong> <span class="li-sub">· ${escapeHtml(r.artist_name || '')}</span>
       <div class="li-sub" style="margin-top:2px;">${st}${(r.add_count || 1) > 1 ? ` <span class="li-sub">· added ${r.add_count}×</span>` : ''}</div></div>

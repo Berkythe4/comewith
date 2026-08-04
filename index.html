@@ -449,7 +449,7 @@ async function loadRadioFeature(){
   const dropFmt=s=>new Date(s+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'short',day:'numeric'});
   if(ep){
     const showName=(ep.name&&!/^weekly station$/i.test(ep.name))?' · '+ep.name:'';
-    $('#rfTitle').textContent='EP '+(ep.station_no??'')+showName;
+    $('#rfTitle').textContent='SHOW '+(ep.station_no??'')+showName;
     $('#rfMeta').textContent=[ep.mix_by?('Mixed by '+ep.mix_by):'',ep.track_count?(ep.track_count+' tracks'):'',ep.total_min?(ep.total_min+' min'):''].filter(Boolean).join(' · ');
     const art=ep.cover_url||ep.artwork_url;if(art)$('#rfArt').style.backgroundImage="url('"+art+"')";
     if(ep.slug)el.href='radio.html?s='+encodeURIComponent(ep.slug);
@@ -459,7 +459,7 @@ async function loadRadioFeature(){
     $('#rfMeta').textContent='Mixes built from artists playing NYC soon — every track is a show you can catch.';
     $('#rfCta').textContent='Explore the radio →';
   }
-  if(nd&&nd.drop_date){$('#rfTease').textContent='⏰ EP '+(nd.station_no??'')+' drops '+dropFmt(nd.drop_date);$('#rfTease').hidden=false;}
+  if(nd&&nd.drop_date){$('#rfTease').textContent='⏰ SHOW '+(nd.station_no??'')+' drops '+dropFmt(nd.drop_date);$('#rfTease').hidden=false;}
   el.hidden=false;
 }
 loadContent();loadEvents();loadCollective();loadImpactReport();loadRadioFeature();

@@ -81,7 +81,7 @@ def main():
                         r["bpm"] or "", r["song_key"] or "", r["camelot"] or "", r["duration_ms"] or "",
                         r["show_date"] or "", r["show_venue"] or "",
                         r.get("genres") or "", r.get("release_date") or ""])
-    print("Wrote %s  (EP %s, %d tracks)" % (out, station_no, len(rows)))
+    print("Wrote %s  (SHOW %s, %d tracks)" % (out, station_no, len(rows)))
     print("Now fill the `start` column with mm:ss for each track, then run render_episode.py")
 
 if __name__ == "__main__":
