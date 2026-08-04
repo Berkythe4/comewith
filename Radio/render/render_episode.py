@@ -244,6 +244,39 @@ def _ctext(d, cx, y, text, fnt, fill):
 def _cdivider(d, cx, y, half=210):
     d.rounded_rectangle([cx - half, y, cx + half, y + 4], radius=2, fill=LIME_DK)
 
+# ---- EDITION COPY -----------------------------------------------------------
+# The bookends say what the episode IS, and that differs by edition. The weekly
+# NYC show is "every artist is playing New York soon"; the Elements run is four
+# consecutive nights of producers playing that festival. Keeping the copy in one
+# table means a new special edition is a dict entry, not a fork of the renderer.
+#
+# `brand`      headline on the intro slide
+# `intro_a/b`  the two body lines (a = what this is, b = what to do about it)
+# `outro_a/b`  the two closing body lines
+# `next_label` prefix on the closing date pill
+# `tease`      final closing line; "" hides it
+EDITIONS = {
+    "weekly": {
+        "brand": "COME WITH RADIO",
+        "intro_a": "Every track is an artist playing New York — soon.",
+        "intro_b": "Hear who's playing, grab your tickets, go live.",
+        "outro_a": "Tickets to every artist you just heard — plus when &",
+        "outro_b": "where they play next, and the mix to replay — at",
+        "next_label": "WE PLUG BACK IN NEXT THURSDAY",
+        "tease": "SOMETHING ELEMENTAL IS COMING",
+    },
+    "elements": {
+        "brand": "COME WITH ELEMENTS RADIO",
+        "intro_a": "Every track is a producer playing Elements this weekend.",
+        "intro_b": "Four nights, four episodes. This one is Berky's run.",
+        "outro_a": "Every artist you just heard plays Elements this weekend —",
+        "outro_b": "set times, the rest of the run and the mix to replay — at",
+        "next_label": "THE RUN CONTINUES",
+        "tease": "FOUR NIGHTS · FOUR EPISODES · ONE WEEKEND",
+    },
+}
+ED = EDITIONS["weekly"]          # replaced in main() by --edition
+
 # ---- INTRO: one accumulating "slide" that tells the station's story ----------
 # Fixed layout (lines never shift); `stage` reveals more of it each beat, so the
 # story assembles in place, then the full slide holds. Overlays the opening of
@@ -255,7 +288,13 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
     tag = "● ON AIR"
     tw = d.textlength(tag, font=F_monob(28))
     d.text((cx - tw / 2, 92 + cs + 22), tag, font=F_monob(28), fill=LIME)
-    _ctext(d, cx, 92 + cs + 66, "COME WITH RADIO", F_disp(86), CREAM)
+    # The brand headline is drawn at whatever size FITS: "COME WITH ELEMENTS
+    # RADIO" is 9 characters longer than "COME WITH RADIO" and would have run
+    # off both edges at a fixed 86pt.
+    bsize = 86
+    while bsize > 40 and d.textlength(ED["brand"], font=F_disp(bsize)) > W - 2 * 110:
+        bsize -= 2
+    _ctext(d, cx, 92 + cs + 66, ED["brand"], F_disp(bsize), CREAM)
     if stage >= 1:                                            # credits
         cred = "  ·  ".join([p for p in [
             ep_label.upper(),
@@ -264,18 +303,15 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
         _ctext(d, cx, 92 + cs + 176, cred, F_mono(30), DIM)
     if stage >= 2:
         _cdivider(d, cx, 92 + cs + 232)
-        _ctext(d, cx, 92 + cs + 262, "Every track is an artist playing New York — soon.", F_body(44), CREAM)
+        _ctext(d, cx, 92 + cs + 262, ED["intro_a"], F_body(44), CREAM)
     if stage >= 3:
-        _ctext(d, cx, 92 + cs + 330, "Hear who's playing, grab your tickets, go live.", F_body(44), DIM)
+        _ctext(d, cx, 92 + cs + 330, ED["intro_b"], F_body(44), DIM)
     if stage >= 4:
         _ctext(d, cx, 92 + cs + 416, "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN", F_mono(28), FAINT)
         _ctext(d, cx, 92 + cs + 452, "comewith.org", F_disp(44), LIME)
     return im.convert("RGB")
 
-# ---- CLOSING: sincere thanks, tracklist download, follow, next Thursday ------
-# Cryptic tease on the closing slide. One place to edit, week to week.
-TEASE_LINE = "SOMETHING ELEMENTAL IS COMING"
-
+# ---- CLOSING: sincere thanks, tracklist download, follow, next drop ----------
 def draw_outro(bg, cover_sm, next_date, stage):
     im = bg.copy(); d = ImageDraw.Draw(im); cx = W // 2
     tag = "● THAT'S THE SHOW"
@@ -285,26 +321,26 @@ def draw_outro(bg, cover_sm, next_date, stage):
     _ctext(d, cx, 292, "PLUGGING IN.", F_disp(78), CREAM)
     if stage >= 1:
         _cdivider(d, cx, 430)
-        _ctext(d, cx, 462, "Tickets to every artist you just heard — plus when &", F_body(40), CREAM)
-        _ctext(d, cx, 512, "where they play next, and the mix to replay — at", F_body(40), CREAM)
+        _ctext(d, cx, 462, ED["outro_a"], F_body(40), CREAM)
+        _ctext(d, cx, 512, ED["outro_b"], F_body(40), CREAM)
     if stage >= 2:
         _ctext(d, cx, 576, "comewith.org", F_disp(60), LIME)
     if stage >= 3:
         _ctext(d, cx, 690, "Follow @comewithnyc so you never miss a drop.", F_body(40), DIM)
     if stage >= 4:
         nd = fmt_md(next_date)
-        txt = "WE PLUG BACK IN NEXT THURSDAY" + ((" · " + nd.upper()) if nd else "")
+        txt = ED["next_label"] + ((" · " + nd.upper()) if nd else "")
         tw2 = d.textlength(txt, font=F_mono(38))
         pad = 30
         d.rounded_rectangle([cx - tw2 / 2 - pad, 772, cx + tw2 / 2 + pad, 772 + 78],
                             radius=40, outline=LIME_DK, width=2)
         d.text((cx - tw2 / 2, 772 + 20), txt, font=F_mono(38), fill=LIME)
-    # A cryptic tease for the Elements run — four consecutive nights starting on the
-    # very Thursday the chip above names, so the slide raises the question and the
-    # Elements Ep1 intro answers it. Its OWN line under the pill, dimmer and smaller,
-    # so the chip stays a clean single line. Reveals last, after the date lands.
-    if stage >= 5:
-        _ctext(d, cx, 892, TEASE_LINE, F_mono(30), DIM)
+    # Closing line under the pill — dimmer and smaller so the chip stays a clean
+    # single line, and revealed last, after the date lands. On the weekly show
+    # this is the cryptic tease for whatever is coming; inside a special edition
+    # it names the run you are already in. "" hides it.
+    if stage >= 5 and ED["tease"]:
+        _ctext(d, cx, 892, ED["tease"], F_mono(30), DIM)
     return im.convert("RGB")
 
 # reveal cadence (seconds per beat); last beat is the full-slide hold.
@@ -338,7 +374,13 @@ def main():
     ap.add_argument("--json", help="tracklist.json from match_mix.py — timing driven ONLY by this")
     ap.add_argument("--meta", help="optional cues CSV to pull bpm/key from, joined by order")
     ap.add_argument("--abitrate", default="192k")
-    ap.add_argument("--audio", required=True)
+    ap.add_argument("--audio", help="the mix; omit only with --no-audio")
+    ap.add_argument("--no-audio", action="store_true",
+                    help="render the SLIDES ONLY, silent — for reviewing the deck before the mix exists")
+    ap.add_argument("--duration", help="total runtime for --no-audio (mm:ss, h:mm:ss or seconds). "
+                                       "Defaults to the last cue's start + its own length.")
+    ap.add_argument("--edition", default="weekly", choices=sorted(EDITIONS),
+                    help="which bookend copy to use")
     ap.add_argument("--cover", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--ep", default="EP 1")
@@ -352,7 +394,13 @@ def main():
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
 
-    for p in ((a.json or a.cues), a.audio, a.cover):
+    global ED
+    ED = EDITIONS[a.edition]
+
+    if not a.audio and not a.no_audio:
+        raise SystemExit("Give --audio, or --no-audio to render the slides on their own.")
+    need = [(a.json or a.cues), a.cover] + ([a.audio] if a.audio else [])
+    for p in need:
         if not p or not os.path.exists(p):
             raise SystemExit("Missing file: " + str(p))
 
@@ -397,10 +445,24 @@ def main():
     if starts != sorted(starts):
         raise SystemExit("Start times aren't in increasing order — check the cues.")
 
-    total = ffprobe_duration(a.audio)
+    if a.audio:
+        total = ffprobe_duration(a.audio)
+    elif a.duration:
+        total = parse_start(a.duration)
+        if total is None:
+            raise SystemExit("Couldn't read --duration %r (use mm:ss, h:mm:ss or seconds)." % a.duration)
+    else:
+        # No mix yet: the last card needs an end, so fall back to that track's own
+        # length from the cues. Better than an arbitrary tail — the deck then runs
+        # for as long as the set actually should.
+        last_ms = 0
+        try: last_ms = int(float(tracks[-1].get("duration_ms") or 0))
+        except Exception: pass
+        total = starts[-1] + (last_ms / 1000.0 if last_ms else 180.0)
+        print("No audio — deck runs to %s (last cue + its own length)." % fmt_clock(total))
     if starts[-1] >= total:
-        raise SystemExit("Last track start (%s) is past the audio length (%s)."
-                         % (fmt_clock(starts[-1]), fmt_clock(total)))
+        raise SystemExit("Last track start (%s) is past the %s length (%s)."
+                         % (fmt_clock(starts[-1]), "audio" if a.audio else "requested", fmt_clock(total)))
     ends = starts[1:] + [total]
 
     work = tempfile.mkdtemp(prefix="cwr_render_")
@@ -449,15 +511,21 @@ def main():
     # mix in seconds instead of choking a per-pixel geq bar.
     os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
     cmd = ["ffmpeg", "-y",
-           "-f", "concat", "-safe", "0", "-i", listfile,
-           "-i", a.audio,
-           "-vf", "fps=30,format=yuv420p",
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
-           "-c:a", "aac", "-b:a", a.abitrate,
-           "-pix_fmt", "yuv420p", "-movflags", "+faststart"]
+           "-f", "concat", "-safe", "0", "-i", listfile]
+    if a.audio:
+        cmd += ["-i", a.audio]
+    cmd += ["-vf", "fps=30,format=yuv420p",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "20"]
+    if a.audio:
+        cmd += ["-c:a", "aac", "-b:a", a.abitrate]
+    else:
+        cmd += ["-an"]                     # slides only — no silent track to strip later
+    cmd += ["-pix_fmt", "yuv420p", "-movflags", "+faststart"]
     if a.dry:
         cmd += ["-t", "1"]
-    cmd += ["-shortest", a.out]
+    if a.audio:
+        cmd += ["-shortest"]               # meaningless (and a warning) with no second input
+    cmd += [a.out]
     print("Encoding video (total %s)…" % fmt_clock(total))
     r = subprocess.run(cmd, capture_output=True, text=True)
     if r.returncode != 0:

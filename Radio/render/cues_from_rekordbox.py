@@ -23,7 +23,7 @@ Format notes (same ones the dashboard importer had to learn):
 Start times are seeded as arithmetic guesses (track lengths scaled to fit the
 mix), clearly labelled as such. They are a typing aid, NOT a measurement.
 """
-import argparse, csv, io, os, subprocess, sys
+import argparse, csv, io, json, os, re, subprocess, sys
 try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception: pass
 
@@ -55,9 +55,23 @@ def read_rekordbox(path):
     out = []
     for ln in lines[1:]:
         c = ln.split("\t")
-        title = col(c, "Track Title", "Title", "Name")
+        # "Timestamp Track Title" is its own Rekordbox column — the one that
+        # prepends the cue time. Another reason columns are found by NAME: this
+        # export has no "Track Title" at all, so a positional reader sees nothing.
+        title = col(c, "Timestamp Track Title", "Track Title", "Title", "Name")
         if not title:
             continue
+        # A cue time typed into the title ("00:00 - Appetite", "1:01:25 - Shake
+        # Something", and sometimes "04:00-  Demon Time" with no space). These are
+        # REAL start times someone wrote down, so they beat the arithmetic guess —
+        # but only when asked for, since a song can legitimately open with a
+        # number. Tolerates h:mm:ss, mm:ss, and any spacing around the dash.
+        cue = None
+        m = re.match(r"^\s*(\d{1,2}:\d{2}(?::\d{2})?)\s*[-–—]\s*(.+)$", title)
+        if m:
+            p = [int(x) for x in m.group(1).split(":")]
+            cue = p[0] * 60 + p[1] if len(p) == 2 else p[0] * 3600 + p[1] * 60 + p[2]
+            title = m.group(2).strip()
         artist = col(c, "Artist", "Artists")
         # Empty Artist column: Rekordbox leaves it blank when the tag has the
         # artist inside the title. Split once on " - ".
@@ -72,9 +86,15 @@ def read_rekordbox(path):
         if bpm:
             try: bpm = str(int(round(float(bpm))))
             except Exception: pass
+        # Strip stray U+FEFF. Rekordbox sometimes leaves a byte-order mark INSIDE
+        # a field ("I've Been Waiting﻿﻿ (Extended)"). It is an encoding
+        # artifact, not part of the name — everything else about the title, symbols
+        # included, is left exactly as written.
+        title = title.replace("﻿", "")
+        artist = artist.replace("﻿", "")
         out.append({"artist": artist, "title": title, "bpm": bpm,
                     "camelot": col(c, "Key"), "genre": col(c, "Genre"),
-                    "duration_ms": int(secs * 1000)})
+                    "cue": cue, "duration_ms": int(secs * 1000)})
     return out
 
 
@@ -95,6 +115,12 @@ def main():
     ap.add_argument("--out", required=True, help="cues CSV to write")
     ap.add_argument("--times", help="also write a human fill-in sheet here")
     ap.add_argument("--ep", type=int, default=0)
+    ap.add_argument("--times-in-title", action="store_true",
+                    help="the export already carries real start times in the title "
+                         "('00:00 - Appetite') — use those instead of guessing")
+    ap.add_argument("--show-venue", default="",
+                    help="venue chip for every card, e.g. 'Elements Festival'")
+    ap.add_argument("--show-dates", help="JSON {artist: 'YYYY-MM-DD'} for the date chip")
     a = ap.parse_args()
 
     tr = read_rekordbox(a.txt)
@@ -104,19 +130,62 @@ def main():
     mix = mix_seconds(a.mix) if a.mix else total
     scale = (mix / total) if total else 1.0
 
-    run, starts = 0.0, []
-    for t in tr:
-        starts.append(mmss(run))
-        run += t["duration_ms"] / 1000.0 * scale
+    if a.times_in_title:
+        missing = [i for i, t in enumerate(tr, 1) if t.get("cue") is None]
+        if missing:
+            raise SystemExit("--times-in-title, but these rows have no time in the title: %s"
+                             % ", ".join(map(str, missing)))
+        starts = [mmss(t["cue"]) for t in tr]
+        drift = [i for i in range(1, len(tr)) if tr[i]["cue"] <= tr[i - 1]["cue"]]
+        if drift:
+            raise SystemExit("Times in the title aren't increasing at row(s): %s"
+                             % ", ".join(str(i + 1) for i in drift))
+    else:
+        run, starts = 0.0, []
+        for t in tr:
+            starts.append(mmss(run))
+            run += t["duration_ms"] / 1000.0 * scale
 
+    # Per-artist show chips. The date is matched on the FIRST credited artist —
+    # a Rekordbox artist field is often "Romeo, Biscits" while the lineup lists
+    # one of them — and falls back to any credited name that we know.
+    shows = {}
+    if a.show_dates:
+        shows = {k.strip().lower(): v for k, v in json.load(open(a.show_dates, encoding="utf-8")).items()}
+    def show_date_for(artist):
+        if not shows:
+            return ""
+        for nm in [artist] + [p.strip() for p in re.split(r"[,&]| x | vs ", artist or "", flags=re.I)]:
+            v = shows.get((nm or "").strip().lower())
+            if v:
+                return v
+        return ""
+
+    # Write EVERY column render_episode reads. A cues file missing `genres`,
+    # `release_date`, `show_date` or `show_venue` doesn't error — that part of the
+    # card just isn't drawn, silently (see NOTES_WEEKLY_RELEASE.md).
+    matched = 0
     with io.open(a.out, "w", encoding="utf-8", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot", "duration_ms"])
+        w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot",
+                    "genres", "release_date", "show_date", "show_venue", "duration_ms"])
         for i, t in enumerate(tr, 1):
+            sd = show_date_for(t["artist"])
+            if sd:
+                matched += 1
             w.writerow([i, starts[i - 1], t["artist"], t["title"], t["bpm"], "",
-                        t["camelot"], t["duration_ms"]])
+                        t["camelot"], t.get("genre", ""), "", sd,
+                        a.show_venue if (sd or a.show_venue) else "", t["duration_ms"]])
     print("wrote %s — %d tracks" % (a.out, len(tr)))
-    print("source total %s | mix %s | overlap scale %.3f" % (mmss(total), mmss(mix), scale))
+    if a.times_in_title:
+        print("start times: read from the export (real cues), last starts %s" % starts[-1])
+    else:
+        print("source total %s | mix %s | overlap scale %.3f" % (mmss(total), mmss(mix), scale))
+    if shows:
+        print("show dates matched: %d/%d" % (matched, len(tr)))
+        for t in tr:
+            if not show_date_for(t["artist"]):
+                print("   no show date: %s" % t["artist"])
 
     if a.times:
         L = []
