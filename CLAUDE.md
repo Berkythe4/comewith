@@ -65,6 +65,17 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 
 ## Come With Radio (episodes live outside `events`)
 
+- **`station_no` is the SHOW counter; `edition_seq` is the episode number.** Two
+  different numbers — do not render either as "EP n" generically. `station_no`
+  counts **every broadcast ever**, across series, and is displayed as **`SHOW n`**
+  everywhere (dashboard, radio.html, dj.html, index.html, social-post titles,
+  and the DB strings reworded in 137). `edition_seq` is a series' own numbering
+  (Elements Ep1–4) and is what an audience knows — so the **rendered video keeps
+  "EP n" and uses `edition_seq`** (`make_episode.py`). Elements Ep1 is SHOW 3.
+  `station_no` is assigned at CREATION, not airtime, so it can drift out of
+  broadcast order — `scripts/renumber_shows.py` fixes that (dry by default; never
+  moves a published episode; also remaps `played_station_no` / `passed_station_no`
+  / `carried_from`, which store the NUMBER rather than a key).
 - **Radio episodes are numbered stations in `sc_playlists`** (`station_no`,
   lifecycle `building → testing → live → archived`), **NOT rows in `events`**.
   Do not create an event for an episode. The scheduled release date lives on
