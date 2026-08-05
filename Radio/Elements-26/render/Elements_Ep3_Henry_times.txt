@@ -1,8 +1,8 @@
 EP 3 - COME WITH ELEMENTS RADIO : TRACK START TIMES
 ======================================================================================
-MIX FILE   : not recorded yet
-MIX LENGTH : 93:49
-TRACKLIST  : Elements Saturday (SoundCloud set - 26 tracks, play order)
+MIX FILE   : CWR_ElementsEp3_Henry.wav
+MIX LENGTH : 58:23
+TRACKLIST  : Elements_Ep3_Tracklist_Henry.docx (typed tracklist - 26 tracks)
 
 HOW TO FILL THIS IN
   1. Type the time each track STARTS, right after the '=' sign.  Format mm:ss
@@ -15,30 +15,30 @@ The 'guess' is ARITHMETIC ONLY - track lengths scaled to fit the mix.
 It is NOT from listening. A starting point, not an answer.
 
 --------------------------------------------------------------------------------------
- 1 =         BISCITS, Aya Anne - always knew                                                            [3:25 long | guess 0:00]
- 2 =         MPH - Long Goodbye Ft. Nathan Nicholson                                                    [3:34 long | guess 3:25]
- 3 =         Prospa & Cloonee - Free Your Mind                                                          [3:21 long | guess 6:59]
- 4 =         Westend - DAFT PUNK - AROUND THE WORLD (WESTEND EDIT) (FREE DOWNLOAD)                      [5:00 long | guess 10:21]
- 5 =         AYYBO, Ragie Ban - I Don't Want To                                                         [3:47 long | guess 15:21]
- 6 =         Linska - Four Four (ft. rhys from the sticks)                                              [2:57 long | guess 19:08]
- 7 =         Cloonee - XTC (feat. Jocelyn Enriquez)                                                     [3:02 long | guess 22:06]
- 8 =         Matroda featuring Dances With White Girls - Bang (feat. Dances With White Girls)           [3:13 long | guess 25:09]
- 9 =         AYYBO, Dale Move - Don't Want None                                                         [3:30 long | guess 28:23]
-10 =         Roddy Lima - Night Time (Extended Mix)                                                     [5:45 long | guess 31:53]
-11 =         Matroda & RICCI - Caliente (Na Na Na)                                                      [3:54 long | guess 37:38]
-12 =         Opiuo and Wreckno - SATELLITE                                                              [5:01 long | guess 41:33]
-13 =         Nikita, the Wicked - DO AS I SAY                                                           [3:19 long | guess 46:34]
-14 =         9B49 - LONELY (9B49 REMIX) - SPEAKER KNOCKERZ [FREE DOWNLOAD]                              [2:56 long | guess 49:53]
-15 =         Opiuo & Ashez - Bash Plate                                                                 [4:37 long | guess 52:50]
-16 =         CloZee - Tomboy                                                                            [4:10 long | guess 57:28]
-17 =         Of The Trees, LYNY - Hollow                                                                [3:34 long | guess 61:39]
-18 =         HOL! - COUNTRY RIDDIM II                                                                   [2:47 long | guess 65:13]
-19 =         SVDDEN DEATH - DREAM SEQUENCE                                                              [4:37 long | guess 68:01]
-20 =         RAY VOLPE - HAPPY SONG                                                                     [3:47 long | guess 72:39]
-21 =         Subtronics - Fibonacci (Part 1)                                                            [2:44 long | guess 76:26]
-22 =         SIPPY - Ashes (feat. Marlhy)                                                               [2:41 long | guess 79:11]
-23 =         LEVEL UP - Alive                                                                           [2:36 long | guess 81:52]
-24 =         Subtronics x A Little Sound - Final Breath                                                 [3:49 long | guess 84:29]
-25 =         Chase & Status, Hedex - Liquor & Cigarettes (feat. ArrDee)                                 [3:09 long | guess 88:18]
-26 =         Hedex, Sullivan King, Basslayerz - Ringtone                                                [2:22 long | guess 91:27]
+ 1 =         Biscits, Aya Anne - Always Knew                                                            [2:22 long | guess 0:00]
+ 2 =         MPH, Nathan Nicholson - Long Goodbye                                                       [2:20 long | guess 2:22]
+ 3 =         Cloonee, Prospa - Free Your Mind                                                           [2:00 long | guess 4:42]
+ 4 =         Daft Punk, Westend - Around The World (Westend Edit)                                       [2:09 long | guess 6:42]
+ 5 =         Ragie Ban, Ayybo - I Don’t Want To                                                         [2:00 long | guess 8:51]
+ 6 =         Linska, Rhys From The Sticks - Four Four                                                   [2:49 long | guess 10:51]
+ 7 =         Cloonee, Jocelyn Enriquez - XTC                                                            [1:57 long | guess 13:40]
+ 8 =         Matroda, Dances - Bang                                                                     [3:33 long | guess 15:37]
+ 9 =         Ayybo, Dale Move - Don’t Want None                                                         [2:33 long | guess 19:10]
+10 =         Roddy Lima - Night Time                                                                    [2:23 long | guess 21:43]
+11 =         Matroda - Caliente (Na Na Na)                                                              [1:56 long | guess 24:06]
+12 =         Opiuo, Wreckno - Satellite                                                                 [2:32 long | guess 26:02]
+13 =         Nikita, The Wicked - Do As I Say                                                           [1:33 long | guess 28:34]
+14 =         Speaker Knockerz, 9B49 - Lonely (9B49 Remix)                                               [1:39 long | guess 30:07]
+15 =         Opiuo - Bash Plate                                                                         [1:32 long | guess 31:46]
+16 =         Clozee - Tomboy                                                                            [2:27 long | guess 33:18]
+17 =         Of The Trees, Lyny - Hollow                                                                [2:38 long | guess 35:45]
+18 =         Hol! - Country Riddim II                                                                   [1:13 long | guess 38:23]
+19 =         Svdden Death - Dream Sequence                                                              [2:18 long | guess 39:36]
+20 =         Ray Volpe - Happy Song                                                                     [1:48 long | guess 41:54]
+21 =         Subtronics - Fibonacci (Part 1)                                                            [1:54 long | guess 43:42]
+22 =         Sippy, Marlhy - Ashes                                                                      [2:14 long | guess 45:36]
+23 =         Level Up - Alive                                                                           [2:02 long | guess 47:50]
+24 =         Subtronics - Final Breath                                                                  [3:07 long | guess 49:52]
+25 =         Chase & Status, Hedex, Arrdee - Liquor & Cigarettes                                        [2:42 long | guess 52:59]
+26 =         Hedex - Ringtone                                                                           [2:42 long | guess 55:41]
 --------------------------------------------------------------------------------------

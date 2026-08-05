@@ -110,11 +110,11 @@ EP 1 - WATER - Berky - Thu Aug 6
 
 EP 3 - EARTH - Henry - Sat Aug 8
    26 tracks. Genres actually in the set, most common first:
-      House (5), Dubstep (5), Dance (3), Electronic (3), Dance & Edm (3)
-      Tech House (2), Ukg (1), Drum & Bass (1)
+      House (6), Electronic (4), Dubstep (4), Dance (3), Dance & Edm (3)
+      Tech House (2), Ukg (1), Bass (1), Drum & Bass (1)
       (ignored, not genres: Matrodasound)
    Tags:
-      #house #dubstep #dance #electronic #edm #techhouse #ukgarage #ukg #dnb 
+      #house #electronic #dubstep #dance #edm #techhouse #ukgarage #ukg #bass #dnb 
       #drumandbass
 
 EP 2 - FIRE - KRNeY - Fri Aug 7

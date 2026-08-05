@@ -51,6 +51,15 @@ def tokens(s):
     return {t for t in norm(s).split() if len(t) >= 4}
 
 
+def who_tokens(s):
+    """Remixer names, at a LOWER length threshold than artist tokens.
+
+    A remixer is often three characters — YDG, GRiZ, MPH — and the 4-char artist
+    threshold silently dropped them, leaving an empty remixer set that made the
+    "same remixer?" guard skip itself entirely."""
+    return {t for t in norm(s).split() if len(t) >= 2}
+
+
 def version_of(title):
     """(is_remix, remixer_tokens) for a title, ignoring standard qualifiers."""
     t = QUALIFIER.sub(" ", title or "")
@@ -60,11 +69,11 @@ def version_of(title):
         for m in re.finditer(r"[\(\[]([^)\]]*)[\)\]]", t):
             inner = m.group(1)
             if re.search(REMIX_W, inner, re.I):
-                who |= {w for w in tokens(re.sub(REMIX_W, " ", inner, flags=re.I))}
+                who |= who_tokens(re.sub(REMIX_W, " ", inner, flags=re.I))
         # "Artist. Title. Pat Lok Flip." — the remix credit needn't be bracketed
         m = re.search(r"([^()\[\]]+)\s+" + REMIX_W + r"\b", t, re.I)
         if m and not who:
-            who |= tokens(m.group(1))[-3:] if isinstance(tokens(m.group(1)), list) else tokens(m.group(1))
+            who |= who_tokens(m.group(1))
     return is_rm, who
 
 
@@ -83,14 +92,24 @@ def acceptable(want_artist, want_title, got_artist, got_title):
         short, long_ = (wt, gt) if len(wt) <= len(gt) else (gt, wt)
         if short not in long_ or len(short) < 0.6 * len(long_):
             return False
+    # Artist must overlap on a distinctive token — but a short name has none.
+    # tokens() drops anything under 4 characters, so YDG, MPH and Hol! produced an
+    # EMPTY set and could never match themselves, no matter how exact the title.
+    # Fall back to comparing the whole normalised name in that case.
     if not (tokens(want_artist) & tokens(got_artist)):
-        return False
+        nw, ng = norm(want_artist).replace(" ", ""), norm(got_artist).replace(" ", "")
+        if not (nw and ng and (nw in ng or ng in nw)):
+            return False
     w_rm, w_who = version_of(want_title)
     g_rm, g_who = version_of(got_title)
     if w_rm != g_rm:
         return False                       # original vs remix — different records
-    if w_rm and w_who and g_who and not (w_who & g_who):
-        return False                       # both remixes, but by different people
+    # Both are remixes. If EITHER names a remixer they must share one. Requiring
+    # both to name someone let a bare "(remix)" match any named remix: MusicBrainz
+    # has "Speaker Knockerz, Young Scooter - Lonely (remix)" from 2014, which was
+    # accepted as the 9B49 remix and would have printed RELEASED 2014 on that card.
+    if w_rm and (w_who or g_who) and not (w_who & g_who):
+        return False
     return True
 
 
@@ -150,11 +169,11 @@ def queries(artist, title):
 
 
 def _match_all(artist, title, got_pairs):
-    """got_pairs = [(got_artist, got_title, date)] -> accepted dates."""
+    """got_pairs = [(got_artist, got_title, date_or_payload)] -> accepted payloads."""
     ok = []
     lead, tail = split_lead_artist(clean_title(title))
     for ga, gt, d in got_pairs:
-        if not d:
+        if not d or (isinstance(d, tuple) and not any(d)):
             continue
         if acceptable(artist, clean_title(title), ga, gt):
             ok.append(d)
@@ -168,9 +187,10 @@ def from_itunes(artist, title):
     for q in queries(artist, title):
         js = get("https://itunes.apple.com/search?term=%s&entity=song&limit=15"
                  % urllib.parse.quote(q))
-        pairs = [(r.get("artistName", ""), r.get("trackName", ""), (r.get("releaseDate") or "")[:10])
+        pairs = [(r.get("artistName", ""), r.get("trackName", ""),
+                  ((r.get("releaseDate") or "")[:10], r.get("primaryGenreName") or ""))
                  for r in (js or {}).get("results", [])]
-        out = [(d, "iTunes") for d in _match_all(artist, title, pairs)]
+        out = [(d, g, "iTunes") for d, g in _match_all(artist, title, pairs) if d]
         if out:
             break
         time.sleep(0.2)
@@ -191,8 +211,10 @@ def from_deezer(artist, title):
                 continue
             a = get("https://api.deezer.com/album/%s" % alb)
             d = (a or {}).get("release_date", "")[:10]
+            g = ((a or {}).get("genres") or {}).get("data") or []
+            gname = g[0].get("name", "") if g else ""
             if d:
-                out.append((d, "Deezer"))
+                out.append((d, gname, "Deezer"))
             time.sleep(0.15)
         if out:
             return out
@@ -207,8 +229,8 @@ def from_musicbrainz(artist, title):
         pairs = []
         for r in (js or {}).get("recordings", []):
             ga = ", ".join(c.get("name", "") for c in r.get("artist-credit", []) if isinstance(c, dict))
-            pairs.append((ga, r.get("title", ""), (r.get("first-release-date") or "")[:10]))
-        out = [(d, "MusicBrainz") for d in _match_all(artist, title, pairs)]
+            pairs.append((ga, r.get("title", ""), ((r.get("first-release-date") or "")[:10], "")))
+        out = [(d, g, "MusicBrainz") for d, g in _match_all(artist, title, pairs) if d]
         time.sleep(1.1)                    # MusicBrainz asks for 1 req/sec
         if out:
             return out
@@ -227,20 +249,26 @@ def main():
     if "release_date" not in cols:
         raise SystemExit("This cues file has no release_date column.")
 
-    found = 0
+    found = got_g = 0
     for i, t in enumerate(rows, 1):
-        if (t.get("release_date") or "").strip():
+        if (t.get("release_date") or "").strip() and (t.get("genres") or "").strip():
             found += 1
             continue
         artist, title = t["artist"], t["title"]
         hits = from_itunes(artist, title) or from_deezer(artist, title) or from_musicbrainz(artist, title)
         if hits:
             # earliest wins — a later date is a re-release / compilation
-            date, src = sorted(hits)[0]
+            date, genre, src = sorted(hits)[0]
             t["release_date"] = date
+            # Genre is only ever FILLED IN, never overwritten: the DJ's own tag
+            # beats a store's guess, same rule track-sources follows for bpm/key.
+            if genre and not (t.get("genres") or "").strip():
+                t["genres"] = genre
+                got_g += 1
             found += 1
-            print("  %2d  %-34s %s   (%s, %d hit%s)"
-                  % (i, artist[:34], date, src, len(hits), "" if len(hits) == 1 else "s"))
+            print("  %2d  %-34s %s   (%s, %d hit%s)%s"
+                  % (i, artist[:34], date, src, len(hits), "" if len(hits) == 1 else "s",
+                     ("  +genre " + genre) if genre and t["genres"] == genre else ""))
         else:
             print("  %2d  %-34s —        no confident match: %s" % (i, artist[:34], title[:44]))
         time.sleep(0.25)
