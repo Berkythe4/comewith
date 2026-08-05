@@ -644,7 +644,9 @@ async function loadEpisode(){
   // prefixing it produced "EP 1 · Come With Elements Radio — Ep1". Only prefix
   // when the name doesn't already say it.
   const nm=station.name||'Come With Radio';
-  const saysEp=station.edition_seq!=null&&new RegExp('\bep\s*'+station.edition_seq+'\b','i').test(nm);
+  // No regex here on purpose: the escapes in a built RegExp string collapsed to a
+  // backspace character and it silently never matched. Flatten and compare.
+  const saysEp=station.edition_seq!=null&&nm.toLowerCase().replace(/[^a-z0-9]/g,'').includes('ep'+station.edition_seq);
   const pre=epNo&&!saysEp?epNo+' · ':(!epNo&&station.station_no!=null?'SHOW '+station.station_no+' · ':'');
   $('#hd').innerHTML=esc(pre+nm)
     +(station.station_no!=null?'<span class="edchip">Show '+esc(String(station.station_no))+'</span>':'');
