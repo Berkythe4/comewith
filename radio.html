@@ -20,6 +20,16 @@
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;900&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root{--bg:#140a17;--bg2:#1d0f22;--panel:#241229;--line:#3a2640;--cream:#EDE4D3;--dim:#b3a7b8;--lime:#a7e02e;--lime-dk:#8FB339;--hot:#ff5ca8;--gold:#e9b949}
+  /* A special edition is the SAME page with different tokens — nothing about the
+     structure, order or behaviour changes, so an Elements episode and an NYC one
+     stay recognisably the same show. Set by loadEpisode() from edition_name. */
+  body.edition-elements{--bg:#0f0a18;--bg2:#170f26;--panel:#1d1430;--line:#382a4c}
+  body.edition-elements .brand b{color:var(--gold)}
+  body.edition-elements .label{color:var(--gold)}
+  body.edition-elements nav{background:rgba(15,10,24,.85)}
+  .edchip{display:inline-block;font-family:'DM Mono',monospace;font-size:.66rem;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--gold);border:1px solid var(--gold);border-radius:999px;
+    padding:2px 9px;margin-left:8px;vertical-align:middle}
   *{box-sizing:border-box;margin:0;padding:0}
   body{background:var(--bg);color:var(--cream);font-family:'DM Sans',system-ui,sans-serif;line-height:1.55;padding-bottom:70px}
   a{color:inherit;text-decoration:none}
@@ -185,7 +195,7 @@
 
 <div class="wrap">
   <header class="hero">
-    <div class="label">Come With · Radio</div>
+    <div class="label" id="kicker">Come With · Radio</div>
     <h1 id="hd">Loading…</h1>
     <div class="sub" id="sub"></div>
     <div id="preview"></div>
@@ -620,9 +630,16 @@ async function loadEpisode(){
     const r=await fetch(FN+q,{headers:H});j=await r.json();if(!r.ok)throw new Error(j.error||'error');
   }catch(e){$('#hd').textContent='Come With Radio';$('#root').innerHTML='<div class="state">'+esc(e.message||'Could not load this station.')+' · <a href="radio.html">All episodes →</a></div>';return;}
   station=j.station;tracks=j.tracks||[];
-  document.title=(station.station_no!=null?('SHOW '+station.station_no+' — '):'')+(station.name||'Come With Radio')+' · Come With Radio';
+  // A special edition numbers its own episodes; that is what the audience knows.
+  // SHOW n is our global counter and stays in the subtitle, not the headline.
+  const ed=(station.edition_name||'').trim();
+  const epNo=station.edition_seq!=null?('EP '+station.edition_seq):null;
+  if(ed){document.body.classList.add('edition-elements');
+    $('#kicker').textContent='Come With · '+ed.replace(/^Come With\s+/i,'').replace(/\s+Radio$/i,'')+' Radio';}
+  document.title=(epNo?epNo+' — ':(station.station_no!=null?('SHOW '+station.station_no+' — '):''))+(station.name||'Come With Radio')+' · Come With Radio';
   $('#allEps').style.display='';
-  $('#hd').textContent=(station.station_no!=null?('SHOW '+station.station_no+' · '):'')+(station.name||'Come With Radio');
+  $('#hd').innerHTML=esc((epNo?epNo+' · ':(station.station_no!=null?('SHOW '+station.station_no+' · '):''))+(station.name||'Come With Radio'))
+    +(ed&&station.station_no!=null?'<span class="edchip">Show '+esc(String(station.station_no))+'</span>':'');
   $('#sub').textContent=(station.mix_by?('Mixed by '+station.mix_by+' · '):'')+(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
   if(!station.published)$('#preview').innerHTML='<span class="banner">Preview · unlisted — only people with this link can see it</span>';
   render();

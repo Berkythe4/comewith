@@ -11262,7 +11262,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccmixfind],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = window.scrollY; raState.stationOpen = !raState.stationOpen; renderRaMarket(); window.scrollTo(0, y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -11279,6 +11279,14 @@ document.addEventListener('click', async (e) => {
   const cco = t.closest('[data-ra-ccopen]'); if (cco) { raState.ccOpen = raState.ccOpen === cco.dataset.raCcopen ? null : cco.dataset.raCcopen; renderRadioCC(); return; }
   const ccd = t.closest('[data-ra-ccdetails]'); if (ccd) { ccWithStation(ccd.dataset.raCcdetails, raOpenEpisodeDetails); return; }
   const ccs = t.closest('[data-ra-ccschedule]'); if (ccs) { raCcSchedule(ccs.dataset.raCcschedule); return; }
+  const ccmf = t.closest('[data-ra-ccmixfind]'); if (ccmf) {
+    // point the build state at THIS episode first — raMixFind works on the open
+    // station, and from the Control Center that may not be the one on screen.
+    const sid = ccmf.dataset.raCcmixfind;
+    ccWithStation(sid, () => raMixFind(ccmf, () => {}))
+      .then(() => loadRadioCC()).then(() => raCcSchedule(sid));
+    return;
+  }
   const ccg = t.closest('[data-ra-ccgenweek]'); if (ccg) { ccWithStation(ccg.dataset.raCcgenweek, raOpenGenWeek); return; }
   const cca = t.closest('[data-ra-cctaskadd]'); if (cca) { raCcAddTask(cca.dataset.raCctaskadd); return; }
   if (t.closest('[data-ra-ccplan]')) { raCcPlanEpisode(); return; }
@@ -12176,7 +12184,7 @@ function renderRadioCC() {
 }
 // Load a station into raState.playlist so the existing editors act on it.
 async function ccWithStation(id, fn) {
-  raState.viewPlaylistId = id; await raLoadPlaylist(); fn();
+  raState.viewPlaylistId = id; await raLoadPlaylist(); await fn();
 }
 // Create a FUTURE episode skeleton (status 'planned') you can assign & work on
 // ahead of time. Numbered next, dropping a week after the latest scheduled one.
@@ -12273,21 +12281,53 @@ async function raCcAddTask(id) {
 // The teased release date (drop_date) + optional auto-publish time. drop_date
 // shows as "SHOW drops <date>" on the site until go-live; scheduled_go_live is the
 // DB-only auto-publish moment (the finalize flow owns the full SoundCloud push).
+// This is the dialog people actually reach for — Control Center → 📅 — so it
+// carries the same mix awareness as the Go-live dialog rather than sending you
+// to the Build view to find out whether the episode has any audio attached.
 function raCcSchedule(id) {
   const s = (raState.stations || []).find(x => x.id === id); if (!s) return;
+  const mixed = !!(s.mix_sc_track_url || s.mix_sc_track_id);
+  const ready = raEpisodeReady(s);
   openKpi('📅 Schedule release', `SHOW ${s.station_no ?? '—'} · ${escapeHtml(s.name || '')}`, `
     <label class="modal-label">Teased drop date (shown on the site until live)</label>
     <input class="modal-input" type="date" name="cc_drop" value="${escapeHtml(s.drop_date || '')}" style="max-width:200px;">
-    <label class="modal-label" style="margin-top:10px;">Auto-publish at (optional)</label>
-    <input class="modal-input" type="datetime-local" name="cc_golive" value="${escapeHtml(utcToLocalInput(s.scheduled_go_live))}" style="max-width:240px;">
-    <div class="kpi-hint" style="margin-top:6px;">Auto-publish flips the page live at that time (DB publish). For the full SoundCloud/YouTube push, use <strong>Finalize</strong> in the Build view.</div>`,
+    <label class="modal-label" style="margin-top:10px;">Auto-publish at</label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <input class="modal-input" type="datetime-local" name="cc_golive" value="${escapeHtml(utcToLocalInput(s.scheduled_go_live))}" style="max-width:240px;">
+      <span class="li-sub">${escapeHtml(tzLabel())}</span>
+    </div>
+    ${s.scheduled_go_live ? `<div class="kpi-hint" style="margin-top:5px;color:var(--green);">✓ Currently set for ${escapeHtml(fmtWhen(s.scheduled_go_live))}</div>` : ''}
+    <div class="kpi-hint" style="margin-top:10px;padding:9px 11px;border-radius:6px;border:1px solid ${mixed ? 'var(--green)' : 'var(--amber,#e0b23a)'};background:${mixed ? 'var(--green-bg,rgba(31,122,31,.12))' : 'rgba(224,178,58,.10)'};">
+      ${mixed
+        ? `<strong style="color:var(--green);">☁ Mix linked.</strong> At that time it flips <strong>public</strong> on SoundCloud on its own and the episode page goes up with it. YouTube stays manual.`
+        : `<strong style="color:var(--amber,#e0b23a);">⚠ No mix linked.</strong> This would publish an episode page with <strong>no audio on it</strong>. A private upload has no shareable URL, so let it retrieve the track:
+           <div style="margin-top:7px;"><button type="button" class="hub-btn ghost" data-ra-ccmixfind="${escapeHtml(id)}">☁ Find my upload</button></div>`}
+    </div>
+    ${ready.missing.length ? `<div class="kpi-hint" style="margin-top:8px;color:var(--amber,#e0b23a);">⚠ Also still missing before this page is worth publishing: <strong>${ready.missing.map(escapeHtml).join(' · ')}</strong></div>` : '<div class="kpi-hint" style="margin-top:8px;color:var(--green);">✓ Name, cover, page description and address are all set.</div>'}`,
     async () => {
-      const patch = { drop_date: kpiVal('cc_drop') || null, updated_at: new Date().toISOString() };
-      patch.scheduled_go_live = localInputToUtc(kpiVal('cc_golive'));
+      const when = localInputToUtc(kpiVal('cc_golive'));
+      if (when && !mixed && !confirm('No SoundCloud mix is linked.\n\nThe page will publish at '
+          + fmtWhen(when) + ' with no audio on it.\n\nPress OK to schedule anyway.')) return;
+      const patch = { drop_date: kpiVal('cc_drop') || null, updated_at: new Date().toISOString(),
+                      scheduled_go_live: when };
       const { error } = await sb.from('sc_playlists').update(patch).eq('id', id);
       if (error) { toast('Save failed: ' + error.message, 'err'); return; }
       closeKpi(); await raLoadPlaylist(); await loadRadioCC();
+      toast(when ? 'Publishes ' + fmtWhen(when) : 'Schedule cleared', 'ok');
     }, 'Save schedule');
+}
+
+// What an episode still needs before its public page is worth putting up. Used
+// by the schedule dialog and by the Control Center list, so "ready" means the
+// same thing in both places.
+function raEpisodeReady(s) {
+  const missing = [];
+  if (!s.name || /^weekly station$/i.test(s.name)) missing.push('a real name');
+  if (!s.cover_url) missing.push('cover art');
+  if (!(s.desc_public || '').trim()) missing.push('page description');
+  if (!(s.slug || '').trim()) missing.push('page address');
+  if (!(s.mix_sc_track_url || s.mix_sc_track_id)) missing.push('the mix');
+  return { missing, ok: missing.length === 0 };
 }
 
 // ---- Weekly radio production cadence ---------------------------------------
@@ -13943,7 +13983,7 @@ async function raMixLinkUrl(url) {
     toast('Mix track linked', 'ok'); raOpenFinalize();
   } catch (e) { toast('Link failed: ' + (e.message || e), 'err'); }
 }
-async function raMixFind(btn) {
+async function raMixFind(btn, after) {
   const pl = raState.playlist; if (!pl) return;
   btn.disabled = true; btn.textContent = '☁ Looking…';
   try {
@@ -13963,7 +14003,7 @@ async function raMixFind(btn) {
     if (pl.status === 'building') pl.status = 'testing';
     toast('Found: ' + data.picked.title, 'ok');
     if (data.warning) alert(data.warning);
-    raOpenFinalize();
+    (after || raOpenFinalize)();
   } catch (e) { toast('Could not read your uploads: ' + (e.message || e), 'err'); btn.disabled = false; btn.textContent = '☁ Find my upload'; }
 }
 async function raMixLink(btn) {

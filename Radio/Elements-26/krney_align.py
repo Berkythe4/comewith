@@ -165,6 +165,11 @@ def main():
         print("\n(dry run - pass --write to build the cues)")
         return
 
+    # EVERY track goes in the cues, not just the matched ones. Writing only the
+    # 22 matched rows and importing that over the station DELETED the four KRNeY
+    # entered that no written line reached — Candy Shop Remix, Purple Plum Trees,
+    # Hot Mic, FVKVRVND. His list is the record of what he played; the handwriting
+    # only supplies times. Unmatched tracks keep their place and go without one.
     out = []
     for start, read, r, s in pairs:
         if not r:
@@ -172,7 +177,12 @@ def main():
         out.append({"start": start, "artist": r["artist"],
                     "title": strip_lead_artist(r["title"], r["artist"]),
                     "genres": "", "release_date": "", "conf": s})
-    print("\nlooking up genre + release date for %d tracks…" % len(out))
+    for r in unmatched_tracks:
+        out.append({"start": "", "artist": r["artist"],
+                    "title": strip_lead_artist(r["title"], r["artist"]),
+                    "genres": "", "release_date": "", "conf": 0})
+    print("\nlooking up genre + release date for %d tracks (%d carry a time)…"
+          % (len(out), len(out) - len(unmatched_tracks)))
     for t in out:
         hits = (RD.from_itunes(t["artist"], t["title"]) or RD.from_deezer(t["artist"], t["title"])
                 or RD.from_musicbrainz(t["artist"], t["title"]))

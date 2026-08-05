@@ -23,7 +23,12 @@ const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }),
 // mix_sc_track_id lets the page embed the mix by numeric id — the widget then
 // survives the mix being moved between accounts / re-uploaded (which orphaned
 // EP1's stored permalink and silently broke its player).
-const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_sc_track_id, mix_youtube_url, cover_url, mix_by";
+// edition_name / edition_seq are what tell the public page it belongs to a
+// special run (Elements) rather than the weekly NYC show. The page uses them for
+// the theme and to show the number the AUDIENCE knows — Elements Ep1, not SHOW 3.
+// Still no sc_playlist_url here: listeners get the final mix, not the source
+// playlist. That omission is deliberate, see the note above.
+const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_sc_track_id, mix_youtube_url, cover_url, mix_by, edition_name, edition_seq";
 // sample_url is Beatport's own public preview clip — it lets a track that
 // isn't on SoundCloud still be auditioned, including on the phone via a
 // preview link. energy/comment are private working notes and stay OUT.
