@@ -11,15 +11,25 @@
 //
 //   1. oembed the stored mix_sc_track_url. If it answers, the link works as-is
 //      and we touch nothing — that is the "or not do anything" case.
-//   2. If oembed 404s, the track is private/scheduled. Resolve it through the
-//      OAuth'd account and flip sharing=public, then re-check.
+//   2. If oembed 404s, the track is private/scheduled. What happens next depends
+//      on ops.radio_sc_autopublic in site_content:
+//        true  (default) - resolve through the OAuth'd account, flip sharing=public,
+//                          re-check. Right when WE own the release.
+//        false           - never touch the track. SoundCloud is doing its own
+//                          scheduled release, so flipping would put the mix out
+//                          EARLY. Instead the page WAITS: the episode stays due
+//                          and the next cron tick tries again, until the embed
+//                          works or the grace window runs out.
 //   3. If there is no URL at all, find the upload on the account by runtime/title
 //      (same logic as sc-connect's find_mix) and store it.
 //   4. THEN publish, by calling the SQL function that does the DB side.
 //
-// Publishing is never blocked by a SoundCloud problem — the drop goes out and the
-// failure is recorded on the station instead of vanishing. Silent failure is the
-// thing this function exists to stop.
+// Publishing is never blocked INDEFINITELY by a SoundCloud problem — the drop goes
+// out and the failure is recorded on the station instead of vanishing. Silent
+// failure is the thing this function exists to stop. The one deliberate wait is
+// autopublic=false above, and even that is capped by SC_GRACE_MIN: after that the
+// page publishes anyway, with the dead embed recorded as a note, because a page
+// that never appears is worse than a page with a broken player on it.
 //
 // GET/POST ?secret=<RADIO_PUBLISH_SECRET>[&dry=1][&station=N]
 //   dry=1      report what it WOULD do, publish nothing
@@ -29,6 +39,10 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const JH = { "Content-Type": "application/json" };
 const SC_ACCEPT = "application/json; charset=utf-8";
 const UA = "Mozilla/5.0 (compatible; ComeWithRadio/1.0)";
+
+// How long the page will wait for SoundCloud's own scheduled release before
+// giving up and publishing anyway. Cron runs every 5 minutes, so this is 24 tries.
+const SC_GRACE_MIN = 120;
 
 const ok = (b: unknown) => new Response(JSON.stringify(b), { headers: JH });
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
@@ -88,11 +102,19 @@ Deno.serve(async (req) => {
     return null;
   }
 
+  // Who owns making the mix public. Default true keeps the weekly show's
+  // behaviour; set 'false' when the release is scheduled on SoundCloud itself,
+  // so this never puts a track out ahead of the time set there.
+  const { data: apRow } = await admin.from("site_content")
+    .select("value").eq("key", "ops.radio_sc_autopublic").maybeSingle();
+  const autoPublic = String(apRow?.value ?? "true").trim().toLowerCase() !== "false";
+
   const results: any[] = [];
   for (const pl of due) {
     const step: any = { station_no: pl.station_no, sc: "untouched", published: false, warning: null };
     let url: string | null = pl.mix_sc_track_url || null;
     let trackId: string | null = pl.mix_sc_track_id || null;
+    let defer = false;
 
     // 1 · already fine?
     if (url && await embeddable(url)) {
@@ -123,7 +145,12 @@ Deno.serve(async (req) => {
           }
           if (found) {
             trackId = String(rj.id);
-            if (rj.sharing === "private" && !dry) {
+            if (rj.sharing === "private" && !autoPublic) {
+              // SoundCloud owns the release. Do not touch the track — flipping it
+              // here would publish the mix ahead of the schedule Keith set there.
+              step.sc = `sharing=${rj.sharing} — left alone (SoundCloud owns the release)`;
+              defer = true;
+            } else if (rj.sharing === "private" && !dry) {
               const fd = new FormData();
               fd.set("track[sharing]", "public");
               const up = await fetch(`https://api.soundcloud.com/tracks/${rj.id}`, {
@@ -161,6 +188,7 @@ Deno.serve(async (req) => {
             step.sc = dry ? `would link "${hit.t.title}"` : `linked "${hit.t.title}"`;
           } else {
             step.warning = "No mix link set and no upload on the account matched this episode.";
+            if (!autoPublic) defer = true;
           }
         }
       }
@@ -172,7 +200,21 @@ Deno.serve(async (req) => {
           mix_sc_track_url: url, mix_sc_track_id: trackId, updated_at: new Date().toISOString(),
         }).eq("id", pl.id);
       }
-      // 4 · publish regardless — a SoundCloud problem must never hold the drop.
+      // 4 · publish. The ONE case that waits is autopublic=false with an embed
+      // that isn't live yet: the page would otherwise go up with a dead player,
+      // which is the exact failure this function was written for. It stays due
+      // and the next tick retries — but only inside the grace window.
+      const lateMin = (Date.now() - new Date(pl.scheduled_go_live).getTime()) / 60000;
+      if (defer && lateMin < SC_GRACE_MIN) {
+        step.published = false;
+        step.sc = (step.sc || "") + ` · waiting for the SoundCloud release (${Math.round(lateMin)}m of ${SC_GRACE_MIN}m)`;
+        results.push(step);
+        continue;
+      }
+      if (defer) {
+        step.warning = (step.warning ? step.warning + " | " : "")
+          + `Published after waiting ${SC_GRACE_MIN}m — the SoundCloud track still isn't embeddable.`;
+      }
       const { data: slug, error: pubErr } = await admin.rpc("radio_publish_station", { p_id: pl.id });
       step.published = !pubErr && !!slug;
       step.slug = slug || null;
