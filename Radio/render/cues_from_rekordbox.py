@@ -108,6 +108,73 @@ def mmss(s):
     s = int(s); return "%d:%02d" % (s // 60, s % 60)
 
 
+def norm_name(s):
+    return re.sub(r"[^a-z0-9]+", "", (s or "").lower())
+
+
+def artist_candidates(artist):
+    """Every name a credit might be filed under, most specific first.
+
+    A credit is rarely just the booked act: "Matroda featuring Dances With White
+    Girls", "Opiuo and Wreckno", "Nikita, the Wicked". Punctuation and the
+    feature tail are what stop a lineup lookup from landing, so both go.
+    """
+    a = (artist or "").strip()
+    lead = re.sub(r"\b(feat|ft|featuring|with|presents|pres)\b.*$", " ", a, flags=re.I)
+    parts = re.split(r"[,&/+]| and | x | vs | versus ", lead, flags=re.I)
+    return [p.strip() for p in ([a, lead] + parts) if p and p.strip()]
+
+
+def make_show_lookup(path):
+    """artist -> 'YYYY-MM-DD' from a {name: date} JSON, matched forgivingly."""
+    if not path:
+        return lambda _a: ""
+    shows = {norm_name(k): v for k, v in json.load(open(path, encoding="utf-8")).items()}
+
+    def lookup(artist):
+        for nm in artist_candidates(artist):
+            v = shows.get(norm_name(nm))
+            if v:
+                return v
+        return ""
+    return lookup
+
+
+def write_times_sheet(path, tracks, starts, ep, mix_secs, source_line, mix_name="?", show="COME WITH NYC RADIO"):
+    """The human fill-in sheet. Shared so a second tracklist source (a SoundCloud
+    playlist, say) produces the SAME document rather than a near-copy of it.
+
+    Deliberately plain ASCII and CRLF: it gets opened in Notepad on a phone or a
+    laptop and typed into, and a smart quote or a lone LF makes that worse.
+    """
+    L = []
+    A = L.append
+    A("%s %s - %s : TRACK START TIMES" % ("EP", ep, show))
+    A("=" * 86)
+    A("MIX FILE   : %s" % mix_name)
+    A("MIX LENGTH : %s" % mmss(mix_secs))
+    A("TRACKLIST  : %s" % source_line)
+    A("")
+    A("HOW TO FILL THIS IN")
+    A("  1. Type the time each track STARTS, right after the '=' sign.  Format mm:ss")
+    A("  2. Within ~15 seconds is close enough - I snap it to the exact drop by audio.")
+    A("  3. Track 1 is almost always 0:00.")
+    A("  4. Do NOT reorder the lines. Save the file, then tell me it's done.")
+    A("  5. Unsure about one? Put a ? after it, e.g.  7 = 15:25?")
+    A("")
+    A("The 'guess' is ARITHMETIC ONLY - track lengths scaled to fit the mix.")
+    A("It is NOT from listening. A starting point, not an answer.")
+    A("")
+    A("-" * 86)
+    for i, t in enumerate(tracks, 1):
+        line = "%2d = %-8s%s - %s" % (i, "", t["artist"], t["title"])
+        A(line.ljust(104) + "[%s long | guess %s]" % (mmss(t["duration_ms"] / 1000.0), starts[i - 1]))
+    A("-" * 86)
+    txt = "\n".join(L) + "\n"
+    io.open(path, "w", encoding="utf-8", newline="\r\n").write(txt)
+    return sum(1 for ch in txt if ord(ch) > 126 and ch not in "\r\n")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--txt", required=True, help="Rekordbox playlist export")
@@ -149,17 +216,7 @@ def main():
     # Per-artist show chips. The date is matched on the FIRST credited artist —
     # a Rekordbox artist field is often "Romeo, Biscits" while the lineup lists
     # one of them — and falls back to any credited name that we know.
-    shows = {}
-    if a.show_dates:
-        shows = {k.strip().lower(): v for k, v in json.load(open(a.show_dates, encoding="utf-8")).items()}
-    def show_date_for(artist):
-        if not shows:
-            return ""
-        for nm in [artist] + [p.strip() for p in re.split(r"[,&]| x | vs ", artist or "", flags=re.I)]:
-            v = shows.get((nm or "").strip().lower())
-            if v:
-                return v
-        return ""
+    show_date_for = make_show_lookup(a.show_dates)
 
     # Write EVERY column render_episode reads. A cues file missing `genres`,
     # `release_date`, `show_date` or `show_venue` doesn't error — that part of the
@@ -181,39 +238,17 @@ def main():
         print("start times: read from the export (real cues), last starts %s" % starts[-1])
     else:
         print("source total %s | mix %s | overlap scale %.3f" % (mmss(total), mmss(mix), scale))
-    if shows:
+    if a.show_dates:
         print("show dates matched: %d/%d" % (matched, len(tr)))
         for t in tr:
             if not show_date_for(t["artist"]):
                 print("   no show date: %s" % t["artist"])
 
     if a.times:
-        L = []
-        A = L.append
-        A("EP %d - COME WITH NYC RADIO : TRACK START TIMES" % a.ep)
-        A("=" * 86)
-        A("MIX FILE   : %s" % os.path.basename(a.mix or "?"))
-        A("MIX LENGTH : %s" % mmss(mix))
-        A("TRACKLIST  : %s (Rekordbox export - %d tracks, play order)" % (os.path.basename(a.txt), len(tr)))
-        A("")
-        A("HOW TO FILL THIS IN")
-        A("  1. Type the time each track STARTS, right after the '=' sign.  Format mm:ss")
-        A("  2. Within ~15 seconds is close enough - I snap it to the exact drop by audio.")
-        A("  3. Track 1 is almost always 0:00.")
-        A("  4. Do NOT reorder the lines. Save the file, then tell me it's done.")
-        A("  5. Unsure about one? Put a ? after it, e.g.  7 = 15:25?")
-        A("")
-        A("The 'guess' is ARITHMETIC ONLY - track lengths scaled to fit the mix.")
-        A("It is NOT from listening. A starting point, not an answer.")
-        A("")
-        A("-" * 86)
-        for i, t in enumerate(tr, 1):
-            line = "%2d = %-8s%s - %s" % (i, "", t["artist"], t["title"])
-            A(line.ljust(104) + "[%s long | guess %s]" % (mmss(t["duration_ms"] / 1000.0), starts[i - 1]))
-        A("-" * 86)
-        txt = "\n".join(L) + "\n"
-        bad = sum(1 for ch in txt if ord(ch) > 126 and ch not in "\r\n")
-        io.open(a.times, "w", encoding="utf-8", newline="\r\n").write(txt)
+        bad = write_times_sheet(
+            a.times, tr, starts, a.ep, mix,
+            "%s (Rekordbox export - %d tracks, play order)" % (os.path.basename(a.txt), len(tr)),
+            os.path.basename(a.mix or "?"))
         print("wrote %s (non-ASCII chars: %d)" % (a.times, bad))
 
 
