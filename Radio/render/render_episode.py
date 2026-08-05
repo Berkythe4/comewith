@@ -116,6 +116,106 @@ def make_background():
     bg = Image.alpha_composite(bg.convert("RGBA"), glow).convert("RGB")
     return bg
 
+def _layer():
+    return Image.new("RGBA", (W, H), (0, 0, 0, 0))
+
+
+def _veil(im, blur):
+    """Blur a field until its EDGE is gone. Anything large enough to tint the
+    frame has to lose its outline, or it reads as a drawn shape rather than
+    light — the first Elements pass left a visible arc where the pool ended."""
+    return im.filter(ImageFilter.GaussianBlur(blur))
+
+
+def _settle(bg, washes, marks, wash_alpha=0.62):
+    """Colour fields first, pulled back so the purple stays the ground; then the
+    thin work at full weight. Marks carry almost no colour area, so they can be
+    bright without shifting the ground — and structure is what reads as an
+    element, not opacity."""
+    lay = _layer()
+    for p in washes:
+        lay = Image.alpha_composite(lay, p)
+    a = lay.split()[3]
+    lay.putalpha(a.point(lambda v: int(v * wash_alpha)))
+    for p in marks:
+        lay = Image.alpha_composite(lay, p)
+    return Image.alpha_composite(bg.convert("RGBA"), lay).convert("RGB")
+
+
+def make_background_water():
+    """WATER — the single-element backdrop for Berky's episode.
+
+    Each episode in the run is assigned an element and its cover art says which;
+    the backdrop should agree. This is water alone rather than all four, and it
+    still has to stay out of the way: the purple remains the ground, and every
+    piece sits where the card is empty — the pool low, the surface light in the
+    dead band above the progress rail, bubbles up the outer edges clear of the
+    cover on the left and the track text on the right.
+
+    What makes it read as water is the horizontal REPETITION, not the blue. So
+    the wash is weak and the ripples do the work, with amplitude and spacing
+    growing toward the bottom so the surface has some depth to it.
+    """
+    import math
+    bg = make_background()
+    rnd = random.Random(20260806)            # fixed: the backdrop must not shimmer
+    washes, marks = [], []
+
+    # The pool. Two fields — a deep cool body and a lighter shelf above it — so
+    # the colour shifts with depth instead of sitting flat.
+    p = _layer(); pd = ImageDraw.Draw(p)
+    pd.ellipse([-W * 0.30, H * 0.66, W * 1.30, H * 1.70], fill=(26, 118, 176, 58))
+    pd.ellipse([-W * 0.10, H * 0.86, W * 1.10, H * 1.50], fill=(18, 74, 132, 46))
+    washes.append(_veil(p, 210))
+
+    # Surface light: a soft pale band where the water meets the air, in the empty
+    # strip under the track text and above the progress rail.
+    s = _layer(); sd = ImageDraw.Draw(s)
+    sd.ellipse([-W * 0.20, H * 0.60, W * 1.20, H * 0.80], fill=(150, 214, 234, 30))
+    washes.append(_veil(s, 150))
+
+    # Ripples. Broken into segments with gaps rather than drawn edge to edge:
+    # full-width lines plus the crossing caustics I tried first read as a
+    # WIREFRAME GRID, not water — a mesh of straight lines is the one thing real
+    # water never makes. Light on a surface is interrupted, so these are too, and
+    # each segment carries its own weight so the band shimmers instead of ruling.
+    r = _layer(); rd = ImageDraw.Draw(r)
+    for k in range(15):
+        t = k / 14.0
+        y0 = H * (0.615 + 0.40 * t ** 1.25)
+        amp = 4 + 15 * t
+        base = 26 + 62 * t                      # nearer the bottom = closer = brighter
+        wid = 3 if t < 0.6 else 4
+        x = rnd.uniform(-40, 120)
+        while x < W + 20:
+            seg = rnd.uniform(160, 520) * (0.6 + 0.8 * t)
+            a_seg = int(base * rnd.uniform(0.45, 1.0))
+            pts = [(px, y0 + amp * math.sin(px / (120.0 + 90.0 * t) + k * 0.7))
+                   for px in range(int(x), int(min(x + seg, W + 20)), 8)]
+            if len(pts) > 1 and a_seg > 5:
+                rd.line(pts, fill=(168, 230, 246, a_seg), width=wid, joint="curve")
+            x += seg + rnd.uniform(70, 260)     # the gap is what stops it ruling
+    # Blur barely at all. A 2px line under a 5px blur spreads over ~15px and its
+    # peak alpha collapses — the first water pass drew all of this and none of it
+    # was visible. Softness has to come from the alpha, not from the blur.
+    marks.append(_veil(r, 2))
+
+    # Bubbles rising up the outer edges — the left column is clear of the cover,
+    # the right of the track text, so nothing drifts behind a word.
+    b = _layer(); bd = ImageDraw.Draw(b)
+    for _ in range(70):
+        side = rnd.random() < 0.5
+        x = W * (rnd.uniform(0.005, 0.055) if side else rnd.uniform(0.945, 0.995))
+        y = H * (1.02 - 0.72 * rnd.random() ** 0.7)
+        rad = rnd.uniform(1.6, 5.2)
+        a = int(190 * max(0.0, 1.0 - (H - y) / (H * 0.72)) ** 1.2 * rnd.uniform(0.55, 1.0))
+        if a > 6:
+            bd.ellipse([x - rad, y - rad, x + rad, y + rad], outline=(202, 242, 252, a), width=2)
+    marks.append(_veil(b, 1))
+
+    return _settle(bg, washes, marks, wash_alpha=0.58)
+
+
 def make_background_elements():
     """The weekly backdrop with the four elements worked into it.
 
@@ -233,7 +333,9 @@ def make_background_elements():
     return Image.alpha_composite(bg.convert("RGBA"), lay).convert("RGB")
 
 
-BACKDROPS = {"weekly": make_background, "elements": make_background_elements}
+BACKDROPS = {"weekly": make_background,
+             "elements": make_background_elements,   # all four, for a run overview
+             "water": make_background_water}         # one episode, one element
 
 
 def chip(draw, x, y, text, fnt, accent=False):
