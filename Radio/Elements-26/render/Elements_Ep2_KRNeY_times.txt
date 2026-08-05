@@ -24,36 +24,53 @@ READ THIS FIRST
   The last track runs to the end of the mix (59:40).
 
 --------------------------------------------------------------------------------------
-  #   START    SONG                          NOTE
+  #   START    SONG                      ARTIST               YEAR GENRE
 --------------------------------------------------------------------------------------
-  1    0:00     Fast lane                     no time written - assumed the opener
-  2    2:04     Curves                        
-  3    4:16     Mask off                      
-  4 ?  5:51     Purple Rhythm                 second word unclear
-  5    7:35     Water Falls                   
-  6 ?  9:21     Evergreen                     reads Evkvround / Everground - unclear
-  7    10:16    Orange                        
-  8    11:06    God speed                     first time crossed out; 11:06 beside it
-  9    13:56    Type Shit                     
- 10 ?  16:47    Wet me                        name and last digit both overwritten
- 11 ?  18:36    Telekness                     time overwritten; name may be 'Telekinesis'
- 12    21:04    Gimme Gimme                   
- 13    23:00    Carry me home                 
- 14 ?  25:41    Feel the vibe                 last digit unclear
- 15    29:11    Forever young                 first time crossed out; 29:11 beside it
- 16 ?  32:22    The Fade                      could be 'The Jade'
- 17    34:18    Feel it in my                 title looks unfinished on the page
- 18    37:16    Make you Right                
- 19 ?  39:59    Psycho                        seconds unclear - 39:59 or 39:39
- 20    42:05    Long walks                    
- 21 ?  44:08    amigud                        name unclear
- 22    47:42    gossip                        
- 23 ?  50:24    Hype up                       reads 'Hytyup' - unclear
- 24    51:36    Dream On                      
- 25    54:03    Torch                         'Gorillat' written beside it - the artist
- 26    55:58    Surround sounds               
- 27    57:19    Let 'em talk                  'Mikayli' written beside it - the artist
+  1    0:00     Fast Lane ft. CREG        Mersiv               -    
+  2    2:04     Curves                    Ivy Lab              2024 Electronic
+  3    4:16     Ganja White Night x Mr.   Ganja White Night    2026 Electronic
+  4 ?  5:51     Purple Rhythm             ** not matched - as written **
+  5    7:35     James Hype - Waterfalls   Mersiv               -    
+  6 ?  9:21     Evergreen                 ** not matched - as written **
+  7    10:16    Orange                    ** not matched - as written **
+  8    11:06    God Speed                 Mickman              -    
+  9    13:56    Crankdat & NGHTMRE - TYP  Crankdat             2025 
+ 10 ?  16:47    the time                  Jigitz               2025 Dance
+ 11 ?  18:36    Telekinesis (ft. Diego M  Zingara              2026 Dubstep
+ 12    21:04    ABBA- Gimme! Gimme! Gimm  Wonkywilla           -    
+ 13    23:00    Carry me home             ** not matched - as written **
+ 14 ?  25:41    Feel The Vibe             Above & Beyond       2026 Dance
+ 15    29:11    Forever Young             It's Murph           2026 Dance
+ 16 ?  32:22    The Fade                  ** not matched - as written **
+ 17    34:18    Feel it in My             It's Murph           2025 Dance
+ 18    37:16    Make You Fight            Chris Lake           2026 House
+ 19 ?  39:59    Psycho                    Chris Lake           2025 Dance
+ 20    42:05    Long Walks R 4 Loverz (w  Dice Man             -    
+ 21 ?  44:08    Amigood                   Ivy Lab              2025 House
+ 22    47:42    Gossip                    Ivy Lab              2026 House
+ 23 ?  50:24    HYYTUP                    Boys Noize           2026 Dance
+ 24    51:36    Aerosmith - Dream On (Ef  Effin                -    
+ 25    54:03    Little Simz - Torch (Gor  Gorillat             -    
+ 26    55:58    SURROUND SOUND (CRANKDAT  Crankdat             -    
+ 27    57:19    Let 'Em Talk (ft. LEIK)   Mikayli              -    
 --------------------------------------------------------------------------------------
+
+NOTES FROM THE PAGE
+    1  Fast lane                no time written - assumed the opener
+    4  Purple Rhythm            second word unclear
+    6  Evergreen                reads Evkvround / Everground - unclear
+    8  God speed                first time crossed out; 11:06 beside it
+   10  Wet me                   name and last digit both overwritten
+   11  Telekness                time overwritten; name may be 'Telekinesis'
+   14  Feel the vibe            last digit unclear
+   15  Forever young            first time crossed out; 29:11 beside it
+   16  The Fade                 could be 'The Jade'
+   17  Feel it in my            title looks unfinished on the page
+   19  Psycho                   seconds unclear - 39:59 or 39:39
+   21  amigud                   name unclear
+   23  Hype up                  reads 'Hytyup' - unclear
+   25  Torch                    'Gorillat' written beside it - the artist
+   27  Let 'em talk             'Mikayli' written beside it - the artist
 
 GAPS BETWEEN TRACKS (a very short or very long one usually means a misread time)
 
@@ -118,9 +135,17 @@ EP 3 - EARTH - Henry - Sat Aug 8
       #drumandbass
 
 EP 2 - FIRE - KRNeY - Fri Aug 7
-   Cannot be listed yet. The handwritten sheet has song names and times but no
-   artists and no genres, so anything here would be guesswork. Confirm the names
-   above and I will match them and produce this block for real.
+   22 of 27 written lines matched to the tracklist KRNeY built in the dashboard
+   through his DJ link. Those artists and titles are HIS, not a guess - the
+   handwriting only supplied the times. Genres and years were then looked up
+   from those real artist + title pairs.
+   Genres across the identified tracks:
+      Dance (6), House (3), Electronic (2), Dubstep (1)
+   Tags (only 12 of the tracks carry a genre so far):
+      #dance #house #electronic #dubstep
+   5 written line(s) matched nothing in his list, and 4 of his tracks have no
+   written line: Candy Shop Remix, Purple Plum Trees, Hot Mic, FVKVRVND.
+   Those are the open questions - see the table above.
 
 EP 4 - AIR - 32LVS - Sun Aug 9
    No tracklist received yet.

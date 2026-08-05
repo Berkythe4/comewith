@@ -40,3 +40,21 @@ Radio/Week */*.aac
 Radio/Week */*.aiff
 
 supabase/.temp/
+
+# Radio media — renders, masters and full-size cover art.
+# A `git add -A` over Radio/ once staged ~750 MB of MP4s and 200 MB of JPEGs in
+# one commit. These are build outputs or huge source assets; the cues, the times
+# sheets and the scripts that make them are what belongs in git.
+Radio/**/Audio_Video_Final/
+Radio/**/Cover Art/
+Radio/**/*.mp4
+Radio/**/*.wav
+Radio/**/*.WAV
+Radio/**/*.mp3
+Radio/Elements-26/render/element_slides/
+Radio/Elements-26/render/frames/
+Radio/Elements-26/render/proto/
+Radio/Elements-26/render/final/
+Radio/Elements-26/render/final2/
+Radio/Elements-26/render/henryck/
+Radio/Video/_preview/
