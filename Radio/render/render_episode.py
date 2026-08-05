@@ -717,6 +717,11 @@ EDITIONS = {
         "outro_b": "set times, the rest of the run and the mix to replay — at",
         "next_label": "THE RUN CONTINUES",
         "tease": "FOUR NIGHTS · FOUR EPISODES · ONE WEEKEND",
+        # The bookends belong to the RUN, not the episode: every night opens and
+        # closes on ether while the track cards stay in that DJ's own element.
+        # Defaulted here rather than left to a flag, so it cannot be forgotten on
+        # one episode and quietly break the set.
+        "bookend_backdrop": "ether",
     },
 }
 ED = EDITIONS["weekly"]          # replaced in main() by --edition
@@ -834,6 +839,12 @@ def main():
                     help="which bookend copy to use")
     ap.add_argument("--backdrop", default="weekly", choices=sorted(BACKDROPS),
                     help="'elements' works fire / air / wind / water into the same purple ground")
+    # The bookends are the RUN's identity, not the episode's: across a series they
+    # should open and close the same way whoever mixed it, while the track cards
+    # stay in that DJ's own element. So they can take their own ground and art.
+    ap.add_argument("--bookend-backdrop", choices=sorted(BACKDROPS),
+                    help="backdrop for the intro + closing only (default: same as --backdrop)")
+    ap.add_argument("--bookend-cover", help="cover art for the intro only (default: same as --cover)")
     ap.add_argument("--cover", required=True)
     ap.add_argument("--out", required=True)
     ap.add_argument("--ep", default="EP 1")
@@ -942,7 +953,9 @@ def main():
     # the mix length. We just steal the first/last few seconds of card time.
     intro = outro = []
     if not a.no_bookends:
-        cover_sm = rounded_cover(a.cover, 300, 24)
+        bk_name = a.bookend_backdrop or ED.get("bookend_backdrop")
+        bk_bg = BACKDROPS[bk_name]() if bk_name else bg
+        cover_sm = rounded_cover(a.bookend_cover or a.cover, 300, 24)
         intro_secs = min(a.intro_secs, cards[0][1] * 0.7)          # don't eat a whole track
         outro_secs = min(a.outro_secs, cards[-1][1] * 0.7)
         drop = a.drop_date
@@ -951,8 +964,8 @@ def main():
         # too — otherwise the intro would run past its own slot and every cue
         # after it would sit late against the mix.
         hold = max(0.0, min(a.intro_hold, cards[0][1] * 0.7 - intro_secs))
-        intro = build_intro(work, bg, cover_sm, a.ep, a.mixed_by, drop, intro_secs, hold)
-        outro = build_outro(work, bg, cover_sm, nxt_date, outro_secs)
+        intro = build_intro(work, bk_bg, cover_sm, a.ep, a.mixed_by, drop, intro_secs, hold)
+        outro = build_outro(work, bk_bg, cover_sm, nxt_date, outro_secs)
         cards[0][1] = max(0.1, cards[0][1] - intro_secs - hold)    # first card starts after intro
         cards[-1][1] = max(0.1, cards[-1][1] - outro_secs)         # last card ends before outro
         print("Intro %.1fs (+%.1fs hold) + closing %.1fs (overlaid on the mix — total unchanged)."
