@@ -708,7 +708,10 @@ EDITIONS = {
     "elements": {
         "brand": "COME WITH ELEMENTS RADIO",
         "intro_a": "Every track is a producer playing Elements this weekend.",
-        "intro_b": "Four nights, four episodes. This one is Berky's run.",
+        # {who} = --mixed-by. Hardcoding "Berky" here was fine while Ep1 was the
+        # only render and wrong the moment Henry's went out saying it too.
+        "intro_b": "Four nights, four episodes. This one is {who}'s run.",
+        "intro_b_anon": "Four nights, four episodes. This is one of them.",
         # No "TICKETS" here — Elements tickets aren't ours to sell, and pointing
         # at them from our own slide reads like we're the box office. What the
         # site actually gives you during the weekend is the schedule and the run.
@@ -754,7 +757,11 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
         _cdivider(d, cx, 92 + cs + 232)
         _ctext(d, cx, 92 + cs + 262, ED["intro_a"], F_body(44), CREAM)
     if stage >= 3:
-        _ctext(d, cx, 92 + cs + 330, ED["intro_b"], F_body(44), DIM)
+        line_b = ED["intro_b"]
+        if "{who}" in line_b:
+            line_b = line_b.format(who=mixed_by) if mixed_by else ED.get("intro_b_anon", "")
+        if line_b:
+            _ctext(d, cx, 92 + cs + 330, line_b, F_body(44), DIM)
     if stage >= 4:
         _ctext(d, cx, 92 + cs + 416, ED["intro_cta"], F_mono(28), FAINT)
         _ctext(d, cx, 92 + cs + 452, "comewith.org", F_disp(44), LIME)
