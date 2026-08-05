@@ -400,6 +400,7 @@ EDITIONS = {
         "brand": "COME WITH RADIO",
         "intro_a": "Every track is an artist playing New York — soon.",
         "intro_b": "Hear who's playing, grab your tickets, go live.",
+        "intro_cta": "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN",
         "outro_a": "Tickets to every artist you just heard — plus when &",
         "outro_b": "where they play next, and the mix to replay — at",
         "next_label": "WE PLUG BACK IN NEXT THURSDAY",
@@ -409,6 +410,10 @@ EDITIONS = {
         "brand": "COME WITH ELEMENTS RADIO",
         "intro_a": "Every track is a producer playing Elements this weekend.",
         "intro_b": "Four nights, four episodes. This one is Berky's run.",
+        # No "TICKETS" here — Elements tickets aren't ours to sell, and pointing
+        # at them from our own slide reads like we're the box office. What the
+        # site actually gives you during the weekend is the schedule and the run.
+        "intro_cta": "SET TIMES · WHO'S PLAYING & WHEN · THE FULL RUN",
         "outro_a": "Every artist you just heard plays Elements this weekend —",
         "outro_b": "set times, the rest of the run and the mix to replay — at",
         "next_label": "THE RUN CONTINUES",
@@ -447,7 +452,7 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
     if stage >= 3:
         _ctext(d, cx, 92 + cs + 330, ED["intro_b"], F_body(44), DIM)
     if stage >= 4:
-        _ctext(d, cx, 92 + cs + 416, "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN", F_mono(28), FAINT)
+        _ctext(d, cx, 92 + cs + 416, ED["intro_cta"], F_mono(28), FAINT)
         _ctext(d, cx, 92 + cs + 452, "comewith.org", F_disp(44), LIME)
     return im.convert("RGB")
 
@@ -487,15 +492,22 @@ def draw_outro(bg, cover_sm, next_date, stage):
 INTRO_BEATS = [1.7, 1.7, 2.4, 2.4, 2.4, 5.0]     # stages 0,1,2,3,4, then hold@4
 OUTRO_BEATS = [1.8, 2.4, 2.2, 2.2, 2.6, 2.2, 5.0]  # stages 0..5, then hold@5
 
-def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs):
-    """PNG frames for the intro, scaled to fit total_secs. Returns [(png,dur)]."""
+def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs, hold_extra=0.0):
+    """PNG frames for the intro, scaled to fit total_secs. Returns [(png,dur)].
+
+    `hold_extra` is added to the FINAL beat only — the one where the whole slide
+    is assembled. Stretching total_secs instead would slow every reveal down with
+    it; the ask is for the finished slide to stay up longer, not for the story to
+    tell itself more slowly.
+    """
     scale = total_secs / sum(INTRO_BEATS)
     out = []
     for i, base in enumerate(INTRO_BEATS):
         stage = min(i, len(INTRO_BEATS) - 2)      # last beat = hold on the final stage
         png = os.path.join(work, "intro_%02d.png" % i)
         draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage).save(png)
-        out.append((png, max(0.1, base * scale)))
+        dur = base * scale + (hold_extra if i == len(INTRO_BEATS) - 1 else 0.0)
+        out.append((png, max(0.1, dur)))
     return out
 
 def build_outro(work, bg, cover_sm, next_date, total_secs):
@@ -532,6 +544,9 @@ def main():
     ap.add_argument("--next-date", default="", help="next drop YYYY-MM-DD (closing 'plug back in'); default = drop-date + 7")
     ap.add_argument("--no-bookends", action="store_true", help="skip the intro + closing slides")
     ap.add_argument("--intro-secs", type=float, default=15.5)
+    ap.add_argument("--intro-hold", type=float, default=5.0,
+                    help="extra seconds the FULLY assembled intro slide stays up, on top of "
+                         "--intro-secs. Reveal pacing is unaffected. 0 restores the old timing.")
     ap.add_argument("--outro-secs", type=float, default=16.0)
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
@@ -633,12 +648,16 @@ def main():
         outro_secs = min(a.outro_secs, cards[-1][1] * 0.7)
         drop = a.drop_date
         nxt_date = next_thursday(drop, a.next_date)
-        intro = build_intro(work, bg, cover_sm, a.ep, a.mixed_by, drop, intro_secs)
+        # The extra hold is real screen time, so it comes out of the first card
+        # too — otherwise the intro would run past its own slot and every cue
+        # after it would sit late against the mix.
+        hold = max(0.0, min(a.intro_hold, cards[0][1] * 0.7 - intro_secs))
+        intro = build_intro(work, bg, cover_sm, a.ep, a.mixed_by, drop, intro_secs, hold)
         outro = build_outro(work, bg, cover_sm, nxt_date, outro_secs)
-        cards[0][1] = max(0.1, cards[0][1] - intro_secs)           # first card starts after intro
+        cards[0][1] = max(0.1, cards[0][1] - intro_secs - hold)    # first card starts after intro
         cards[-1][1] = max(0.1, cards[-1][1] - outro_secs)         # last card ends before outro
-        print("Intro %.1fs + closing %.1fs (overlaid on the mix — total unchanged)."
-              % (intro_secs, outro_secs))
+        print("Intro %.1fs (+%.1fs hold) + closing %.1fs (overlaid on the mix — total unchanged)."
+              % (intro_secs, hold, outro_secs))
     concat = list(intro) + [tuple(c) for c in cards] + list(outro)
 
     listfile = os.path.join(work, "list.txt")
