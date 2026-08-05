@@ -589,7 +589,9 @@ function render(){
     (station.desc_public?`<div class="desc">${esc(station.desc_public)}</div>`:'')+
     `<div class="actions">${scBtn}${ytBtn}<button class="chip" id="saveAllBtn">♡ Save all</button><button class="chip" id="csvBtn">⬇ Export tracklist (CSV)</button><button class="chip" id="shareBtn">🔗 Copy link</button></div>`+
     (embedUrl?`<div class="mixbox"><iframe allow="autoplay; encrypted-media" loading="lazy" src="${esc(scEmbed(embedUrl,true))}"></iframe></div>`:'')+
-    `<div class="label" style="margin:8px 0 2px">Tracklist · every artist is playing NYC soon</div>`+
+    `<div class="label" style="margin:8px 0 2px">Tracklist · ${(station&&station.edition_name)
+        ? 'every artist is playing Elements this weekend'
+        : 'every artist is playing NYC soon'}</div>`+
     '<div>'+tr.map((t,i)=>{
       const key=[t.camelot?('<span class="hot">'+esc(t.camelot)+'</span>'):'',t.bpm?(esc(t.bpm)+' BPM'):'',t.song_key?esc(t.song_key):'',(t.genres&&t.genres.length)?esc(t.genres.slice(0,2).join(' / ')):''].filter(Boolean).join(' · ');
       const show=[t.show_date?'🗓 '+fmtShow(t.show_date):'',t.show_venue?'📍 '+esc(t.show_venue):'',t.show_cost?'🎟 '+esc(t.show_cost):''].filter(Boolean).join(' · ');
@@ -636,10 +638,16 @@ async function loadEpisode(){
   const epNo=station.edition_seq!=null?('EP '+station.edition_seq):null;
   if(ed){document.body.classList.add('edition-elements');
     $('#kicker').textContent='Come With · '+ed.replace(/^Come With\s+/i,'').replace(/\s+Radio$/i,'')+' Radio';}
-  document.title=(epNo?epNo+' — ':(station.station_no!=null?('SHOW '+station.station_no+' — '):''))+(station.name||'Come With Radio')+' · Come With Radio';
+  document.title=(station.name||'Come With Radio')+' · Come With Radio';
   $('#allEps').style.display='';
-  $('#hd').innerHTML=esc((epNo?epNo+' · ':(station.station_no!=null?('SHOW '+station.station_no+' · '):''))+(station.name||'Come With Radio'))
-    +(ed&&station.station_no!=null?'<span class="edchip">Show '+esc(String(station.station_no))+'</span>':'');
+  // The episode name usually ALREADY ends in its own number ("… — Ep1"), so
+  // prefixing it produced "EP 1 · Come With Elements Radio — Ep1". Only prefix
+  // when the name doesn't already say it.
+  const nm=station.name||'Come With Radio';
+  const saysEp=station.edition_seq!=null&&new RegExp('\bep\s*'+station.edition_seq+'\b','i').test(nm);
+  const pre=epNo&&!saysEp?epNo+' · ':(!epNo&&station.station_no!=null?'SHOW '+station.station_no+' · ':'');
+  $('#hd').innerHTML=esc(pre+nm)
+    +(station.station_no!=null?'<span class="edchip">Show '+esc(String(station.station_no))+'</span>':'');
   $('#sub').textContent=(station.mix_by?('Mixed by '+station.mix_by+' · '):'')+(tracks.length+' tracks · '+Math.round(tracks.reduce((s,t)=>s+(t.duration_ms||0),0)/60000)+' min')+(station.published_at?(' · '+fmtDate(station.published_at)):'');
   if(!station.published)$('#preview').innerHTML='<span class="banner">Preview · unlisted — only people with this link can see it</span>';
   render();
