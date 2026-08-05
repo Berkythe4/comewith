@@ -271,7 +271,7 @@ Deno.serve(async (req) => {
     const playlistId = (body.playlist_id || "").toString();
     if (!playlistId) return err(400, "playlist_id required");
     const { data: pl } = await admin.from("sc_playlists")
-      .select("id, name, slug, station_no, status, mix_sc_track_url").eq("id", playlistId).single();
+      .select("id, name, slug, station_no, status, mix_sc_track_url, edition_seq").eq("id", playlistId).single();
     if (!pl) return err(404, "station not found");
     const token = await freshToken();
     if (!token) return err(401, "SoundCloud connection expired — reconnect.");
@@ -284,20 +284,63 @@ Deno.serve(async (req) => {
     if (!mine.length) return ok({ success: true, candidates: [], note: "No uploads found on your SoundCloud account." });
 
     const want = Number(body.duration_ms || 0);
-    const norm = (x: string) => (x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-    // Episode fingerprints: its name, its slug, and "ep<N>" — the upload is
-    // usually named after the same thing the WAV was.
-    const keys = [norm(pl.name), norm(pl.slug || ""), "ep" + (pl.station_no ?? "")].filter((k) => k.length > 2);
+
+    // TOKEN overlap, not whole-string containment. The old rule compared the
+    // episode name to the upload title as one squashed string, so
+    // "Come With Elements26 Radio Ep1" did not match "Come With Elements Radio —
+    // Ep1" — a single "26" in the middle took the score to ZERO on a title that
+    // is obviously the same episode. Letters and digits split apart so that 26
+    // is its own token rather than fused to "elements".
+    const toks = (x: string) => (x || "").toLowerCase()
+      .replace(/([a-z])(\d)/g, "$1 $2").replace(/(\d)([a-z])/g, "$1 $2")
+      .split(/[^a-z0-9]+/).filter(Boolean);
+    const nameToks = new Set(toks(pl.name));
+    // The episode number in a title is the EDITION's own number when there is an
+    // edition — that is what a DJ writes. Accepting the global show number too
+    // made "Come With Elements26 Radio Ep3" match episode 1, purely because that
+    // episode happens to be SHOW 3.
+    const epNums = [pl.edition_seq != null ? pl.edition_seq : pl.station_no]
+      .filter((n) => n != null).map(String);
+
+    // Weight a word by how RARE it is across the account's uploads. "come",
+    // "with" and "radio" are on almost every track and say nothing; "elements"
+    // says everything. Without this, "Come With NYC Radio Ep1" scored nearly as
+    // well as the actual Elements Ep1 upload, because four of six words agreed.
+    const df = new Map<string, number>();
+    for (const t of mine) for (const w of new Set(toks(t.title))) df.set(w, (df.get(w) || 0) + 1);
+    const weight = (w: string) => 1 / (1 + (df.get(w) || 0));
+    let totalW = 0;
+    for (const w of nameToks) totalW += weight(w);
+
     const scored = mine.map((t) => {
-      const nt = norm(t.title);
+      const tt = toks(t.title);
+      const tset = new Set(tt);
       let score = 0;
-      for (const k of keys) if (k && (nt.includes(k) || k.includes(nt))) score += 0.4;
-      // Runtime match is decisive: same length to within 5s is the same audio.
+
+      // Weighted Jaccard, not one-way coverage. Asking only "how much of the
+      // episode name is in this title" ignores what ELSE the title says, so
+      // "Come With NYC Radio Ep1" scored 0.79 against the Elements episode — it
+      // has every word except one. Counting NYC against it is the whole point.
+      let interW = 0, unionW = 0;
+      for (const w of nameToks) { unionW += weight(w); if (tset.has(w)) interW += weight(w); }
+      for (const w of tset) if (!nameToks.has(w)) unionW += weight(w);
+      const cover = unionW ? interW / unionW : 0;
+      score += cover * 1.0;
+
+      // "ep 1" present as adjacent tokens, or the bare number alongside "ep"
+      const epHit = epNums.some((n) => {
+        for (let i = 0; i < tt.length - 1; i++) if (tt[i] === "ep" && tt[i + 1] === n) return true;
+        return tset.has("ep" + n);
+      });
+      if (epHit) score += 0.5;
+
+      // Runtime remains decisive WHEN WE HAVE IT — but it is often absent, so it
+      // can no longer be the only route to confidence.
       const dd = want && t.duration ? Math.abs(t.duration - want) : null;
       if (dd !== null && dd <= 5000) score += 1.0;
       else if (dd !== null && dd <= 30000) score += 0.35;
-      // Newest first as a weak tiebreak.
-      return { t, score, delta_ms: dd };
+
+      return { t, score, delta_ms: dd, cover, epHit };
     }).sort((a, b) => (b.score - a.score) ||
         (String(b.t.created_at || "").localeCompare(String(a.t.created_at || ""))));
 
@@ -313,7 +356,15 @@ Deno.serve(async (req) => {
       match: Number(x.score.toFixed(2)), delta_ms: x.delta_ms,
     });
     const best = scored[0];
-    const confident = best && best.score >= 1.0;      // i.e. the runtime matched
+    // Confident on runtime, OR on most of the name plus the right episode number.
+    // A second upload would have to share both to be confused with this one.
+    // Runtime is still the one signal that stands alone. Otherwise the title has
+    // to cover most of the distinctive words, carry the right episode number, AND
+    // beat the runner-up clearly — auto-linking the wrong mix is worse than
+    // asking, which is what the candidate list is for.
+    const margin = scored[1] ? best.score - scored[1].score : Infinity;
+    const confident = !!best && ((best.delta_ms !== null && best.delta_ms <= 5000) ||
+      (best.cover >= 0.7 && best.epHit && margin >= 0.3));
     const out = {
       success: true,
       candidates: scored.slice(0, 8).map(shape),
