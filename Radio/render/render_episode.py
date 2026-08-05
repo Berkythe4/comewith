@@ -216,6 +216,197 @@ def make_background_water():
     return _settle(bg, washes, marks, wash_alpha=0.58)
 
 
+def make_background_fire():
+    """FIRE — Martin. Cover is a red/orange flame swirl.
+
+    Heat comes from the EMBERS, not the wash: orange spread wide over purple just
+    makes brown. So the wash stays low and tight to the floor, and the sparks and
+    the updraught do the reading.
+    """
+    import math
+    bg = make_background()
+    rnd = random.Random(20260807)
+    washes, marks = [], []
+
+    f = _layer(); fd = ImageDraw.Draw(f)
+    fd.ellipse([-W * 0.25, H * 0.74, W * 1.25, H * 1.60], fill=(196, 34, 8, 62))
+    fd.ellipse([-W * 0.05, H * 0.88, W * 1.05, H * 1.44], fill=(242, 88, 4, 46))
+    washes.append(_veil(f, 205))
+
+    # Updraught: tapering vertical wisps off the floor. Curved and uneven —
+    # straight ones would read as a fence.
+    u = _layer(); ud = ImageDraw.Draw(u)
+    for k in range(22):
+        x0 = W * rnd.uniform(0.0, 1.0)
+        h = H * rnd.uniform(0.14, 0.34)
+        a0 = 40 + 46 * rnd.random()
+        sway = rnd.uniform(18, 62) * (1 if rnd.random() < 0.5 else -1)
+        pts = []
+        n = 16
+        for i in range(n + 1):
+            t = i / n
+            pts.append((x0 + sway * math.sin(t * 2.4 + k), H * 1.01 - h * t))
+        for i in range(n):
+            a = int(a0 * (1 - i / n) ** 1.5)
+            if a > 4:
+                ud.line([pts[i], pts[i + 1]], fill=(255, 158, 62, a), width=3)
+    marks.append(_veil(u, 4))
+
+    # Sparks, densest low, thinning as they rise.
+    em = _layer(); ed = ImageDraw.Draw(em)
+    for _ in range(150):
+        x = W * rnd.random()
+        y = H * (1.03 - 0.60 * rnd.random() ** 0.6)
+        r = rnd.uniform(1.3, 4.4)
+        a = int(225 * max(0.0, 1.0 - (H - y) / (H * 0.60)) ** 1.4 * rnd.uniform(0.5, 1.0))
+        if a > 6:
+            ed.ellipse([x - r, y - r, x + r, y + r], fill=(255, 198, 116, min(235, a)))
+    marks.append(_veil(em, 2))
+    return _settle(bg, washes, marks, wash_alpha=0.60)
+
+
+def make_background_earth():
+    """EARTH — Henry. Cover is aerial terrain: olive fields and river channels.
+
+    So this is CONTOURS, not strata. Nested meandering lines read as land seen
+    from above and, importantly, don't collide with water's parallel ripples —
+    two elements in one run must not look like each other.
+    """
+    import math
+    bg = make_background()
+    rnd = random.Random(20260808)
+    washes, marks = [], []
+
+    g = _layer(); gd = ImageDraw.Draw(g)
+    gd.ellipse([-W * 0.25, H * 0.70, W * 1.25, H * 1.60], fill=(96, 104, 24, 66))
+    gd.ellipse([-W * 0.05, H * 0.86, W * 1.05, H * 1.40], fill=(132, 108, 32, 44))
+    washes.append(_veil(g, 205))
+
+    # Contour lines: each one a wandering curve, each nested slightly inside the
+    # last, so they group into landforms instead of ruling parallel lines.
+    c = _layer(); cd = ImageDraw.Draw(c)
+    for band in range(4):
+        seed_y = H * (0.70 + 0.085 * band)
+        f1, f2 = rnd.uniform(180, 320), rnd.uniform(420, 900)
+        p1, p2 = rnd.uniform(0, 6.3), rnd.uniform(0, 6.3)
+        for k in range(5):
+            off = k * rnd.uniform(9, 17)
+            a = int((104 + 74 * band / 3.0) * (1 - k / 7.0))
+            pts = [(x, seed_y + off + 26 * math.sin(x / f1 + p1) + 44 * math.sin(x / f2 + p2))
+                   for x in range(-20, W + 40, 12)]
+            cd.line(pts, fill=(214, 202, 126, max(26, a)), width=3, joint="curve")
+    marks.append(_veil(c, 2))
+
+    # Grain — dry dust rather than rising sparks, so it sits low and still.
+    d_ = _layer(); dd = ImageDraw.Draw(d_)
+    for _ in range(190):
+        x = W * rnd.random()
+        y = H * (1.02 - 0.34 * rnd.random() ** 0.5)
+        r = rnd.uniform(0.9, 2.6)
+        a = int(175 * rnd.uniform(0.4, 1.0))
+        dd.ellipse([x - r, y - r, x + r, y + r], fill=(214, 190, 128, a))
+    marks.append(_veil(d_, 1))
+    return _settle(bg, washes, marks, wash_alpha=0.58)
+
+
+def make_background_air():
+    """AIR — 32LVS. Cover is cyan smoke against black.
+
+    Sinuous tapering wisps, not the straight lime streaks the four-element
+    backdrop uses for wind: those two would otherwise be the same gesture twice.
+    Held to the upper band and the outer thirds, clear of the track text.
+    """
+    import math
+    bg = make_background()
+    rnd = random.Random(20260809)
+    washes, marks = [], []
+
+    a_ = _layer(); ad = ImageDraw.Draw(a_)
+    ad.ellipse([W * 0.30, -H * 0.42, W * 1.24, H * 0.42], fill=(52, 152, 190, 44))
+    ad.ellipse([-W * 0.24, H * 0.06, W * 0.42, H * 0.72], fill=(40, 128, 168, 30))
+    washes.append(_veil(a_, 195))
+
+    # Wisps: long, slow, thinning at both ends — smoke, not wind.
+    w = _layer(); wd = ImageDraw.Draw(w)
+    for k in range(14):
+        y0 = H * rnd.uniform(0.05, 0.34) if k % 2 == 0 else H * rnd.uniform(0.62, 0.94)
+        x0 = W * rnd.uniform(-0.15, 0.55)
+        span = W * rnd.uniform(0.35, 0.85)
+        amp = rnd.uniform(22, 70)
+        f = rnd.uniform(260, 520)
+        a0 = 104 + 62 * rnd.random()
+        n = 40
+        pts = [(x0 + span * (i / n), y0 + amp * math.sin((x0 + span * (i / n)) / f + k))
+               for i in range(n + 1)]
+        for i in range(n):
+            t = i / n
+            a = int(a0 * math.sin(math.pi * t) ** 0.8)      # fade in and out at the ends
+            if a > 4:
+                wd.line([pts[i], pts[i + 1]], fill=(176, 232, 248, a), width=4)
+    marks.append(_veil(w, 3))
+
+    m = _layer(); md = ImageDraw.Draw(m)
+    for _ in range(70):
+        x = W * rnd.random()
+        y = H * rnd.random()
+        r = rnd.uniform(1.0, 3.2)
+        md.ellipse([x - r, y - r, x + r, y + r], fill=(220, 242, 252, int(120 * rnd.uniform(0.3, 1.0))))
+    marks.append(_veil(m, 2))
+    return _settle(bg, washes, marks, wash_alpha=0.56)
+
+
+def make_background_ether():
+    """ETHER — Janelle. The one with no natural vocabulary, so it takes it from
+    the cover: a pale radiant bloom ringed by faint geometry.
+
+    Kept to the top-right, where the lime glow already lives and the card is
+    empty, plus a sparse starfield. This is the one I'd most want a second
+    opinion on — the other four describe themselves; ether doesn't.
+    """
+    import math
+    bg = make_background()
+    rnd = random.Random(20260810)
+    washes, marks = [], []
+
+    # Pushed up and right so the rings clear the artist name — display type is
+    # the one thing on the card nothing may cross.
+    cx, cy = W * 0.87, H * 0.15
+    b = _layer(); bd = ImageDraw.Draw(b)
+    bd.ellipse([cx - W * 0.30, cy - H * 0.42, cx + W * 0.30, cy + H * 0.42], fill=(150, 178, 226, 46))
+    washes.append(_veil(b, 190))
+
+    # Concentric polygons, rotating a little each ring — the cover's geometry,
+    # drawn faintly enough to read as structure rather than shapes.
+    p = _layer(); pd = ImageDraw.Draw(p)
+    for k in range(7):
+        rad = 105 + k * 62
+        rot = k * 0.28
+        sides = 6
+        pts = [(cx + rad * math.cos(rot + i * 2 * math.pi / sides),
+                cy + rad * 0.86 * math.sin(rot + i * 2 * math.pi / sides)) for i in range(sides)]
+        pd.line(pts + [pts[0]], fill=(206, 220, 250, max(30, int(120 - k * 12))), width=3, joint="curve")
+    marks.append(_veil(p, 2))
+
+    # Rays out of the bloom, short and uneven.
+    r_ = _layer(); rd = ImageDraw.Draw(r_)
+    for k in range(20):
+        ang = rnd.uniform(0, 6.283)
+        r0 = rnd.uniform(90, 150); r1 = r0 + rnd.uniform(60, 240)
+        a = int(72 + 62 * rnd.random())
+        rd.line([(cx + r0 * math.cos(ang), cy + r0 * 0.86 * math.sin(ang)),
+                 (cx + r1 * math.cos(ang), cy + r1 * 0.86 * math.sin(ang))],
+                fill=(220, 232, 252, a), width=3)
+    marks.append(_veil(r_, 3))
+
+    s = _layer(); sd = ImageDraw.Draw(s)
+    for _ in range(120):
+        x = W * rnd.random(); y = H * rnd.random()
+        r = rnd.uniform(0.8, 2.4)
+        sd.ellipse([x - r, y - r, x + r, y + r], fill=(230, 236, 254, int(140 * rnd.uniform(0.25, 1.0))))
+    marks.append(_veil(s, 1))
+    return _settle(bg, washes, marks, wash_alpha=0.56)
+
+
 def make_background_elements():
     """The weekly backdrop with the four elements worked into it.
 
@@ -333,9 +524,15 @@ def make_background_elements():
     return Image.alpha_composite(bg.convert("RGBA"), lay).convert("RGB")
 
 
+# One backdrop per element, so a card agrees with its cover art. "elements"
+# carries all four at once and is the run-overview look.
 BACKDROPS = {"weekly": make_background,
-             "elements": make_background_elements,   # all four, for a run overview
-             "water": make_background_water}         # one episode, one element
+             "elements": make_background_elements,
+             "water": make_background_water,
+             "fire": make_background_fire,
+             "earth": make_background_earth,
+             "air": make_background_air,
+             "ether": make_background_ether}
 
 
 def chip(draw, x, y, text, fnt, accent=False):
