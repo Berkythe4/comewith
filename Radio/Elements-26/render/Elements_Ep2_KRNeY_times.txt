@@ -10,12 +10,10 @@ READ THIS FIRST
   legible almost everywhere; several song NAMES are not. Correct anything wrong,
   fill in the artists, and I will build the cues and render from it.
 
-  9 line(s) I could not read with confidence - please check these first:
+  7 line(s) I could not read with confidence - please check these first:
       4. Purple Rhythm      5:51     second word unclear
       6. Evergreen          9:21     reads Evkvround / Everground - unclear
-     10. Wet me             16:47    name and last digit both overwritten
      11. Telekness          18:36    time overwritten; name may be 'Telekinesis'
-     14. Feel the vibe      25:41    last digit unclear
      16. The Fade           32:22    could be 'The Jade'
      19. Psycho             39:59    seconds unclear - 39:59 or 39:39
      21. amigud             44:08    name unclear
@@ -33,14 +31,14 @@ READ THIS FIRST
   5    7:35     James Hype - Waterfalls   Mersiv               -    
   6 ?  9:21     Evergreen                 ** not matched - as written **
   7    10:16    Orange                    ** not matched - as written **
-  8    11:06    God Speed                 Mickman              -    
+  8    12:06    God Speed                 Mickman              -    
   9    13:56    Crankdat & NGHTMRE - TYP  Crankdat             2025 
- 10 ?  16:47    the time                  Jigitz               2025 Dance
+ 10    16:41    the time                  Jigitz               2025 Dance
  11 ?  18:36    Telekinesis (ft. Diego M  Zingara              2026 Dubstep
  12    21:04    ABBA- Gimme! Gimme! Gimm  Wonkywilla           -    
  13    23:00    Carry me home             ** not matched - as written **
- 14 ?  25:41    Feel The Vibe             Above & Beyond       2026 Dance
- 15    29:11    Forever Young             It's Murph           2026 Dance
+ 14    25:11    Feel The Vibe             Above & Beyond       2026 Dance
+ 15    28:11    Forever Young             It's Murph           2026 Dance
  16 ?  32:22    The Fade                  ** not matched - as written **
  17    34:18    Feel it in My             It's Murph           2025 Dance
  18    37:16    Make You Fight            Chris Lake           2026 House
@@ -59,13 +57,13 @@ NOTES FROM THE PAGE
     1  Fast lane                no time written - assumed the opener
     4  Purple Rhythm            second word unclear
     6  Evergreen                reads Evkvround / Everground - unclear
-    8  God speed                first time crossed out; 11:06 beside it
+    8  God speed                first time crossed out; 12:06 confirmed
    10  Wet me                   name and last digit both overwritten
    11  Telekness                time overwritten; name may be 'Telekinesis'
    14  Feel the vibe            last digit unclear
-   15  Forever young            first time crossed out; 29:11 beside it
+   15  Forever young            first time crossed out; 28:11 confirmed
    16  The Fade                 could be 'The Jade'
-   17  Feel it in my            title looks unfinished on the page
+   17  Feel it in my            title unfinished on the page; time given as 3481 - read as 34:18
    19  Psycho                   seconds unclear - 39:59 or 39:39
    21  amigud                   name unclear
    23  Hype up                  reads 'Hytyup' - unclear
@@ -80,15 +78,15 @@ GAPS BETWEEN TRACKS (a very short or very long one usually means a misread time)
     4 ->  5   5:51    to 7:35      1:44
     5 ->  6   7:35    to 9:21      1:46
     6 ->  7   9:21    to 10:16     0:55  <-- under a minute, check
-    7 ->  8   10:16   to 11:06     0:50  <-- under a minute, check
-    8 ->  9   11:06   to 13:56     2:50
-    9 -> 10   13:56   to 16:47     2:51
-   10 -> 11   16:47   to 18:36     1:49
+    7 ->  8   10:16   to 12:06     1:50
+    8 ->  9   12:06   to 13:56     1:50
+    9 -> 10   13:56   to 16:41     2:45
+   10 -> 11   16:41   to 18:36     1:55
    11 -> 12   18:36   to 21:04     2:28
    12 -> 13   21:04   to 23:00     1:56
-   13 -> 14   23:00   to 25:41     2:41
-   14 -> 15   25:41   to 29:11     3:30
-   15 -> 16   29:11   to 32:22     3:11
+   13 -> 14   23:00   to 25:11     2:11
+   14 -> 15   25:11   to 28:11     3:00
+   15 -> 16   28:11   to 32:22     4:11  <-- over four minutes, check
    16 -> 17   32:22   to 34:18     1:56
    17 -> 18   34:18   to 37:16     2:58
    18 -> 19   37:16   to 39:59     2:43
@@ -135,15 +133,15 @@ EP 3 - EARTH - Henry - Sat Aug 8
       #drumandbass
 
 EP 2 - FIRE - KRNeY - Fri Aug 7
-   22 of 27 written lines matched to the tracklist KRNeY built in the dashboard
+   23 of 27 written lines matched to the tracklist KRNeY built in the dashboard
    through his DJ link. Those artists and titles are HIS, not a guess - the
    handwriting only supplied the times. Genres and years were then looked up
    from those real artist + title pairs.
    Genres across the identified tracks:
-      Dance (6), House (3), Electronic (2), Dubstep (1)
-   Tags (only 12 of the tracks carry a genre so far):
-      #dance #house #electronic #dubstep
-   5 written line(s) matched nothing in his list, and 4 of his tracks have no
+      Dance (6), House (3), Electronic (2), Dubstep (1), Electro (1)
+   Tags (only 13 of the tracks carry a genre so far):
+      #dance #house #electronic #dubstep #electro
+   4 written line(s) matched nothing in his list, and 4 of his tracks have no
    written line: Candy Shop Remix, Purple Plum Trees, Hot Mic, FVKVRVND.
    Those are the open questions - see the table above.
 
