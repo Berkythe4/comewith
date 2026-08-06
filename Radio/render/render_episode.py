@@ -770,6 +770,11 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
 # ---- CLOSING: sincere thanks, tracklist download, follow, next drop ----------
 def draw_outro(bg, cover_sm, next_date, stage):
     im = bg.copy(); d = ImageDraw.Draw(im); cx = W // 2
+    # The run's mark, same art as the intro so the episode opens and closes on
+    # it. Smaller than the intro's — the closing slide carries five more lines
+    # of copy and the pill, and a 300px cover pushes the tease off the bottom.
+    mk = cover_sm.resize((120, 120), Image.LANCZOS)
+    im.paste(mk, (cx - 60, 8), mk)
     tag = "● THAT'S THE SHOW"
     tw = d.textlength(tag, font=F_monob(28))
     d.text((cx - tw / 2, 150), tag, font=F_monob(28), fill=LIME)
@@ -859,6 +864,9 @@ def main():
     ap.add_argument("--mixed-by", default="", help="intro credit — who mixed it")
     ap.add_argument("--drop-date", default="", help="this episode's drop date YYYY-MM-DD (intro)")
     ap.add_argument("--next-date", default="", help="next drop YYYY-MM-DD (closing 'plug back in'); default = drop-date + 7")
+    # The LAST episode of a special edition doesn't continue the run — it hands
+    # back to the weekly show, and "THE RUN CONTINUES" on that slide is a lie.
+    ap.add_argument("--next-label", default="", help="override the closing date pill's prefix (e.g. 'BACK TO NYC RADIO' on a finale)")
     ap.add_argument("--no-bookends", action="store_true", help="skip the intro + closing slides")
     ap.add_argument("--intro-secs", type=float, default=15.5)
     ap.add_argument("--intro-hold", type=float, default=5.0,
@@ -869,7 +877,12 @@ def main():
     a = ap.parse_args()
 
     global ED
-    ED = EDITIONS[a.edition]
+    # Copy of the table, not the table itself — an override has to apply to THIS
+    # render only, or a future caller that renders two episodes in one process
+    # inherits the finale's wording on the wrong one.
+    ED = dict(EDITIONS[a.edition])
+    if a.next_label:
+        ED["next_label"] = a.next_label.upper()
 
     if not a.audio and not a.no_audio:
         raise SystemExit("Give --audio, or --no-audio to render the slides on their own.")

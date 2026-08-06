@@ -39,10 +39,14 @@ TRACKS = [
      "The Great Gig in the Sky", ""),
     ("1:50",  "Checkmate", "Ravenscoon", "", ""),
     ("2:30",  "Coming Up (Like That)", "Heyz", "", ""),
-    ("3:40",  "Jaguar (Pierce & Hazea Remix) / Nissan Altima (32LVS Edit)", "",
-     "", "mashup — no original artists credited on the list"),
-    ("5:50",  "Highly / Trance Trap", "P.A.F.F.", "",
-     "written as 'Highly - Trance Trap - P.A.F.F.' — read as one entry, two titles"),
+    # PIERCE's own upload is titled "WHAT SO NOT - JAGUAR (PIERCE & HAZEA REMIX)".
+    ("3:40",  "Jaguar (Pierce & Hazea Remix) / Nissan Altima (32LVS Edit)",
+     "What So Not, Doja Cat", "Jaguar",
+     "Jaguar is What So Not's, confirmed on PIERCE's upload; Nissan Altima is Doja Cat's"),
+    # Not two titles after all — P.A.F.F. released one track called
+    # "HIGHLY (Trance Trap)", on 808 WAYS to DIE.
+    ("5:50",  "HIGHLY (Trance Trap)", "P.A.F.F.", "",
+     "written 'Highly - Trance Trap - P.A.F.F.' — it is ONE track by that name"),
     ("6:50",  "ID", "32LVS", "", "unreleased — nothing to look up"),
     ("10:10", "Purple Haze (Extrakt Flip)", "Jimi Hendrix", "Purple Haze",
      "written 'Jimmy Hendrix' — spelled Jimi on the card"),
@@ -51,28 +55,42 @@ TRACKS = [
     # there is "Anyway" by HEYZ, on the album Who Is HEYZ — the same act as 2:30.
     ("12:20", "Anyway", "Heyz", "", "written 'Hey' — it's Heyz, same act as 2:30"),
     ("13:40", "Bring the Funk Back", "SoDown", "", ""),
-    ("14:40", "Say It x Soundboy (Celo Edit) x Freeway (Aquabass Edit)", "",
-     "", "three-way edit — no original artists credited"),
+    # aquabass's own upload: "Flume x Hairitage - Say It x Freeway - aquabass edit".
+    ("14:40", "Say It x Soundboy (Celo Edit) x Freeway (aquabass Edit)",
+     "Flume, Hairitage", "Say It", "artists come from aquabass's own upload title"),
     ("16:00", "Eye of the Mind", "SoDown", "", ""),
-    ("17:20", "Daydreaming (Effin Flip)", "", "",
-     "no artist — several well-known songs share this title, so I left it open"),
-    ("19:20", "Look At Me Now (Zoey808 Flip)", "", "",
-     "no artist — almost certainly the Chris Brown one, but he didn't say so"),
-    ("21:15", "Just Dance (Z3LLA & Lucky Flip)", "", "",
-     "no artist — almost certainly Lady Gaga, but he didn't say so"),
+    # Effin's flip is of Lupe Fiasco ft. Jill Scott, per 1001Tracklists and the
+    # video title — NOT the Radiohead or Harry Styles song of the same name.
+    ("17:20", "Daydreamin' (Effin Flip)", "Lupe Fiasco, Jill Scott", "Daydreamin'",
+     "written 'Daydreaming' — the flip is of Lupe Fiasco's Daydreamin'"),
+    # These two carry no credit anywhere I could find, and are the only rows here
+    # where the artist comes from the TITLE being famous rather than from a source.
+    ("19:20", "Look At Me Now (Zoey808 Flip)", "Chris Brown", "Look At Me Now",
+     "artist inferred from the title, not confirmed on the flip itself"),
+    ("21:15", "Just Dance (Z3LLA & Lucky Flip)", "Lady Gaga", "Just Dance",
+     "artist inferred from the title, not confirmed on the flip itself"),
     ("23:15", "I Feel the Earth Move (32LVS Flip)", "Carole King",
      "I Feel the Earth Move", "written 'Earth Move - Carol King' — full title, Carole spelled out"),
     ("26:50", "Fuck My Computer (PZZS Remix)", "Ninajirachi", "Fuck My Computer", ""),
-    ("28:10", "TEAR U APART", "Moore Kismet", "", ""),
-    ("30:28", "CSRIAC (Remix)", "Ninajirachi", "CSRIAC", ""),
+    ("28:10", "TEAR U APART", "Moore Kismet, Luma", "TEAR U APART",
+     "released as Moore Kismet & Luma — Luma was missing from the list"),
+    # CSRIAC is a misreading of CSIRAC — Ninajirachi's track off I Love My
+    # Computer, named after Australia's first computer. The only remix of it on
+    # the stores is Effy's.
+    ("30:28", "CSIRAC (Effy Remix)", "Ninajirachi", "CSIRAC",
+     "written 'CSRIAC (Remix)' — the song is CSIRAC and the remix is Effy's"),
     ("32:00", "Falling (Eliminate Remix)", "Frost Children", "Falling", ""),
     ("32:42", "Falling (FRAXURE Remix)", "Frost Children", "Falling",
      "second flip of the same song, 42s after the first — that's how it's written"),
     ("34:32", "thinkaboutit x Crush", "Eliminate, Pixel Terror", "thinkaboutit",
      "written 'thinkaboutit - Eliminate x Crush - Pixel Terror'; the year is "
      "Eliminate's own 'thinkaboutit', off Get Off The Internet"),
-    ("36:27", "Midnight Sun x Language (Hex Cougar Remix) — 32LVS Mashup", "32LVS",
-     "", "mashup — originals not credited"),
+    # Language (Hex Cougar Remix) is Porter Robinson's, confirmed on Hex Cougar's
+    # own upload. Which "Midnight Sun" it's mashed with, I could not establish —
+    # too many songs carry that name.
+    ("36:27", "Midnight Sun x Language (Hex Cougar Remix) — 32LVS Mashup",
+     "Porter Robinson", "Language",
+     "Language is Porter Robinson's; the Midnight Sun half is still unidentified"),
     # She styles it lowercase, and that is how it comes back from every store.
     ("40:05", "Wall of Sound (32LVS Remix)", "Charli xcx", "Wall of Sound",
      "written 'Charli XCX' — set lowercase, the way she styles it"),
