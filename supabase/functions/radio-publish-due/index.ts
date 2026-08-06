@@ -44,6 +44,16 @@ const UA = "Mozilla/5.0 (compatible; ComeWithRadio/1.0)";
 // giving up and publishing anyway. Cron runs every 5 minutes, so this is 24 tries.
 const SC_GRACE_MIN = 120;
 
+// The permanent, public address of a track — no query string, no secret token.
+// SoundCloud hands back .../<track>/s-XXXX for anything private, and that URL
+// both works AND oembeds while the track is private, so it sails through every
+// check here and then gets rendered on the public episode page. Store the
+// canonical one; it is the address the track has once it goes public.
+const canonicalScUrl = (raw: string | null | undefined): string | null => {
+  const u = (raw || "").trim().split("?")[0].replace(/\/+$/, "");
+  return u ? (u.replace(/\/s-[A-Za-z0-9]+$/, "") || null) : null;
+};
+
 const ok = (b: unknown) => new Response(JSON.stringify(b), { headers: JH });
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 
@@ -134,7 +144,12 @@ Deno.serve(async (req) => {
           let rj = await rr.json().catch(() => ({}));
           let found = rr.ok && rj?.kind === "track";
           if (!found) {
-            const bare = (x: string) => (x || "").split("?")[0].replace(/\/+$/, "").toLowerCase();
+            // Compare canonical-to-canonical. The stored URL is now always
+            // token-free, while /me/tracks returns the token-bearing one for a
+            // private upload — matching the raw strings would never hit, and
+            // the episode would report "didn't resolve on your account" for a
+            // track sitting right there in the list.
+            const bare = (x: string) => (canonicalScUrl(x) || "").toLowerCase();
             const lr = await fetch("https://api.soundcloud.com/me/tracks?limit=50&linked_partitioning=true",
               { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
             const lj = await lr.json().catch(() => ({}));
@@ -157,7 +172,7 @@ Deno.serve(async (req) => {
                 method: "PUT", headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT }, body: fd });
               const uj = await up.json().catch(() => ({}));
               if (up.ok) {
-                url = typeof uj.permalink_url === "string" ? uj.permalink_url : url;
+                url = canonicalScUrl(typeof uj.permalink_url === "string" ? uj.permalink_url : url) || url;
                 step.sc = (await embeddable(url!)) ? "flipped public — embeddable" : "flipped public — oembed still cold";
               } else {
                 step.warning = `Could not make the track public (${up.status}).`;
@@ -184,7 +199,7 @@ Deno.serve(async (req) => {
             return { t, sc };
           }).sort((a, b) => b.sc - a.sc)[0];
           if (hit && hit.sc >= 0.5) {
-            trackId = String(hit.t.id); url = hit.t.permalink_url;
+            trackId = String(hit.t.id); url = canonicalScUrl(hit.t.permalink_url);
             step.sc = dry ? `would link "${hit.t.title}"` : `linked "${hit.t.title}"`;
           } else {
             step.warning = "No mix link set and no upload on the account matched this episode.";

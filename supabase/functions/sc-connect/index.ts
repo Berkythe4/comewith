@@ -33,6 +33,25 @@ const b64url = (buf: ArrayBuffer | Uint8Array) => {
 };
 const SC_ACCEPT = "application/json; charset=utf-8";
 
+// The permanent, public address of a track — no query string, no secret token.
+//
+// SoundCloud's permalink_url for a PRIVATE track comes back carrying its share
+// secret: .../32lvs-elements-mix/s-q93yts0zR8y. That URL is a real working
+// address — it even oembeds while the track is private, which is exactly what
+// makes storing it dangerous: the episode page looks fine in testing and hands
+// every visitor a link that bypasses the track's privacy. It is also not the
+// address the track will have once it goes public.
+//
+// So every path that stores a mix URL runs it through here: the dashboard paste
+// field, "Find my upload", the uploader, and the scheduled publisher. Stripping
+// it in the browser only (which is where this started) leaves the two server
+// paths writing tokens back in behind you.
+export function canonicalScUrl(raw: string | null | undefined): string | null {
+  const u = (raw || "").trim().split("?")[0].replace(/\/+$/, "");
+  if (!u) return null;
+  return u.replace(/\/s-[A-Za-z0-9]+$/, "") || null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return err(405, "POST only");
@@ -380,7 +399,7 @@ Deno.serve(async (req) => {
     if (body.apply && confident) {
       await admin.from("sc_playlists").update({
         mix_sc_track_id: String(best.t.id),
-        mix_sc_track_url: best.t.permalink_url,
+        mix_sc_track_url: canonicalScUrl(best.t.permalink_url),
         cover_url: best.t.artwork_url || undefined,
         status: pl.status === "building" ? "testing" : pl.status,
         updated_at: new Date().toISOString(),
@@ -428,7 +447,7 @@ Deno.serve(async (req) => {
     }
     await admin.from("sc_playlists").update({
       mix_sc_track_id: tj.id != null ? String(tj.id) : null,
-      mix_sc_track_url: tj.permalink_url || trackUrl || null,
+      mix_sc_track_url: canonicalScUrl(tj.permalink_url || trackUrl),
       cover_url: tj.artwork_url || null,
       status: pl.status === "building" ? "testing" : pl.status,
       updated_at: new Date().toISOString(),
@@ -490,7 +509,7 @@ Deno.serve(async (req) => {
           // the track public changes its permalink to the clean canonical one,
           // so re-capture it here or the episode page keeps a broken player.
           const tj = await r.json().catch(() => ({} as Record<string, unknown>));
-          const fresh = typeof tj?.permalink_url === "string" ? tj.permalink_url : "";
+          const fresh = canonicalScUrl(typeof tj?.permalink_url === "string" ? tj.permalink_url : "");
           if (fresh && fresh !== pl.mix_sc_track_url) {
             await admin.from("sc_playlists").update({ mix_sc_track_url: fresh, updated_at: new Date().toISOString() }).eq("id", playlistId);
           }
