@@ -24,8 +24,18 @@
 # Serial on purpose. Two ffmpeg jobs writing at once once produced a file with a
 # plausible size and duration whose NAL units were shredded and whose audio was
 # -91 dB. Renders are ~15 minutes each; the set takes about an hour.
+#
+#   bash render_all.sh          all four
+#   bash render_all.sh 2 3 4    just those, e.g. to resume after a failure
 set -euo pipefail
 cd "$(dirname "$0")/../.."
+
+WANT=("$@")
+want() {                        # no args given => render everything
+  [ ${#WANT[@]} -eq 0 ] && return 0
+  for w in "${WANT[@]}"; do [ "$w" = "$1" ] && return 0; done
+  return 1
+}
 
 R="Radio/Elements-26/render"
 AV="$R/Audio_Video_Final"
@@ -34,34 +44,37 @@ ETHER="$ART/ETHER_JANELLE.JPG"
 RE="python Radio/render/render_episode.py"
 COMMON=(--edition elements --bookend-cover "$ETHER" --title "Come With Elements Radio")
 
-echo "=== EP 1 · WATER · Berky · Thu 6 Aug ==="
+want 1 && { echo "=== EP 1 · WATER · Berky · Thu 6 Aug ==="
 $RE "${COMMON[@]}" \
   --cues "$R/Elements_Ep1_cues.csv" \
   --audio "$AV/CWR_Elements_Day1_Berky.wav" \
   --backdrop water --cover "$ART/WATER_KEITH.JPG" \
   --out "$AV/CWR_ElementsEp1_Berky.mp4" \
   --ep "EP 1" --mixed-by "Berky" \
-  --drop-date 2026-08-06 --next-date 2026-08-07
+  --drop-date 2026-08-06 --next-date 2026-08-07; }
 
-echo "=== EP 2 · FIRE · KRNeY · Fri 7 Aug ==="
+# _render.csv, NOT _cues.csv. The cues file holds all 26 of KRNeY's tracks
+# including the four no handwritten line ever reached; the renderer refuses a
+# blank start time, correctly — a card with no cue has nowhere to appear.
+want 2 && { echo "=== EP 2 · FIRE · KRNeY · Fri 7 Aug ==="
 $RE "${COMMON[@]}" \
-  --cues "$R/Elements_Ep2_KRNeY_cues.csv" \
+  --cues "$R/Elements_Ep2_KRNeY_render.csv" \
   --audio "$AV/CWR_ElementsEp2_KRNeY.wav" \
   --backdrop fire --cover "$ART/FIRE_MARTIN.JPG" \
   --out "$AV/CWR_ElementsEp2_KRNeY.mp4" \
   --ep "EP 2" --mixed-by "KRNeY" \
-  --drop-date 2026-08-07 --next-date 2026-08-08
+  --drop-date 2026-08-07 --next-date 2026-08-08; }
 
-echo "=== EP 3 · EARTH · Henry · Sat 8 Aug ==="
+want 3 && { echo "=== EP 3 · EARTH · Henry · Sat 8 Aug ==="
 $RE "${COMMON[@]}" \
   --cues "$R/Elements_Ep3_Henry_cues.csv" \
   --audio "$AV/CWR_ElementsEp3_Henry.wav" \
   --backdrop earth --cover "$ART/EARTH_HENRY.JPG" \
   --out "$AV/CWR_ElementsEp3_Henry.mp4" \
   --ep "EP 3" --mixed-by "Henry" \
-  --drop-date 2026-08-08 --next-date 2026-08-09
+  --drop-date 2026-08-08 --next-date 2026-08-09; }
 
-echo "=== EP 4 · AIR · 32LVS · Sun 9 Aug (finale) ==="
+want 4 && { echo "=== EP 4 · AIR · 32LVS · Sun 9 Aug (finale) ==="
 $RE "${COMMON[@]}" \
   --cues "$R/Elements_Ep4_32LVS_cues.csv" \
   --audio "$AV/CWR_ElementsEp4_32LVS.mp3" \
@@ -69,6 +82,6 @@ $RE "${COMMON[@]}" \
   --out "$AV/CWR_ElementsEp4_32LVS.mp4" \
   --ep "EP 4" --mixed-by "32LVS" \
   --drop-date 2026-08-09 --next-date 2026-08-20 \
-  --next-label "BACK TO NYC RADIO"
+  --next-label "BACK TO NYC RADIO"; }
 
-echo "All four rendered."
+echo "Done."
