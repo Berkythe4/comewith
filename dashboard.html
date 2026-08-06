@@ -12154,7 +12154,12 @@ function renderRadioCC() {
         <div class="li-sub">${escapeHtml(sched)}${tks.length ? ` · ${done}/${tks.length} tasks` : ''}${ccNotesFor(s.id).length ? ` · 💬 ${ccNotesFor(s.id).length}` : ''}</div></div>
       <span class="li-sub">${isOpen ? '▾' : '▸'}</span></div>`;
     if (!isOpen) return head;
-    const pageUrl = s.slug ? `${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(s.slug)}` : (s.public_token ? `${ARTIST_ORIGIN}radio.html?t=${encodeURIComponent(s.public_token)}` : null);
+    // Two DIFFERENT links, not one that quietly falls back. The preview is the
+    // unlisted token URL and works whether or not the episode is published; the
+    // episode page is the real public address and only means anything once it
+    // is. Collapsing them hid which one you were about to send someone.
+    const previewUrl = s.public_token ? `${ARTIST_ORIGIN}radio.html?t=${encodeURIComponent(s.public_token)}` : null;
+    const pageUrl = s.slug ? `${ARTIST_ORIGIN}radio.html?s=${encodeURIComponent(s.slug)}` : null;
     const taskRows = tks.length ? tks.map(t => `<div class="hub-li" style="padding:4px 0;">
         <div class="li-main"><a href="#" data-ra-cctaskedit="${t.id}" style="color:inherit;">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the episode page">📢</a>` : ''}<div class="li-sub">${t.due_date ? fmtDate(t.due_date) : 'no date'} · ${escapeHtml(t.status)}</div></div>
       </div>`).join('') : '<div class="li-sub">No tasks yet.</div>';
@@ -12167,7 +12172,8 @@ function renderRadioCC() {
         <button class="hub-mini" data-ra-cctaskadd="${s.id}">➕ Task</button>
         <button class="hub-mini" data-ra-ccclip="${s.id}">✂️ Add clip</button>
         <button class="hub-mini" data-ra-ccnotify="${s.id}">🔔 Ask teammate</button>
-        ${pageUrl ? `<a class="hub-mini" href="${escapeHtml(pageUrl)}" target="_blank" rel="noopener">🌐 Episode page ↗</a>` : ''}
+        ${previewUrl ? `<a class="hub-mini" href="${escapeHtml(previewUrl)}" target="_blank" rel="noopener" title="Unlisted preview — works before the episode is published. Only people with this link can see it.">👁 Preview page ↗</a>` : ''}
+        ${pageUrl ? `<a class="hub-mini" href="${escapeHtml(pageUrl)}" target="_blank" rel="noopener" title="${s.published ? 'The live public page' : 'The public address this will have — not live until the episode is published'}">🌐 Episode page${s.published ? '' : ' (not live yet)'} ↗</a>` : ''}
         ${s.mix_sc_track_url ? `<a class="hub-mini" href="${escapeHtml(s.mix_sc_track_url)}" target="_blank" rel="noopener">☁ Mix ↗</a>` : ''}
         ${s.mix_youtube_url ? `<a class="hub-mini" href="${escapeHtml(s.mix_youtube_url)}" target="_blank" rel="noopener">▶ YouTube ↗</a>` : ''}
       </div>
