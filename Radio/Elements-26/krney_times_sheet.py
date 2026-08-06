@@ -246,7 +246,33 @@ def build():
         A("   Cannot be listed yet - run krney_identify.py first.")
     A("")
     A("EP 4 - AIR - 32LVS - Sun Aug 9")
-    A("   No tracklist received yet.")
+    _p4 = os.path.join(RENDER, "Elements_Ep4_32LVS_cues.csv")
+    if os.path.exists(_p4):
+        n4, c4 = genres_for("Elements_Ep4_32LVS_cues.csv")
+        A("   %d tracks. Five of them are mashups or flips with no original artist" % n4)
+        A("   credited, so they carry a title only - that is his list, not a gap I left.")
+        A("   Genres actually in the set, most common first:")
+        items = ["%s (%d)" % (g, k) for g, k in c4.most_common() if g not in DROP]
+        line = "      "
+        for it in items:
+            if len(line) + len(it) + 2 > 84:
+                A(line.rstrip().rstrip(",")); line = "      "
+            line += it + ", "
+        A(line.rstrip().rstrip(","))
+        A("   Tags:")
+        tags, seen4 = [], set()
+        for g, _ in c4.most_common():
+            for t in tags_for(g):
+                if t not in seen4:
+                    seen4.add(t); tags.append(t)
+        line = "      "
+        for t in tags:
+            if len(line) + len(t) + 1 > 84:
+                A(line); line = "      "
+            line += t + " "
+        A(line.rstrip())
+    else:
+        A("   No tracklist received yet.")
     A("")
     A("=" * 86)
     
