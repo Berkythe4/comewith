@@ -12499,6 +12499,21 @@ function raIsEditable(pl) {
   pl = pl || raState.playlist;
   return !!pl && pl.status !== 'live' && pl.status !== 'archived';
 }
+// A SoundCloud share link carries two things that must not be stored:
+//   ?si=… / utm_*   tracking the embed player cannot follow
+//   /s-XXXXXX       the PRIVATE SECRET TOKEN. Copying the share link of a
+//                   private track gives you this, and storing it would put the
+//                   secret token on the public episode page — and break the
+//                   embed for good the moment the token is regenerated. The
+//                   canonical permalink is the same URL without it, and that is
+//                   what works once the track goes public.
+function raCleanScUrl(v) {
+  let u = (v || '').trim().split('?')[0].replace(/\/+$/, '');
+  if (!u) return null;
+  u = u.replace(/\/s-[A-Za-z0-9]+$/, '');
+  return u || null;
+}
+
 function raStationClosed(pl) {
   pl = pl || raState.playlist;
   if (raIsEditable(pl)) return null;
@@ -13188,10 +13203,7 @@ async function raSaveEpisodeDetails() {
       name,
       mix_by: kpiVal('ep_mix_by') || null,
       mix_youtube_url: kpiVal('ep_youtube') || null,
-      // ?si=… and utm_* ride along on every SoundCloud share link and the embed
-      // player can't follow them. Strip before storing, same rule the event
-      // editor follows for recap media.
-      mix_sc_track_url: (kpiVal('ep_sc_url') || '').trim().split('?')[0] || null,
+      mix_sc_track_url: raCleanScUrl(kpiVal('ep_sc_url')),
       desc_public: kpiVal('ep_desc_public') || null,
       desc_sc: kpiVal('ep_desc_sc') || null,
       recap_notes: kpiVal('ep_recap_notes') || null,
