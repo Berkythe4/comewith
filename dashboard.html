@@ -519,8 +519,23 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .strat-cat-body > .section-label:first-child { margin-top: 14px; display: block; }
 /* Bars, for per-event sequences. An average is a number you cannot act on;
    the sequence shows whether the last one was better than the one before. */
-.cat-bars { display: flex; align-items: flex-end; gap: 3px; height: 54px; position: relative; }
-.cat-bar { flex: 1; min-width: 3px; background: var(--cat-color, var(--mid)); opacity: 0.4; position: relative; }
+/* Bars are a FIXED preferred width that only shrinks once they would overflow.
+   With `flex: 1` three events each took a third of the screen, which reads as a
+   block of colour rather than a chart — you could not tell what you were
+   looking at. The track is right-aligned so the most recent event sits at the
+   same edge whether there are 3 bars or 40, and so the average line spans the
+   bars rather than a mostly-empty row. */
+.cat-bars { display: flex; justify-content: flex-end; height: 54px; }
+.cat-bars-track {
+  display: flex; align-items: flex-end; gap: 3px; height: 100%;
+  position: relative; flex: 0 1 auto; max-width: 100%;
+}
+.cat-bar {
+  /* basis = preferred width, shrink = 1: many bars compress to fit, few bars
+     stay legible instead of stretching. */
+  flex: 0 1 26px; min-width: 2px;
+  background: var(--cat-color, var(--mid)); opacity: 0.4; position: relative;
+}
 .cat-bar.latest { opacity: 1; }
 .cat-bar.neg { background: var(--red); }
 .cat-ref { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-strong); pointer-events: none; }
@@ -5392,9 +5407,14 @@ function barSeries(rows, { color = '#C75A3C', lowerBetter = false } = {}) {
       title="${escapeHtml(r.name || '')}${r.event_date ? ' · ' + escapeHtml(fmtDate(r.event_date)) : ''}: ${fmtNum(v)}"></div>`;
   }).join('');
   const refTop = ((max - avg) / span) * 100;
+  // The inner track is what actually holds the bars: it sizes to their content
+  // so the outer flex can right-align it, and it anchors the average line to
+  // the bars instead of stretching it across empty space.
   return `<div class="cat-bars" style="--cat-color:${color}">
-      <div class="cat-ref" style="top:${refTop.toFixed(1)}%" title="average ${fmtNum(avg)}"></div>
-      ${bars}
+      <div class="cat-bars-track">
+        <div class="cat-ref" style="top:${refTop.toFixed(1)}%" title="average ${fmtNum(avg)}"></div>
+        ${bars}
+      </div>
     </div>
     <div class="li-sub" style="margin-top:4px;">${pts.length} event${pts.length === 1 ? '' : 's'} · average ${fmtNum(avg)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''}</div>`;
 }
