@@ -1,12 +1,16 @@
-# Carryover — 2026-08-15 (radio: future-dated windows + the 1000-row truncation · LAPTOP)
+# Carryover — 2026-08-15 (full admin for Martin & Henry + the site-owner guard · DESKTOP)
 
-**THREE closes landed on 2026-08-15, on three machines.** This is the latest, run by
-**Keith on the laptop**. In order: the desktop's radio-discovery audit, Henry's Notes
-module, then this one. Nothing was overwritten — every "This session shipped" block is
-preserved below, newest first.
+**FOUR closes landed on 2026-08-15, across three machines.** This is the latest, run by
+**Keith on the desktop**. In order: the desktop's radio-discovery audit, Henry's Notes
+module, Keith's laptop radio-window/paging work, then this one. Nothing was overwritten —
+every "This session shipped" block is preserved below, newest first.
+
+**The close routine is now the MERGE ROUTINE** (`MERGE_ROUTINE.md`, was
+`SESSION_CLOSE_PROMPTS.md`). Renamed because with three machines shipping, every close is
+also a merge — and it now opens with a mandatory `git fetch` + migration-number check.
 
 Pickup order: this → `DEV_DOCS/claude-memory/MEMORY.md` → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`.
-Ritual: `SESSION_CLOSE_PROMPTS.md`. DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
+Ritual: `MERGE_ROUTINE.md` (was `SESSION_CLOSE_PROMPTS.md`). DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
 
 ## 👉 If you are the LAPTOP, start here
 
@@ -28,7 +32,9 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `139_notes_to_tasks.sql`; 138 + 139 APPLIED to prod 2026-08-15.**
+- **Migrations: files through `140_site_owner.sql`; 138 + 139 + 140 APPLIED to prod 2026-08-15.**
+  ⚠ 140 was authored as `138` on the desktop while the laptop was landing its own 138/139 —
+  **take the next number only after `git fetch`.** Duplicate numbers conflict in prod, not git.
   Applied via the Management API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is
   linked to **staging**, so always pass the prod ref explicitly. The migration **files** are
   the tracked source of truth.
@@ -37,7 +43,15 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   `v_kpi_dance_infusion`, `v_kpi_dashboard`).
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
-- **Latest LEARNINGS §:** 18.
+- **`master_admin` is now THREE people** — Keith, **Martin and Henry** (promoted 2026-08-15).
+  `sub_admin`: Janelle, Liz. **`profiles.is_owner` = Keith, one row**, protected by the
+  `protect_site_owner()` trigger (140): no other admin can change the owner's role,
+  `deleted_at` or `is_owner`, or delete that row. Verified on prod with 10 impersonation
+  checks inside BEGIN..ROLLBACK — 5 blocked, 5 correctly allowed. LEARNINGS §19.
+  The guard exempts service-role callers by design, so it protects the APP, not the
+  PROJECT — the service key, `SBP_PAT`, Supabase dashboard, GitHub and Netlify all sit
+  above it and stay Keith-only.
+- **Latest LEARNINGS §:** 19.
 - **Git:** `master` = this merge, pushed and live. `radio/window-by-lineup`,
   `feature/notes-assignment` (PR #1) and `feature/notes-edit-and-convert` (PR #2) all
   **merged**. Older unmerged branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`,
@@ -69,7 +83,12 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Reload the dashboard and pull once more, then scan.** Everything from this session is
+**Have Martin and Henry sign in and confirm they see everything you see** — Income,
+Expenses, Strategy and Users are the four master-only modules that just opened up. Then
+open Users and confirm Keith carries the 👑 owner chip above the two new master chips.
+
+Then, still outstanding from the laptop session: **reload the dashboard and pull once
+more, then scan.** Everything from this session is
 deployed but nothing has been clicked through a browser yet — the paging fix in particular
 changes what the Radio panel loads, and it is the one change a human has to see working.
 
@@ -77,6 +96,12 @@ Second, cheap while you're in there: **exercise the Notes module end to end** (a
 edit one, convert one to a task). Deployed and structurally verified, never clicked.
 
 ## Parked / next
+0. **Access change just landed — nobody has signed in under it yet.** Martin and Henry are
+   full `master_admin` as of 2026-08-15. Worth saying out loud to both: they can now see and
+   edit all company money (income, expenses, mileage, ticketing, sponsorships, donations),
+   flip `financials_released` on any event, and change every other user's module access.
+   They can also remove **each other** — the guard protects Keith only. If you want them
+   peer-locked too, that's a further rule and it isn't built.
 1. **Click through this session's work — none of it has been exercised in a browser.**
    In order: (a) hard-reload the dashboard and open Radio — the artist and cache counts
    should JUMP, because the panel was silently loading only 1,000 of 1,594 artists and
@@ -119,6 +144,33 @@ edit one, convert one to a task). Deployed and structurally verified, never clic
    with `toISOString()` but compares it to a local `today`, so in New York the window can run a
    day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
    overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-15 — full admin for Martin & Henry, behind a site-owner guard · DESKTOP)
+Migration **140 applied to prod**; `invite-user` **v9** deployed; dashboard owner chip merged.
+- **Martin and Henry are `master_admin`.** Everything Keith has, with one exception.
+- **The exception is enforced in the database, not the UI.** There is no role-change control
+  in the dashboard at all — the hole was that `"Master admin can manage all profiles"` is
+  `for all using (is_master_admin())` with no WITH CHECK, so any master_admin could PATCH
+  Keith's profile row straight through PostgREST. 140 adds `profiles.is_owner` (Keith, one
+  row) + a `protect_site_owner()` trigger covering `role`, `deleted_at`, `is_owner` and
+  `DELETE` as one unit.
+- **`deleted_at` was the vector that mattered**, not `role`: under the 098 deactivation
+  contract a deactivated profile reads as no-role, so deactivating Keith would have locked
+  him out with his role still saying `master_admin`.
+- **Verified on prod**, impersonating Martin inside BEGIN..ROLLBACK: demote owner, deactivate
+  owner, strip owner flag, grab ownership, delete owner row → **all 5 blocked**; edit owner's
+  phone, change Henry's role, read company income, call `get_team_members()`, see the owner
+  flag → **all 5 allowed**. Financial views re-checked anon 401 after.
+- **`invite-user` hardened** — it runs as service role and so bypasses the trigger by design;
+  it now refuses the owner's email itself.
+- **Users tab:** 👑 owner chip + owner sorts first, so three identical "master" chips don't
+  hide who runs the place (`get_team_members()` dropped/recreated to return `is_owner`).
+- **Called out, not fixed:** the two new masters can remove each other and invite more
+  masters; the 041–043 financial gate now applies only to Janelle and Liz; and the guard
+  exempts service-role callers, so it protects the app, not the project.
+- **Renamed the close routine to the MERGE ROUTINE** (`MERGE_ROUTINE.md`) with a mandatory
+  Step 0: fetch before documenting, take migration numbers after pulling. This session
+  authored `140` as `138` while the laptop was landing 138 and 139.
 
 ## This session shipped (2026-08-15 — Radio: future-dated windows, and the 1000-row truncation · LAPTOP)
 Keith asked to plan an episode against a date months out — schedules that far ahead are
@@ -220,7 +272,7 @@ reading the deployed source back). Financial views re-checked anon **401** after
 - Also confirmed **clean**: RA coverage itself (582 in-window events, listings to 11/10, taper
   looks like genuine listing decay, not truncation), and all five financial views at anon 401.
 - **Docs:** `DEV_DOCS/claude-memory/` snapshot added so the laptop can read project state;
-  `CLAUDE.md` gained a start-of-session / close-of-session section; `SESSION_CLOSE_PROMPTS.md`
+  `CLAUDE.md` gained a start-of-session / close-of-session section; `MERGE_ROUTINE.md`
   gained an "every close" block (re-snapshot memory, name the machine, don't merge to master
   to tidy up).
 

@@ -270,3 +270,45 @@ moment a pull can be *narrower* — which is the whole point of aiming it at a w
 delete throws away everything past the window it just fetched. Bound a delete at both ends,
 or don't scope the fetch. Widening a read is never just a read change if a write is keyed
 to the same range.
+
+## Section 19 — The site owner is a row, not a role (2026-08-15)
+
+Martin and Henry were promoted to full `master_admin`. The one thing they must not be
+able to do is unseat Keith. That could not be expressed in the role system, because
+`master_admin` was the top of it: the policy `"Master admin can manage all profiles"`
+is `for all using (is_master_admin())` **with no WITH CHECK**, so any master_admin
+could `PATCH /profiles?id=eq.<keith>` straight through PostgREST. There is no
+role-change control in the dashboard at all — the UI was never the boundary.
+
+**Decision:** ownership is a flag on a row — `profiles.is_owner`, exactly one — with a
+`before insert or update or delete` trigger (`protect_site_owner()`) rather than an
+RLS predicate. RLS on `profiles` would have to allow master_admins to write the table
+generally; the trigger can allow the write and refuse the *specific column changes*
+that matter, which is the actual requirement. Ownership can be **given** by the owner
+and never **taken**.
+
+**The vector that isn't obvious: `deleted_at`.** Under the 098 deactivation contract,
+`is_admin()` / `is_master_admin()` / `user_can_access_module()` all treat a profile
+with `deleted_at` set as no-role. So deactivating the owner locks them out completely
+while `role` still reads `master_admin` — a guard that only watched `role` would have
+looked correct and protected nothing. The guard covers `role`, `deleted_at`, `is_owner`
+and `DELETE` as one unit.
+
+**The deliberate hole:** the trigger exempts callers with no JWT (`auth.uid()` is null)
+— service role, Edge Functions, and Management-API sessions. Without that exemption a
+bad row could only be fixed by Supabase support. The honest consequence is that this
+protects the **app**, not the **project**: the service-role key, an `SBP_PAT`, the
+Supabase dashboard, GitHub and Netlify all still sit above it, and they are what
+ownership actually means. Keep them Keith-only.
+
+**Corollary, and it generalises:** a service-role Edge Function bypasses every trigger
+guard, so it has to re-enforce the rule itself. `invite-user` now refuses the owner's
+email — Supabase happens to error on an already-registered address, but that is its
+behaviour, not our guarantee. Any future function that writes `profiles` inherits this
+obligation.
+
+**What this does NOT do**, stated plainly because it's easy to assume otherwise: the
+two remaining master_admins can still remove *each other*, invite further
+master_admins, read and write all company money, and flip `financials_released` on any
+event. The 041–043 financial gate now applies only to Janelle and Liz. That was the
+accepted trade of "same full access as me, except ownership".

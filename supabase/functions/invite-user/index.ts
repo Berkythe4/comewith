@@ -60,6 +60,17 @@ Deno.serve(async (req) => {
     const staff_role = VALID_STAFF.includes(b.staff_role) ? b.staff_role : null;
     if (!email) return jsonError(400, "email required");
 
+    // The site-owner guard (138) is a trigger on profiles, and it deliberately
+    // exempts service-role callers so break-glass repair stays possible. This
+    // function IS a service-role caller, so it has to enforce the rule itself:
+    // an invite aimed at the owner's address must never reach step 4's profile
+    // patch. Supabase already errors on an existing email, but that is its
+    // behaviour, not our guarantee.
+    const { data: owner } = await admin.from("profiles").select("email").eq("is_owner", true).maybeSingle();
+    if (owner?.email && owner.email.toLowerCase() === email) {
+      return jsonError(403, "That address belongs to the site owner and can't be re-invited.");
+    }
+
     // 3. Invite (creates auth user; the handle_new_user trigger creates the
     //    profiles row). Pass full_name through user metadata.
     const { data: invited, error: inviteErr } = await admin.auth.admin.inviteUserByEmail(email, {

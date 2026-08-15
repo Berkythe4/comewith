@@ -20,21 +20,51 @@ per-machine and does **not** sync, so everything a session needs to resume lives
 Then `git log --oneline -15` and `git branch -a` — work is sometimes parked on a
 branch specifically so it does **not** auto-deploy (see below).
 
-## End of session (the close routine)
+## End of session (the MERGE ROUTINE)
 
-**`SESSION_CLOSE_PROMPTS.md` is the ritual** — Quick / Standard / Full by session
-size. Run it at the end of any session that shipped real work; always when a
-migration or prod data was touched, or a new standing rule was set. It carries the
-prod safety checks (the five financial views must return anon **401**) and it's
-what keeps CARRYOVER / LEARNINGS / ROADMAP true instead of drifting.
+**`MERGE_ROUTINE.md` is the ritual** (called the "session close" until 2026-08-15;
+renamed because three machines ship into this repo now and every close is also a
+merge). Quick / Standard / Full by session size. Run it at the end of any session
+that shipped real work; always when a migration or prod data was touched, or a new
+standing rule was set. It carries the prod safety checks (the five financial views
+must return anon **401**) and it's what keeps CARRYOVER / LEARNINGS / ROADMAP true
+instead of drifting.
 
-Two Come-With-specific additions to whichever variant you run:
+Four Come-With-specific rules on top of whichever variant you run:
+- **`git fetch` FIRST, before writing any doc.** Other machines have shipped.
+  CARRYOVER / LEARNINGS / ROADMAP are append-heavy shared files, and writing them
+  against a stale base guarantees a conflict in the very file meant to tell the
+  next person what's true.
+- **Take the next migration number AFTER pulling.** On 2026-08-15 a migration was
+  authored as `138` while the laptop was landing its own `138` and `139`. Duplicate
+  numbers are a conflict in prod, not in git.
 - **Re-snapshot Claude memory** into `DEV_DOCS/claude-memory/` (see the README
-  there) so the other machine isn't more than one session behind.
+  there) so the other machines aren't more than one session behind.
 - **`master` auto-deploys to Netlify.** Pushing `master` publishes the site and
   dashboard immediately. Work Keith hasn't green-lit goes on a branch and is
   named in CARRYOVER under "Parked / next"; never merge it to close a session out.
-  Edge functions are separate — they go live only on an explicit deploy.
+  Edge functions are separate — they go live only on an explicit deploy, via
+  `scripts/deploy_edge_function.py` (the CLI can't do it — see CARRYOVER).
+
+## Roles, and who owns the place
+
+- **`master_admin` is now three people** — Keith, Martin and Henry (2026-08-15).
+  `sub_admin`: Janelle, Liz. There is still **no `admin` role**.
+- **`profiles.is_owner` marks the overall site owner — Keith, exactly one row.**
+  Migration 140 added it plus the `protect_site_owner()` trigger: no other admin
+  can change the owner's `role`, `deleted_at` or `is_owner`, or delete that row.
+  Everything else on the owner's profile stays editable.
+- **The demotion vector is `deleted_at`, not just `role`.** Under the 098
+  deactivation contract a deactivated profile is treated as no-role by
+  `is_admin()` / `is_master_admin()` / `user_can_access_module()`, so setting
+  `deleted_at` locks the owner out while `role` still reads `master_admin`. Any
+  new owner/role guard MUST cover both, or it isn't a guard.
+- **The trigger deliberately exempts service-role callers** (`auth.uid()` null) so
+  break-glass repair stays possible. That means it protects the *app*, not the
+  *project*: anyone holding the service-role key, an `SBP_PAT`, the Supabase
+  dashboard, GitHub or Netlify can still undo it. Edge functions running as
+  service role must therefore enforce the rule themselves — `invite-user` refuses
+  the owner's email for exactly this reason.
 
 ## Database / Supabase migrations
 

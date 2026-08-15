@@ -8,7 +8,7 @@ metadata:
   modified: 2026-08-15T20:34:52.417Z
 ---
 
-Set up 2026-08-15. Keith added a **laptop** alongside the desktop. Claude Code's
+Set up 2026-08-15. Keith added a **laptop** alongside the desktop, and Henry ships from his own machine — three in total. Claude Code's
 memory is per-machine and per-path (`~/.claude/projects/<slug>/memory/`) and does
 **not** sync — so a laptop session starts blind unless the state is in the repo.
 
@@ -20,7 +20,7 @@ The channel is the repo, in this order:
   credentials before committing; keep it that way.
 - **`CLAUDE.md`** — gained a "Start of session" / "End of session" section, so it's
   auto-loaded on either machine and points at all of the above.
-- **`SESSION_CLOSE_PROMPTS.md`** — the close ritual, plus a new "every close" block:
+- **`MERGE_ROUTINE.md`** (renamed from `SESSION_CLOSE_PROMPTS.md` on 2026-08-15, because with three machines every close is also a merge) — the ritual. It opens with a mandatory `git fetch` + migration-number check, plus an "every close" block:
   re-snapshot memory, name the machine, never merge un-green-lit work to master.
 
 **Why:** the desktop's memory was the only record of months of decisions, and none

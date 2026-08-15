@@ -1934,6 +1934,15 @@ window.addEventListener('popstate', (e) => {
 });
 
 // ---- Team management (master_admin only) ----------------------------------
+// Three master_admins wear three identical "master" chips, which says nothing
+// about who actually owns the place. The owner is the one profile whose role,
+// active status and ownership no other admin can change (migration 140) — so it
+// gets its own chip, and the row sorts to the top.
+function ownerChip(u) {
+  return u && u.is_owner
+    ? ' <span class="role-chip" style="cursor:default;background:var(--gold,#B5791F);color:#fff;" title="Site owner — only they can change their own role, active status or hand ownership over">👑 owner</span>'
+    : '';
+}
 // 'partners' (104): sees every module EXCEPT the master_only ones — income,
 // expenses, strategy and Users. That master_only flag IS the financial wall, so
 // partners never touch company money regardless of what's in default_roles.
@@ -1952,7 +1961,7 @@ async function loadTeam() {
   ]);
   if (reg.error) { body.innerHTML = '<div class="placeholder">' + escapeHtml(reg.error.message) + '</div>'; return; }
   TEAM.modules = reg.data || [];
-  TEAM.users = (members.data || []).sort((a, b) => (b.role === 'master_admin' ? 1 : 0) - (a.role === 'master_admin' ? 1 : 0) || (a.full_name || a.email).localeCompare(b.full_name || b.email));
+  TEAM.users = (members.data || []).sort((a, b) => (b.is_owner ? 1 : 0) - (a.is_owner ? 1 : 0) || (b.role === 'master_admin' ? 1 : 0) - (a.role === 'master_admin' ? 1 : 0) || (a.full_name || a.email).localeCompare(b.full_name || b.email));
   TEAM.people = TEAM.users; // module/override views read TEAM.people
   TEAM.overrides = {};
   (ov.data || []).forEach(r => { (TEAM.overrides[r.user_id] ||= {})[r.module_key] = r.access; });
@@ -1988,7 +1997,7 @@ function renderTeamPeople() {
     const aliases = TEAM.aliasByUser[u.id] || [], g = TEAM.gigByUser[u.id] || { gigs: 0 }, la = teamLastActivity(u.id);
     return `<tr data-user-open="${escapeHtml(u.id)}" style="cursor:pointer;${u.deleted_at ? 'opacity:.45;' : ''}">
       <td>${u.id !== ME.id && !u.deleted_at ? `<input type="checkbox" data-user-pick="${escapeHtml(u.id)}" style="width:auto;margin:0;">` : ''}</td>
-      <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${u.role === 'master_admin' ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}<div class="li-sub">${escapeHtml(u.email)}</div></td>
+      <td><strong>${escapeHtml(u.full_name || u.email)}</strong>${ownerChip(u)}${u.role === 'master_admin' ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}<div class="li-sub">${escapeHtml(u.email)}</div></td>
       <td>${escapeHtml(u.role === 'master_admin' ? 'all' : (u.staff_role || '—'))}</td>
       <td>${aliases.length ? aliases.map(a => `<span class="role-chip" style="cursor:default;">${escapeHtml(a.display_name)}</span>`).join(' ') : muted}</td>
       <td class="num">${g.gigs || muted}</td>
@@ -2125,7 +2134,7 @@ function renderUserDetail() {
   $('teamBody').innerHTML = `
     <button class="hub-mini" data-user-back>← all users</button>
     <div class="hub-head" style="margin-top:10px;">
-      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}
+      <div class="hub-title">${escapeHtml(u.full_name || u.email)}${ownerChip(u)}${isMaster ? ' <span class="role-chip" style="cursor:default;">master</span>' : ''}${u.deleted_at ? ' <span class="role-chip" style="cursor:default;">deactivated</span>' : ''}
         <span style="margin-left:10px;">
           ${u.id !== ME.id && !u.deleted_at ? `<button class="hub-mini" data-user-email="${escapeHtml(u.id)}">✉ Email</button> <button class="hub-mini" data-user-chat="${escapeHtml(u.id)}">💬 Chat</button>` : ''}
           ${ME.isMaster && u.id !== ME.id && !isMaster ? (u.deleted_at

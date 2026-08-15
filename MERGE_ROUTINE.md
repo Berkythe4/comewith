@@ -1,9 +1,35 @@
-# Session Close Protocol — Come With
+# The Merge Routine — Come With
+
+*(Called the "session close" until 2026-08-15, and renamed because that's not what it
+is any more. Three machines now ship into this repo — Keith's desktop, Keith's laptop,
+Henry's — and every close is also a merge. Old file name: `SESSION_CLOSE_PROMPTS.md`.)*
 
 Paste one of the prompts below at the end of any session where you shipped real work.
 Pick the variant by session size. Adapted from the AI Planner's protocol; the
 Come-With-specific bits are the prod safety checks (anon-revoked financial views,
 migration-vs-prod drift) instead of the Planner's test suite / ADR pipeline.
+
+---
+
+## Step 0 — merge FIRST, before you write a word of docs
+
+Other machines have been shipping. Do this before anything else, every time:
+
+```
+git fetch origin && git log --oneline HEAD..origin/master
+```
+
+- **Pull before you document.** CARRYOVER, LEARNINGS and ROADMAP are all
+  append-heavy shared files; writing them against a stale base is how you get a
+  conflict in the one file whose job is to tell the next person what's true.
+- **Check the migration numbers.** Take the next free number *after* pulling —
+  2026-08-15 had `140_site_owner.sql` written as `138` while the laptop was
+  simultaneously landing `138_notes_assignment.sql` and `139_notes_to_tasks.sql`.
+  Two migrations sharing a number is a merge conflict in prod, not in git.
+- **Re-verify prod facts you gathered before the pull.** Another machine may have
+  applied a migration that moves them.
+- **Preserve every "This session shipped" block.** They stack, newest first. Nobody's
+  session gets overwritten because someone else closed later the same day.
 
 ---
 
