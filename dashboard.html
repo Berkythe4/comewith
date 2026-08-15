@@ -1563,6 +1563,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th style="width:170px;">Assigned to</th>
             <th>Page</th>
             <th>Created</th>
+            <th style="width:130px;"></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -6060,6 +6061,24 @@ function notesFillWhoFilter() {
   sel.dataset.filled = '1';
 }
 
+// Tasks a note has already been converted into (139), keyed by note id — so a
+// closed note shows what it became instead of just going quiet.
+let _notesTasks = new Map();
+async function notesLoadTaskLinks(ids) {
+  _notesTasks = new Map();
+  if (!ids.length) return;
+  try {
+    const { data, error } = await sb.from('tasks')
+      .select('id, title, status, feedback_note_id')
+      .in('feedback_note_id', ids).is('deleted_at', null);
+    if (error) throw error;
+    (data || []).forEach(t => { if (t.feedback_note_id) _notesTasks.set(t.feedback_note_id, t); });
+  } catch (_) {
+    // 139 not applied yet: no such column. Degrade to no chips rather than
+    // taking the whole tab down over a decoration.
+  }
+}
+
 queries.notes = async () => {
   await notesTeam();          // names must resolve before the rows render
   notesFillWhoFilter();
@@ -6070,20 +6089,30 @@ queries.notes = async () => {
   if (notesWho === 'me') qy = qy.eq('assigned_to', ME.id);
   else if (notesWho === 'none') qy = qy.is('assigned_to', null);
   else if (notesWho) qy = qy.eq('assigned_to', notesWho);
-  return qy;
+  const res = await qy;
+  if (!res.error) await notesLoadTaskLinks((res.data || []).map(r => r.id));
+  return res;
 };
 emptyMessages.notes = 'No notes here. Use “＋ Log note” to jot a bug, enhancement, or idea.';
 renderers.notes = (rows) => {
   $('table-notes').querySelector('tbody').innerHTML = rows.map(r => {
     const done = r.status === 'done';
     const author = notesPersonName(r.created_by);
+    const task = _notesTasks.get(r.id);
+    const taskChip = task
+      ? ` <a href="#" class="role-chip" data-note-gototask="${escapeHtml(task.id)}" style="background:${wsPillarColor('site')};color:#fff;font-size:.6rem;text-decoration:none;" title="Open the task this note became">→ task · ${escapeHtml(task.status)}</a>`
+      : '';
     return `<tr class="${done ? 'note-done' : ''}">
       <td><input type="checkbox" class="note-done-cb" data-id="${escapeHtml(r.id)}"${done ? ' checked' : ''}></td>
       <td><span class="badge badge-type-${escapeHtml(r.type)}">${escapeHtml(r.type)}</span></td>
-      <td class="note-text">${escapeHtml(r.note)}${author ? ` <span class="li-sub">— logged by ${escapeHtml(author)}</span>` : ''}</td>
+      <td class="note-text">${escapeHtml(r.note)}${taskChip}${author ? ` <span class="li-sub">— logged by ${escapeHtml(author)}</span>` : ''}</td>
       <td>${notesAssignSelect(r.id, r.assigned_to || '', r.note)}</td>
       <td>${escapeHtml(r.page || '') || muted}</td>
       <td>${escapeHtml(fmtDate(r.created_at))}</td>
+      <td style="white-space:nowrap;">
+        <button class="hub-mini" data-note-edit="${escapeHtml(r.id)}" title="Edit this note">✎</button>${task ? '' : `
+        <button class="hub-mini" data-note-task="${escapeHtml(r.id)}" title="Create a task from this note — the note closes when the task is made">⇢ Task</button>`}
+      </td>
     </tr>`;
   }).join('');
 };
@@ -6122,6 +6151,77 @@ $('panel-notes').addEventListener('change', (e) => {
   if (e.target.id !== 'notesWhoFilter') return;
   notesWho = e.target.value;
   loadTab('notes');
+});
+
+// Edit a note in place. Anyone with Notes access can edit any note — it's a
+// shared log, and fixing someone else's half-finished line shouldn't require
+// hunting down its author.
+async function openEditNote(id) {
+  const { data: n, error } = await sb.from('feedback_log')
+    .select('id, type, note, page, status, assigned_to').eq('id', id).single();
+  if (error || !n) { toast('Note not found: ' + (error?.message || ''), 'err'); return; }
+  await notesTeam();
+  const typeOpts = ['idea', 'enhancement', 'bug'].map(t => `<option value="${t}"${t === n.type ? ' selected' : ''}>${t}</option>`).join('');
+  const statusOpts = ['open', 'done'].map(s => `<option value="${s}"${s === n.status ? ' selected' : ''}>${s}</option>`).join('');
+  openKpi('Edit note', 'Anyone with Notes access can edit any note', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Type</label><select class="modal-select" name="type">${typeOpts}</select></div>
+      <div><label class="modal-label">Page</label><input class="modal-input" name="page" value="${escapeHtml(n.page || '')}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="5" required>${escapeHtml(n.note)}</textarea></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Assigned to</label>
+        <select class="modal-select" name="assigned_to"><option value=""${n.assigned_to ? '' : ' selected'}>— unassigned —</option>${notesPersonOptions(n.assigned_to || '')}</select></div>
+      <div><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+    </div>`,
+    async () => {
+      const note = kpiVal('note'); if (!note) throw new Error('Note text is required');
+      const assigned_to = kpiVal('assigned_to') || null;
+      const { error: ue } = await sb.from('feedback_log').update({
+        type: kpiVal('type') || n.type,
+        note,
+        page: kpiVal('page') || null,
+        assigned_to,
+        status: kpiVal('status') || n.status,
+      }).eq('id', id);
+      if (ue) throw ue;
+      if (assigned_to && assigned_to !== n.assigned_to && assigned_to !== ME.id) {
+        notify(assigned_to, 'assigned', 'A note was assigned to you', note.slice(0, 160), 'note', id);
+      }
+      closeKpi(); toast('Note updated', 'ok');
+      loadTab('notes');
+    }, 'Save');
+}
+
+// Convert a note into a task, then close the note. Deliberately reuses the
+// Calendar's task modal rather than growing a second task form that drifts.
+async function noteToTask(id) {
+  const { data: n, error } = await sb.from('feedback_log').select('id, type, note, page').eq('id', id).single();
+  if (error || !n) { toast('Note not found: ' + (error?.message || ''), 'err'); return; }
+  const oneLine = n.note.replace(/\s+/g, ' ').trim();
+  const title = oneLine.length > 90 ? oneLine.slice(0, 89) + '…' : oneLine;
+  // Only repeat the body when the title had to be cut — otherwise it's an echo.
+  const description = [
+    oneLine.length > 90 ? n.note : '',
+    `From the Notes page — ${n.type}${n.page ? ' · ' + n.page : ''}`,
+  ].filter(Boolean).join('\n\n');
+  await calAddTask({
+    heading: 'Convert note to task',
+    sub: 'Creating the task closes the note',
+    title, description,
+    pillar: 'site', source: 'note', feedback_note_id: n.id,
+    onCreated: () => loadTab('notes'),
+  });
+}
+
+// Row actions: edit · convert · jump to the task a note became.
+$('panel-notes').addEventListener('click', (e) => {
+  const ed = e.target.closest('[data-note-edit]');
+  if (ed) { e.preventDefault(); openEditNote(ed.dataset.noteEdit); return; }
+  const tk = e.target.closest('[data-note-task]');
+  if (tk) { e.preventDefault(); noteToTask(tk.dataset.noteTask); return; }
+  const gt = e.target.closest('[data-note-gototask]');
+  if (gt) { e.preventDefault(); openEditTask(gt.dataset.noteGototask, () => loadTab('notes')); return; }
 });
 
 // Check-to-mark-done (delegated; separate from the status-select handler)
@@ -15387,9 +15487,16 @@ $('panel-conversations').addEventListener('change', (e) => {
 const MEET = { tab: 'meetings', list: [], open: null, notes: [], team: [], newKind: 'note', newPillar: '', filter: 'mine', ws: [], wsOpen: null, wsUpdates: [] };
 const MEET_KINDS = { note: '📝 Note', decision: '✅ Decision', action: '⚡ Action', question: '❓ Question' };
 const WS_STATUS = { active: 'Active', blocked: 'Blocked', parked: 'Parked', done: 'Done' };
-const WS_PILLARS = ['content', 'audience', 'parties', 'dance_infusion', 'radio', 'ops'];
-const wsPillarColor = (p) => (WORKSTREAM[p]?.color) || (p === 'radio' ? '#B5791F' : p === 'ops' ? '#5b7fb3' : 'var(--mid)');
-const wsPillarLabel = (p) => (WORKSTREAM[p]?.label) || (p === 'radio' ? 'Radio' : p === 'ops' ? 'Operations' : (p || ''));
+const WS_PILLARS = ['content', 'audience', 'parties', 'dance_infusion', 'radio', 'ops', 'site'];
+// Buckets that aren't Strategy-board workstreams. 'site' (139) is where work on
+// the dashboard and comewith.org itself lands — it's what a converted note gets.
+const WS_PILLAR_EXTRA = {
+  radio: { label: 'Radio',      color: '#B5791F' },
+  ops:   { label: 'Operations', color: '#5b7fb3' },
+  site:  { label: 'Site',       color: '#3E7C9B' },
+};
+const wsPillarColor = (p) => (WORKSTREAM[p]?.color) || WS_PILLAR_EXTRA[p]?.color || 'var(--mid)';
+const wsPillarLabel = (p) => (WORKSTREAM[p]?.label) || WS_PILLAR_EXTRA[p]?.label || (p || '');
 
 async function loadMeetings() {
   const body = $('meetBody');
@@ -15986,7 +16093,11 @@ function calBoardTasks() {
     (!f.msOnly || t.milestone) &&
     (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
   if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
-  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date >= today && t.due_date <= lim); }
+  // A horizon that starts today hides the work that most needs doing. "Next N
+  // days" therefore runs from the past to today+N: overdue tasks are always in
+  // it. Whether done tasks show stays governed by the status chips, so this
+  // doesn't quietly re-decide that too.
+  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date <= lim); }
   else if (f.due === 'none') list = list.filter(t => !t.due_date);
   const dir = f.dir;
   list.sort((a, b) => {
@@ -16033,7 +16144,7 @@ function calRenderBoard() {
       <select class="hub-status-sel" data-tb-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
       <select class="hub-status-sel" data-tb-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
       <select class="hub-status-sel" data-tb-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue'], ['7', 'Next 7 days'], ['30', 'Next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['7', 'Overdue + next 7 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-tb-mson>⭐ milestones only</button>
       <span class="li-sub" style="margin-left:auto;">${list.length} task${list.length !== 1 ? 's' : ''}</span>
     </div>
@@ -16128,7 +16239,7 @@ async function openEditTask(taskId, onSaved) {
     });
   }, 40);
 }
-async function calAddTask() {
+async function calAddTask(pre = {}) {
   const [evs, team] = await Promise.all([
     sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(150),
     sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true),
@@ -16136,31 +16247,49 @@ async function calAddTask() {
   const evOpts = (evs.data || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('');
   const asgOpts = (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at)
     .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
-  openKpi('Add task / milestone', 'Milestones show on the calendar grid; tasks live on the board', `
-    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required></div>
-    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2"></textarea></div>
+  // Bucket was filterable on the board but never settable at creation — which is
+  // why 83 tasks have none. `pre` lets another surface (Notes → convert) open
+  // this same modal pre-filled instead of growing a second task form.
+  const bucketOpts = ['<option value="">— none —</option>'].concat(WS_PILLARS.map(p =>
+    `<option value="${p}"${p === pre.pillar ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`)).join('');
+  openKpi(pre.heading || 'Add task / milestone', pre.sub || 'Milestones show on the calendar grid; tasks live on the board', `
+    <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required value="${escapeHtml(pre.title || '')}"></div>
+    <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="3">${escapeHtml(pre.description || '')}</textarea></div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date"></div>
       <div><label class="modal-label">Priority</label><select class="modal-select" name="priority"><option value="">—</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></div>
     </div>
-    <div class="modal-form-row"><label class="modal-label">Event (optional)</label><select class="modal-select" name="event_id"><option value="">— standalone —</option>${evOpts}</select></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Bucket</label><select class="modal-select" name="pillar">${bucketOpts}</select></div>
+      <div><label class="modal-label">Event (optional)</label><select class="modal-select" name="event_id"><option value="">— standalone —</option>${evOpts}</select></div>
+    </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Assignee (optional)</label><select class="modal-select" name="assignee"><option value="">—</option>${asgOpts}</select></div>
       <div><label class="modal-label" style="display:flex;gap:8px;align-items:center;margin-top:22px;"><input type="checkbox" name="milestone"> ⭐ Milestone</label></div>
     </div>`,
     async () => {
       const title = kpiVal('title'); if (!title) throw new Error('Title is required');
-      const t = { title, source: 'manual', status: 'todo', milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked };
+      const t = { title, source: pre.source || 'manual', status: 'todo', milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked };
       const desc = kpiVal('description'); if (desc) t.description = desc;
       const dd = kpiVal('due_date'); if (dd) t.due_date = dd;
       const pr = kpiVal('priority'); if (pr) t.priority = pr;
       const ev = kpiVal('event_id'); if (ev) t.event_id = ev;
+      const pil = kpiVal('pillar'); if (pil) t.pillar = pil;
+      if (pre.feedback_note_id) t.feedback_note_id = pre.feedback_note_id;
+      // NB: tasks.created_by is an FK to actors, not auth.users — leave it unset.
       const { data, error } = await sb.from('tasks').insert(t).select('id').single();
       if (error) throw error;
       const asg = kpiVal('assignee');
       if (asg) { const r = await sb.from('task_assignments').insert({ task_id: data.id, actor_id: asg, role: 'doer' }); if (r.error) throw r.error; }
-      closeKpi(); toast(t.milestone ? 'Milestone added' : 'Task added', 'ok');
-      await loadCalendar();
+      // The note closes only once the task genuinely exists. If this half fails
+      // the task still stands and the note stays open — visibly, not silently.
+      if (pre.feedback_note_id) {
+        const { error: ne } = await sb.from('feedback_log').update({ status: 'done' }).eq('id', pre.feedback_note_id);
+        if (ne) toast('Task created, but the note stayed open: ' + ne.message, 'err');
+      }
+      closeKpi();
+      toast(t.milestone ? 'Milestone added' : (pre.feedback_note_id ? 'Task created — note closed' : 'Task added'), 'ok');
+      if (pre.onCreated) await pre.onCreated(); else await loadCalendar();
     }, 'Add');
 }
 $('panel-calendar').addEventListener('click', async (e) => {
