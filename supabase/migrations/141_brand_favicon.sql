@@ -1,4 +1,9 @@
--- 140: a brand.favicon key so the site can carry its own tab icon.
+-- 141: a brand.favicon key so the site can carry its own tab icon.
+--
+-- Authored as 140 and renumbered: 140_site_owner.sql was landing from another
+-- machine at the same time and reached prod first. The number was taken from a
+-- stale local master without fetching — the exact mistake CLAUDE.md's merge
+-- routine warns about ("take the next migration number AFTER pulling").
 --
 -- The dashboard has linked /icons/favicon-32.png and /icons/apple-touch-icon.png
 -- since it shipped; the PUBLIC pages never linked anything, so comewith.org has
