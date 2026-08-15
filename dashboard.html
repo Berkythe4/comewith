@@ -10550,6 +10550,71 @@ function raWindow() {
   const c = new Date(start + 'T00:00:00'); c.setDate(c.getDate() + raState.radioWeeks * 7);
   return { start, cut: c.toISOString().slice(0, 10) };
 }
+// EVERY date an artist plays, not just their soonest. `ra_artists` collapses an
+// artist to ONE row carrying next_event_date, so an artist playing the 16th AND
+// the 25th vanished from a window starting on the 18th — 77 of them (70 with a
+// SoundCloud link) on the 2026-08-18 pull, and nothing said so. The lineups on
+// ra_events hold every date, so index those. Memoized on the events array, which
+// a pull replaces wholesale.
+let _raShowIdx = null, _raShowIdxSrc = null;
+function raShowIndex() {
+  if (_raShowIdx && _raShowIdxSrc === raState.events) return _raShowIdx;
+  const idx = {};
+  for (const e of (raState.events || [])) {
+    if (!e.event_date) continue;
+    for (const a of (e.lineup || [])) {
+      const n = ((a && a.name) || '').trim().toLowerCase(); if (!n) continue;
+      (idx[n] = idx[n] || []).push({ date: e.event_date, venue: e.venue_name || null, genres: e.genres || [], source: e.source || 'ra' });
+    }
+  }
+  Object.values(idx).forEach(l => l.sort((x, y) => x.date.localeCompare(y.date)));
+  _raShowIdx = idx; _raShowIdxSrc = raState.events;
+  return idx;
+}
+// The artist's SOONEST show inside [start, cut] — from the lineup index, with the
+// artist row's own date as one more candidate (partners and manual adds have no
+// event row at all). Null = they don't play in this window.
+function raShowInWindow(a, start, cut) {
+  const own = a.next_event_date && a.next_event_date >= start && a.next_event_date <= cut
+    ? { date: a.next_event_date, venue: a.next_venue || null, genres: a.genres || [], source: a.source || 'ra' } : null;
+  const hit = (raShowIndex()[(a.name || '').trim().toLowerCase()] || []).find(s => s.date >= start && s.date <= cut) || null;
+  if (!hit) return own;
+  if (!own) return hit;
+  return hit.date <= own.date ? hit : own;
+}
+// ONE definition of "the artists in this window", shared by the list, the counts
+// and every scan/match pass — deduped, and re-pointed at the show they actually
+// play IN the window (date, venue, that bill's genres) rather than whichever
+// earlier show happened to be stamped on their row.
+function raWindowPool() {
+  const { start, cut } = raWindow();
+  const seen = new Set(); const out = [];
+  for (const a of raState.artists) {
+    const s = raShowInWindow(a, start, cut);
+    if (!s && !a.is_partner) continue;      // partners always show, even with no upcoming date
+    const k = a.soundcloud ? raKey(a.soundcloud) : 'n:' + (a.name || '').toLowerCase();
+    if (seen.has(k)) continue; seen.add(k);
+    out.push({
+      ...a, key: k, c: a.soundcloud ? (raState.cache[k] || null) : null,
+      next_event_date: s ? s.date : a.next_event_date,
+      next_venue: s ? (s.venue || a.next_venue) : a.next_venue,
+      genres: (s && s.genres.length) ? [...new Set([...(a.genres || []), ...s.genres])] : (a.genres || []),
+    });
+  }
+  return out;
+}
+// Just the in-window artists that have a SoundCloud profile to read (stats + scans).
+function raWindowScannable() {
+  const { start, cut } = raWindow();
+  return raWindowPool().filter(a => a.soundcloud && a.next_event_date >= start && a.next_event_date <= cut);
+}
+// …and the ones still missing a link, by name — what sc-match goes looking for.
+function raWindowNoSc() {
+  const { start, cut } = raWindow();
+  return raWindowPool()
+    .filter(a => !a.soundcloud && a.next_event_date >= start && a.next_event_date <= cut && (a.name || '').trim())
+    .map(a => a.name.trim());
+}
 // SoundCloud Widget API (for playing a built playlist as a station) — loaded once.
 let _scWidgetReady = null;
 function ensureScWidget() {
@@ -11418,12 +11483,16 @@ async function raRefresh(btn) {
   try {
     const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 90 } });
     if (error) throw error;
-    let tm = 0, dice = 0;
-    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 90 } }); tm = r.data?.edm_saved || 0; } catch (_) { /* skip */ }
-    // DICE (source='dice') — reverse-engineered public endpoints, no key. Never
-    // touches RA/TM rows; failure here doesn't fail the whole pull.
-    try { const r = await sb.functions.invoke('pull-dice', { body: { days: 90 } }); dice = r.data?.saved || 0; } catch (_) { /* skip */ }
-    toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`, 'ok');
+    // A failure here doesn't fail the whole pull — but it MUST be visible. These
+    // were swallowed silently, so an outage and a genuine zero looked identical
+    // and you'd plan a week off a pool that quietly lost a source.
+    let tm = 0, dice = 0, dropped = 0; const failed = [];
+    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 90 } }); if (r.error) throw r.error; tm = r.data?.edm_saved || 0; } catch (_) { failed.push('Ticketmaster'); }
+    // DICE (source='dice') — reverse-engineered public endpoints, no key.
+    try { const r = await sb.functions.invoke('pull-dice', { body: { days: 90 } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; } catch (_) { failed.push('DICE'); }
+    toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`
+      + (dropped ? ` · ⚠ ${dropped} DICE shows over the detail cap` : '')
+      + (failed.length ? ` · ⚠ ${failed.join(' + ')} didn't answer` : ''), failed.length ? 'err' : 'ok');
     raState.events = []; raState.venues = [];   // force fresh reload of the scene data
     if (document.querySelector('#panel-scene-map.active')) await loadSceneMap();
     else if (document.querySelector('#panel-market.active')) await loadMarket();
@@ -11606,15 +11675,7 @@ $('panel-market').addEventListener('input', (e) => {
 // Deduped artists in the window, then filtered (genre / producers / search) + sorted.
 // Each carries its cache row (producer status + songs).
 function raRadioList() {
-  const { start, cut } = raWindow();
-  const seen = new Set(); let out = [];
-  for (const a of raState.artists) {
-    const inWin = a.next_event_date && a.next_event_date >= start && a.next_event_date <= cut;
-    if (!inWin && !a.is_partner) continue;   // partners always show, even with no upcoming date
-    const k = a.soundcloud ? raKey(a.soundcloud) : 'n:' + (a.name || '').toLowerCase();
-    if (seen.has(k)) continue; seen.add(k);
-    out.push({ ...a, key: k, c: a.soundcloud ? (raState.cache[k] || null) : null });
-  }
+  let out = raWindowPool();
   if (raState.genre) out = out.filter(a => (a.genres || []).includes(raState.genre));
   if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
   // Source filter (RA / DICE / TM). DICE & Ticketmaster artists carry no
@@ -11651,8 +11712,7 @@ function renderRaRadio() {
   const list = raRadioList();
   // full deduped window (pre-producer-filter) — for stats + scan candidates
   const { start, cut } = raWindow();
-  const seen = new Set(); const windowArtists = [];
-  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); windowArtists.push({ ...a, key: k }); }
+  const windowArtists = raWindowScannable();
   const scanned = windowArtists.filter(a => raState.cache[a.key]).length;
   const unscanned = windowArtists.length - scanned;
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
@@ -11662,7 +11722,7 @@ function renderRaRadio() {
   const srcCounts = {}; for (const a of raState.artists) { const s = a.source || 'ra'; srcCounts[s] = (srcCounts[s] || 0) + 1; }
   const srcSet = Object.keys(srcCounts).sort((a, b) => srcCounts[b] - srcCounts[a]);
   const { start: wStart, cut: wCut } = raWindow();
-  const noScCount = raState.artists.filter(a => !a.soundcloud && a.next_event_date >= wStart && a.next_event_date <= wCut).length;
+  const noScCount = raWindowPool().filter(a => !a.soundcloud && a.next_event_date >= wStart && a.next_event_date <= wCut).length;
 
   const weekBtn = (w) => `<button class="hub-btn ghost" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w}w</button>`;
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
@@ -12578,9 +12638,7 @@ function raPublishTracklist() {
 // once kept its old numbers forever — including numbers produced by a bug.
 // `force` drops the cached rows for this window first so they're re-read.
 async function raRescan() {
-  const { start, cut } = raWindow();
-  const seen = new Set(); const keys = [];
-  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); keys.push(k); }
+  const keys = raWindowScannable().map(a => a.key);
   if (!keys.length) { toast('No artists in this window', 'ok'); return; }
   if (!confirm(`Re-read ${keys.length} artist${keys.length === 1 ? '' : 's'} from SoundCloud?\n\nThe cached song lists are discarded and pulled again. Use this after a fix to how songs are read — otherwise "Scan for producers" is enough.`)) return;
   await sb.from('sc_artist_cache').delete().in('soundcloud', keys);
@@ -12589,9 +12647,7 @@ async function raRescan() {
   raScan();
 }
 async function raScan() {
-  const { start, cut } = raWindow();
-  const seen = new Set(); const todo = [];
-  for (const a of raState.artists) { if (!a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue; const k = raKey(a.soundcloud); if (seen.has(k)) continue; seen.add(k); if (!raState.cache[k]) todo.push(k); }
+  const todo = raWindowScannable().filter(a => !raState.cache[a.key]).map(a => a.key);
   if (!todo.length) { toast('All artists in this window are already scanned', 'ok'); return; }
   raState.scanning = true; raState.scanCancel = false; raState.scanDone = 0; raState.scanTotal = todo.length; renderRaMarket();
   for (let i = 0; i < todo.length && !raState.scanCancel; i += 20) {
@@ -12612,13 +12668,7 @@ async function raScan() {
 // ra_artists; we mirror them into local state so they appear + can be scanned
 // immediately, then kick the normal producer scan to pull their songs.
 async function raMatchSc(btn) {
-  const { start, cut } = raWindow();
-  const seen = new Set(); const names = [];
-  for (const a of raState.artists) {
-    if (a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
-    const n = (a.name || '').trim(); if (!n) continue;
-    const k = n.toLowerCase(); if (seen.has(k)) continue; seen.add(k); names.push(n);
-  }
+  const names = raWindowNoSc();
   if (!names.length) { toast('Every artist in this window already has a SoundCloud', 'ok'); return; }
   if (!confirm(`Search SoundCloud for ${names.length} artist${names.length === 1 ? '' : 's'} with no link yet?\n\nOnly a confident match is kept (verified / exact name), so some won't resolve. Matched artists are then scanned for songs.`)) return;
   const label = btn ? btn.textContent : '';
@@ -12643,13 +12693,7 @@ async function raMatchSc(btn) {
 // sources), then reads every unscanned profile (songs, followers). This is how
 // you refresh the pool — the episode/upload tools stay in the station builder.
 async function raRefreshAll(btn) {
-  const { start, cut } = raWindow();
-  const seen = new Set(); const names = [];
-  for (const a of raState.artists) {
-    if (a.soundcloud || !a.next_event_date || a.next_event_date < start || a.next_event_date > cut) continue;
-    const n = (a.name || '').trim(); if (!n) continue;
-    const k = n.toLowerCase(); if (seen.has(k)) continue; seen.add(k); names.push(n);
-  }
+  const names = raWindowNoSc();
   const label = btn ? btn.textContent : '';
   if (btn) btn.disabled = true;
   // 1) match the no-link artists so they can be read this same pass
