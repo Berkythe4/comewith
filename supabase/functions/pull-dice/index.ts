@@ -14,7 +14,9 @@
 // ra_events regardless of source, so DICE shows flow in automatically.
 //
 // Admin JWT OR service-role. No secret required (DICE endpoints are open).
-// Body: { days?: number (default 42) }
+// Body: { days?: number (default 42), maxDetail?: number (default 240) }
+//   maxDetail bounds the detail-fetch pass. The response reports
+//   dropped_over_cap + last_date so a truncated pull can't pass for a full one.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -99,14 +101,26 @@ Deno.serve(async (req) => {
     }
 
     // 2. Detail-fetch each (bounded) for perm_name + lineup + a firm venue city.
-    //    Cap to keep well under the function time budget.
-    const ids = [...cand.keys()].slice(0, 160);
+    //    The cap keeps us under the function time budget — but WHICH events it
+    //    spends itself on is the whole game. It used to take the first 160 ids in
+    //    tag order, so on the 2026-08-14 pull DICE stopped dead at 8/21: weeks 2-4
+    //    of a 4-week window had zero DICE shows and nothing reported it. Now we
+    //    drop anything the search already dates outside the window (no detail
+    //    fetch needed for those), take what's left SOONEST-FIRST, and return the
+    //    overflow count so a truncated pull says so out loud.
+    const dateOf = (e: any) => (e?.dates?.event_start_date || "").slice(0, 10);
+    const inRange = [...cand.values()].filter((e) => { const d = dateOf(e); return !d || (d >= today && d <= cutoff); });
+    inRange.sort((a, b) => (dateOf(a) || "9999-99-99").localeCompare(dateOf(b) || "9999-99-99"));
+    const maxDetail = Math.min(400, Math.max(40, Number(b.maxDetail) || 240));
+    const picked = inRange.slice(0, maxDetail);
+    const droppedOverCap = inRange.length - picked.length;
+    const ids = picked.map((e) => e.id);
     const rows: Record<string, unknown>[] = [];
     const artistMap = new Map<string, Record<string, unknown>>();
     let scanned = 0, kept = 0;
 
-    for (let i = 0; i < ids.length; i += 6) {
-      const batch = ids.slice(i, i + 6);
+    for (let i = 0; i < ids.length; i += 8) {
+      const batch = ids.slice(i, i + 8);
       const details = await Promise.all(batch.map((id) => detail(id)));
       for (let k = 0; k < batch.length; k++) {
         scanned++;
@@ -158,7 +172,14 @@ Deno.serve(async (req) => {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
       if (ae) console.error("dice ra_artists:", ae.message);
     }
-    return new Response(JSON.stringify({ success: true, source: "dice", candidates: cand.size, scanned, saved: kept, artists: artistRows.length }), { headers: JH });
+    // last_date makes a short pull obvious at a glance: if DICE only reaches a
+    // week out, that's the search's own horizon, not a filter you can widen.
+    const lastDate = rows.reduce((m, r) => (r.event_date as string) > m ? (r.event_date as string) : m, "");
+    return new Response(JSON.stringify({
+      success: true, source: "dice", candidates: cand.size, in_window_candidates: inRange.length,
+      detailed: ids.length, dropped_over_cap: droppedOverCap, scanned, saved: kept,
+      last_date: lastDate || null, artists: artistRows.length,
+    }), { headers: JH });
   } catch (e) {
     return err(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));
   }
