@@ -228,6 +228,20 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   `.benefit`, `.audio`) layered over a base that set `background-size/position/
   repeat` — the shorthand resets them and breaks hero photos. Use `background-image:`.
 
+## Editing `dashboard.html` (1.3 MB, one inline `<script type="module">`)
+
+- **Never read the whole file into context.** It is ~1.3 MB and effectively all one
+  inline module. Reading it once costs more than an entire ordinary session, and it
+  gets read on nearly every dashboard PR. Locate the region with `grep -n`, pull only
+  that window with `sed -n 'A,Bp'`, then `Edit` on an exact unique string. To review a
+  change, `git diff` it — never `cat` the file.
+- **Syntax-check by extraction, not by re-reading.** Extract the inline module body to
+  a temp `.mjs` and run `node --check` on it. Run the **same extraction against the
+  pre-edit version** (`git show HEAD:dashboard.html`) as a control — otherwise an
+  artifact of the extraction itself reads as a real error introduced by the edit.
+- **There is no local console check** — the Browser pane can't open `file://` URLs. The
+  loop is `node --check` plus the deployed Netlify build.
+
 ## Scope
 
 - This codebase is **Come With only**. Do **not** add anything Come With Fitness
