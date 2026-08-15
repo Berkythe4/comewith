@@ -780,14 +780,17 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 }
 .tier-add:hover { border-color: var(--red); color: var(--red); }
 /* Feedback log (Phase 13 — Part C) */
-.notes-filter { display: flex; gap: 6px; margin-bottom: 14px; }
+.notes-filter { display: flex; gap: 6px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
 .notes-filter button {
   background: none; border: 1px solid var(--border-strong); color: var(--mid);
   font-family: 'Inconsolata', monospace; font-size: 0.7rem; letter-spacing: 0.08em;
   text-transform: uppercase; padding: 6px 12px; cursor: pointer;
 }
 .notes-filter button.active { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.note-text { white-space: normal; max-width: 460px; line-height: 1.4; }
+/* How many notes each status button would show under the OTHER active filters */
+.notes-count { opacity: 0.6; font-variant-numeric: tabular-nums; margin-left: 5px; }
+/* pre-wrap: a note typed across several lines reads that way instead of as one blob */
+.note-text { white-space: pre-wrap; max-width: 460px; line-height: 1.4; }
 tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .badge-type-bug { background: rgba(232,74,134,0.16); color: #ff9ec4; }
 .badge-type-enhancement { background: var(--blue-bg); color: var(--blue); }
@@ -1544,15 +1547,25 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 
       <div class="panel" id="panel-notes">
         <div class="notes-filter">
-          <button data-notes-filter="open" class="active">Open</button>
-          <button data-notes-filter="done">Done</button>
-          <button data-notes-filter="all">All</button>
-          <select class="hub-status-sel" id="notesWhoFilter" style="margin-left:10px;max-width:190px;">
+          <button data-notes-filter="open" data-label="Open" class="active">Open</button>
+          <button data-notes-filter="done" data-label="Done">Done</button>
+          <button data-notes-filter="all" data-label="All">All</button>
+          <input class="modal-input" id="notesSearch" placeholder="Search note / page / person…" autocomplete="off" style="margin-left:10px;max-width:250px;">
+          <select class="hub-status-sel" id="notesTypeFilter" style="max-width:150px;">
+            <option value="">Any type</option>
+            <option value="bug">bug</option>
+            <option value="enhancement">enhancement</option>
+            <option value="idea">idea</option>
+          </select>
+          <select class="hub-status-sel" id="notesWhoFilter" style="max-width:190px;">
             <option value="">Anyone</option>
             <option value="me">Mine</option>
             <option value="none">Unassigned</option>
           </select>
         </div>
+        <!-- Pages already in use, so quick capture and the edit modal stop inventing a
+             second spelling of the same tab. Filled by notesFillPageList(). -->
+        <datalist id="notesPageList"></datalist>
         <div class="row-count" id="count-notes">—</div>
         <div id="state-notes"></div>
         <table class="data-table" id="table-notes" style="display:none;">
@@ -1560,10 +1573,11 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th style="width:42px;">Done</th>
             <th>Type</th>
             <th>Note</th>
+            <th style="width:130px;">Logged by</th>
             <th style="width:170px;">Assigned to</th>
             <th>Page</th>
             <th>Created</th>
-            <th style="width:130px;"></th>
+            <th style="width:150px;"></th>
           </tr></thead>
           <tbody></tbody>
         </table>
@@ -6032,6 +6046,9 @@ async function submitLogEvent() {
 // ---- Feedback log (Phase 13 — Part C) ----
 let notesFilter = 'open';
 let notesWho = '';   // '' anyone · 'me' · 'none' unassigned · <profile id>
+let notesType = '';  // '' any · 'bug' · 'enhancement' · 'idea'
+let notesQ = '';     // free-text search, lower-cased
+let _notesRows = []; // the last full fetch, UNFILTERED — every filter reads from here
 
 // The roster used for assignment (138). Deliberately NOT loadStaff() — that one
 // drops ME on purpose, because it exists to pick email recipients. Claiming a
@@ -6047,16 +6064,45 @@ async function notesTeam() {
   _notesTeam = data || [];
   return _notesTeam;
 }
+
+// People who appear on a note but are NOT on the assignable roster — someone
+// deactivated, demoted, or a customer-role account. They have to be resolvable,
+// because a name we can't render is a name the UI quietly replaces with
+// "— unassigned —", and saving the edit modal then makes that lie true.
+let _notesOffRoster = new Map();
+async function notesLearnPeople(ids) {
+  const onTeam = (id) => (_notesTeam || []).some(p => p.id === id);
+  const missing = [...new Set(ids.filter(Boolean))].filter(id => !onTeam(id) && !_notesOffRoster.has(id));
+  if (!missing.length) return;
+  try {
+    const { data, error } = await sb.from('profiles').select('id, full_name, email').in('id', missing);
+    if (error) throw error;
+    (data || []).forEach(p => _notesOffRoster.set(p.id, p));
+  } catch (_) {
+    // Can't read them: fall through to "someone". Still better than claiming
+    // the note is unassigned, and never worth taking the tab down over.
+  }
+}
+const notesPerson = (id) => (_notesTeam || []).find(x => x.id === id) || _notesOffRoster.get(id) || null;
 const notesPersonName = (id) => {
   if (!id) return '';
-  const p = (_notesTeam || []).find(x => x.id === id);
+  const p = notesPerson(id);
   return p ? (p.full_name || p.email) : 'someone';
 };
+// `sel` is always rendered as an option, even when its owner is off the roster,
+// so the current assignee survives a save instead of being silently cleared.
 function notesPersonOptions(sel, { meLabel = true } = {}) {
-  return (_notesTeam || []).map(p => {
+  const team = (_notesTeam || []);
+  const out = team.map(p => {
     const label = (p.full_name || p.email) + (meLabel && p.id === ME.id ? ' (me)' : '');
     return `<option value="${escapeHtml(p.id)}"${p.id === sel ? ' selected' : ''}>${escapeHtml(label)}</option>`;
-  }).join('');
+  });
+  if (sel && !team.some(p => p.id === sel)) {
+    const p = _notesOffRoster.get(sel);
+    const label = (p ? (p.full_name || p.email) : 'someone') + ' — no longer on the team';
+    out.push(`<option value="${escapeHtml(sel)}" selected>${escapeHtml(label)}</option>`);
+  }
+  return out.join('');
 }
 function notesAssignSelect(id, sel, note) {
   return `<select class="hub-status-sel note-assign-sel" data-id="${escapeHtml(id)}" data-prev="${escapeHtml(sel || '')}" data-note="${escapeHtml((note || '').slice(0, 160))}">
@@ -6088,19 +6134,88 @@ async function notesLoadTaskLinks(ids) {
   }
 }
 
+// Does a note survive the current filters? `ignoreStatus` is for the per-button
+// counts, which have to answer "how many WOULD Done show" while Open is active.
+function notesMatches(r, ignoreStatus) {
+  if (!ignoreStatus && notesFilter !== 'all' && r.status !== notesFilter) return false;
+  if (notesType && r.type !== notesType) return false;
+  if (notesWho === 'me') { if (r.assigned_to !== ME.id) return false; }
+  else if (notesWho === 'none') { if (r.assigned_to) return false; }
+  else if (notesWho) { if (r.assigned_to !== notesWho) return false; }
+  if (notesQ) {
+    const hay = [r.note, r.page, notesPersonName(r.created_by), notesPersonName(r.assigned_to)]
+      .filter(Boolean).join(' ').toLowerCase();
+    if (!hay.includes(notesQ)) return false;
+  }
+  return true;
+}
+const notesFiltered = () => _notesRows.filter(r => notesMatches(r, false));
+
+// Counts live on the status buttons themselves — three unlabelled buttons made
+// you click each one to find out whether it had anything behind it.
+function notesPaintCounts() {
+  const pool = _notesRows.filter(r => notesMatches(r, true));
+  const n = { open: 0, done: 0, all: pool.length };
+  for (const r of pool) { if (r.status === 'open') n.open++; else if (r.status === 'done') n.done++; }
+  for (const b of $('panel-notes').querySelectorAll('[data-notes-filter]')) {
+    b.innerHTML = `${escapeHtml(b.dataset.label || '')}<span class="notes-count">${n[b.dataset.notesFilter] ?? 0}</span>`;
+  }
+}
+
+// Pages already used, offered as suggestions so nobody coins a second spelling.
+function notesPaintPageList(pages) {
+  const dl = $('notesPageList'); if (!dl) return;
+  const uniq = [...new Set((pages || []).map(p => (p || '').trim()).filter(Boolean))].sort();
+  dl.innerHTML = uniq.map(p => `<option value="${escapeHtml(p)}"></option>`).join('');
+}
+function notesFillPageList() { notesPaintPageList(_notesRows.map(r => r.page)); }
+// Quick capture is reachable from every tab, so the suggestions usually have to
+// work without Notes ever having been opened. Paged, not capped — same as above.
+async function notesEnsurePageList() {
+  if (_notesRows.length) { notesFillPageList(); return; }
+  try {
+    const { data, error } = await sbAll(() => sb.from('feedback_log').select('id, page'), 'id');
+    if (error) throw error;
+    notesPaintPageList((data || []).map(r => r.page));
+  } catch (_) { /* suggestions are a convenience — never block capture over them */ }
+}
+
+// Re-filter and redraw from what we already fetched. Filter/search changes go
+// through here rather than loadTab(), so typing doesn't fire a query a keystroke.
+function notesRepaint() {
+  const rows = notesFiltered();
+  notesPaintCounts();
+  setCount('notes', rows.length);
+  if (!rows.length) {
+    setPanelState('notes', 'info', _notesRows.length
+      ? `No notes match these filters (${_notesRows.length} total).`
+      : emptyMessages.notes);
+    return;
+  }
+  renderers.notes(rows);
+  setPanelState('notes', 'hidden');
+}
+
 queries.notes = async () => {
   await notesTeam();          // names must resolve before the rows render
   notesFillWhoFilter();
-  let qy = sb.from('feedback_log')
-    .select('id, created_at, type, note, status, page, created_by, assigned_to')
-    .order('created_at', { ascending: false }).limit(500);
-  if (notesFilter !== 'all') qy = qy.eq('status', notesFilter);
-  if (notesWho === 'me') qy = qy.eq('assigned_to', ME.id);
-  else if (notesWho === 'none') qy = qy.is('assigned_to', null);
-  else if (notesWho) qy = qy.eq('assigned_to', notesWho);
-  const res = await qy;
-  if (!res.error) await notesLoadTaskLinks((res.data || []).map(r => r.id));
-  return res;
+  // Paged, not capped. The old .limit(500) was a silent ceiling of exactly the
+  // shape LEARNINGS §18 is about — and since every filter is now applied here in
+  // the browser, a truncated fetch would have quietly shrunk the counts too.
+  const res = await sbAll(() => sb.from('feedback_log')
+    .select('id, created_at, type, note, status, page, created_by, assigned_to'), 'id');
+  if (res.error) return res;
+  _notesRows = (res.data || []).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  await notesLearnPeople(_notesRows.flatMap(r => [r.created_by, r.assigned_to]));
+  await notesLoadTaskLinks(_notesRows.map(r => r.id));
+  notesFillPageList();
+  notesPaintCounts();
+  // loadTab reads this only after we return, so it can describe the real reason
+  // the list is empty: nothing logged at all vs. nothing matching the filters.
+  emptyMessages.notes = _notesRows.length
+    ? `No notes match these filters (${_notesRows.length} total).`
+    : 'No notes here. Use “＋ Log note” to jot a bug, enhancement, or idea.';
+  return { data: notesFiltered(), error: null };
 };
 emptyMessages.notes = 'No notes here. Use “＋ Log note” to jot a bug, enhancement, or idea.';
 renderers.notes = (rows) => {
@@ -6114,13 +6229,15 @@ renderers.notes = (rows) => {
     return `<tr class="${done ? 'note-done' : ''}">
       <td><input type="checkbox" class="note-done-cb" data-id="${escapeHtml(r.id)}"${done ? ' checked' : ''}></td>
       <td><span class="badge badge-type-${escapeHtml(r.type)}">${escapeHtml(r.type)}</span></td>
-      <td class="note-text">${escapeHtml(r.note)}${taskChip}${author ? ` <span class="li-sub">— logged by ${escapeHtml(author)}</span>` : ''}</td>
+      <td class="note-text">${escapeHtml(r.note)}${taskChip}</td>
+      <td>${author ? escapeHtml(author) : muted}</td>
       <td>${notesAssignSelect(r.id, r.assigned_to || '', r.note)}</td>
       <td>${escapeHtml(r.page || '') || muted}</td>
       <td>${escapeHtml(fmtDate(r.created_at))}</td>
       <td style="white-space:nowrap;">
         <button class="hub-mini" data-note-edit="${escapeHtml(r.id)}" title="Edit this note">✎</button>${task ? '' : `
         <button class="hub-mini" data-note-task="${escapeHtml(r.id)}" title="Create a task from this note — the note closes when the task is made">⇢ Task</button>`}
+        <button class="hub-mini" data-note-del="${escapeHtml(r.id)}" title="Delete this note permanently">🗑</button>
       </td>
     </tr>`;
   }).join('');
@@ -6141,9 +6258,10 @@ document.querySelector('main.main').addEventListener('change', async (e) => {
   sel.disabled = false;
   if (error) { sel.value = prev; toast('Could not assign: ' + error.message, 'err'); return; }
   sel.dataset.prev = to || '';
+  const row = _notesRows.find(x => x.id === id); if (row) row.assigned_to = to;
   if (to && to !== ME.id) notify(to, 'assigned', 'A note was assigned to you', sel.dataset.note || '', 'note', id);
   toast(to ? (to === ME.id ? 'Assigned to you' : 'Assigned to ' + notesPersonName(to)) : 'Unassigned', 'ok');
-  if (notesWho) loadTab('notes');   // the row may no longer match the who-filter
+  notesRepaint();   // counts move, and the row may no longer match the who-filter
 });
 
 // Filter buttons (open / done / all)
@@ -6152,14 +6270,22 @@ $('panel-notes').addEventListener('click', (e) => {
   if (!b) return;
   notesFilter = b.dataset.notesFilter;
   for (const x of $('panel-notes').querySelectorAll('[data-notes-filter]')) x.classList.toggle('active', x === b);
-  loadTab('notes');
+  notesRepaint();
 });
 
-// Who-filter (anyone / mine / unassigned / a named teammate)
+// Who-filter (anyone / mine / unassigned / a named teammate) and type-filter
 $('panel-notes').addEventListener('change', (e) => {
-  if (e.target.id !== 'notesWhoFilter') return;
-  notesWho = e.target.value;
-  loadTab('notes');
+  if (e.target.id === 'notesWhoFilter') notesWho = e.target.value;
+  else if (e.target.id === 'notesTypeFilter') notesType = e.target.value;
+  else return;
+  notesRepaint();
+});
+
+// Search. Filters what's already loaded, so it's per-keystroke with no query.
+$('panel-notes').addEventListener('input', (e) => {
+  if (e.target.id !== 'notesSearch') return;
+  notesQ = e.target.value.trim().toLowerCase();
+  notesRepaint();
 });
 
 // Edit a note in place. Anyone with Notes access can edit any note — it's a
@@ -6170,12 +6296,14 @@ async function openEditNote(id) {
     .select('id, type, note, page, status, assigned_to').eq('id', id).single();
   if (error || !n) { toast('Note not found: ' + (error?.message || ''), 'err'); return; }
   await notesTeam();
+  await notesLearnPeople([n.assigned_to]);   // so an off-roster assignee survives the save
+  await notesEnsurePageList();
   const typeOpts = ['idea', 'enhancement', 'bug'].map(t => `<option value="${t}"${t === n.type ? ' selected' : ''}>${t}</option>`).join('');
   const statusOpts = ['open', 'done'].map(s => `<option value="${s}"${s === n.status ? ' selected' : ''}>${s}</option>`).join('');
   openKpi('Edit note', 'Anyone with Notes access can edit any note', `
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Type</label><select class="modal-select" name="type">${typeOpts}</select></div>
-      <div><label class="modal-label">Page</label><input class="modal-input" name="page" value="${escapeHtml(n.page || '')}"></div>
+      <div><label class="modal-label">Page</label><input class="modal-input" name="page" list="notesPageList" value="${escapeHtml(n.page || '')}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="5" required>${escapeHtml(n.note)}</textarea></div>
     <div class="modal-form-row half-row">
@@ -6223,12 +6351,33 @@ async function noteToTask(id) {
   });
 }
 
-// Row actions: edit · convert · jump to the task a note became.
+// Delete a note. There is no deleted_at on feedback_log (016) and adding one to
+// a scratchpad isn't worth a migration, so this is a hard delete and the prompt
+// says so. A note that became a task is safe to remove: tasks.feedback_note_id
+// is ON DELETE SET NULL (139), so the work survives and only the back-link goes.
+async function deleteNote(id) {
+  const r = _notesRows.find(x => x.id === id);
+  const task = _notesTasks.get(id);
+  const preview = (r?.note || '').replace(/\s+/g, ' ').trim().slice(0, 120);
+  if (!confirm(`Delete this note permanently?\n\n${preview}\n\nThis cannot be undone.`
+    + (task ? `\n\nThe task it became ("${task.title}") is kept — it just loses the link back here.` : ''))) return;
+  const { error } = await sb.from('feedback_log').delete().eq('id', id);
+  if (error) { toast('Could not delete: ' + error.message, 'err'); return; }
+  _notesRows = _notesRows.filter(x => x.id !== id);
+  _notesTasks.delete(id);
+  notesFillPageList();
+  notesRepaint();
+  toast('Note deleted', 'ok');
+}
+
+// Row actions: edit · convert · delete · jump to the task a note became.
 $('panel-notes').addEventListener('click', (e) => {
   const ed = e.target.closest('[data-note-edit]');
   if (ed) { e.preventDefault(); openEditNote(ed.dataset.noteEdit); return; }
   const tk = e.target.closest('[data-note-task]');
   if (tk) { e.preventDefault(); noteToTask(tk.dataset.noteTask); return; }
+  const dl = e.target.closest('[data-note-del]');
+  if (dl) { e.preventDefault(); deleteNote(dl.dataset.noteDel); return; }
   const gt = e.target.closest('[data-note-gototask]');
   if (gt) { e.preventDefault(); openEditTask(gt.dataset.noteGototask, () => loadTab('notes')); return; }
 });
@@ -6244,14 +6393,19 @@ document.querySelector('main.main').addEventListener('change', async (e) => {
   cb.disabled = false;
   if (error) { cb.checked = !cb.checked; toast('Update failed: ' + error.message, 'err'); return; }
   cb.closest('tr')?.classList.toggle('note-done', cb.checked);
-  if (notesFilter !== 'all') loadTab('notes'); // row may no longer match the filter
+  const row = _notesRows.find(x => x.id === id); if (row) row.status = status;
+  notesRepaint();   // counts move, and the row may no longer match the filter
 });
 
 // "+ Log note" — quick capture, available on every tab
 $('logNoteBtn').addEventListener('click', async () => {
   const activeBtn = document.querySelector('.sidebar-nav button.active');
-  const page = activeBtn ? activeBtn.textContent.trim() : '';
+  // dataset.label is the clean module name. textContent sweeps up the nav's
+  // status badge and the master-only 🔑 too — which is how prod ended up holding
+  // "Come With Radio" and "Come With Radio✓" as two different pages.
+  const page = activeBtn ? (activeBtn.dataset.label || activeBtn.textContent.trim()) : '';
   await notesTeam();
+  await notesEnsurePageList();
   // Defaults to unassigned on purpose: logging something you spotted is not the
   // same as saying you will build it. Claiming is one click in the table.
   openKpi('Log a note', 'Quick capture — bug, enhancement, or idea', `
@@ -6262,7 +6416,7 @@ $('logNoteBtn').addEventListener('click', async () => {
           <option value="enhancement">enhancement</option>
           <option value="bug">bug</option>
         </select></div>
-      <div><label class="modal-label">Page</label><input class="modal-input" name="page" value="${escapeHtml(page)}"></div>
+      <div><label class="modal-label">Page</label><input class="modal-input" name="page" list="notesPageList" value="${escapeHtml(page)}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="4" required></textarea></div>
     <div class="modal-form-row"><label class="modal-label">Assign to</label>
