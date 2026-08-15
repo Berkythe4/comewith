@@ -5967,7 +5967,7 @@ $('panel-strategy').addEventListener('click', (e) => {
     saveStratPrefs().then(err => { if (err) toast('Saving layout failed: ' + err.message, 'err'); });
   }
 });
-// Persist hide/show to the shared dashboard_prefs row
+// Persist hide/show to this user's own prefs row (was a single shared row)
 $('strat-manage-list').addEventListener('change', async (e) => {
   const cb = e.target.closest('input[type="checkbox"][data-metric]');
   if (!cb) return;
