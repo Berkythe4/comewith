@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Come With — Brooklyn parties that give back</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
 <meta name="description" content="Come With throws Brooklyn house & disco parties — day and night — produces events end to end, and runs Dance Infusion, benefits for the National MS Society. Come dance. Do good.">
 <meta property="og:title" content="Come With — Brooklyn parties that give back">
 <meta property="og:description" content="House & disco parties, daytime dances, event production, and Dance Infusion benefits for the National MS Society.">
@@ -355,12 +357,23 @@ function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tin
     if(tint==='none'){slot.innerHTML='<img src="'+url+'" alt="Come With" style="height:30px;width:auto">';}
     else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}
   });}
+// Swaps the tab icon to the one uploaded in Site Editor → Brand & logo. The
+// static <link> in <head> is the default, so an empty brand.favicon is a no-op
+// rather than a blank tab.
+function setFavicon(url){
+  if(!url)return;
+  const l=document.getElementById('favicon');if(!l)return;
+  l.removeAttribute('sizes');                 // an override is rarely 32x32
+  l.type=/\.svg(\?|$)/i.test(url)?'image/svg+xml':/\.ico(\?|$)/i.test(url)?'image/x-icon':'image/png';
+  l.href=url;
+}
 async function loadContent(){
   const rows=await api('site_content?select=key,value');const C={};(rows||[]).forEach(r=>C[r.key]=r.value);
   document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
   if(C['contact.email'])$('#emailLink').href='mailto:'+C['contact.email'];
   if(C['contact.ig_url'])$('#igLink').href=C['contact.ig_url'];
   if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
+  setFavicon(C['brand.favicon']);
   const total=+(C['di.goal_total']||10000),raised=+(C['di.goal_raised']||4140),pct=Math.min(100,Math.round(raised/total*100));
   animateStat($('#stat1'),raised,'$');animateStat($('#stat2'),+(C['di.stat2']||2),'');animateStat($('#stat3'),+(C['di.stat3']||159),'');
   setTimeout(function(){$('#bar').style.width=pct+'%';},200);$('#barPct').textContent=pct+'%';$('#barAmt').textContent='$'+raised.toLocaleString()+' / $'+total.toLocaleString();
