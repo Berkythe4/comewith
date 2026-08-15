@@ -6,7 +6,9 @@
 // ra_events with source='tm' (no RSVP — TM has none; the demand metric stays RA).
 // Admin JWT OR service-role. Secret: TM_API_KEY.
 //
-// Body: { days?: number (default 42), city?: string (default "New York") }
+// Body: { days?: number (default 42), city?: string, cities?: string[] }
+//   cities default = all five boroughs. TM matches the city name literally, so
+//   "New York" alone is Manhattan only — see the note at the cities list below.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -38,21 +40,36 @@ Deno.serve(async (req) => {
   try {
     const b = await req.json().catch(() => ({}));
     const days = Math.min(90, Math.max(7, Number(b.days) || 42));
-    const city = (b.city || "New York").toString();
+    // `city` is a LITERAL city-name match at Ticketmaster's end, and NYC is five
+    // of them. Asking only for "New York" returned Manhattan and nothing else —
+    // 27 future shows across 11 venues, not one in Brooklyn or Queens, so Brooklyn
+    // Steel / Kings Theatre / Avant Gardner never existed as far as this pull was
+    // concerned. Query each borough.
+    const cities: string[] = Array.isArray(b.cities) && b.cities.length
+      ? b.cities.map((c: unknown) => String(c))
+      : b.city ? [String(b.city)]
+      : ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island"];
     const now = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 19) + "Z";
     const start = iso(now), end = iso(new Date(now.getTime() + days * 86400000));
 
     const rows: Record<string, unknown>[] = [];
     const artistMap = new Map<string, Record<string, unknown>>();
-    let total = 0;
+    let grandTotal = 0;
+    const perCity: Record<string, number> = {};
+    let firstCall = true;
+    for (const city of cities) {
+    let total = 0, cityKept = 0;
     for (let page = 0; page < 5; page++) {
       const params = new URLSearchParams({
         apikey: key, classificationName: "Dance/Electronic", city, startDateTime: start, endDateTime: end,
         size: "100", page: String(page), sort: "date,asc",
       });
       const r = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`, { headers: { "Accept": "application/json" } });
-      if (!r.ok) { if (page === 0) return err(502, `Ticketmaster responded ${r.status}.`); break; }
+      // Only a dead FIRST call is fatal — one borough 404ing must not throw away
+      // the four that answered.
+      if (!r.ok) { if (firstCall) return err(502, `Ticketmaster responded ${r.status}.`); break; }
+      firstCall = false;
       const j = await r.json();
       total = j.page?.totalElements || 0;
       const events = j._embedded?.events || [];
@@ -76,6 +93,7 @@ Deno.serve(async (req) => {
           lineup: attractions.map((a) => ({ name: a.name, soundcloud: null })),
           next_cost: cost, fetched_at: new Date().toISOString(),
         });
+        cityKept++;
         // TM performers → ra_artists (so they appear in the artist views). No socials/RSVP.
         for (const a of attractions) {
           if (!a?.id || !a?.name) continue;
@@ -92,6 +110,8 @@ Deno.serve(async (req) => {
         }
       }
       if (events.length < 100 || (page + 1) * 100 >= total) break;
+    }
+    grandTotal += total; perCity[city] = cityKept;
     }
 
     // Dedupe by ra_id (TM can repeat), then replace the TM slice of the window.
@@ -112,7 +132,7 @@ Deno.serve(async (req) => {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
       if (ae) console.error("tm artist upsert:", ae.message);
     }
-    return new Response(JSON.stringify({ success: true, source: "ticketmaster", total_from_tm: total, edm_saved: saved }), { headers: JH });
+    return new Response(JSON.stringify({ success: true, source: "ticketmaster", cities, per_city: perCity, total_from_tm: grandTotal, edm_saved: saved }), { headers: JH });
   } catch (e) {
     console.error("pull-ticketmaster:", e instanceof Error ? e.message : String(e));
     return err(502, "Ticketmaster pull failed — try again shortly.");
