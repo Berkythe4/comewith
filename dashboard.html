@@ -10623,14 +10623,33 @@ function ensureScWidget() {
   _scWidgetReady = new Promise((res) => { const s = document.createElement('script'); s.src = 'https://w.soundcloud.com/player/api.js'; s.onload = res; document.head.appendChild(s); });
   return _scWidgetReady;
 }
+// PostgREST answers with at most `max_rows` (1000 on prod) and says NOTHING when
+// it truncates — the same silent-shortfall class as the next_event_date bug.
+// Every radio load is already over that line (1,327 future events / 1,594 future
+// artists / 1,956 cache rows), and none of them ordered, so WHICH thousand came
+// back was arbitrary: pick a start date a couple of months out and the window
+// could miss its own shows while looking perfectly healthy. Page explicitly,
+// ordered by primary key so a page boundary can't skip or repeat a row.
+const PG_PAGE = 1000;
+async function sbAll(build, pk) {
+  const out = [];
+  for (let from = 0; ; from += PG_PAGE) {
+    const { data, error } = await build().order(pk, { ascending: true }).range(from, from + PG_PAGE - 1);
+    if (error) return { data: out, error };
+    if (!data || !data.length) break;
+    out.push(...data);
+    if (data.length < PG_PAGE) break;
+  }
+  return { data: out, error: null };
+}
 // ===== COME WITH RADIO module (panel-ra-market) =====
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social, ev] = await Promise.all([
-    sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'),
-    sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'),
-    sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true),
-    sb.from('ra_events').select('ra_id,event_date,venue_name,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)),
+    sbAll(() => sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
+    sbAll(() => sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'), 'soundcloud'),
+    sbAll(() => sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true), 'id'),
+    sbAll(() => sb.from('ra_events').select('ra_id,event_date,venue_name,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
   ]);
   raState.events = ev.data || [];
   if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
@@ -10790,15 +10809,15 @@ const nightScore = (met, dow) => met.opp * (DOW_WEIGHT[dow] ?? 0.5);
 async function loadMarket() {
   $('marketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading market…</div>';
   const [ev, mine, ven] = await Promise.all([
-    sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)).order('event_date'),
+    sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
     sb.from('events').select('name,event_date,total_attendance').not('total_attendance', 'is', null),
     sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
   ]);
   if (ev.error) { $('marketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
   // Full artist pool (city/partner) + scan cache so Buzz/NYC work here even if the radio tab hasn't loaded.
-  if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue,city,is_partner,source').gte('next_event_date', new Date().toISOString().slice(0, 10)).order('next_event_date'); raState.artists = data || []; }
-  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
+  if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue,city,is_partner,source').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
+  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
   if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
   await raLoadWatch();
   await ensureRadioArtists();
@@ -11481,18 +11500,35 @@ $('panel-ra-market').addEventListener('input', (e) => {
 async function raRefresh(btn) {
   if (btn) { btn.disabled = true; btn.textContent = '↻ Pulling… (~20s)'; }
   try {
-    const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days: 90 } });
+    // Cover the near term (the Market and Scene screens read it) AND the radio
+    // window, which can now start months out. RA and Ticketmaster just page, so
+    // they take the union [today → max(today+90, window end)]. DICE's detail
+    // budget is finite and spent soonest-first, so it gets the WINDOW ITSELF —
+    // 240 detail fetches aimed at the weeks the episode is actually built from
+    // beats 240 spent on the near term never arriving. All three now bound their
+    // delete to the range they pulled, so a narrow window can't wipe the rest.
+    const { start: winStart, cut: winCut } = raWindow();
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const spanDays = Math.ceil((new Date(winCut + 'T00:00:00Z') - new Date(todayIso + 'T00:00:00Z')) / 86400000);
+    const days = Math.min(180, Math.max(90, spanDays || 90));
+    const { data, error } = await sb.functions.invoke('pull-ra-market', { body: { area: 8, days } });
     if (error) throw error;
     // A failure here doesn't fail the whole pull — but it MUST be visible. These
     // were swallowed silently, so an outage and a genuine zero looked identical
     // and you'd plan a week off a pool that quietly lost a source.
-    let tm = 0, dice = 0, dropped = 0; const failed = [];
-    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days: 90 } }); if (r.error) throw r.error; tm = r.data?.edm_saved || 0; } catch (_) { failed.push('Ticketmaster'); }
+    let tm = 0, dice = 0, dropped = 0, diceLast = null; const failed = [];
+    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days } }); if (r.error) throw r.error; tm = r.data?.edm_saved || 0; } catch (_) { failed.push('Ticketmaster'); }
     // DICE (source='dice') — reverse-engineered public endpoints, no key.
-    try { const r = await sb.functions.invoke('pull-dice', { body: { days: 90 } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; } catch (_) { failed.push('DICE'); }
+    // ~10 DICE shows a day in NYC, so ask for the window's worth of detail budget
+    // rather than the old flat 240 — which bound exactly on the 8/15 pull and cut
+    // the last two weeks off a 4-week window.
+    const diceDetail = Math.min(600, Math.max(240, Math.ceil((new Date(winCut + 'T00:00:00Z') - new Date(winStart + 'T00:00:00Z')) / 86400000) * 14));
+    try { const r = await sb.functions.invoke('pull-dice', { body: { from: winStart, to: winCut, maxDetail: diceDetail } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; diceLast = r.data?.last_date || null; } catch (_) { failed.push('DICE'); }
     toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`
-      + (dropped ? ` · ⚠ ${dropped} DICE shows over the detail cap` : '')
-      + (failed.length ? ` · ⚠ ${failed.join(' + ')} didn't answer` : ''), failed.length ? 'err' : 'ok');
+      + ` · RA to ${data.to || '?'}, DICE ${winStart}→${winCut}${diceLast ? ` (reached ${diceLast})` : ''}`
+      + (data.truncated ? ` · ⚠ RA had more listings than the page budget` : '')
+      + (dropped ? ` · ⚠ ${dropped} DICE shows over the detail cap — narrow the window` : '')
+      + (failed.length ? ` · ⚠ ${failed.join(' + ')} didn't answer` : ''), (failed.length || dropped || data.truncated) ? 'err' : 'ok');
     raState.events = []; raState.venues = [];   // force fresh reload of the scene data
     if (document.querySelector('#panel-scene-map.active')) await loadSceneMap();
     else if (document.querySelector('#panel-market.active')) await loadMarket();
@@ -11528,13 +11564,13 @@ async function loadSceneMap() {
   try {
     if (!raState.events?.length || !(raState.venues || []).some(v => v.lat != null)) {
       const [ev, ven] = await Promise.all([
-        raState.events?.length ? Promise.resolve({ data: raState.events }) : sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)),
+        raState.events?.length ? Promise.resolve({ data: raState.events }) : sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
         sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
       ]);
       raState.events = ev.data || raState.events || []; raState.venues = ven.data || []; raState._scVenSig = null;
     }
-    if (!raState.artists?.length) { const { data } = await sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)); raState.artists = data || []; }
-    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
+    if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
+    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
     await ensureRadioArtists();
     await ensureLeaflet();
   } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }
@@ -11723,6 +11759,12 @@ function renderRaRadio() {
   const srcSet = Object.keys(srcCounts).sort((a, b) => srcCounts[b] - srcCounts[a]);
   const { start: wStart, cut: wCut } = raWindow();
   const noScCount = raWindowPool().filter(a => !a.soundcloud && a.next_event_date >= wStart && a.next_event_date <= wCut).length;
+  // How far the pool actually reaches, per source. Picking a start date is only
+  // useful if you can see where the data stops — otherwise a window set past the
+  // last pull looks like "nobody is playing" rather than "nothing was pulled".
+  const lastBy = {}; for (const e of (raState.events || [])) { const s = e.source || 'ra'; if (e.event_date && (!lastBy[s] || e.event_date > lastBy[s])) lastBy[s] = e.event_date; }
+  const poolLast = Object.values(lastBy).sort().pop() || '';
+  const coverNote = Object.keys(lastBy).sort().map(s => `${(RA_SOURCE[s]?.l || s.toUpperCase())} ${lastBy[s]}`).join(' · ');
 
   const weekBtn = (w) => `<button class="hub-btn ghost" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w}w</button>`;
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
@@ -11787,7 +11829,8 @@ function renderRaRadio() {
         <button class="hub-btn ghost" data-ra-prodtoggle style="${raState.producersOnly ? 'background:var(--green,#1f7a1f);color:#fff;' : ''}" title="Hide DJs who don't post original songs">🎛 Producers only</button>
         <button class="hub-btn ghost" data-ra-noscoggle style="${raState.showNoSc ? 'background:var(--gold,#B5791F);color:#fff;' : ''}" title="Show only artists that still have no SoundCloud link after a refresh — check Beatport by name instead">🛒 No-SoundCloud${noScCount ? ` (${noScCount})` : ''}</button>
         <span class="li-sub">Window:</span>${[2, 3, 4, 6].map(weekBtn).join('')}
-        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" style="max-width:150px;"></label>
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">from <input type="date" class="modal-input" data-ra-startdate value="${escapeHtml(raState.radioStart || new Date().toISOString().slice(0, 10))}" title="First day of the window. Deliberately NOT capped at the pool's last date — set it further out and hit ↻ Pull shows to extend the pool to meet it." style="max-width:150px;"></label>
+        ${poolLast ? `<span class="li-sub" title="Furthest show currently in the pool, per source. Pick a start date inside this and 'Pull shows' again to extend it.">📅 pool to <b>${escapeHtml(poolLast)}</b>${coverNote ? ` · ${coverNote}` : ''}${wCut > poolLast ? ` · <span style="color:var(--gold,#B5791F)">⚠ window runs past the pool — pull again</span>` : ''}</span>` : ''}
         ${anyFilter ? '<button class="hub-mini" data-ra-clearfilters title="Reset search, genre and venue">✕ clear filters</button>' : ''}
         <span style="margin-left:auto;">${scanBar}</span>
       </div>
@@ -13215,9 +13258,10 @@ async function raOpenEpisodeDetails() {
       <div id="djLinkBox" style="margin-top:8px;">${raDjLinkHtml(pl)}</div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
         <input name="ep_dj_genres" class="modal-input" value="${v((dp.genres || []).join(', '))}" placeholder="scope genres (comma) — blank = all" style="flex:1 1 200px;font-size:.82rem;">
+        <input name="ep_dj_start" type="date" class="modal-input" value="${v(dp.start || '')}" title="first day of the DJ's window — blank = from today" style="max-width:150px;font-size:.82rem;">
         <input name="ep_dj_weeks" type="number" class="modal-input" value="${v(dp.weeks || 4)}" min="1" max="12" title="how many weeks of shows the DJ sees" style="max-width:90px;font-size:.82rem;">
       </div>
-      <div class="kpi-hint" style="margin:4px 0 0;">The DJ link shows only NYC artists playing within the next few weeks (+ any genre filter) so they research within scope.</div></div>
+      <div class="kpi-hint" style="margin:4px 0 0;">The DJ link shows only NYC artists playing inside this window (+ any genre filter) so they research within scope. Leave the date blank to start from today; set it to plan an episode further out — the pool reaches as far as the last "↻ Pull shows" went.</div></div>
     <div class="form-row" style="border:1px solid var(--gold);border-radius:8px;padding:11px 13px;background:rgba(181,121,31,0.05);">
       <label style="font-size:.86rem;">📝 Recap notes <span class="li-sub">— internal only, never public. For Janelle's recap content.</span></label>
       <textarea name="ep_recap_notes" class="modal-textarea" rows="4" placeholder="Your notes on the set / the night — the story, standout tracks, energy, moments — anything Janelle can turn into recap posts.">${v(pl.recap_notes)}</textarea></div>
@@ -13253,7 +13297,16 @@ async function raSaveEpisodeDetails() {
       recap_notes: kpiVal('ep_recap_notes') || null,
       assigned_to: kpiVal('ep_assigned_to') || null,
       assigned_actor_id: kpiVal('ep_assigned_actor') || null,
-      dj_search_params: { genres: (kpiVal('ep_dj_genres') || '').split(',').map(g => g.trim()).filter(Boolean), weeks: Number(kpiVal('ep_dj_weeks')) || 4 },
+      // MERGE, never replace. An Elements edition carries artists / pool / day /
+      // disco / day_of in here; writing a fresh object from these three inputs
+      // silently wiped the DJ's fixed lineup scope the first time anyone opened
+      // ✎ Details on it and saved.
+      dj_search_params: {
+        ...(pl.dj_search_params || {}),
+        genres: (kpiVal('ep_dj_genres') || '').split(',').map(g => g.trim()).filter(Boolean),
+        weeks: Number(kpiVal('ep_dj_weeks')) || 4,
+        start: kpiVal('ep_dj_start') || null,
+      },
       updated_at: new Date().toISOString(),
     };
     // Station-level artwork lives in site_content (the established in-app-settings
@@ -14174,8 +14227,8 @@ async function raRefreshShowInfo(btn) {
   try {
     const today = new Date().toISOString().slice(0, 10);
     const [{ data: arts }, { data: cache }] = await Promise.all([
-      sb.from('ra_artists').select('name,soundcloud,genres,next_event_date,next_venue,next_cost,next_event_url').gte('next_event_date', today).order('next_event_date'),
-      sb.from('sc_artist_cache').select('soundcloud,username').not('username', 'is', null),
+      sbAll(() => sb.from('ra_artists').select('name,soundcloud,genres,next_event_date,next_venue,next_cost,next_event_url').gte('next_event_date', today), 'ra_id'),
+      sbAll(() => sb.from('sc_artist_cache').select('soundcloud,username').not('username', 'is', null), 'soundcloud'),
     ]);
     // Match on a NORMALIZED name (case/accents/punctuation-insensitive, "&"→"and")
     // instead of a raw lowercase string — otherwise "Artbat" vs "ARTBAT" or an

@@ -14,7 +14,9 @@
 // ra_events regardless of source, so DICE shows flow in automatically.
 //
 // Admin JWT OR service-role. No secret required (DICE endpoints are open).
-// Body: { days?: number (default 42), maxDetail?: number (default 240) }
+// Body: { from?: "YYYY-MM-DD" (default today), to?: "YYYY-MM-DD",
+//          days?: number (default 42, used when `to` is absent),
+//          maxDetail?: number (default 240) }
 //   maxDetail bounds the detail-fetch pass. The response reports
 //   dropped_over_cap + last_date so a truncated pull can't pass for a full one.
 
@@ -87,9 +89,16 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
-    const days = Math.min(90, Math.max(7, Number(b.days) || 42));
+    const days = Math.min(180, Math.max(7, Number(b.days) || 42));
     const today = new Date().toISOString().slice(0, 10);
-    const cutoff = new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+    // The window can START in the future. Planning an episode two months out and
+    // pulling [today, today+90] spent the whole detail budget on the near weeks
+    // and never reached the window at all — soonest-first guarantees it. Anchor
+    // on `from` so the cap is spent where the episode actually is.
+    const from = typeof b.from === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.from) && b.from > today ? b.from : today;
+    const cutoff = typeof b.to === "string" && /^\d{4}-\d{2}-\d{2}$/.test(b.to) && b.to > from
+      ? b.to
+      : new Date(new Date(from + "T00:00:00Z").getTime() + days * 86400000).toISOString().slice(0, 10);
 
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
@@ -109,9 +118,13 @@ Deno.serve(async (req) => {
     //    fetch needed for those), take what's left SOONEST-FIRST, and return the
     //    overflow count so a truncated pull says so out loud.
     const dateOf = (e: any) => (e?.dates?.event_start_date || "").slice(0, 10);
-    const inRange = [...cand.values()].filter((e) => { const d = dateOf(e); return !d || (d >= today && d <= cutoff); });
+    const inRange = [...cand.values()].filter((e) => { const d = dateOf(e); return !d || (d >= from && d <= cutoff); });
     inRange.sort((a, b) => (dateOf(a) || "9999-99-99").localeCompare(dateOf(b) || "9999-99-99"));
-    const maxDetail = Math.min(400, Math.max(40, Number(b.maxDetail) || 240));
+    // Ceiling raised 400 → 600. NYC runs ~10 DICE shows a day, so even a 4-week
+    // window needs more than the old 240 default; the caller scales the request
+    // to the window it asked for. Details run 8-wide, so 600 is ~75 rounds —
+    // still comfortably inside the function's time budget.
+    const maxDetail = Math.min(600, Math.max(40, Number(b.maxDetail) || 240));
     const picked = inRange.slice(0, maxDetail);
     const droppedOverCap = inRange.length - picked.length;
     const ids = picked.map((e) => e.id);
@@ -162,7 +175,11 @@ Deno.serve(async (req) => {
     }
 
     // 3. Replace ONLY the dice-sourced rows (never touch ra / tm).
-    await admin.from("ra_events").delete().eq("source", "dice").gte("event_date", today);
+    // Bounded at BOTH ends — this pull now covers [from, cutoff], which may be a
+    // narrow window well into the future. Deleting everything from `today` on and
+    // re-inserting only the window would throw away every dice show outside it.
+    await admin.from("ra_events").delete().eq("source", "dice")
+      .gte("event_date", from).lte("event_date", cutoff);
     if (rows.length) {
       const { error } = await admin.from("ra_events").upsert(rows, { onConflict: "ra_id" });
       if (error) { console.error("dice ra_events:", error.message); return err(500, "Could not save DICE events: " + error.message); }
@@ -179,6 +196,9 @@ Deno.serve(async (req) => {
       success: true, source: "dice", candidates: cand.size, in_window_candidates: inRange.length,
       detailed: ids.length, dropped_over_cap: droppedOverCap, scanned, saved: kept,
       last_date: lastDate || null, artists: artistRows.length,
+      // Echo the window actually pulled, so a caller can tell "DICE has nothing
+      // there" apart from "I asked for the wrong dates".
+      from, to: cutoff,
     }), { headers: JH });
   } catch (e) {
     return err(500, "Unexpected: " + (e instanceof Error ? e.message : String(e)));

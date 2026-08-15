@@ -6,8 +6,10 @@
 // scraping stays off the client. Admin JWT OR service-role bearer (so pg_cron
 // can call it later). Public promoter data only — money/guestlist is never here.
 //
-// Body (all optional): { area?: number, days?: number, maxPages?: number }
+// Body (all optional): { area?: number, from?: "YYYY-MM-DD", to?: "YYYY-MM-DD",
+//                        days?: number, maxPages?: number }
 //   area default = site_content 'ops.ra_area_id' (8 = New York)
+//   from default = today; to default = from + days
 //   days default = 28, maxPages default = 12 (×50 = up to 600 events)
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -114,13 +116,19 @@ Deno.serve(async (req) => {
       const { data: s } = await admin.from("site_content").select("value").eq("key", "ops.ra_area_id").maybeSingle();
       area = Number(s?.value) || 8;
     }
-    const days = Math.min(120, Math.max(7, Number(b.days) || 28));
+    const days = Math.min(180, Math.max(7, Number(b.days) || 28));
     const maxPages = Math.min(40, Math.max(1, Number(b.maxPages) || 30)); // ~2000 events, enough to reach 3 months out
 
     const today = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 10);
-    const dayFrom = iso(today);
-    const dayTo = iso(new Date(today.getTime() + days * 86400000));
+    const todayIso = iso(today);
+    // The window can start in the future — an episode planned for October should
+    // be researched against October's listings, not the next four weeks.
+    const dayRe = /^\d{4}-\d{2}-\d{2}$/;
+    const dayFrom = typeof b.from === "string" && dayRe.test(b.from) && b.from > todayIso ? b.from : todayIso;
+    const dayTo = typeof b.to === "string" && dayRe.test(b.to) && b.to > dayFrom
+      ? b.to
+      : iso(new Date(new Date(dayFrom + "T00:00:00Z").getTime() + days * 86400000));
 
     const eventMap = new Map<string, Record<string, unknown>>(); // keyed by ra_id — RA repeats events across pages
     const artistMap = new Map<string, Record<string, unknown>>();
@@ -171,8 +179,13 @@ Deno.serve(async (req) => {
     }
 
     // Replace the RA slice of the window only (leave Ticketmaster rows intact).
-    await admin.from("ra_events").delete().eq("source", "ra").gte("event_date", dayFrom);
-    await admin.from("ra_artists").delete().eq("source", "ra").gte("next_event_date", dayFrom);
+    // Bounded at BOTH ends. The pull covers [dayFrom, dayTo]; deleting from
+    // dayFrom forward and re-inserting only that range would discard every RA row
+    // beyond it the moment the window stops being "today + everything".
+    await admin.from("ra_events").delete().eq("source", "ra")
+      .gte("event_date", dayFrom).lte("event_date", dayTo);
+    await admin.from("ra_artists").delete().eq("source", "ra")
+      .gte("next_event_date", dayFrom).lte("next_event_date", dayTo);
     let evN = 0, arN = 0;
     const eventRows = [...eventMap.values()];
     if (eventRows.length) {
@@ -191,6 +204,10 @@ Deno.serve(async (req) => {
       success: true, area, days, pages, total_available: total,
       events_saved: evN, artists_saved: arN,
       artists_with_soundcloud: artistRows.filter((a) => a.soundcloud).length,
+      // Echo the window actually pulled, and say so when RA had more pages than
+      // maxPages allowed — a truncated pull must never read as a complete one.
+      from: dayFrom, to: dayTo,
+      truncated: pages >= maxPages && total > pages * 50,
     }), { headers: JH });
   } catch (e) {
     console.error("pull-ra-market:", e instanceof Error ? e.message : String(e));

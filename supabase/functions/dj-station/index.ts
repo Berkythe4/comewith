@@ -91,8 +91,14 @@ Deno.serve(async (req) => {
     const genres: string[] = Array.isArray(params.genres) ? params.genres.filter(Boolean) : [];
     const artistNames: string[] = Array.isArray(params.artists) ? params.artists.filter(Boolean) : [];
     const weeks = Math.max(1, Math.min(12, Number(params.weeks) || 4));
-    const today = new Date().toISOString().slice(0, 10);
-    const to = new Date(Date.now() + weeks * 7 * 86400000).toISOString().slice(0, 10);
+    // The window START is the episode's, not "whenever the DJ opened the link".
+    // An episode planned for October wants October's bills; anchoring on today
+    // handed the DJ the next four weeks of shows that have nothing to do with
+    // the set they're building. Blank/invalid → today, which is the old behaviour.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const startRaw = typeof params.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.start) ? params.start : null;
+    const from = startRaw && startRaw > todayIso ? startRaw : todayIso;
+    const to = new Date(new Date(from + "T00:00:00Z").getTime() + weeks * 7 * 86400000).toISOString().slice(0, 10);
     const SEL = "name, soundcloud, follower_count, genres, city, next_event_date, next_venue, next_event_url";
 
     // Two scope modes:
@@ -125,12 +131,12 @@ Deno.serve(async (req) => {
       // Keyed lowercase (names on a bill drift in casing); `name` keeps the
       // original spelling, which is what ra_artists.name is queried on.
       const showByName: Record<string, { date: string; venue: string | null; genres: string[]; name: string }> = {};
-      for (let from = 0; ; from += EV_PAGE) {
+      for (let off = 0; ; off += EV_PAGE) {
         const { data: evs, error: evErr } = await admin.from("ra_events")
           .select("event_date, venue_name, genres, lineup")
-          .gte("event_date", today).lte("event_date", to)
+          .gte("event_date", from).lte("event_date", to)
           .order("event_date", { ascending: true })
-          .range(from, from + EV_PAGE - 1);
+          .range(off, off + EV_PAGE - 1);
         if (evErr) return err(500, "Could not read the show listings.");
         if (!evs || !evs.length) break;
         for (const e of evs) {
@@ -163,11 +169,11 @@ Deno.serve(async (req) => {
       // match missed as well as the no-event-row cases.
       // Paged explicitly: PostgREST caps an unbounded select at 1000 rows and says
       // nothing, which is the same silent-shortfall shape this fix exists to kill.
-      for (let from = 0; ; from += EV_PAGE) {
+      for (let off = 0; ; off += EV_PAGE) {
         const { data } = await admin.from("ra_artists").select(SEL)
-          .gte("next_event_date", today).lte("next_event_date", to)
+          .gte("next_event_date", from).lte("next_event_date", to)
           .order("next_event_date", { ascending: true })
-          .range(from, from + EV_PAGE - 1);
+          .range(off, off + EV_PAGE - 1);
         if (!data || !data.length) break;
         rows.push(...data);
         if (data.length < EV_PAGE) break;
@@ -185,7 +191,7 @@ Deno.serve(async (req) => {
       // that bill's genres) rather than whichever earlier show is on their row.
       let pool = Object.values(byKey).map((a: any) => {
         const s = showByName[(a.name || "").trim().toLowerCase()];
-        const own = a.next_event_date >= today && a.next_event_date <= to ? a.next_event_date : null;
+        const own = a.next_event_date >= from && a.next_event_date <= to ? a.next_event_date : null;
         const useShow = s && (!own || s.date <= own);
         return {
           ...a,
@@ -193,7 +199,7 @@ Deno.serve(async (req) => {
           next_venue: useShow ? (s.venue || a.next_venue) : a.next_venue,
           genres: (useShow && s.genres.length) ? [...new Set([...(a.genres || []), ...s.genres])] : (a.genres || []),
         };
-      }).filter((a: any) => a.next_event_date >= today && a.next_event_date <= to);
+      }).filter((a: any) => a.next_event_date >= from && a.next_event_date <= to);
 
       // Genre filter runs AFTER the bill's genres are merged in, so an artist
       // carrying no genres of their own still matches on the night they play.
@@ -254,7 +260,7 @@ Deno.serve(async (req) => {
       ok: true,
       episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date },
       scope: {
-        weeks, genres, from: today, to, pool: params.pool || null, day: params.day || null,
+        weeks, genres, from, to, pool: params.pool || null, day: params.day || null,
         // 'all-producers' = this edition deliberately reaches past its own day.
         reach: params.scope || null,
         count: (artists || []).length,

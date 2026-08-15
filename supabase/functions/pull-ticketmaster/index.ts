@@ -6,7 +6,9 @@
 // ra_events with source='tm' (no RSVP — TM has none; the demand metric stays RA).
 // Admin JWT OR service-role. Secret: TM_API_KEY.
 //
-// Body: { days?: number (default 42), city?: string, cities?: string[] }
+// Body: { from?: "YYYY-MM-DD" (default today), to?: "YYYY-MM-DD",
+//          days?: number (default 42, used when `to` is absent),
+//          city?: string, cities?: string[] }
 //   cities default = all five boroughs. TM matches the city name literally, so
 //   "New York" alone is Manhattan only — see the note at the cities list below.
 
@@ -39,7 +41,7 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
-    const days = Math.min(90, Math.max(7, Number(b.days) || 42));
+    const days = Math.min(180, Math.max(7, Number(b.days) || 42));
     // `city` is a LITERAL city-name match at Ticketmaster's end, and NYC is five
     // of them. Asking only for "New York" returned Manhattan and nothing else —
     // 27 future shows across 11 venues, not one in Brooklyn or Queens, so Brooklyn
@@ -49,9 +51,18 @@ Deno.serve(async (req) => {
       ? b.cities.map((c: unknown) => String(c))
       : b.city ? [String(b.city)]
       : ["New York", "Brooklyn", "Queens", "Bronx", "Staten Island"];
+    // The window can start in the future — an episode planned for October wants
+    // October's shows, and asking from today just burns pages on the near term.
     const now = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 19) + "Z";
-    const start = iso(now), end = iso(new Date(now.getTime() + days * 86400000));
+    const dayRe = /^\d{4}-\d{2}-\d{2}$/;
+    const todayIso = now.toISOString().slice(0, 10);
+    const fromDate = typeof b.from === "string" && dayRe.test(b.from) && b.from > todayIso
+      ? new Date(b.from + "T00:00:00Z") : now;
+    const toDate = typeof b.to === "string" && dayRe.test(b.to) && b.to > fromDate.toISOString().slice(0, 10)
+      ? new Date(b.to + "T23:59:59Z")
+      : new Date(fromDate.getTime() + days * 86400000);
+    const start = iso(fromDate), end = iso(toDate);
 
     const rows: Record<string, unknown>[] = [];
     const artistMap = new Map<string, Record<string, unknown>>();
@@ -118,7 +129,12 @@ Deno.serve(async (req) => {
     const map = new Map<string, Record<string, unknown>>();
     rows.forEach((r) => map.set(r.ra_id as string, r));
     const finalRows = [...map.values()].map(({ next_cost, ...r }) => r); // next_cost isn't an ra_events col
-    await admin.from("ra_events").delete().eq("source", "tm").gte("event_date", start.slice(0, 10));
+    // Bounded at BOTH ends. This used to delete every tm row from `start` forward
+    // and re-insert only what this pull returned — fine while the pull was always
+    // [today, today+90], fatal once the window can be narrower or start later:
+    // pulling a 4-week window would have deleted every tm show beyond it.
+    await admin.from("ra_events").delete().eq("source", "tm")
+      .gte("event_date", start.slice(0, 10)).lte("event_date", end.slice(0, 10));
     let saved = 0;
     if (finalRows.length) {
       const { error } = await admin.from("ra_events").upsert(finalRows, { onConflict: "ra_id" });
@@ -126,13 +142,18 @@ Deno.serve(async (req) => {
       saved = finalRows.length;
     }
     // TM artists
-    await admin.from("ra_artists").delete().eq("source", "tm").gte("next_event_date", start.slice(0, 10));
+    await admin.from("ra_artists").delete().eq("source", "tm")
+      .gte("next_event_date", start.slice(0, 10)).lte("next_event_date", end.slice(0, 10));
     const artistRows = [...artistMap.values()];
     if (artistRows.length) {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
       if (ae) console.error("tm artist upsert:", ae.message);
     }
-    return new Response(JSON.stringify({ success: true, source: "ticketmaster", cities, per_city: perCity, total_from_tm: grandTotal, edm_saved: saved }), { headers: JH });
+    return new Response(JSON.stringify({
+      success: true, source: "ticketmaster", cities, per_city: perCity,
+      total_from_tm: grandTotal, edm_saved: saved,
+      from: start.slice(0, 10), to: end.slice(0, 10),
+    }), { headers: JH });
   } catch (e) {
     console.error("pull-ticketmaster:", e instanceof Error ? e.message : String(e));
     return err(502, "Ticketmaster pull failed — try again shortly.");
