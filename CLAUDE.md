@@ -1,8 +1,40 @@
 # Come With — Project Conventions
 
 Operational conventions for this repo. These are binding — follow them exactly.
-Broader migration history and architecture live in `ROADMAP.md`; phase/status
-notes live in Claude memory.
+Broader migration history and architecture live in `ROADMAP.md`.
+
+## Start of session (read these, in this order)
+
+Keith works from **two machines** (desktop + laptop). Claude Code's memory is
+per-machine and does **not** sync, so everything a session needs to resume lives
+**in the repo**:
+
+1. **`CARRYOVER.md`** — where the last session left off, and what's next. Start here.
+2. **`DEV_DOCS/claude-memory/MEMORY.md`** — index of the desktop's Claude memory,
+   snapshotted into the repo so either machine can read it. Open individual files
+   from there as needed; they're background, and reflect what was true when written.
+3. **`LEARNINGS.md`** — numbered, append-only design decisions with rationale.
+4. **`ROADMAP.md`** — architecture + phase history (older; CARRYOVER wins on state).
+5. **`reviews/session_YYYY-MM-DD.md`** — the narrative of a given session.
+
+Then `git log --oneline -15` and `git branch -a` — work is sometimes parked on a
+branch specifically so it does **not** auto-deploy (see below).
+
+## End of session (the close routine)
+
+**`SESSION_CLOSE_PROMPTS.md` is the ritual** — Quick / Standard / Full by session
+size. Run it at the end of any session that shipped real work; always when a
+migration or prod data was touched, or a new standing rule was set. It carries the
+prod safety checks (the five financial views must return anon **401**) and it's
+what keeps CARRYOVER / LEARNINGS / ROADMAP true instead of drifting.
+
+Two Come-With-specific additions to whichever variant you run:
+- **Re-snapshot Claude memory** into `DEV_DOCS/claude-memory/` (see the README
+  there) so the other machine isn't more than one session behind.
+- **`master` auto-deploys to Netlify.** Pushing `master` publishes the site and
+  dashboard immediately. Work Keith hasn't green-lit goes on a branch and is
+  named in CARRYOVER under "Parked / next"; never merge it to close a session out.
+  Edge functions are separate — they go live only on an explicit deploy.
 
 ## Database / Supabase migrations
 

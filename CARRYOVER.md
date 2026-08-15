@@ -1,34 +1,100 @@
-# Carryover — 2026-06-02 (data-load session close)
+# Carryover — 2026-08-15 (radio discovery audit close · ran on the DESKTOP)
 
-Pickup order: this → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`. Ritual: `SESSION_CLOSE_PROMPTS.md`.
-DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
+Pickup order: this → `DEV_DOCS/claude-memory/MEMORY.md` → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`.
+Ritual: `SESSION_CLOSE_PROMPTS.md`. DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
 
-## ⛔ PRIORITY CONTEXT
-**Come With is MAINTENANCE-ONLY.** The **CWF (Come With Fitness) BRD is project #1 — due JUNE 15, 2026.**
-Nothing Come With Fitness in this repo (dashboard / schema / pages) until the BRD ships **and** there's
-an explicit go (LEARNINGS §5).
+## 👉 If you are the LAPTOP, start here
 
-## State summary
+Nothing is lost — but two things about this repo aren't obvious from a fresh checkout:
+
+1. **Claude memory doesn't sync between machines.** The desktop's 60 memory files
+   are snapshotted into **`DEV_DOCS/claude-memory/`** (index: `MEMORY.md`). Read the
+   index; open individual files as needed. Re-snapshot at every close.
+2. **This session's work is on a BRANCH, not master** — deliberately, because
+   `master` auto-deploys to Netlify and Keith hadn't green-lit the deploy:
+   ```
+   git fetch origin && git checkout radio/window-by-lineup     # commit 768a8a8
+   ```
+   See "Parked / next" for what it's waiting on.
+
+## ⛔ PRIORITY CONTEXT (⚠ dated 2026-06-02 — unverified, confirm with Keith)
+**Come With was set MAINTENANCE-ONLY** while the **CWF (Come With Fitness) BRD** ran as
+project #1, due **June 15, 2026** — two months past. Actual work since has been steady
+Come With radio/dashboard building, so this framing is stale. What still stands, and is
+a hard rule either way: **nothing Come With Fitness in this repo** (dashboard / schema /
+pages) — LEARNINGS §5 and CLAUDE.md "Scope".
+
+## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: through 029 APPLIED to prod** — 023–028 (data architecture) + **029** (sponsorships
-  actor FK + `donor` role). Applied via the Management API (not the CLI migration system); the
-  migration **files** are the tracked source of truth. **origin/master = `c7ca237`**, so the
-  023–028/029 files for the *latest* commits are partly **held** (see Git).
-- **Data model POPULATED** with reconciled DI data — DI#1 **39%** to mission, DI#2 **31%**; 17 actors
-  (role-overlap working: Keith = dj+donor+sponsor+team; Crossroads = vendor+sponsor); 5 DI#2 DJ
-  participants; 12 sponsorships ($6,225 cash). No duplicate actors.
-- **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; new `donor` role on `actors`.
-- **Financial views:** anon-revoked, verified **401**. ⚠ **NOT revoked from `authenticated`** — that's
-  the GATED BLOCKER before any customer/external login (ROADMAP).
-- **Latest LEARNINGS §:** 14.
-- **Git:** **3 commits held** (push held per Keith): `261797d` (029 + DI load log), `5cbb51e` (roadmap
-  backlog), + this close-out commit. Branches `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`
-  pushed but unmerged.
+- **Migrations: files through `137_show_counter_wording.sql`.** Applied via the Management
+  API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is linked to **staging**, so
+  always pass the prod ref explicitly. The migration **files** are the tracked source of truth.
+- **Financial views:** all five re-verified anon **401** on 2026-08-15 (`v_event_summary`,
+  `v_kpi_event_financials`, `v_kpi_parties`, `v_kpi_dance_infusion`, `v_kpi_dashboard`).
+  ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
+- **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
+- **Latest LEARNINGS §:** 15.
+- **Git:** `master` = `0635a2e`, clean and pushed. Branch **`radio/window-by-lineup`** (`768a8a8`)
+  pushed, **unmerged, undeployed**. Older unmerged branches: `fix-lognumbers-optgroups`,
+  `docs/roadmap-reconcile`.
+- **Radio discovery pool (prod, as of the 2026-08-14 pull):** 1,122 future RA events,
+  159 DICE, 27 TM; 2,061 RA artists with a SoundCloud link. **No cron pulls any of this** —
+  `cron.job` runs only publish/retention/YouTube. The pool is as fresh as the last manual
+  "↻ Pull shows".
+- **Docs freshness:** `ROADMAP.md` is reconciled to **2026-06-02** and predates the whole
+  radio build; treat CARRYOVER + `DEV_DOCS/claude-memory/` as the true state.
 - **Tools:** `/tools/actor-inspector.html` · `/tools/test-checklist.html` · `/tools/visualizer.html`
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**CWF BRD (June 15).** Come With stays maintenance-only.
+**Decide on `radio/window-by-lineup`** (below): merge + deploy, or keep holding. Until then
+the radio window is still hiding artists on every pull, so anything episode-planning-shaped
+is working from a short list.
+
+## Parked / next
+1. **`radio/window-by-lineup` awaits Keith's go.** Two steps, in either order:
+   - `git checkout master && git merge radio/window-by-lineup && git push` → Netlify
+     publishes the dashboard fix.
+   - `supabase functions deploy pull-dice pull-ticketmaster --project-ref yaytdosxfhcqatmhctzk`
+     → the DICE + Ticketmaster coverage fixes go live. CLI 2.101.0 is installed but linked to
+     **staging**, hence the explicit ref. Verify after: run "↻ Pull shows" and check the toast
+     reports DICE reaching past week 1 and TM returning Brooklyn venues.
+2. **Scan the 8/18 window.** 677 of 825 in-window artists with a SoundCloud link have never
+   been read (148 scanned → 89 producers). "↻ Refresh music & data" on the Radio panel. It
+   only reads artists with no cache row at all, so it's safe to re-run.
+3. **`dj-station` caps its artist query at `.limit(160)`** with no notice, against a window
+   holding ~879 artists — a DJ with a broad genre filter is silently seeing a fraction of the
+   crate. Found during this audit, **not fixed**, needs a paging/notice decision.
+4. **Scan cache never re-reads.** `raScan` skips anyone with a cache row forever; a producer
+   who released tracks since their scan shows the stale catalog until "↻ re-read all" (which
+   nukes and re-reads the whole window). Only 2 in-window artists are >30 days stale today —
+   not yet urgent, will be.
+5. **Financial views still readable by `authenticated`** — the standing GATED BLOCKER before
+   any customer/external login.
+
+## This session shipped (2026-08-15 — Radio discovery audit: the window was filtering on the wrong date)
+Full audit of shows → producers → tracks, run against prod. **No migration, no prod writes.**
+Code is on branch `radio/window-by-lineup` (`768a8a8`), **pushed, unmerged, undeployed.**
+- **The bug:** `ra_artists` collapses each artist to ONE row carrying `next_event_date` — their
+  *soonest* show. The radio window filtered on that column, so an artist playing the 16th **and**
+  the 25th vanished from a window starting the 18th. Keith's 8/18 + 4-week filter was hiding
+  **77 artists, 70 with a SoundCloud link.** Fix indexes every date from `ra_events.lineup`;
+  simulated on prod it recovers exactly those 77 (866 → 943), and re-points each artist at the
+  show they play *in* the window (date, venue, that bill's genres).
+- **DICE was 7 days deep, not 90.** It detail-fetched the first 160 candidates in tag order and
+  saved 159 — the cap was binding exactly, so weeks 2–4 had **zero** DICE and nothing said so.
+  Now date-filters before spending a fetch, takes soonest-first, caps at 240, reports
+  `dropped_over_cap` + `last_date`.
+- **Ticketmaster was Manhattan-only.** `city: "New York"` is a literal match at TM's end: 27
+  future shows, 11 venues, nothing in Brooklyn or Queens. Now queries all five boroughs.
+- **"Pull shows" swallowed TM/DICE failures**, so an outage and a real zero looked identical.
+  It now names a source that didn't answer.
+- Also confirmed **clean**: RA coverage itself (582 in-window events, listings to 11/10, taper
+  looks like genuine listing decay, not truncation), and all five financial views at anon 401.
+- **Docs:** `DEV_DOCS/claude-memory/` snapshot added so the laptop can read project state;
+  `CLAUDE.md` gained a start-of-session / close-of-session section; `SESSION_CLOSE_PROMPTS.md`
+  gained an "every close" block (re-snapshot memory, name the machine, don't merge to master
+  to tidy up).
 
 ## This session shipped (2026-06-16 — Guest KPI fix: returning-match + filter-aware cards + mission/business split + ROADMAP)
 Diagnose-first, then fix. Migration 040 applied to prod (additive views). Money untouched throughout.

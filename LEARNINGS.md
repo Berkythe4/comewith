@@ -148,3 +148,42 @@ The relational model has no native "donated" / "% to mission" field. It reconcil
 `v_kpi_dance_infusion.cost_to_raise_per_dollar` = expenses ÷ total_raised; public "% to mission" =
 1 − that. Headline figures also kept in `events.notes`. **Backlog:** add an actor FK to
 `third_party_donations` (donations currently attributed by text `donor_name`, not linked to actor rows).
+
+## Section 15 — A cache row that answers a different question than the one you're asking (2026-08-15)
+
+`ra_artists` holds one row per artist carrying `next_event_date` — their **soonest**
+upcoming show. It reads like "when this artist plays". It is not: it's "the first
+time this artist plays, counting from whenever the pull ran". The Come With Radio
+window filtered on that column, so an artist playing the 16th **and** the 25th
+dropped out of a window starting on the 18th. On the 2026-08-18 + 4-week window that
+hid **77 artists, 70 of them with a SoundCloud link** — invisibly, because a shorter
+list looks exactly like a quieter month.
+
+**Decision:** a date window over artists is evaluated against **`ra_events.lineup`**,
+which carries every date, and the artist is re-pointed at the show they actually play
+*inside* the window. The artist row's own date is one more candidate, not the source
+of truth — partners and manual adds have no event row at all. One shared pool
+(`raWindowPool()`) now feeds the list, the counts, the venue filter and all four
+scan/match passes; each had re-derived the window separately, so they could disagree.
+
+**The general rule:** a denormalized "next/latest/current X" column is a **summary of
+the pull**, not a fact about the entity. Filter on the underlying rows. If you must
+filter on the summary, the window has to start at the same instant the summary did.
+
+Two more of the same family, found in the same audit — a bound that fires silently
+reads as an empty result, and an empty result reads as truth:
+
+- **DICE** detail-fetched the first 160 candidates *in tag order* and saved 159. The
+  cap was binding exactly, so a 90-day request returned 7 days: weeks 2–4 of a 4-week
+  window had zero DICE shows. Now it drops out-of-window candidates before spending a
+  fetch, takes the rest soonest-first, and returns `dropped_over_cap` + `last_date`.
+- **Ticketmaster's `city` is a literal string match.** "New York" is Manhattan — 27
+  future shows across 11 venues, nothing in Brooklyn or Queens, so Brooklyn Steel /
+  Kings Theatre / Avant Gardner did not exist as far as the pull was concerned. Now
+  all five boroughs are queried, and only a dead *first* call is fatal.
+
+**Standing requirement:** any pull that truncates, caps or samples must **report what
+it dropped**, and the caller must surface it. "↻ Pull shows" was also swallowing TM
+and DICE failures entirely — an outage and a genuine zero rendered identically. A
+source that didn't answer is now named in the toast. Silent truncation is the failure
+mode here, not the truncation itself.

@@ -16,6 +16,24 @@ migration-vs-prod drift) instead of the Planner's test suite / ADR pipeline.
 
 ---
 
+## Every close, regardless of size (added 2026-08-15)
+
+Two machines now work this repo (desktop + laptop), and Claude Code's memory is
+per-machine — it does **not** sync. So a close isn't finished until the *repo*
+carries the state:
+
+- **Re-snapshot Claude memory** into `DEV_DOCS/claude-memory/`:
+  `cp ~/.claude/projects/<path-slug>/memory/*.md DEV_DOCS/claude-memory/`
+  (the slug is derived from the checkout path, so it differs per machine).
+  Scan for credentials before committing — that folder is public in the repo.
+- **Say in CARRYOVER which machine the session ran on**, and name any branch the
+  work is parked on, with the exact command to pick it up.
+- **`master` auto-deploys to Netlify.** Never merge un-green-lit work to master
+  to "tidy up" a close. Docs-only commits on master are fine — they rebuild the
+  site with identical content.
+
+---
+
 ## Quick close (small session — one fix / one UI tweak, no schema change)
 
 Use when: a bugfix or single UI change shipped; no migration; no new decision.
