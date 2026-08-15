@@ -239,7 +239,8 @@ function render(q){
       ? (sc.reach==='all-producers'
         ? `Your crate = <b>every producer on the Elements bill</b>, all four days${sc.count?` · ${sc.count} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}. Filter by day below, or just dig. Hit <b>＋ add</b> to build the episode.`
         : `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`)
-      : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}</div>
+      : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.count?` · ${sc.count} artists`:''}${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}
+      ${sc.capped?`<div style="margin-top:6px;color:var(--warn,#e0a33e)">⚠ Showing the first <b>${sc.count}</b> of <b>${sc.pool_total}</b> artists in this window — narrow the genre filter or shorten the window to see the rest.</div>`:''}</div>
     <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
     ${days.length>1?`<div class="grpf">
       <button class="gchip${DAY===''?' on':''}" data-day="">All days</button>

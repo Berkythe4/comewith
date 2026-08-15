@@ -1,21 +1,21 @@
-# Carryover — 2026-08-15 (radio discovery audit close · ran on the DESKTOP)
+# Carryover — 2026-08-15 (radio discovery audit close · desktop, then LAPTOP follow-up)
 
 Pickup order: this → `DEV_DOCS/claude-memory/MEMORY.md` → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`.
 Ritual: `SESSION_CLOSE_PROMPTS.md`. DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
 
 ## 👉 If you are the LAPTOP, start here
 
-Nothing is lost — but two things about this repo aren't obvious from a fresh checkout:
+Nothing is lost — but one thing about this repo isn't obvious from a fresh checkout:
+**Claude memory doesn't sync between machines.** The desktop's 60 memory files are
+snapshotted into **`DEV_DOCS/claude-memory/`** (index: `MEMORY.md`). Read the index;
+open individual files as needed. Re-snapshot at every close.
 
-1. **Claude memory doesn't sync between machines.** The desktop's 60 memory files
-   are snapshotted into **`DEV_DOCS/claude-memory/`** (index: `MEMORY.md`). Read the
-   index; open individual files as needed. Re-snapshot at every close.
-2. **This session's work is on a BRANCH, not master** — deliberately, because
-   `master` auto-deploys to Netlify and Keith hadn't green-lit the deploy:
-   ```
-   git fetch origin && git checkout radio/window-by-lineup     # commit 768a8a8
-   ```
-   See "Parked / next" for what it's waiting on.
+> ⚠ The rest of this file was written at `88a609c`, one commit BEFORE the merge, and
+> described `radio/window-by-lineup` as unmerged/undeployed. **It shipped.** Keith
+> green-lit it at 16:52 on 8/15: `88b2153` merges it to master (Netlify published the
+> dashboard fix) and both edge functions were deployed the same minute — verified on
+> prod by pulling their live bodies (`pull-dice` carries `dropped_over_cap`,
+> `pull-ticketmaster` carries `Brooklyn`/`Queens`). Parked item #1 is DONE.
 
 ## ⛔ PRIORITY CONTEXT (⚠ dated 2026-06-02 — unverified, confirm with Keith)
 **Come With was set MAINTENANCE-ONLY** while the **CWF (Come With Fitness) BRD** ran as
@@ -34,43 +34,51 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
 - **Latest LEARNINGS §:** 15.
-- **Git:** `master` = `0635a2e`, clean and pushed. Branch **`radio/window-by-lineup`** (`768a8a8`)
-  pushed, **unmerged, undeployed**. Older unmerged branches: `fix-lognumbers-optgroups`,
-  `docs/roadmap-reconcile`.
-- **Radio discovery pool (prod, as of the 2026-08-14 pull):** 1,122 future RA events,
-  159 DICE, 27 TM; 2,061 RA artists with a SoundCloud link. **No cron pulls any of this** —
-  `cron.job` runs only publish/retention/YouTube. The pool is as fresh as the last manual
-  "↻ Pull shows".
+- **Git:** `master` = `88b2153` (merge of `radio/window-by-lineup`), pushed and deployed.
+  That branch is now merged — don't re-checkout it. Older unmerged branches:
+  `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`.
+- **Radio discovery pool (prod, as of the 2026-08-15 17:13 pull — the first one AFTER the
+  DICE/TM fixes went live):** 1,047 future RA events (→ 11/13), **240 DICE** (→ 9/07, was 124
+  → 8/21), **40 TM across 16 venues** (was 25/10, now including Brooklyn Steel, Brooklyn
+  Paramount, Brooklyn Bowl, Warsaw, Music Hall of Williamsburg, Under the 'K' Bridge Park).
+  **No cron pulls any of this** — `cron.job` runs only publish/retention/YouTube.
 - **Docs freshness:** `ROADMAP.md` is reconciled to **2026-06-02** and predates the whole
   radio build; treat CARRYOVER + `DEV_DOCS/claude-memory/` as the true state.
 - **Tools:** `/tools/actor-inspector.html` · `/tools/test-checklist.html` · `/tools/visualizer.html`
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Decide on `radio/window-by-lineup`** (below): merge + deploy, or keep holding. Until then
-the radio window is still hiding artists on every pull, so anything episode-planning-shaped
-is working from a short list.
+**Deploy `dj-station`** (parked #1 below) and decide the DICE cap. The dashboard window is
+fixed and live; the DJ-facing path is fixed in the repo but not yet on prod.
 
 ## Parked / next
-1. **`radio/window-by-lineup` awaits Keith's go.** Two steps, in either order:
-   - `git checkout master && git merge radio/window-by-lineup && git push` → Netlify
-     publishes the dashboard fix.
-   - `supabase functions deploy pull-dice pull-ticketmaster --project-ref yaytdosxfhcqatmhctzk`
-     → the DICE + Ticketmaster coverage fixes go live. CLI 2.101.0 is installed but linked to
-     **staging**, hence the explicit ref. Verify after: run "↻ Pull shows" and check the toast
-     reports DICE reaching past week 1 and TM returning Brooklyn venues.
-2. **Scan the 8/18 window.** 677 of 825 in-window artists with a SoundCloud link have never
-   been read (148 scanned → 89 producers). "↻ Refresh music & data" on the Radio panel. It
-   only reads artists with no cache row at all, so it's safe to re-run.
-3. **`dj-station` caps its artist query at `.limit(160)`** with no notice, against a window
-   holding ~879 artists — a DJ with a broad genre filter is silently seeing a fraction of the
-   crate. Found during this audit, **not fixed**, needs a paging/notice decision.
+1. **`dj-station` fix is committed but NOT DEPLOYED.** Same two bugs the dashboard had, on the
+   DJ-facing path: it filtered on `ra_artists.next_event_date` (the soonest-show bug) *and*
+   capped at a silent `.limit(160)` against a ~982-artist window. Rewritten on
+   `ra_events.lineup`, mirroring `raWindowPool()`; paged rather than capped, and if the
+   1,500 safety stop ever binds it reports `scope.capped` + `pool_total` and dj.html shows a
+   warning. Deploy: Management API multipart
+   `POST /v1/projects/yaytdosxfhcqatmhctzk/functions/deploy?slug=dj-station` (the CLI rejects
+   the `sbp_v0_…` PAT; send a browser User-Agent). Verify by opening a real `dj.html?ep=<token>`
+   and checking the artist count moves off 160.
+2. **DICE's cap is still binding — decide whether to raise it.** The 8/15 17:13 pull took DICE
+   from 124 → 240 events and from 8/21 → 9/07, so the fix works. But 240 IS the new cap, and
+   soonest-first fills the front: weeks of 9/07 and 9/14 hold 1 and 0 DICE events. A 4-week
+   window from 8/18 still under-represents DICE in its last two weeks. It is now *reported*
+   (`dropped_over_cap`) rather than silent, which was the point — but the number wants raising.
+3. **Scan the 8/18 window — 113 artists, not 677.** Post-pull truth: 982 artists in the
+   8/18→9/15 window, 754 with a SoundCloud link, **641 already scanned, 113 never read**
+   (517 cache rows were written 8/14 21:53, after this file's original numbers were taken).
+   "↻ Refresh music & data" on the Radio panel; it only reads artists with no cache row, so
+   it's safe to re-run.
 4. **Scan cache never re-reads.** `raScan` skips anyone with a cache row forever; a producer
    who released tracks since their scan shows the stale catalog until "↻ re-read all" (which
    nukes and re-reads the whole window). Only 2 in-window artists are >30 days stale today —
    not yet urgent, will be.
 5. **Financial views still readable by `authenticated`** — the standing GATED BLOCKER before
    any customer/external login.
+6. **Nothing schedules a market pull.** `cron.job` runs only publish/retention/YouTube, so the
+   pool is only ever as fresh as the last manual "↻ Pull shows" (8/15 17:13 as of this line).
 
 ## This session shipped (2026-08-15 — Radio discovery audit: the window was filtering on the wrong date)
 Full audit of shows → producers → tracks, run against prod. **No migration, no prod writes.**

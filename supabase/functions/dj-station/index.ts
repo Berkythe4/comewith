@@ -15,6 +15,32 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 // scanned. Keep these in step if the contract ever changes.
 const SONG_MAX_MS = 15 * 60 * 1000;
 
+// Window-mode paging. There is no silent cap here: MAX_ARTISTS is a safety stop,
+// and if it ever binds the response says so (`scope.capped`) rather than handing
+// the DJ a short list that looks complete.
+const EV_PAGE = 1000;
+// Kept well under PostgREST's URL budget — an .in() list is a query string, and
+// 200 names of arbitrary length is close enough to the limit to be a hazard.
+const ART_CHUNK = 100;
+const MAX_ARTISTS = 1500;
+
+// Normalized SoundCloud URL — the join key for the scan cache and the dedupe key
+// for artists. Defined once, up here, because both the window pool and the song
+// lookup need it.
+const norm = (u: string) => (u || "").trim().toLowerCase().replace("://www.", "://").replace(/\/+$/, "").split("?")[0];
+
+// The same artist name can exist under several source rows — Brainrack and Flash
+// Gea are on the Elements bill AND have a thin RA row with no soundcloud. Taking
+// whichever arrived first silently served those acts an EMPTY crate (35 and 25
+// songs cached, 0 delivered). Prefer the row that actually has a profile, then
+// the better-followed one.
+const better = (a: any, cur: any) => {
+  if (!cur) return true;
+  const rank = (x: any) => [x.soundcloud ? 1 : 0, x.follower_count || 0];
+  const [as, af] = rank(a), [cs, cf] = rank(cur);
+  return as > cs || (as === cs && af > cf);
+};
+
 const CORS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -74,6 +100,7 @@ Deno.serve(async (req) => {
     //    artists, in the given order, no date window.
     //  • DEFAULT → NYC artists playing within the window (+ optional genre filter).
     let artists;
+    let poolTotal: number | null = null, capped = false;
     if (artistNames.length) {
       const { data } = await admin.from("ra_artists").select(SEL).in("name", artistNames);
       // The SAME artist name can exist under several sources — Brainrack and
@@ -82,24 +109,103 @@ Deno.serve(async (req) => {
       // acts an EMPTY crate (35 and 25 songs cached, 0 delivered). Prefer the
       // row that actually has a profile, then the better-followed one.
       const byName: Record<string, any> = {};
-      (data || []).forEach((a) => {
-        const cur = byName[a.name];
-        if (!cur) { byName[a.name] = a; return; }
-        const rank = (x: any) => [x.soundcloud ? 1 : 0, x.follower_count || 0];
-        const [as, af] = rank(a), [cs, cf] = rank(cur);
-        if (as > cs || (as === cs && af > cf)) byName[a.name] = a;
-      });
+      (data || []).forEach((a) => { if (better(a, byName[a.name])) byName[a.name] = a; });
       artists = artistNames.map((n) => byName[n]).filter(Boolean);
     } else {
-      let q = admin.from("ra_artists").select(SEL)
-        .gte("next_event_date", today).lte("next_event_date", to)
-        .order("next_event_date", { ascending: true }).limit(160);
-      if (genres.length) q = q.overlaps("genres", genres);
-      artists = (await q).data;
+      // WINDOW MODE — built from ra_events.lineup, NOT ra_artists.next_event_date.
+      //
+      // `ra_artists` collapses an artist to ONE row carrying next_event_date =
+      // their SOONEST show. That is a summary of the pull, not a fact about the
+      // artist, so filtering on it drops anyone playing just BEFORE the window
+      // and again INSIDE it. It cost the dashboard 77 artists (70 with a
+      // SoundCloud link) on the 2026-08-18 window before raWindowPool() was
+      // rebuilt on the lineups; this path carried the identical bug, plus a
+      // silent .limit(160) against an ~879-artist window. Mirror of
+      // raWindowPool() in dashboard.html — keep the two in step.
+      // Keyed lowercase (names on a bill drift in casing); `name` keeps the
+      // original spelling, which is what ra_artists.name is queried on.
+      const showByName: Record<string, { date: string; venue: string | null; genres: string[]; name: string }> = {};
+      for (let from = 0; ; from += EV_PAGE) {
+        const { data: evs, error: evErr } = await admin.from("ra_events")
+          .select("event_date, venue_name, genres, lineup")
+          .gte("event_date", today).lte("event_date", to)
+          .order("event_date", { ascending: true })
+          .range(from, from + EV_PAGE - 1);
+        if (evErr) return err(500, "Could not read the show listings.");
+        if (!evs || !evs.length) break;
+        for (const e of evs) {
+          if (!e.event_date) continue;
+          for (const a of ((e.lineup as any[]) || [])) {
+            const n = ((a && a.name) || "").trim();
+            if (!n) continue;
+            // Events arrive date-ascending, so the FIRST hit is the soonest show
+            // this artist plays inside the window — that's what the DJ should see.
+            const k = n.toLowerCase();
+            if (!showByName[k]) showByName[k] = { date: e.event_date, venue: e.venue_name || null, genres: e.genres || [], name: n };
+          }
+        }
+        if (evs.length < EV_PAGE) break;
+      }
+
+      // Their ra_artists rows. Names come off the bills, which is where those rows
+      // were built from, so the casing lines up; the next_event_date sweep below
+      // is the backstop that also catches partners and manual adds carrying no
+      // event row at all.
+      const billed = [...new Set(Object.values(showByName).map((s) => s.name))];
+      const rows: any[] = [];
+      for (let i = 0; i < billed.length; i += ART_CHUNK) {
+        const chunk = billed.slice(i, i + ART_CHUNK);
+        const { data } = await admin.from("ra_artists").select(SEL).in("name", chunk);
+        if (data) rows.push(...data);
+      }
+      // Case-insensitive retry is not free, so instead sweep the artists whose own
+      // stamped date lands in the window — cheap, and it recovers anyone the name
+      // match missed as well as the no-event-row cases.
+      // Paged explicitly: PostgREST caps an unbounded select at 1000 rows and says
+      // nothing, which is the same silent-shortfall shape this fix exists to kill.
+      for (let from = 0; ; from += EV_PAGE) {
+        const { data } = await admin.from("ra_artists").select(SEL)
+          .gte("next_event_date", today).lte("next_event_date", to)
+          .order("next_event_date", { ascending: true })
+          .range(from, from + EV_PAGE - 1);
+        if (!data || !data.length) break;
+        rows.push(...data);
+        if (data.length < EV_PAGE) break;
+      }
+
+      // Dedupe on the SoundCloud profile (falling back to the name), preferring
+      // the row that actually carries a profile.
+      const byKey: Record<string, any> = {};
+      for (const a of rows) {
+        const k = a.soundcloud ? norm(a.soundcloud) : "n:" + (a.name || "").trim().toLowerCase();
+        if (better(a, byKey[k])) byKey[k] = a;
+      }
+
+      // Re-point each artist at the show they play IN the window (date, venue,
+      // that bill's genres) rather than whichever earlier show is on their row.
+      let pool = Object.values(byKey).map((a: any) => {
+        const s = showByName[(a.name || "").trim().toLowerCase()];
+        const own = a.next_event_date >= today && a.next_event_date <= to ? a.next_event_date : null;
+        const useShow = s && (!own || s.date <= own);
+        return {
+          ...a,
+          next_event_date: useShow ? s.date : (own || a.next_event_date),
+          next_venue: useShow ? (s.venue || a.next_venue) : a.next_venue,
+          genres: (useShow && s.genres.length) ? [...new Set([...(a.genres || []), ...s.genres])] : (a.genres || []),
+        };
+      }).filter((a: any) => a.next_event_date >= today && a.next_event_date <= to);
+
+      // Genre filter runs AFTER the bill's genres are merged in, so an artist
+      // carrying no genres of their own still matches on the night they play.
+      if (genres.length) pool = pool.filter((a: any) => (a.genres || []).some((g: string) => genres.includes(g)));
+      pool.sort((a: any, b: any) => String(a.next_event_date).localeCompare(String(b.next_event_date)));
+
+      poolTotal = pool.length;
+      capped = pool.length > MAX_ARTISTS;
+      artists = capped ? pool.slice(0, MAX_ARTISTS) : pool;
     }
 
     // Their songs, from the scan cache (keyed by normalized soundcloud URL).
-    const norm = (u: string) => (u || "").trim().toLowerCase().replace("://www.", "://").replace(/\/+$/, "").split("?")[0];
     const scUrls = [...new Set((artists || []).map((a) => a.soundcloud).filter(Boolean).map(norm))];
     const songByUrl: Record<string, any[]> = {};
     for (let i = 0; i < scUrls.length; i += 200) {
@@ -152,6 +258,10 @@ Deno.serve(async (req) => {
         // 'all-producers' = this edition deliberately reaches past its own day.
         reach: params.scope || null,
         count: (artists || []).length,
+        // A cap that binds is reported, never silent: pool_total is what the
+        // window actually holds, capped says the list was cut.
+        pool_total: poolTotal,
+        capped,
       },
       artists: out,
       tracklist: tracks || [],
