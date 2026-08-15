@@ -464,10 +464,6 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
   content: ''; width: 11px; height: 11px; border-radius: 2px; background: var(--ws-color, var(--mid));
 }
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
-/* Audience covers four unrelated things — the mailing list, social, the radio,
-   the site. A full-width hairline forces the next sub-group onto its own row so
-   they don't read as one undifferentiated wall of numbers. */
-.kpi-break { grid-column: 1 / -1; height: 1px; background: var(--border); margin: 2px 0; }
 .kpi-card {
   background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--ws-color, var(--mid));
   padding: 15px 17px; display: flex; flex-direction: column; gap: 9px;
@@ -483,6 +479,68 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .kpi-trend.down { color: var(--red); }
 .kpi-trend.flat { color: var(--mid); }
 .kpi-target { color: var(--mid); }
+/* ===== Category summaries (Phase 2 rebuild) =====
+   The board used to be ~35 equal-weight cards in four groups, which is a wall
+   you look at and take nothing from. Each category now leads with the two
+   numbers that say whether it is HEALTHY plus one chart, and the old card grid
+   becomes the drill-down behind a click. Collapsed is the default: the summary
+   view is the page, the detail is on request. */
+.strat-cat { border: 1px solid var(--border); background: var(--surface); margin-bottom: 14px; }
+.strat-cat-head {
+  display: flex; align-items: center; gap: 12px; width: 100%;
+  padding: 13px 17px; background: none; border: none; border-left: 3px solid var(--cat-color, var(--mid));
+  font-family: inherit; text-align: left; cursor: pointer; color: var(--ink);
+}
+.strat-cat-head:hover { background: var(--off); }
+.strat-cat-name {
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.05rem; letter-spacing: 0.08em;
+  min-width: 128px; flex-shrink: 0;
+}
+/* The two health numbers, inline in the header so a collapsed page still
+   answers "is this fine?" without a single click. */
+.cat-heads { display: flex; gap: 26px; flex: 1; flex-wrap: wrap; }
+.cat-head { display: flex; flex-direction: column; gap: 2px; min-width: 108px; }
+.cat-head-label { font-size: 0.56rem; letter-spacing: 0.11em; text-transform: uppercase; color: var(--mid); }
+.cat-head-val { font-family: 'Bebas Neue', sans-serif; font-size: 1.55rem; line-height: 1; color: var(--ink); }
+.cat-head-val.none { color: var(--mid); }
+.cat-head-val .unit { font-size: 0.7rem; color: var(--mid); margin-left: 2px; }
+/* Direction is colour (good/bad), never the raw sign -- for a lower-is-better
+   metric like cost-to-raise, a falling number is the GOOD one. */
+.cat-delta { font-size: 0.62rem; letter-spacing: 0.02em; }
+.cat-delta.up { color: var(--green); }
+.cat-delta.down { color: var(--red); }
+.cat-delta.flat { color: var(--mid); }
+.cat-chev { color: var(--mid); font-size: 0.8rem; flex-shrink: 0; transition: transform 0.15s; }
+.strat-cat.open .cat-chev { transform: rotate(90deg); }
+.cat-chart { padding: 0 17px 13px; }
+.cat-chart-cap { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 3px; }
+.strat-cat-body { display: none; padding: 0 17px 17px; border-top: 1px solid var(--border); margin-top: 3px; }
+.strat-cat.open .strat-cat-body { display: block; }
+.strat-cat-body > .section-label:first-child { margin-top: 14px; display: block; }
+/* Bars, for per-event sequences. An average is a number you cannot act on;
+   the sequence shows whether the last one was better than the one before. */
+.cat-bars { display: flex; align-items: flex-end; gap: 3px; height: 54px; position: relative; }
+.cat-bar { flex: 1; min-width: 3px; background: var(--cat-color, var(--mid)); opacity: 0.4; position: relative; }
+.cat-bar.latest { opacity: 1; }
+.cat-bar.neg { background: var(--red); }
+.cat-ref { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-strong); pointer-events: none; }
+/* Where a number comes from, on the card face rather than hidden in a hover.
+   A blank hand-logged card and a genuine zero used to look identical. */
+.kpi-src {
+  font-size: 0.54rem; letter-spacing: 0.09em; text-transform: uppercase;
+  border: 1px solid var(--border-strong); color: var(--mid); padding: 1px 4px; margin-left: 6px;
+}
+.kpi-src.stale { color: var(--red); border-color: var(--red); }
+/* Things that want a decision, above everything else. */
+.strat-alerts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.strat-alert {
+  display: flex; align-items: baseline; gap: 9px; font-size: 0.76rem; line-height: 1.5;
+  background: var(--surface); border: 1px solid var(--border); border-left: 3px solid var(--red);
+  padding: 9px 14px;
+}
+.strat-alert.warn { border-left-color: #B5791F; }
+.strat-alert.info { border-left-color: var(--border-strong); }
+.strat-alert b { font-weight: normal; color: var(--ink); }
 .strat-event-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; }
 .evt-metric { background: var(--surface); border: 1px solid var(--border); padding: 14px 16px; display: flex; flex-direction: column; gap: 7px; }
 .strat-manage { background: var(--surface); border: 1px solid var(--border); padding: 16px 18px; display: none; }
@@ -1368,23 +1426,18 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <div id="strat-manage-list"></div>
           </div>
           <div>
-            <div class="section-label">KPIs</div>
-            <div class="section-sub">Targets are set from the dashboard; values come from logged numbers and events. Empty until data is entered.</div>
+            <div class="section-label">Needs a decision</div>
+            <div class="section-sub">Rules over the same numbers below — a metric on the wrong side of its target, or a hand-logged one that has gone stale.</div>
+            <div id="strat-alerts" class="strat-alerts"></div>
+          </div>
+          <div>
+            <div class="section-label">The board</div>
+            <!-- Latest event, Site traffic and Trends used to be separate
+                 sections here; they are now the drill-down inside the category
+                 they belong to, so the page reads as six things instead of a
+                 stack of unrelated ones. -->
+            <div class="section-sub">Each category leads with the two numbers that say whether it is healthy, plus one chart. Open a category for every number behind it.</div>
             <div id="strat-cards"></div>
-          </div>
-          <div>
-            <div class="section-label">Latest event</div>
-            <div id="strat-parties"></div>
-            <div id="strat-di" style="margin-top:14px;"></div>
-          </div>
-          <div>
-            <div class="section-label">Site traffic</div>
-            <div class="section-sub">Last 30 days, first-party — no cookies, no third party. Counts real visitors only: bots, unfurlers, localhost and Netlify previews never reach the table.</div>
-            <div id="strat-traffic"></div>
-          </div>
-          <div>
-            <div class="section-label">Trends</div>
-            <div id="strat-trends"></div>
           </div>
           <div>
             <div class="section-label">The flywheel</div>
@@ -5242,24 +5295,115 @@ const WORKSTREAM = {
   dance_infusion: { label: 'Dance Infusion', color: '#8362A8' },
 };
 const WS_ORDER = ['content', 'audience', 'parties', 'dance_infusion'];
-// Sub-groups inside a workstream, in display order. Cards sort by these and a
-// hairline breaks the grid between them.
-//   Audience: mailing list · social · radio · site
-//   Content:  per-video performance · whole-channel totals
-// Numbers repeat across workstreams — grouping only ever applies within one.
-const KPI_VIDEO_KEYS = new Set(['youtube.avg_views', 'youtube.engagement_rate', 'youtube.days_since_upload']);
-function kpiSubgroup(k) {
-  if (KPI_VIDEO_KEYS.has(k)) return 1;                 // Content — how a video does
-  if (k.startsWith('youtube.')) return 2;              // Content — channel-wide totals
-  // Repeat attendees sits on the mailing row by request: it's the other
-  // "are they coming back" number, even though it comes from attendance.
-  if (k === 'audience.subscribers' || k.startsWith('audience.subscribers_') || k === 'guest.repeat_pct') return 1;
-  if (k.startsWith('instagram.') || k.startsWith('tiktok.')) return 2;
-  if (k.startsWith('radio.')) return 3;
-  if (k.startsWith('site.')) return 4;
-  return 5;
+// ---- Categories (Phase 2 rebuild) ----------------------------------------
+// Six categories, not the four workstreams. Radio was seven cards buried in an
+// Audience sub-group and Site was a section of its own; both are whole areas of
+// the business and read better as their own thing.
+//
+// Membership is derived from the METRIC KEY PREFIX, deliberately not from
+// kpi_targets.workstream. Re-filing the rows in the database would have meant
+// the deployed dashboard -- which knows only four workstreams -- silently
+// dropping nine cards the moment the migration landed. Prefix matching also
+// means a new metric_key lands in the right place with no migration at all.
+//
+// `heads` are the two numbers that say whether the category is HEALTHY, each
+// written as a fallback chain: the *_last keys are carded by migration 143, so
+// until that lands (or if a target row is ever removed) the renderer falls back
+// to the lifetime average rather than rendering an empty header.
+const CATEGORIES = [
+  { key: 'parties', label: 'Parties', color: '#C75A3C',
+    match: k => k.startsWith('parties.'),
+    heads: [['parties.net_pl_last', 'parties.net_pl'], ['parties.sell_through_last', 'parties.sell_through']],
+    chart: { kind: 'events', metric: 'parties.net_pl_last', title: 'Net P&L per event' } },
+  { key: 'dance_infusion', label: 'Dance Infusion', color: '#8362A8',
+    match: k => k.startsWith('di.'),
+    // Cost to raise leads: it is what Keith judges a DI event's health by, and
+    // it is lower-is-better, so the arrow logic has to follow comparison.
+    heads: [['di.cost_to_raise_last', 'di.cost_to_raise'], ['di.raised_last', 'di.raised_per_event']],
+    chart: { kind: 'events', metric: 'di.cost_to_raise_last', title: 'Cost to raise $1, per event' } },
+  { key: 'audience', label: 'Audience', color: '#2E8E72',
+    // The mailing list leads over follower counts on purpose: it is the only
+    // audience we own and can actually contact. Followers stay in the detail.
+    match: k => k.startsWith('audience.') || k.startsWith('instagram.') || k.startsWith('tiktok.') || k === 'guest.repeat_pct',
+    heads: [['audience.subscribers'], ['guest.repeat_pct']],
+    chart: { kind: 'history', metric: 'audience.subscribers', title: 'Mailing list over time' } },
+  { key: 'content', label: 'Content', color: '#B5791F',
+    match: k => k.startsWith('youtube.') || k.startsWith('content.'),
+    // Recent uploads, not the lifetime average -- youtube.avg_views spreads
+    // every video ever over one number and cannot move.
+    heads: [['content.avg_views_recent', 'youtube.avg_views'], ['youtube.days_since_upload']],
+    chart: { kind: 'videos', title: 'Views per upload, most recent first' } },
+  { key: 'radio', label: 'Radio', color: '#3D6E8F',
+    match: k => k.startsWith('radio.'),
+    heads: [['radio.listeners'], ['radio.sc_plays']],
+    chart: { kind: 'history', metric: 'radio.listeners', title: 'Listeners over time' } },
+  { key: 'site', label: 'Site', color: '#7A6A55',
+    match: k => k.startsWith('site.'),
+    heads: [['site.visitors_30d'], ['site.clicks_30d']],
+    chart: { kind: 'daily', title: 'Page views / day' } },
+];
+const catFor = (key) => CATEGORIES.find(c => c.match(key)) || null;
+const catByKey = (k) => CATEGORIES.find(c => c.key === k);
+
+// A card's number is only as trustworthy as where it came from, so say so on
+// the face. A hand-logged metric nobody has touched in two months is flagged:
+// it is not "0", it is unknown, and those used to look identical.
+const STALE_DAYS = 60;
+const daysSince = (d) => d ? Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 86400000) : null;
+function srcBadge(c) {
+  const age = daysSince(c.as_of);
+  if (c.source_kind === 'computed') return '<span class="kpi-src" title="Recomputed from the database on every load">live</span>';
+  if (c.source_kind === 'api') return '<span class="kpi-src" title="Pulled from the platform API">api</span>';
+  if (c.source_kind === 'manual') {
+    const stale = age != null && age > STALE_DAYS;
+    return `<span class="kpi-src${stale ? ' stale' : ''}" title="Entered by hand${age != null ? ` — last ${age} days ago` : ''}">logged${stale ? ` · ${age}d` : ''}</span>`;
+  }
+  return '<span class="kpi-src" title="Nothing has ever been recorded for this metric">no data</span>';
 }
-// Explicit order within a sub-group. v_kpi_dashboard has no ORDER BY, so
+// Headline delta. Arrow follows the raw direction, colour follows good/bad --
+// for cost-to-raise (comparison 'lte') a FALLING number is the good one.
+// prior_basis comes from the database so the card can say what it is comparing
+// against instead of showing a bare, unlabelled arrow.
+function headDelta(c) {
+  if (!c || c.current_value == null) return { cls: 'flat', text: '' };
+  if (c.prior_value == null) return { cls: 'flat', text: 'no prior reading yet' };
+  const delta = Number(c.current_value) - Number(c.prior_value);
+  const basis = c.prior_basis || 'the previous reading';
+  if (delta === 0) return { cls: 'flat', text: `unchanged vs ${basis}` };
+  const better = c.comparison === 'lte' ? delta < 0 : delta > 0;
+  return { cls: better ? 'up' : 'down',
+           text: `${delta > 0 ? '▲ +' : '▼ −'}${fmtNum(Math.abs(delta))} vs ${basis}` };
+}
+// Bar sequence for per-event metrics. `ref` draws the average as a dashed line
+// so "was the last one better than usual" is answerable at a glance.
+function barSeries(rows, { color = '#C75A3C', lowerBetter = false } = {}) {
+  const pts = (rows || []).filter(r => r.value != null);
+  if (!pts.length) return '<div class="li-sub">No completed events yet.</div>';
+  const vals = pts.map(r => Number(r.value));
+  const max = Math.max(...vals, 0), min = Math.min(...vals, 0), span = (max - min) || 1;
+  const avg = vals.reduce((s, v) => s + v, 0) / vals.length;
+  const zero = ((max - 0) / span) * 100;
+  const bars = pts.map((r, i) => {
+    const v = Number(r.value);
+    const h = Math.max(2, (Math.abs(v) / span) * 100);
+    const last = i === pts.length - 1;
+    const bad = lowerBetter ? false : v < 0;
+    return `<div class="cat-bar${last ? ' latest' : ''}${bad ? ' neg' : ''}" style="height:${h}%"
+      title="${escapeHtml(r.name || '')}${r.event_date ? ' · ' + escapeHtml(fmtDate(r.event_date)) : ''}: ${fmtNum(v)}"></div>`;
+  }).join('');
+  const refTop = ((max - avg) / span) * 100;
+  return `<div class="cat-bars" style="--cat-color:${color}">
+      <div class="cat-ref" style="top:${refTop.toFixed(1)}%" title="average ${fmtNum(avg)}"></div>
+      ${bars}
+    </div>
+    <div class="li-sub" style="margin-top:4px;">${pts.length} event${pts.length === 1 ? '' : 's'} · average ${fmtNum(avg)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''}</div>`;
+}
+// (kpiSubgroup / KPI_VIDEO_KEYS lived here: sub-groups that split one giant
+// Audience grid into mailing / social / radio / site with a hairline between
+// them. CATEGORIES does that job properly now — radio and site are their own
+// categories rather than rows inside someone else's — so the hairline and the
+// sub-group ranking are both gone.)
+// Explicit order within a category. v_kpi_dashboard has no ORDER BY, so
 // without this the cards sit wherever Postgres hands them back.
 const KPI_ORDER = [
   'audience.subscribers', 'audience.subscribers_come_with', 'audience.subscribers_dance_infusion', 'guest.repeat_pct',
@@ -5314,8 +5458,20 @@ const METRIC_SOURCE = {
   'di.raised_per_event': 'LIVE — average raised per completed DI event: tickets + other income + donations + sponsor cash + sponsor in-kind.',
   'di.cost_to_raise': 'LIVE — expenses ÷ total raised, averaged over completed DI events. Lower is better.',
   'di.to_ms_total': 'LIVE — net P&L summed across completed DI events; what actually went to the MS Society.',
+  // Last-event metrics (142/143). These are the category headlines: an average
+  // over every event ever cannot tell you whether the LAST one worked, which is
+  // the question actually being asked.
+  'parties.net_pl_last': 'LIVE — net P&L of the most recent COMPLETED party, not an average. Compared against the party before it, so “vs previous event” means exactly that.',
+  'parties.sell_through_last': 'LIVE — tickets sold ÷ venue capacity for the most recent completed party. Blank if that venue has no capacity on record.',
+  'di.cost_to_raise_last': 'LIVE — expenses ÷ total raised at the most recent completed Dance Infusion event. Lower is better, so a falling number shows as good.',
+  'di.raised_last': 'LIVE — everything that came in at the most recent completed DI event: tickets + other income + donations + sponsor cash + sponsor in-kind.',
+  'di.attendance_last': 'LIVE — total_attendance on the most recent completed DI event. Entered by hand or set from door scan data, not derived from tickets sold.',
+  'content.avg_views_recent': 'YOUTUBE API — average views across the 5 most recent uploads, compared against the 5 before them. Replaces the lifetime “avg views / upload”, which spreads every video ever over one number and barely moves.',
 };
-const strat = { cards: [], hidden: new Set(), parties: null, di: null, traffic: null };
+const strat = { cards: [], hidden: new Set(), parties: null, di: null, traffic: null,
+  // Which categories are open, per user. Empty = everything collapsed, which is
+  // the point of the rebuild: the summary IS the page.
+  expanded: new Set(), series: [], history: {}, recentVideos: [] };
 
 const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
 function fmtMetric(v, unit) {
@@ -5325,14 +5481,10 @@ function fmtMetric(v, unit) {
   if (unit === '%') return s + '%';
   return unit ? `${s} <span class="unit">${escapeHtml(unit)}</span>` : s;
 }
-// Trend: arrow follows raw direction; color follows good/bad (flipped for lte).
-function trendFor(c) {
-  if (c.current_value == null || c.prior_value == null) return { cls: 'flat', arrow: '–', text: 'no prior reading' };
-  const delta = Number(c.current_value) - Number(c.prior_value);
-  if (delta === 0) return { cls: 'flat', arrow: '–', text: 'no change' };
-  const better = c.comparison === 'lte' ? delta < 0 : delta > 0;
-  return { cls: better ? 'up' : 'down', arrow: delta > 0 ? '▲' : '▼', text: fmtNum(Math.abs(delta)) };
-}
+// (trendFor lived here. headDelta replaces it: same good/bad colour logic, but
+// it also says what the comparison IS -- "vs about 30 days ago", "vs previous
+// event" -- reading prior_basis from the view. A bare "▲ 47" never said 47
+// since when, which was half of why the board was unreadable.)
 // Progress toward target; inverted for lte (lower is better).
 function progressFor(c) {
   if (c.current_value == null || c.target_value == null) return 0;
@@ -5367,23 +5519,34 @@ function infoTip(text) { return ` <span class="info-tip" data-tip="${escapeHtml(
 // Content colour on their edge to read as their own bucket in the row.
 const KPI_MEDIA_KEY = /^radio\.(yt_|sc_)/;
 function kpiCardHtml(c) {
-  const t = trendFor(c);
+  const d = headDelta(c);
+  // Category colour, not workstream colour: radio.* and site.* are their own
+  // categories on the board now, and the edge stripe should agree with the
+  // block they sit in. The media-metric exception survives -- episode views are
+  // Content performance sitting in a Radio card.
   const color = KPI_MEDIA_KEY.test(c.metric_key)
     ? WORKSTREAM.content.color
-    : (WORKSTREAM[c.workstream]?.color || 'var(--mid)');
-  // The tooltip explains the SOURCE, not the arithmetic of the progress bar —
-  // knowing a bar is current÷target never told anyone anything.
+    : (catFor(c.metric_key)?.color || WORKSTREAM[c.workstream]?.color || 'var(--mid)');
   const tip = METRIC_SOURCE[c.metric_key]
     || 'No source note written for this metric yet. It reads either a live database view or the latest hand-logged reading in metric_snapshots.';
+  // A bar needs both a value and a target to mean anything. Rendering 0% for a
+  // metric with no target read as "failing badly" rather than "not tracked".
+  const bar = (c.current_value != null && c.target_value != null)
+    ? `<div class="kpi-bar"><span style="width:${progressFor(c)}%"></span></div>` : '';
+  // "Updated today" was true of every computed card every day and told nobody
+  // anything. changed_on (142) is when the number actually last MOVED.
+  const stamp = c.changed_on
+    ? `unchanged since ${escapeHtml(fmtDate(c.changed_on))}`
+    : (c.as_of ? `updated ${escapeHtml(fmtDate(c.as_of))}` : '');
   return `<div class="kpi-card${c.current_value == null ? ' no-data' : ''}" style="--ws-color:${color}">
-    <div class="kpi-label">${escapeHtml(c.label)}${infoTip(tip)}</div>
+    <div class="kpi-label">${escapeHtml(c.label)}${srcBadge(c)}${infoTip(tip)}</div>
     <div class="kpi-value">${fmtMetric(c.current_value, c.unit)}</div>
-    <div class="kpi-bar"><span style="width:${progressFor(c)}%"></span></div>
+    ${bar}
     <div class="kpi-meta">
-      <span class="kpi-trend ${t.cls}">${t.arrow} ${escapeHtml(t.text)}</span>
-      <span class="kpi-target">target ${fmtMetric(c.target_value, c.unit)}</span>
+      <span class="kpi-trend ${d.cls}">${escapeHtml(d.text || 'no reading')}</span>
+      ${c.target_value != null ? `<span class="kpi-target">target ${fmtMetric(c.target_value, c.unit)}</span>` : ''}
     </div>
-    ${c.as_of ? `<div class="kpi-asof" style="font-size:0.64rem;color:var(--mid);margin-top:3px;">updated ${escapeHtml(fmtDate(c.as_of))}</div>` : ''}
+    ${stamp ? `<div class="kpi-asof" style="font-size:0.64rem;color:var(--mid);margin-top:3px;">${stamp}</div>` : ''}
   </div>`;
 }
 
@@ -5480,45 +5643,187 @@ function renderStratTrends() {
         <div class="li-sub">${fmtNum(v.likes)} likes · ${fmtNum(v.comments)} comments${v.published_at ? ' · ' + escapeHtml(fmtDate(v.published_at)) : ''}</div></div>
         <div class="li-amt">${fmtNum(v.views)} views</div></div>`).join('')
     : '<div class="li-sub">No YouTube videos pulled yet — hit “↻ YouTube”.</div>';
-  $('strat-trends').innerHTML = `
-    <div class="section-sub">Audience — IG followers over time</div>${igRows}
-    <div class="section-sub" style="margin-top:12px;">Attendance over time</div>${attRow}
-    <div class="section-sub" style="margin-top:12px;">Top YouTube videos</div><div class="hub-list">${ytRows}</div>`;
+  // Split across three categories now instead of one "Trends" dump: IG belongs
+  // to Audience, attendance to Parties, videos to Content. Each target only
+  // exists when its category is rendered, so every write is guarded.
+  const put = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  put('strat-ig', `<div class="section-sub">IG followers over time</div>${igRows}`);
+  put('strat-attendance', `<div class="section-sub" style="margin-top:12px;">Attendance over time</div>${attRow}`);
+  put('strat-videos', `<div class="section-sub" style="margin-top:12px;">Top YouTube videos</div><div class="hub-list">${ytRows}</div>`);
+}
+
+// Is this number on the wrong side of its own target? Direction depends on the
+// metric: for cost-to-raise (lte) being ABOVE target is the failure.
+function offTarget(c) {
+  if (!c || c.current_value == null || c.target_value == null) return false;
+  const cur = Number(c.current_value), tgt = Number(c.target_value);
+  return c.comparison === 'lte' ? cur > tgt : cur < tgt;
+}
+// The decisions, above everything else. Deterministic rules -- no model, no
+// inference -- each naming the number and what it is measured against. This is
+// the part the old board never had: it rendered 35 numbers and interpreted none
+// of them.
+function stratAlerts() {
+  const by = (k) => strat.cards.find(c => c.metric_key === k);
+  const num = (k) => { const c = by(k); return c && c.current_value != null ? Number(c.current_value) : null; };
+  const out = [];
+
+  const npl = num('parties.net_pl_last') ?? num('parties.net_pl');
+  if (npl != null && npl < 0) out.push({ sev: '', t: 'The last party lost money',
+    d: `${fmtMetric(Math.abs(npl), '$')} down. Sell-through and costs are both in Parties.` });
+
+  const st = num('parties.sell_through_last') ?? num('parties.sell_through');
+  if (st != null && st < 50) out.push({ sev: 'warn', t: 'The room is running half empty',
+    d: `Last party sold ${fmtNum(st)}% of capacity. Either the room is too big or promotion is starting too late.` });
+
+  const ctrCard = by('di.cost_to_raise_last') || by('di.cost_to_raise');
+  if (offTarget(ctrCard)) out.push({ sev: 'warn', t: 'Cost to raise $1 is over target',
+    d: `${fmtMetric(ctrCard.current_value, '$')} against a ${fmtMetric(ctrCard.target_value, '$')} target — every dollar to MS is costing more than planned.` });
+
+  const upCard = by('youtube.days_since_upload');
+  if (offTarget(upCard)) out.push({ sev: 'warn', t: 'Nothing published lately',
+    d: `${fmtNum(upCard.current_value)} days since the last upload, against a ${fmtNum(upCard.target_value)}-day target.` });
+
+  // Hand-logged metrics rot silently: the card keeps showing a number that
+  // stopped being true months ago.
+  const stale = strat.cards.filter(c => c.source_kind === 'manual' && daysSince(c.as_of) > STALE_DAYS);
+  if (stale.length) out.push({ sev: 'info', t: `${stale.length} hand-logged metric${stale.length === 1 ? '' : 's'} out of date`,
+    d: `${stale.map(c => escapeHtml(c.label)).join(', ')} — last entered over ${STALE_DAYS} days ago. Use “Log numbers”.` });
+
+  const blank = strat.cards.filter(c => c.current_value == null);
+  if (blank.length) out.push({ sev: 'info', t: `${blank.length} card${blank.length === 1 ? '' : 's'} have never been filled in`,
+    d: `${blank.map(c => escapeHtml(c.label)).join(', ')} — blank, which is not the same as zero.` });
+
+  return out.slice(0, 6);
+}
+
+// One category's chart. Kept small on purpose: the chart answers "which way is
+// this going", the drill-down answers everything else.
+function catChart(cat) {
+  const ch = cat.chart; if (!ch) return '';
+  let body = '', note = '';
+  if (ch.kind === 'events') {
+    const rows = (strat.series || []).filter(r => r.metric_key === ch.metric)
+      .slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
+    body = barSeries(rows, { color: cat.color, lowerBetter: ch.metric === 'di.cost_to_raise_last' });
+  } else if (ch.kind === 'history') {
+    const ser = strat.history?.[ch.metric] || [];
+    body = ser.length
+      ? sparkline(ser.map(s => s.value), { color: cat.color })
+      : '<div class="li-sub">No history yet — the nightly snapshot started building it on 15 Aug 2026.</div>';
+    if (ser.length === 1) note = 'one reading so far';
+  } else if (ch.kind === 'videos') {
+    const vids = (strat.recentVideos || []).slice().reverse();
+    body = barSeries(vids.map(v => ({ value: v.views, name: v.title, event_date: (v.published_at || '').slice(0, 10) })),
+                     { color: cat.color });
+  } else if (ch.kind === 'daily') {
+    const days = (strat.traffic?.daily || []).slice(-30);
+    body = days.length > 1
+      ? sparkline(days.map(d => Number(d.views || 0)), { color: cat.color })
+      : '<div class="li-sub">Not enough traffic recorded yet.</div>';
+  }
+  return `<div class="cat-chart">
+    <div class="cat-chart-cap"><span class="kpi-label">${escapeHtml(ch.title)}</span>
+      ${note ? `<span class="li-sub">${escapeHtml(note)}</span>` : ''}</div>
+    ${body}</div>`;
 }
 
 function renderStrategy() {
-  let groups = '';
-  for (const ws of WS_ORDER) {
-    const cards = strat.cards.filter(c => c.workstream === ws && !strat.hidden.has(c.metric_key))
-      .sort((a, b) => kpiSubgroup(a.metric_key) - kpiSubgroup(b.metric_key)
-        || kpiRank(a.metric_key) - kpiRank(b.metric_key)
-        || (a.label || '').localeCompare(b.label || ''));
-    if (!cards.length) continue;
-    let prevSub = null;
-    const cells = cards.map(c => {
-      const sub = kpiSubgroup(c.metric_key);
-      const brk = prevSub !== null && sub !== prevSub ? '<div class="kpi-break"></div>' : '';
-      prevSub = sub;
-      return brk + kpiCardHtml(c);
+  // Alerts first -- the only part of the page that tells you to do something.
+  const alerts = stratAlerts();
+  const alertEl = $('strat-alerts');
+  if (alertEl) alertEl.innerHTML = alerts.length
+    ? alerts.map(a => `<div class="strat-alert ${a.sev}"><b>${escapeHtml(a.t)}</b><span class="li-sub">${a.d}</span></div>`).join('')
+    : '<div class="strat-alert info"><b>Nothing needs a decision right now.</b><span class="li-sub">No metric is off target and nothing has gone stale.</span></div>';
+
+  // Category blocks. Anything whose prefix matches nothing still gets rendered,
+  // under "Other" -- a card must never silently disappear because a new
+  // metric_key was added without a matching category.
+  const claimed = new Set();
+  const extra = {
+    parties: '<div id="strat-parties"></div><div id="strat-attendance"></div>',
+    dance_infusion: '<div id="strat-di"></div>',
+    audience: '<div id="strat-ig"></div>',
+    content: '<div id="strat-videos"></div>',
+    site: '<div id="strat-traffic"></div>',
+  };
+  const blockFor = (cat, all) => {
+    // Headline metrics ignore the hidden set: they are the summary, and a
+    // hidden card should drop out of the grid, not blank the header.
+    const heads = cat.heads.map(chain => {
+      for (const k of chain) { const c = strat.cards.find(x => x.metric_key === k); if (c) return c; }
+      return null;
+    });
+    // Only the key actually PROMOTED to the header is dropped from the grid —
+    // not every key in its fallback chain. Excluding the whole chain would have
+    // hidden the lifetime averages (parties.net_pl, di.cost_to_raise) from the
+    // drill-down as soon as the *_last metrics got carded.
+    const usedHeads = new Set(heads.filter(Boolean).map(c => c.metric_key));
+    const cards = all.filter(c => !strat.hidden.has(c.metric_key) && !usedHeads.has(c.metric_key))
+      .sort((a, b) => kpiRank(a.metric_key) - kpiRank(b.metric_key) || (a.label || '').localeCompare(b.label || ''));
+    const headHtml = heads.map(c => {
+      if (!c) return `<div class="cat-head"><div class="cat-head-label">—</div><div class="cat-head-val none">—</div></div>`;
+      const d = headDelta(c);
+      const off = offTarget(c);
+      return `<div class="cat-head">
+        <div class="cat-head-label">${escapeHtml(c.label)}${srcBadge(c)}</div>
+        <div class="cat-head-val${c.current_value == null ? ' none' : ''}">${fmtMetric(c.current_value, c.unit)}</div>
+        <div class="cat-delta ${d.cls}">${escapeHtml(d.text)}${off ? ` · target ${fmtNum(c.target_value)}` : ''}</div>
+      </div>`;
     }).join('');
-    groups += `<div class="strat-group">
-      <div class="strat-group-title" style="--ws-color:${WORKSTREAM[ws].color}">${escapeHtml(WORKSTREAM[ws].label)}</div>
-      <div class="kpi-grid">${cells}</div>
+    const grid = cards.length
+      ? `<div class="kpi-grid">${cards.map(kpiCardHtml).join('')}</div>`
+      : '<div class="li-sub">Every card in this category is hidden.</div>';
+    const open = strat.expanded.has(cat.key);
+    return `<div class="strat-cat${open ? ' open' : ''}" data-cat-block="${cat.key}" style="--cat-color:${cat.color}">
+      <button class="strat-cat-head" data-cat="${cat.key}" aria-expanded="${open}">
+        <span class="strat-cat-name">${escapeHtml(cat.label)}</span>
+        <span class="cat-heads">${headHtml}</span>
+        <span class="cat-chev">▶</span>
+      </button>
+      ${catChart(cat)}
+      <div class="strat-cat-body">
+        <div class="section-label">All ${escapeHtml(cat.label.toLowerCase())} numbers</div>
+        ${grid}
+        ${extra[cat.key] || ''}
+      </div>
+    </div>`;
+  };
+
+  let html = '';
+  for (const cat of CATEGORIES) {
+    const mine = strat.cards.filter(c => catFor(c.metric_key)?.key === cat.key);
+    mine.forEach(c => claimed.add(c.metric_key));
+    html += blockFor(cat, mine);
+  }
+  const orphans = strat.cards.filter(c => !claimed.has(c.metric_key) && !strat.hidden.has(c.metric_key));
+  if (orphans.length) {
+    const open = strat.expanded.has('other');
+    html += `<div class="strat-cat${open ? ' open' : ''}" style="--cat-color:var(--mid)">
+      <button class="strat-cat-head" data-cat="other" aria-expanded="${open}">
+        <span class="strat-cat-name">Other</span>
+        <span class="cat-heads"><span class="li-sub">${orphans.length} metric${orphans.length === 1 ? '' : 's'} with no category yet</span></span>
+        <span class="cat-chev">▶</span>
+      </button>
+      <div class="strat-cat-body"><div class="kpi-grid">${orphans.map(kpiCardHtml).join('')}</div></div>
     </div>`;
   }
-  $('strat-cards').innerHTML = groups || `<div class="panel-state">All cards hidden. Use “Manage cards” to show some.</div>`;
+  $('strat-cards').innerHTML = html;
 
   const evt = (label, val, tip) => `<div class="evt-metric"><div class="kpi-label">${escapeHtml(label)}${tip ? infoTip(tip) : ''}</div><div class="kpi-value">${val}</div></div>`;
+  // These targets live inside category bodies now, created by the innerHTML
+  // write just above -- guarded so a future category rename cannot throw.
   const p = strat.parties, d = strat.di;
-  $('strat-parties').innerHTML = p
+  const setIf = (id, html) => { const el = $(id); if (el) el.innerHTML = html; };
+  setIf('strat-parties', p
     ? `<div class="section-sub">Latest party — ${escapeHtml(p.name || '')} · ${escapeHtml(fmtDate(p.event_date))}</div>
        <div class="strat-event-row">
          ${evt('Sell-through', fmtMetric(p.sell_through_pct, '%'), FORMULAS.sell_through)}
          ${evt('Tickets / capacity', `${fmtNum(p.tickets_sold)} / ${fmtNum(p.capacity)}`, FORMULAS.tickets_cap)}
          ${evt('Net P&L', fmtMetric(p.net_pl, '$'), FORMULAS.net_pl)}
        </div>`
-    : `<div class="panel-state">No party events yet — log one to populate sell-through and P&amp;L.</div>`;
-  $('strat-di').innerHTML = d
+    : `<div class="panel-state">No party events yet — log one to populate sell-through and P&amp;L.</div>`);
+  setIf('strat-di', d
     ? `<div class="section-sub">Latest Dance Infusion — ${escapeHtml(d.name || '')} · ${escapeHtml(fmtDate(d.event_date))}</div>
        <div class="strat-event-row">
          ${evt('Net P&L', fmtMetric(d.net_pl, '$'), FORMULAS.net_pl)}
@@ -5526,11 +5831,13 @@ function renderStrategy() {
          ${evt('Cost to raise $1', fmtMetric(d.cost_to_raise_per_dollar, '$'), FORMULAS.cost_to_raise)}
          ${evt('Attendance', fmtNum(d.total_attendance), FORMULAS.attendance)}
        </div>`
-    : `<div class="panel-state">No Dance Infusion events yet.</div>`;
+    : `<div class="panel-state">No Dance Infusion events yet.</div>`);
 
-  $('strat-manage-list').innerHTML = WS_ORDER.flatMap(ws =>
-    strat.cards.filter(c => c.workstream === ws).map(c =>
-      `<label><input type="checkbox" data-metric="${escapeHtml(c.metric_key)}"${strat.hidden.has(c.metric_key) ? '' : ' checked'}> ${escapeHtml(WORKSTREAM[ws].label)} · ${escapeHtml(c.label)}</label>`
+  // Grouped by the same six categories the board uses, so "where is that card"
+  // has one answer rather than two.
+  $('strat-manage-list').innerHTML = CATEGORIES.flatMap(cat =>
+    strat.cards.filter(c => catFor(c.metric_key)?.key === cat.key).map(c =>
+      `<label><input type="checkbox" data-metric="${escapeHtml(c.metric_key)}"${strat.hidden.has(c.metric_key) ? '' : ' checked'}> ${escapeHtml(cat.label)} · ${escapeHtml(c.label)}</label>`
     )
   ).join('');
   renderStratTraffic();
@@ -5541,12 +5848,22 @@ async function loadStrategy() {
   setStratState('loading', 'Loading strategy…');
   $('refreshBtn').disabled = true;
   try {
-    const [dash, parties, di, prefs, igHist, att, ytVids, tDaily, tPages, tLinks, tRefs, tListeners] = await Promise.all([
-      sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of'),
+    const [dash, parties, di, prefs, igHist, att, ytVids, tDaily, tPages, tLinks, tRefs, tListeners, evSeries, recentVids] = await Promise.all([
+      // prior_as_of / prior_basis / source_kind / changed_on are the columns 142
+      // appended: what the number is compared against, where it came from, and
+      // when it last actually moved.
+      sb.from('v_kpi_dashboard').select('metric_key, workstream, label, current_value, prior_value, target_value, comparison, unit, as_of, prior_as_of, prior_basis, source_kind, changed_on'),
       sb.from('v_kpi_parties').select('name, event_date, capacity, tickets_sold, sell_through_pct, net_pl').order('event_date', { ascending: false }).limit(1),
       sb.from('v_kpi_dance_infusion').select('name, event_date, total_attendance, net_pl, total_raised, cost_to_raise_per_dollar').order('event_date', { ascending: false }).limit(1),
-      sb.from('dashboard_prefs').select('hidden_metric_keys').eq('singleton', true).maybeSingle(),
-      sb.from('metric_snapshots').select('metric_key, value, captured_on').in('metric_key', IG_ACCOUNTS.map(a => a.key)).is('series_id', null).order('captured_on'),
+      // Per-user now (142). dashboard_prefs was a SINGLETON row, so one person
+      // hiding a card hid it for everyone -- unworkable once each person also
+      // has their own open/closed categories.
+      sb.from('user_dashboard_prefs').select('hidden_metric_keys, expanded_categories').eq('user_id', ME.id).maybeSingle(),
+      // Same query, wider net: the category charts read subscriber and listener
+      // history from the same snapshots the IG sparklines already used.
+      sb.from('metric_snapshots').select('metric_key, value, captured_on')
+        .in('metric_key', [...IG_ACCOUNTS.map(a => a.key), 'audience.subscribers', 'radio.listeners'])
+        .is('series_id', null).order('captured_on'),
       sb.from('events').select('name, event_date, total_attendance').is('deleted_at', null).not('total_attendance', 'is', null).order('event_date'),
       sb.from('youtube_videos').select('title, views, likes, comments, published_at').order('views', { ascending: false }).limit(6),
       // Traffic rollups (109). Views, not raw rows — the table gets long fast.
@@ -5555,6 +5872,12 @@ async function loadStrategy() {
       sb.from('v_site_top_links').select('link_url, label, outbound, clicks, clickers').order('clicks', { ascending: false }).limit(25),
       sb.from('v_site_referrers').select('referrer, views, visitors').order('views', { ascending: false }).limit(25),
       sb.from('v_radio_listeners').select('role, is_external, visits, episodes_seen'),
+      // Per-event values (142) -- the bar sequences, and the "vs the previous
+      // party" comparison an average can never show.
+      sb.from('v_kpi_event_series').select('metric_key, name, event_date, value, seq').order('event_date'),
+      // Chronological, unlike the by-views list below it: the Content chart is
+      // asking "is what we publish NOW landing", which needs recency order.
+      sb.from('youtube_videos').select('title, views, published_at').order('published_at', { ascending: false }).limit(12),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
     if (err) {
@@ -5566,7 +5889,18 @@ async function loadStrategy() {
     strat.parties = parties.data?.[0] || null;
     strat.di = di.data?.[0] || null;
     strat.hidden = new Set(prefs.data?.hidden_metric_keys || []);
-    strat.igHistory = {}; (igHist.data || []).forEach(s => { (strat.igHistory[s.metric_key] = strat.igHistory[s.metric_key] || []).push(s); });
+    strat.expanded = new Set(prefs.data?.expanded_categories || []);
+    // One pass, two consumers: igHistory keeps the existing IG sparklines
+    // working; history feeds the category charts.
+    strat.igHistory = {}; strat.history = {};
+    (igHist.data || []).forEach(s => {
+      (strat.history[s.metric_key] = strat.history[s.metric_key] || []).push(s);
+      if (IG_ACCOUNTS.some(a => a.key === s.metric_key)) (strat.igHistory[s.metric_key] = strat.igHistory[s.metric_key] || []).push(s);
+    });
+    // Supplementary, like traffic: a missing view on an older deploy must not
+    // take the whole screen down.
+    strat.series = evSeries?.data || [];
+    strat.recentVideos = recentVids?.data || [];
     strat.attendance = att.data || [];
     strat.ytVideos = ytVids.data || [];
     // Traffic is supplementary — a failure here (view missing on an older
@@ -5605,21 +5939,41 @@ async function refreshMixStats() {
   toast(data?.note || `Mix stats updated for ${data.updated} episode${data.updated === 1 ? '' : 's'}${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
   refreshStratIfActive();
 }
-// Manage-cards toggle + YouTube / mix refresh
+// One row per user; upsert so the first save creates it. The RLS policy is
+// row-local (user_id = auth.uid()) so this works without a returning-clause
+// round trip — see the CLAUDE.md note on insert..returning and RLS.
+async function saveStratPrefs() {
+  const { error } = await sb.from('user_dashboard_prefs').upsert({
+    user_id: ME.id,
+    hidden_metric_keys: [...strat.hidden],
+    expanded_categories: [...strat.expanded],
+    updated_at: new Date().toISOString(),
+  });
+  return error;
+}
+// Manage-cards toggle + YouTube / mix refresh + category expand
 $('panel-strategy').addEventListener('click', (e) => {
   if (e.target.closest('[data-strat-toggle]')) { $('strat-manage').classList.toggle('show'); return; }
   if (e.target.closest('[data-yt-refresh]')) { refreshYoutube(); return; }
   if (e.target.closest('[data-mix-refresh]')) { refreshMixStats(); return; }
+  const catBtn = e.target.closest('[data-cat]');
+  if (catBtn) {
+    // Toggle the class rather than re-rendering: a full render would rebuild
+    // every chart and throw away the scroll position mid-click.
+    const key = catBtn.dataset.cat, block = catBtn.closest('.strat-cat');
+    const open = block.classList.toggle('open');
+    catBtn.setAttribute('aria-expanded', String(open));
+    if (open) strat.expanded.add(key); else strat.expanded.delete(key);
+    saveStratPrefs().then(err => { if (err) toast('Saving layout failed: ' + err.message, 'err'); });
+  }
 });
-// Persist hide/show to the shared dashboard_prefs row
+// Persist hide/show to this user's own prefs row (was a single shared row)
 $('strat-manage-list').addEventListener('change', async (e) => {
   const cb = e.target.closest('input[type="checkbox"][data-metric]');
   if (!cb) return;
   const key = cb.dataset.metric;
   if (cb.checked) strat.hidden.delete(key); else strat.hidden.add(key);
-  const { error } = await sb.from('dashboard_prefs')
-    .update({ hidden_metric_keys: [...strat.hidden], updated_at: new Date().toISOString() })
-    .eq('singleton', true);
+  const error = await saveStratPrefs();
   if (error) {
     if (cb.checked) strat.hidden.add(key); else strat.hidden.delete(key); // revert state
     cb.checked = !cb.checked;
