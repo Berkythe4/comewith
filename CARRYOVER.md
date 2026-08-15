@@ -1,4 +1,9 @@
-# Carryover — 2026-08-15 (radio discovery audit close · ran on the DESKTOP)
+# Carryover — 2026-08-15 (Notes module: assign · edit · convert-to-task — ran on HENRY'S machine)
+
+**Two closes landed on 2026-08-15, on two different machines.** This is the later one,
+run by **Henry** from a fresh checkout at `C:\comewith`. Keith's radio-discovery-audit
+close (desktop, same day) is preserved below under "This session shipped" — nothing in
+it was overwritten, and its Parked/next items are still open and still first.
 
 Pickup order: this → `DEV_DOCS/claude-memory/MEMORY.md` → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`.
 Ritual: `SESSION_CLOSE_PROMPTS.md`. DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
@@ -24,16 +29,23 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `137_show_counter_wording.sql`.** Applied via the Management
-  API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is linked to **staging**, so
-  always pass the prod ref explicitly. The migration **files** are the tracked source of truth.
-- **Financial views:** all five re-verified anon **401** on 2026-08-15 (`v_event_summary`,
-  `v_kpi_event_financials`, `v_kpi_parties`, `v_kpi_dance_infusion`, `v_kpi_dashboard`).
+- **Migrations: files through `139_notes_to_tasks.sql`; 138 + 139 APPLIED to prod 2026-08-15.**
+  Applied via the Management API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is
+  linked to **staging**, so always pass the prod ref explicitly. The migration **files** are
+  the tracked source of truth.
+- **Financial views:** all five re-verified anon **401** on 2026-08-15, *after* both migrations
+  and both deploys (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+  `v_kpi_dance_infusion`, `v_kpi_dashboard`).
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
-- **Latest LEARNINGS §:** 15.
-- **Git:** `master` = `88b2153`, pushed. `radio/window-by-lineup` **merged**. Older unmerged
-  branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`, `event-hub-sprint-1`.
+- **Latest LEARNINGS §:** 17.
+- **Git:** `master` = `0529125`, pushed and live. `radio/window-by-lineup`, `feature/notes-assignment`
+  (PR #1) and `feature/notes-edit-and-convert` (PR #2) all **merged**. Older unmerged branches:
+  `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`, `event-hub-sprint-1`.
+- **Henry has prod access now** — his Supabase account was added to the **Come With** org on
+  2026-08-15, so his own `SBP_PAT` reaches `comewith-prod` and `comewith-staging`. His `.env`
+  carries only `SBP_PAT` + `SBP_REF_PROD`, not the `SUPABASE_PROD_URL` /
+  `SUPABASE_PROD_PUBLISHABLE_KEY` the contract expects.
 - **Edge-function deploys go through `scripts/deploy_edge_function.py`**, not the CLI. CLI
   2.101.0 rejects the newer `sbp_v0_…` PAT format outright ("Invalid access token format")
   *and* is linked to staging; the Management API takes the same token fine. The script
@@ -48,9 +60,14 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Click "↻ Pull shows", then "↻ Refresh music & data"** on the Radio panel (items 1–2). The
-fix is live but unexercised, and the pool is still the 2026-08-14 pull with 677 unscanned
-artists in it.
+**Unchanged from the desktop close: click "↻ Pull shows", then "↻ Refresh music & data"** on
+the Radio panel (items 1–2). The fix is live but unexercised, and the pool is still the
+2026-08-14 pull with 677 unscanned artists in it. The Notes work below doesn't compete with
+this — it shipped and needs nothing.
+
+Second, cheap and worth doing while you're in there: **exercise the Notes module end to end**
+(assign a note, edit one, convert one to a task). Everything was deployed and structurally
+verified, but nothing has been clicked in the real dashboard by a human yet.
 
 ## Parked / next
 1. **Exercise the deployed fix — nobody has run a pull through it yet.** Hit "↻ Pull shows"
@@ -71,6 +88,63 @@ artists in it.
    not yet urgent, will be.
 5. **Financial views still readable by `authenticated`** — the standing GATED BLOCKER before
    any customer/external login.
+6. **`feedback_log` answers anon `200 []`, not `401`.** Same latent shape 103 fixed for
+   `sc_playlists` / `sc_playlist_tracks`: a table-level anon grant survives while RLS blocks
+   every row, so it reads as an empty array instead of failing closed. **Verified not a leak** —
+   the body is `[]` and an anon POST is refused 401. The source is visible in
+   `016_feedback_log.sql` lines 27–28, which contains the exact
+   `grant all on all tables in schema public to anon` that `CLAUDE.md` now forbids. One-line
+   follow-up: `revoke all on public.feedback_log from anon;`. Not urgent, but it will scare
+   whoever next audits `role_table_grants`.
+7. **Two gate tests written but NEVER RUN:** `tests/notes_assignment_test.sql` (138) and
+   `tests/notes_to_tasks_test.sql` (139). Both are `BEGIN..ROLLBACK`. They were blocked by a
+   permission classifier on Henry's machine at the time; the Management API path works now, so
+   they can simply be run. 138's trigger behaviour is still argued rather than observed.
+8. **`.claude/settings.local.json` is tracked in git.** It's machine-local permission config —
+   Henry's `Bash(git merge:*)` grant is sitting as an uncommitted modification right now and
+   will follow whoever next stages everything. Probably wants `.gitignore` + `git rm --cached`.
+9. **The task board's due-date window mixes UTC and local.** `calBoardTasks` builds the horizon
+   with `toISOString()` but compares it to a local `today`, so in New York the window can run a
+   day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
+   overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-15 — Notes module: assignment, editing, convert-to-task · HENRY'S machine)
+Migrations **138 + 139 APPLIED to prod**; `master` = `0529125`, merged and **verified live on
+comewith.org**. Financial views re-checked anon **401** after both. Two PRs: #1 (assignment),
+#2 (edit / convert / Site bucket / due-filter). No existing row was modified by either migration.
+- **Assignment (138).** `feedback_log.assigned_to` → `profiles` + `assigned_at`, partial index,
+  and a BEFORE trigger that stamps the timestamp in the database rather than trusting the
+  client clock. Inline picker per row, who-filter (Anyone / Mine / Unassigned / teammate),
+  "logged by X" beside each note, optional assignee on quick capture. Assigning to someone
+  else fires the existing `notify()` (kind `assigned`, 121) so a claim is visible without
+  re-reading the tab. **Why `profiles` and not `actors`: LEARNINGS §16.**
+- **Editing.** Notes were write-once. Anyone with Notes access can now edit any note — type,
+  page, text, assignee, status. Closes Keith's own note from 2026-08-12, "Allow for editing
+  notes that have been created."
+- **Convert to task (139).** "⇢ Task" opens the Calendar's existing task modal pre-filled from
+  the note; the note closes only once the task actually exists, and if the close fails the task
+  stands and the note stays open *and says so*. `tasks_source_check` widened to admit `'note'`
+  (the move 114 made for `'meeting'`); `tasks.feedback_note_id` mirrors `meeting_note_id`,
+  `ON DELETE SET NULL` so deleting a note never deletes the work it became.
+- **`site` bucket.** Added to `WS_PILLARS`, defaulted for converted notes, changeable in the
+  modal. **No migration** — 116 made `pillar` free text precisely so a bucket stays a UI
+  concern. The ternary chain in `wsPillarColor`/`wsPillarLabel` became `WS_PILLAR_EXTRA`.
+- **Found and fixed on the way:** `calAddTask` had **no Bucket field at all** — the board could
+  filter by bucket but nothing could ever set one, which is why **83 of 109 tasks have none**.
+  Now on the modal for every task.
+- **"Next 7 / 30 days" now includes overdue.** A horizon starting today hid exactly the work
+  that most needed doing. Labels say so ("Overdue + next 7 days"); done-ness stays governed by
+  the status chips rather than being silently re-decided.
+- **Verification, honestly scoped:** the 1.22 MB inline module passes `node --check` after every
+  merge, run with the pre-edit file as a control so an extraction artifact can't pass for a real
+  error; both migrations verified on prod by introspection; the live site re-fetched and grepped
+  for the shipped markup. **Not verified:** the two gate tests never ran (Parked item 7), and
+  no human has clicked the feature in the real dashboard.
+- **Machine note:** this session's Claude memory lives on Henry's machine
+  (`~/.claude/projects/C--comewith/memory/`, 3 files) and was **deliberately NOT** copied into
+  `DEV_DOCS/claude-memory/` — that folder is the desktop's set, and its README says not to merge
+  two divergent memory sets by hand. The durable lessons from it went into LEARNINGS §16–17
+  instead, which is where they're readable from any machine.
 
 ## This session shipped (2026-08-15 — Radio discovery audit: the window was filtering on the wrong date)
 Full audit of shows → producers → tracks, run against prod. **No migration, no prod writes.**

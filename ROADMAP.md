@@ -19,7 +19,7 @@ items collected in project-phase-11-status memory.
 
 > ## ⚠ THIS FILE IS STALE (noted 2026-08-15)
 > Reconciled **2026-06-02**. It predates the entire Come With Radio build (migrations
-> through 137, episode stations, listener accounts, the DICE/Ticketmaster market pulls)
+> through 139, episode stations, listener accounts, the DICE/Ticketmaster market pulls)
 > and the priority framing below is two months past its date. For current state read
 > **`CARRYOVER.md`** first, then **`DEV_DOCS/claude-memory/MEMORY.md`**. The architecture
 > and phase history below are still accurate as history — the status is not.
