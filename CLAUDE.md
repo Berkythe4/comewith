@@ -71,6 +71,19 @@ Two Come-With-specific additions to whichever variant you run:
 - **Deactivation contract (098):** `profiles.deleted_at` set = user deactivated;
   `is_admin()` / `is_master_admin()` / `user_can_access_module()` all treat that
   profile as no-role. Any new role helper MUST keep the `deleted_at is null` guard.
+- **PostgREST `max_rows` is 1000 on prod, and truncation is SILENT.** A `.select()`
+  with no `.range()` is a query with an undeclared cap — `ra_events` (1,327 future),
+  `ra_artists` (1,594 future) and `sc_artist_cache` (1,956) are all past it today. Page
+  it, and **order by a PRIMARY KEY**: ordering by a non-unique column (`event_date`,
+  `next_event_date`) lets a tie straddle a page boundary and silently skip or repeat
+  rows. The dashboard has `sbAll(build, pk)`; edge functions page inline. Any cap that
+  can't be paged away MUST report what it dropped (`dropped_over_cap`, `scope.capped`)
+  and the UI must surface it — a silent cap reads as "that's all there is". §18.
+- **A delete keyed to a fetch range must be bounded at BOTH ends.** The pull functions
+  clear their own source's rows before re-inserting; `gte(from)` alone was only ever
+  correct because every pull ran [today, today+90]. Once a fetch can be narrower or
+  start later, a bottom-bounded delete throws away everything past the window it just
+  fetched. Widening a read is not just a read change if a write shares its range.
 
 ## Series contract (events.series)
 

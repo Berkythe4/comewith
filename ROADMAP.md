@@ -19,7 +19,7 @@ items collected in project-phase-11-status memory.
 
 > ## ⚠ THIS FILE IS STALE (noted 2026-08-15)
 > Reconciled **2026-06-02**. It predates the entire Come With Radio build (migrations
-> through 137, episode stations, listener accounts, the DICE/Ticketmaster market pulls)
+> through 139, episode stations, listener accounts, the DICE/Ticketmaster market pulls)
 > and the priority framing below is two months past its date. For current state read
 > **`CARRYOVER.md`** first, then **`DEV_DOCS/claude-memory/MEMORY.md`**. The architecture
 > and phase history below are still accurate as history — the status is not.
@@ -1090,6 +1090,13 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
   magic link AND silently throttles listener signups. Needs Resend SMTP in the
   Supabase dashboard, then raise `rate_limit_email_sent`. **Highest priority.**
 - Marks show only in ⛶ Arrange — not the main tracklist or `dj.html`.
+- ~~The radio window can only start today~~ — **resolved 2026-08-15.** The window takes
+  any start date, `dj-station` reads it off the episode, and the pulls take `from`/`to`
+  out to 180 days. Deployed, **not yet clicked in a browser** (CARRYOVER Parked #1).
+- ~~The dashboard silently loaded at most 1000 rows per radio query~~ — **resolved
+  2026-08-15** via `sbAll()`. Any NEW radio query must page too — LEARNINGS §18.
+- **No cron pulls the market.** `cron.job` runs only publish/retention/YouTube, so the
+  discovery pool is only ever as fresh as the last manual "↻ Pull shows". Unresolved.
 - ~~13 Elements artists have suspicious 0-track SoundCloud matches~~ — **resolved
   2026-08-03**, see "Elements: uncapped songs + Thursday scope" below. 18 acts still
   show 0 songs and that is the CORRECT answer: they only ever post DJ sets.

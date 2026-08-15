@@ -1,4 +1,9 @@
-# Carryover — 2026-08-15 (radio discovery audit close · desktop, then LAPTOP follow-up)
+# Carryover — 2026-08-15 (radio: future-dated windows + the 1000-row truncation · LAPTOP)
+
+**THREE closes landed on 2026-08-15, on three machines.** This is the latest, run by
+**Keith on the laptop**. In order: the desktop's radio-discovery audit, Henry's Notes
+module, then this one. Nothing was overwritten — every "This session shipped" block is
+preserved below, newest first.
 
 Pickup order: this → `DEV_DOCS/claude-memory/MEMORY.md` → `LEARNINGS.md` → `ROADMAP.md` → `CLAUDE.md`.
 Ritual: `SESSION_CLOSE_PROMPTS.md`. DI data load detail: `events/dance-infusion/DI_DATA_LOAD_LOG.md`.
@@ -10,12 +15,9 @@ Nothing is lost — but one thing about this repo isn't obvious from a fresh che
 snapshotted into **`DEV_DOCS/claude-memory/`** (index: `MEMORY.md`). Read the index;
 open individual files as needed. Re-snapshot at every close.
 
-> ⚠ The rest of this file was written at `88a609c`, one commit BEFORE the merge, and
-> described `radio/window-by-lineup` as unmerged/undeployed. **It shipped.** Keith
-> green-lit it at 16:52 on 8/15: `88b2153` merges it to master (Netlify published the
-> dashboard fix) and both edge functions were deployed the same minute — verified on
-> prod by pulling their live bodies (`pull-dice` carries `dropped_over_cap`,
-> `pull-ticketmaster` carries `Brooklyn`/`Queens`). Parked item #1 is DONE.
+The radio window fix is merged, live, and **has now been exercised** — Keith ran a real
+"↻ Pull shows" at 17:13 on 8/15 and the numbers moved (see State summary). Everything
+below is current as of that pull plus this session's deploys.
 
 ## ⛔ PRIORITY CONTEXT (⚠ dated 2026-06-02 — unverified, confirm with Keith)
 **Come With was set MAINTENANCE-ONLY** while the **CWF (Come With Fitness) BRD** ran as
@@ -26,63 +28,181 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `137_show_counter_wording.sql`.** Applied via the Management
-  API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is linked to **staging**, so
-  always pass the prod ref explicitly. The migration **files** are the tracked source of truth.
-- **Financial views:** all five re-verified anon **401** on 2026-08-15 (`v_event_summary`,
-  `v_kpi_event_financials`, `v_kpi_parties`, `v_kpi_dance_infusion`, `v_kpi_dashboard`).
+- **Migrations: files through `139_notes_to_tasks.sql`; 138 + 139 APPLIED to prod 2026-08-15.**
+  Applied via the Management API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is
+  linked to **staging**, so always pass the prod ref explicitly. The migration **files** are
+  the tracked source of truth.
+- **Financial views:** all five re-verified anon **401** on 2026-08-15, *after* both migrations
+  and both deploys (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+  `v_kpi_dance_infusion`, `v_kpi_dashboard`).
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
-- **Latest LEARNINGS §:** 15.
-- **Git:** `master` = `88b2153` (merge of `radio/window-by-lineup`), pushed and deployed.
-  That branch is now merged — don't re-checkout it. Older unmerged branches:
-  `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`.
+- **Latest LEARNINGS §:** 18.
+- **Git:** `master` = this merge, pushed and live. `radio/window-by-lineup`,
+  `feature/notes-assignment` (PR #1) and `feature/notes-edit-and-convert` (PR #2) all
+  **merged**. Older unmerged branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`,
+  `event-hub-sprint-1`.
+- **Edge functions on prod:** `dj-station` **v9**, `pull-dice` **v6**, `pull-ticketmaster`
+  **v8**, `pull-ra-market` **v15** — all deployed 2026-08-15 from the laptop and verified by
+  reading the live bundles back.
+- **Henry has prod access now** — his Supabase account was added to the **Come With** org on
+  2026-08-15, so his own `SBP_PAT` reaches `comewith-prod` and `comewith-staging`. His `.env`
+  carries only `SBP_PAT` + `SBP_REF_PROD`, not the `SUPABASE_PROD_URL` /
+  `SUPABASE_PROD_PUBLISHABLE_KEY` the contract expects.
+- **Edge-function deploys go through `scripts/deploy_edge_function.py`**, not the CLI. CLI
+  2.101.0 rejects the newer `sbp_v0_…` PAT format outright ("Invalid access token format")
+  *and* is linked to staging; the Management API takes the same token fine. The script
+  preserves each function's existing `verify_jwt` rather than resetting it — `dj-station` is
+  `verify_jwt=false` (token-gated, no login) and flipping it locks every DJ out.
+- **PostgREST `max_rows` on prod is 1000** and it truncates silently. Any unbounded
+  `.select()` over `ra_events` / `ra_artists` / `sc_artist_cache` is already over that line.
+  The dashboard pages through `sbAll()` now; new code must too. LEARNINGS §18.
 - **Radio discovery pool (prod, as of the 2026-08-15 17:13 pull — the first one AFTER the
   DICE/TM fixes went live):** 1,047 future RA events (→ 11/13), **240 DICE** (→ 9/07, was 124
   → 8/21), **40 TM across 16 venues** (was 25/10, now including Brooklyn Steel, Brooklyn
   Paramount, Brooklyn Bowl, Warsaw, Music Hall of Williamsburg, Under the 'K' Bridge Park).
-  **No cron pulls any of this** — `cron.job` runs only publish/retention/YouTube.
+  2,874 RA artists total, 1,594 with a future date. **No cron pulls any of this** — `cron.job`
+  runs only publish/retention/YouTube; the pool is as fresh as the last manual "↻ Pull shows".
 - **Docs freshness:** `ROADMAP.md` is reconciled to **2026-06-02** and predates the whole
   radio build; treat CARRYOVER + `DEV_DOCS/claude-memory/` as the true state.
 - **Tools:** `/tools/actor-inspector.html` · `/tools/test-checklist.html` · `/tools/visualizer.html`
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Deploy `dj-station`** (parked #1 below) and decide the DICE cap. The dashboard window is
-fixed and live; the DJ-facing path is fixed in the repo but not yet on prod.
+**Reload the dashboard and pull once more, then scan.** Everything from this session is
+deployed but nothing has been clicked through a browser yet — the paging fix in particular
+changes what the Radio panel loads, and it is the one change a human has to see working.
+
+Second, cheap while you're in there: **exercise the Notes module end to end** (assign a note,
+edit one, convert one to a task). Deployed and structurally verified, never clicked.
 
 ## Parked / next
-1. **`dj-station` fix is committed but NOT DEPLOYED.** Same two bugs the dashboard had, on the
-   DJ-facing path: it filtered on `ra_artists.next_event_date` (the soonest-show bug) *and*
-   capped at a silent `.limit(160)` against a ~982-artist window. Rewritten on
-   `ra_events.lineup`, mirroring `raWindowPool()`; paged rather than capped, and if the
-   1,500 safety stop ever binds it reports `scope.capped` + `pool_total` and dj.html shows a
-   warning. Deploy: Management API multipart
-   `POST /v1/projects/yaytdosxfhcqatmhctzk/functions/deploy?slug=dj-station` (the CLI rejects
-   the `sbp_v0_…` PAT; send a browser User-Agent). Verify by opening a real `dj.html?ep=<token>`
-   and checking the artist count moves off 160.
-2. **DICE's cap is still binding — decide whether to raise it.** The 8/15 17:13 pull took DICE
-   from 124 → 240 events and from 8/21 → 9/07, so the fix works. But 240 IS the new cap, and
-   soonest-first fills the front: weeks of 9/07 and 9/14 hold 1 and 0 DICE events. A 4-week
-   window from 8/18 still under-represents DICE in its last two weeks. It is now *reported*
-   (`dropped_over_cap`) rather than silent, which was the point — but the number wants raising.
-3. **Scan the 8/18 window — 113 artists, not 677.** Post-pull truth: 982 artists in the
+1. **Click through this session's work — none of it has been exercised in a browser.**
+   In order: (a) hard-reload the dashboard and open Radio — the artist and cache counts
+   should JUMP, because the panel was silently loading only 1,000 of 1,594 artists and
+   1,000 of 1,956 cache rows; (b) set the "from" date a month or two out and confirm the
+   toolbar's "📅 pool to" note and the ⚠ warning behave; (c) hit "↻ Pull shows" and read the
+   toast — it now names the RA horizon, the DICE window and anything dropped; (d) open a
+   real `dj.html?ep=<token>` and confirm the artist count is no longer pinned at 160.
+2. **Scan the 8/18 window — 113 artists, not 677.** Post-pull truth: 982 artists in the
    8/18→9/15 window, 754 with a SoundCloud link, **641 already scanned, 113 never read**
-   (517 cache rows were written 8/14 21:53, after this file's original numbers were taken).
+   (517 cache rows were written 8/14 21:53, after the desktop's numbers were taken).
    "↻ Refresh music & data" on the Radio panel; it only reads artists with no cache row, so
-   it's safe to re-run.
+   it's safe to re-run. NOTE: the pre-paging UI under-reported what was already scanned, so
+   this count may look different in the browser than it did yesterday — the 113 is from SQL.
+3. **DICE beyond ~4 weeks is still thin, by design now.** The pull aims its detail budget at
+   the radio window rather than at a flat 90 days, so shows outside the window aren't
+   refreshed — they're preserved from earlier pulls, not re-checked. If you move the window,
+   pull again. `dropped_over_cap` in the toast is the signal that the budget bound.
 4. **Scan cache never re-reads.** `raScan` skips anyone with a cache row forever; a producer
    who released tracks since their scan shows the stale catalog until "↻ re-read all" (which
    nukes and re-reads the whole window). Only 2 in-window artists are >30 days stale today —
    not yet urgent, will be.
 5. **Financial views still readable by `authenticated`** — the standing GATED BLOCKER before
    any customer/external login.
-6. **Nothing schedules a market pull.** `cron.job` runs only publish/retention/YouTube, so the
-   pool is only ever as fresh as the last manual "↻ Pull shows" (8/15 17:13 as of this line).
+6. **`feedback_log` answers anon `200 []`, not `401`.** Same latent shape 103 fixed for
+   `sc_playlists` / `sc_playlist_tracks`: a table-level anon grant survives while RLS blocks
+   every row, so it reads as an empty array instead of failing closed. **Verified not a leak** —
+   the body is `[]` and an anon POST is refused 401. The source is visible in
+   `016_feedback_log.sql` lines 27–28, which contains the exact
+   `grant all on all tables in schema public to anon` that `CLAUDE.md` now forbids. One-line
+   follow-up: `revoke all on public.feedback_log from anon;`. Not urgent, but it will scare
+   whoever next audits `role_table_grants`.
+7. **Two gate tests written but NEVER RUN:** `tests/notes_assignment_test.sql` (138) and
+   `tests/notes_to_tasks_test.sql` (139). Both are `BEGIN..ROLLBACK`. They were blocked by a
+   permission classifier on Henry's machine at the time; the Management API path works now, so
+   they can simply be run. 138's trigger behaviour is still argued rather than observed.
+8. **`.claude/settings.local.json` is tracked in git.** It's machine-local permission config —
+   Henry's `Bash(git merge:*)` grant is sitting as an uncommitted modification right now and
+   will follow whoever next stages everything. Probably wants `.gitignore` + `git rm --cached`.
+9. **The task board's due-date window mixes UTC and local.** `calBoardTasks` builds the horizon
+   with `toISOString()` but compares it to a local `today`, so in New York the window can run a
+   day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
+   overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-15 — Radio: future-dated windows, and the 1000-row truncation · LAPTOP)
+Keith asked to plan an episode against a date months out — schedules that far ahead are
+mostly confirmed, so the research is worth doing early. **No migration, no prod data writes.**
+Four edge functions deployed (`dj-station` v9, `pull-dice` v6, `pull-ticketmaster` v8,
+`pull-ra-market` v15), all verified by reading the live bundles back.
+- **The dashboard was silently losing a third of the pool.** PostgREST `max_rows` is 1000 on
+  prod and says nothing when it truncates. Every radio load was over it — 1,327 future events,
+  1,594 future artists, 1,956 cache rows — and none was ordered, so *which* thousand came back
+  was arbitrary. A far-future window could miss its own shows and look healthy; it also made
+  scanned artists read as unscanned. All of them page through the new `sbAll()` now, ordered
+  by primary key. **LEARNINGS §18.**
+- **`dj-station` had the dashboard's own window bug**, on the one screen where a missing artist
+  reads as "they have nothing": it filtered on `ra_artists.next_event_date` (the soonest-show
+  column) *and* took a silent `.limit(160)` against a 982-artist window. Rebuilt on
+  `ra_events.lineup` mirroring `raWindowPool()`, paged not capped, and it reports
+  `scope.capped` + `pool_total` if the 1,500 safety stop ever binds.
+- **The window can start in the future.** `dj-station` reads a start date off
+  `dj_search_params` instead of anchoring on "whenever the DJ opened the link", and the
+  episode form has a date field for it. All three pulls now take `from`/`to`, clamp at 180
+  days instead of 90/120, and echo the window they pulled.
+- **DICE gets the window, not a flat 90 days.** Its detail budget is finite and spent
+  soonest-first, so aiming it at the weeks the episode is built from beats spending it on the
+  near term and never arriving. Budget now scales with the window (~10 DICE shows/day in NYC;
+  the flat 240 bound exactly on the 8/15 pull and cut the last two weeks off a 4-week window);
+  ceiling raised 400 → 600.
+- **Caught before it bit: the deletes would have eaten the pool.** All three pulls delete their
+  own source's rows before re-inserting and all three bounded that delete only at the bottom —
+  fine while a pull was always [today, today+90], destructive the moment a window can be
+  narrower or start later. Pulling a 4-week window would have deleted every Ticketmaster show
+  beyond it. Bounded at both ends now.
+- **Also fixed:** the episode form REPLACED `dj_search_params` wholesale, so opening ✎ Details
+  on an Elements edition and saving would have wiped its `artists`/`day_of` scope — it merges
+  now. And the window's date picker is deliberately NOT capped at the pool's last date (you set
+  it further out and pull to meet it); the toolbar reports how far each source reaches and
+  warns when the window runs past it.
+- **Verification, honestly scoped:** this laptop has neither `deno` nor `node`, so **nothing is
+  compile-checked**. Changes were reviewed by reading, bracket-balanced against the pre-edit
+  file as a control, and the deployed bundles grepped on prod for the new code. **Not
+  verified: no human has clicked any of it in a browser** — Parked item 1.
+
+## This session shipped (2026-08-15 — Notes module: assignment, editing, convert-to-task · HENRY'S machine)
+Migrations **138 + 139 APPLIED to prod**; `master` = `0529125`, merged and **verified live on
+comewith.org**. Financial views re-checked anon **401** after both. Two PRs: #1 (assignment),
+#2 (edit / convert / Site bucket / due-filter). No existing row was modified by either migration.
+- **Assignment (138).** `feedback_log.assigned_to` → `profiles` + `assigned_at`, partial index,
+  and a BEFORE trigger that stamps the timestamp in the database rather than trusting the
+  client clock. Inline picker per row, who-filter (Anyone / Mine / Unassigned / teammate),
+  "logged by X" beside each note, optional assignee on quick capture. Assigning to someone
+  else fires the existing `notify()` (kind `assigned`, 121) so a claim is visible without
+  re-reading the tab. **Why `profiles` and not `actors`: LEARNINGS §16.**
+- **Editing.** Notes were write-once. Anyone with Notes access can now edit any note — type,
+  page, text, assignee, status. Closes Keith's own note from 2026-08-12, "Allow for editing
+  notes that have been created."
+- **Convert to task (139).** "⇢ Task" opens the Calendar's existing task modal pre-filled from
+  the note; the note closes only once the task actually exists, and if the close fails the task
+  stands and the note stays open *and says so*. `tasks_source_check` widened to admit `'note'`
+  (the move 114 made for `'meeting'`); `tasks.feedback_note_id` mirrors `meeting_note_id`,
+  `ON DELETE SET NULL` so deleting a note never deletes the work it became.
+- **`site` bucket.** Added to `WS_PILLARS`, defaulted for converted notes, changeable in the
+  modal. **No migration** — 116 made `pillar` free text precisely so a bucket stays a UI
+  concern. The ternary chain in `wsPillarColor`/`wsPillarLabel` became `WS_PILLAR_EXTRA`.
+- **Found and fixed on the way:** `calAddTask` had **no Bucket field at all** — the board could
+  filter by bucket but nothing could ever set one, which is why **83 of 109 tasks have none**.
+  Now on the modal for every task.
+- **"Next 7 / 30 days" now includes overdue.** A horizon starting today hid exactly the work
+  that most needed doing. Labels say so ("Overdue + next 7 days"); done-ness stays governed by
+  the status chips rather than being silently re-decided.
+- **Verification, honestly scoped:** the 1.22 MB inline module passes `node --check` after every
+  merge, run with the pre-edit file as a control so an extraction artifact can't pass for a real
+  error; both migrations verified on prod by introspection; the live site re-fetched and grepped
+  for the shipped markup. **Not verified:** the two gate tests never ran (Parked item 7), and
+  no human has clicked the feature in the real dashboard.
+- **Machine note:** this session's Claude memory lives on Henry's machine
+  (`~/.claude/projects/C--comewith/memory/`, 3 files) and was **deliberately NOT** copied into
+  `DEV_DOCS/claude-memory/` — that folder is the desktop's set, and its README says not to merge
+  two divergent memory sets by hand. The durable lessons from it went into LEARNINGS §16–17
+  instead, which is where they're readable from any machine.
 
 ## This session shipped (2026-08-15 — Radio discovery audit: the window was filtering on the wrong date)
 Full audit of shows → producers → tracks, run against prod. **No migration, no prod writes.**
-Code is on branch `radio/window-by-lineup` (`768a8a8`), **pushed, unmerged, undeployed.**
+**MERGED + DEPLOYED** (`88b2153`): dashboard live on Netlify (verified — `raWindowPool` is in
+the served file), `pull-dice` **v5** and `pull-ticketmaster` **v7** live on prod (verified by
+reading the deployed source back). Financial views re-checked anon **401** after the deploy.
 - **The bug:** `ra_artists` collapses each artist to ONE row carrying `next_event_date` — their
   *soonest* show. The radio window filtered on that column, so an artist playing the 16th **and**
   the 25th vanished from a window starting the 18th. Keith's 8/18 + 4-week filter was hiding

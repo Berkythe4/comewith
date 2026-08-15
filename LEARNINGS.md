@@ -187,3 +187,86 @@ it dropped**, and the caller must surface it. "↻ Pull shows" was also swallowi
 and DICE failures entirely — an outage and a genuine zero rendered identically. A
 source that didn't answer is now named in the toast. Silent truncation is the failure
 mode here, not the truncation itself.
+
+## Section 16 — Internal work assigns to `profiles`; work touching outside people assigns to `actors` (2026-08-15)
+
+Notes (`feedback_log`) gained an assignee in migration 138, and the obvious move was
+to copy `task_assignments`, which points at **`actors`**. That would have been wrong.
+
+The two tables answer different questions. A **task** can land on a DJ, a vendor, or a
+venue contact — people who have no login and may never have one — so `actors`, the
+people-and-orgs graph, is right for it. A **note** is the internal build log; its
+readers are the five `profiles` with logins, and the notification bell (121) keys on
+the **auth user id**. Assigning a note to an actor would mean maintaining an
+actor→user mapping that does not exist, purely to send a notification.
+
+**The rule:** if the thing being assigned is internal team work and needs to notify,
+assign to `profiles`. If it can land on someone outside the team, assign to `actors`.
+Don't unify them for symmetry — they have genuinely different populations.
+
+Two related decisions from the same build, recorded so they aren't re-litigated:
+- **One assignee on a note, not a link table.** The entire point is a single owner;
+  the double-work problem is not solved by a note with three owners.
+- **Quick capture defaults to unassigned.** Logging something you spotted is not the
+  same as committing to build it. Claiming is one click in the table.
+- **A converted note keeps a back-link** (`tasks.feedback_note_id`, 139, mirroring
+  `meeting_note_id`). Without it a converted note simply goes `done`, and nothing
+  distinguishes "we did this" from "this became work that is still open."
+
+## Section 17 — An empty error body means the request was rejected before the SQL ran (2026-08-15)
+
+Applying migration 139 through the Management API returned **HTTP 400 with an empty
+body**, while the identical endpoint answered read-only queries fine. Half an hour
+went into the SQL. The SQL was never the problem.
+
+PowerShell 5.1's `Get-Content -Raw` decodes using the **system ANSI codepage**, not
+UTF-8. The migration's comments contain em dashes; each came back as the three
+mojibake characters `â€"`, which were then re-encoded into a payload the API rejected.
+Reading the same file with `[IO.File]::ReadAllText(path, [Text.Encoding]::UTF8)`
+applied it first try — `201 []`.
+
+**The diagnostic that mattered:** a *SQL* error from this endpoint comes back as JSON
+with a Postgres message and code (`{"message":"Failed to run sql query: ERROR: 42703
+…"}`). An **empty** body means the request was rejected before execution — so
+interrogate the payload, not the statements. Bisecting confirmed it: comments stripped,
+the migration applied; every SQL construct in it (multi-statement, `begin/commit`,
+dollar-quoting, comments) passed individually.
+
+**Standing rule:** read any file whose bytes are going over the wire with an explicit
+encoding. The same trap is why `ROADMAP.md` prints as `Come With â€" Platform Roadmap`
+in a PowerShell console while being perfectly fine on disk — use the editor/Read path
+for files, not `Get-Content`, when the content matters.
+
+## Section 18 — A row limit you did not set is still a row limit (2026-08-15)
+
+PostgREST answers with at most `max_rows` and says **nothing** when it truncates. On
+`comewith-prod` that is **1000**. Every radio load in the dashboard was already past it —
+1,327 future `ra_events`, 1,594 future `ra_artists`, 1,956 `sc_artist_cache` — and none of
+them carried an `.order()`, so *which* thousand came back was arbitrary and could change
+between two identical calls.
+
+The damage was invisible in exactly the way Section 15's was. A shorter artist list looks
+like a quieter month. Scanned artists read as unscanned, because a third of the cache was
+never delivered. And it got worse the further out you looked: a window set two months ahead
+could miss its own shows while the panel looked perfectly healthy.
+
+**The rule:** a `.select()` with no `.range()` is a query with an undeclared cap. Page it,
+and order by a **primary key** — ordering by a non-unique column (`event_date`,
+`next_event_date`) lets a tie straddle a page boundary and silently skip or repeat rows.
+The dashboard does this through `sbAll(build, pk)`; edge functions page inline. Same rule
+for any new radio surface.
+
+**The corollary, which is the more general lesson:** *every* bound in this pipeline was
+written when the data was smaller than the bound, and every one of them became a silent
+filter as the data grew — the 1000-row default, `dj-station`'s `.limit(160)`, DICE's
+160-then-240 detail cap, RA's page budget. A cap is only safe if exceeding it is
+**reported**. Where a cap is genuinely needed, return the count it dropped and surface it
+in the UI; where it is not, page.
+
+**And the trap that nearly shipped with the fix:** all three pull functions delete their
+own source's rows before re-inserting, bounded only at the bottom (`gte(from)`). That is
+correct exactly as long as every pull covers "today through the end of what we keep". The
+moment a pull can be *narrower* — which is the whole point of aiming it at a window — that
+delete throws away everything past the window it just fetched. Bound a delete at both ends,
+or don't scope the fetch. Widening a read is never just a read change if a write is keyed
+to the same range.
