@@ -16093,7 +16093,11 @@ function calBoardTasks() {
     (!f.msOnly || t.milestone) &&
     (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
   if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
-  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date >= today && t.due_date <= lim); }
+  // A horizon that starts today hides the work that most needs doing. "Next N
+  // days" therefore runs from the past to today+N: overdue tasks are always in
+  // it. Whether done tasks show stays governed by the status chips, so this
+  // doesn't quietly re-decide that too.
+  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date <= lim); }
   else if (f.due === 'none') list = list.filter(t => !t.due_date);
   const dir = f.dir;
   list.sort((a, b) => {
@@ -16140,7 +16144,7 @@ function calRenderBoard() {
       <select class="hub-status-sel" data-tb-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
       <select class="hub-status-sel" data-tb-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
       <select class="hub-status-sel" data-tb-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue'], ['7', 'Next 7 days'], ['30', 'Next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['7', 'Overdue + next 7 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-tb-mson>⭐ milestones only</button>
       <span class="li-sub" style="margin-left:auto;">${list.length} task${list.length !== 1 ? 's' : ''}</span>
     </div>
