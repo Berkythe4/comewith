@@ -1547,6 +1547,11 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
           <button data-notes-filter="open" class="active">Open</button>
           <button data-notes-filter="done">Done</button>
           <button data-notes-filter="all">All</button>
+          <select class="hub-status-sel" id="notesWhoFilter" style="margin-left:10px;max-width:190px;">
+            <option value="">Anyone</option>
+            <option value="me">Mine</option>
+            <option value="none">Unassigned</option>
+          </select>
         </div>
         <div class="row-count" id="count-notes">—</div>
         <div id="state-notes"></div>
@@ -1555,6 +1560,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
             <th style="width:42px;">Done</th>
             <th>Type</th>
             <th>Note</th>
+            <th style="width:170px;">Assigned to</th>
             <th>Page</th>
             <th>Created</th>
           </tr></thead>
@@ -6015,24 +6021,92 @@ async function submitLogEvent() {
 
 // ---- Feedback log (Phase 13 — Part C) ----
 let notesFilter = 'open';
-queries.notes = () => {
-  let qy = sb.from('feedback_log').select('id, created_at, type, note, status, page').order('created_at', { ascending: false }).limit(500);
+let notesWho = '';   // '' anyone · 'me' · 'none' unassigned · <profile id>
+
+// The roster used for assignment (138). Deliberately NOT loadStaff() — that one
+// drops ME on purpose, because it exists to pick email recipients. Claiming a
+// note for yourself is the main move here, so ME has to stay in the list.
+let _notesTeam = null;
+async function notesTeam() {
+  if (_notesTeam) return _notesTeam;
+  const { data } = await sb.from('profiles')
+    .select('id, full_name, email')
+    .in('role', ['master_admin', 'sub_admin'])
+    .is('deleted_at', null)
+    .order('email');
+  _notesTeam = data || [];
+  return _notesTeam;
+}
+const notesPersonName = (id) => {
+  if (!id) return '';
+  const p = (_notesTeam || []).find(x => x.id === id);
+  return p ? (p.full_name || p.email) : 'someone';
+};
+function notesPersonOptions(sel, { meLabel = true } = {}) {
+  return (_notesTeam || []).map(p => {
+    const label = (p.full_name || p.email) + (meLabel && p.id === ME.id ? ' (me)' : '');
+    return `<option value="${escapeHtml(p.id)}"${p.id === sel ? ' selected' : ''}>${escapeHtml(label)}</option>`;
+  }).join('');
+}
+function notesAssignSelect(id, sel, note) {
+  return `<select class="hub-status-sel note-assign-sel" data-id="${escapeHtml(id)}" data-prev="${escapeHtml(sel || '')}" data-note="${escapeHtml((note || '').slice(0, 160))}">
+    <option value=""${sel ? '' : ' selected'}>— unassigned —</option>${notesPersonOptions(sel)}</select>`;
+}
+// Teammate entries on the who-filter, added once the roster is known.
+function notesFillWhoFilter() {
+  const sel = $('notesWhoFilter');
+  if (!sel || sel.dataset.filled) return;
+  sel.insertAdjacentHTML('beforeend', notesPersonOptions('', { meLabel: false })); // "Mine" already covers me
+  sel.dataset.filled = '1';
+}
+
+queries.notes = async () => {
+  await notesTeam();          // names must resolve before the rows render
+  notesFillWhoFilter();
+  let qy = sb.from('feedback_log')
+    .select('id, created_at, type, note, status, page, created_by, assigned_to')
+    .order('created_at', { ascending: false }).limit(500);
   if (notesFilter !== 'all') qy = qy.eq('status', notesFilter);
+  if (notesWho === 'me') qy = qy.eq('assigned_to', ME.id);
+  else if (notesWho === 'none') qy = qy.is('assigned_to', null);
+  else if (notesWho) qy = qy.eq('assigned_to', notesWho);
   return qy;
 };
 emptyMessages.notes = 'No notes here. Use “＋ Log note” to jot a bug, enhancement, or idea.';
 renderers.notes = (rows) => {
   $('table-notes').querySelector('tbody').innerHTML = rows.map(r => {
     const done = r.status === 'done';
+    const author = notesPersonName(r.created_by);
     return `<tr class="${done ? 'note-done' : ''}">
       <td><input type="checkbox" class="note-done-cb" data-id="${escapeHtml(r.id)}"${done ? ' checked' : ''}></td>
       <td><span class="badge badge-type-${escapeHtml(r.type)}">${escapeHtml(r.type)}</span></td>
-      <td class="note-text">${escapeHtml(r.note)}</td>
+      <td class="note-text">${escapeHtml(r.note)}${author ? ` <span class="li-sub">— logged by ${escapeHtml(author)}</span>` : ''}</td>
+      <td>${notesAssignSelect(r.id, r.assigned_to || '', r.note)}</td>
       <td>${escapeHtml(r.page || '') || muted}</td>
       <td>${escapeHtml(fmtDate(r.created_at))}</td>
     </tr>`;
   }).join('');
 };
+
+// Assign / reassign / unassign inline. Whoever picks it up owns it, and the
+// person on the receiving end gets a bell (121) so a claim is visible without
+// anyone having to re-read the Notes tab.
+document.querySelector('main.main').addEventListener('change', async (e) => {
+  const sel = e.target.closest('.note-assign-sel');
+  if (!sel) return;
+  const id = sel.dataset.id;
+  const to = sel.value || null;
+  const prev = sel.dataset.prev || '';
+  if ((to || '') === prev) return;
+  sel.disabled = true;
+  const { error } = await sb.from('feedback_log').update({ assigned_to: to }).eq('id', id);
+  sel.disabled = false;
+  if (error) { sel.value = prev; toast('Could not assign: ' + error.message, 'err'); return; }
+  sel.dataset.prev = to || '';
+  if (to && to !== ME.id) notify(to, 'assigned', 'A note was assigned to you', sel.dataset.note || '', 'note', id);
+  toast(to ? (to === ME.id ? 'Assigned to you' : 'Assigned to ' + notesPersonName(to)) : 'Unassigned', 'ok');
+  if (notesWho) loadTab('notes');   // the row may no longer match the who-filter
+});
 
 // Filter buttons (open / done / all)
 $('panel-notes').addEventListener('click', (e) => {
@@ -6040,6 +6114,13 @@ $('panel-notes').addEventListener('click', (e) => {
   if (!b) return;
   notesFilter = b.dataset.notesFilter;
   for (const x of $('panel-notes').querySelectorAll('[data-notes-filter]')) x.classList.toggle('active', x === b);
+  loadTab('notes');
+});
+
+// Who-filter (anyone / mine / unassigned / a named teammate)
+$('panel-notes').addEventListener('change', (e) => {
+  if (e.target.id !== 'notesWhoFilter') return;
+  notesWho = e.target.value;
   loadTab('notes');
 });
 
@@ -6058,9 +6139,12 @@ document.querySelector('main.main').addEventListener('change', async (e) => {
 });
 
 // "+ Log note" — quick capture, available on every tab
-$('logNoteBtn').addEventListener('click', () => {
+$('logNoteBtn').addEventListener('click', async () => {
   const activeBtn = document.querySelector('.sidebar-nav button.active');
   const page = activeBtn ? activeBtn.textContent.trim() : '';
+  await notesTeam();
+  // Defaults to unassigned on purpose: logging something you spotted is not the
+  // same as saying you will build it. Claiming is one click in the table.
   openKpi('Log a note', 'Quick capture — bug, enhancement, or idea', `
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Type</label>
@@ -6071,17 +6155,26 @@ $('logNoteBtn').addEventListener('click', () => {
         </select></div>
       <div><label class="modal-label">Page</label><input class="modal-input" name="page" value="${escapeHtml(page)}"></div>
     </div>
-    <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="4" required></textarea></div>`,
+    <div class="modal-form-row"><label class="modal-label">Note *</label><textarea class="modal-textarea" name="note" rows="4" required></textarea></div>
+    <div class="modal-form-row"><label class="modal-label">Assign to</label>
+      <select class="modal-select" name="assigned_to">
+        <option value="" selected>— unassigned —</option>${notesPersonOptions('')}
+      </select></div>`,
     submitLogNote, 'Save note');
 });
 async function submitLogNote() {
   const type = kpiVal('type') || 'idea';
   const note = kpiVal('note');
   const page = kpiVal('page') || null;
+  const assigned_to = kpiVal('assigned_to') || null;
   if (!note) throw new Error('Note text is required');
-  const { error } = await sb.from('feedback_log').insert({ type, note, page }); // created_by defaults to auth.uid()
+  // created_by defaults to auth.uid(); assigned_at is stamped by the 138 trigger
+  const { data, error } = await sb.from('feedback_log').insert({ type, note, page, assigned_to }).select('id').single();
   if (error) throw error;
-  closeKpi(); toast('Note saved', 'ok');
+  if (assigned_to && assigned_to !== ME.id) {
+    notify(assigned_to, 'assigned', 'A note was assigned to you', note.slice(0, 160), 'note', data.id);
+  }
+  closeKpi(); toast(assigned_to ? 'Note saved and assigned' : 'Note saved', 'ok');
   if (document.querySelector('#panel-notes.active')) loadTab('notes');
 }
 
