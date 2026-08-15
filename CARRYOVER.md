@@ -10,12 +10,10 @@ Nothing is lost — but two things about this repo aren't obvious from a fresh c
 1. **Claude memory doesn't sync between machines.** The desktop's 60 memory files
    are snapshotted into **`DEV_DOCS/claude-memory/`** (index: `MEMORY.md`). Read the
    index; open individual files as needed. Re-snapshot at every close.
-2. **This session's work is on a BRANCH, not master** — deliberately, because
-   `master` auto-deploys to Netlify and Keith hadn't green-lit the deploy:
-   ```
-   git fetch origin && git checkout radio/window-by-lineup     # commit 768a8a8
-   ```
-   See "Parked / next" for what it's waiting on.
+2. **The radio window fix is MERGED AND LIVE** (2026-08-15, `88b2153`) — dashboard on
+   Netlify, `pull-dice` v5 + `pull-ticketmaster` v7 on prod. Just `git pull`.
+   **It has not been exercised yet** — see "Parked / next" item 1 for the one click
+   that proves it.
 
 ## ⛔ PRIORITY CONTEXT (⚠ dated 2026-06-02 — unverified, confirm with Keith)
 **Come With was set MAINTENANCE-ONLY** while the **CWF (Come With Fitness) BRD** ran as
@@ -34,9 +32,12 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
 - **Latest LEARNINGS §:** 15.
-- **Git:** `master` = `0635a2e`, clean and pushed. Branch **`radio/window-by-lineup`** (`768a8a8`)
-  pushed, **unmerged, undeployed**. Older unmerged branches: `fix-lognumbers-optgroups`,
-  `docs/roadmap-reconcile`.
+- **Git:** `master` = `88b2153`, pushed. `radio/window-by-lineup` **merged**. Older unmerged
+  branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`, `event-hub-sprint-1`.
+- **Edge-function deploys go through `scripts/deploy_edge_function.py`**, not the CLI. CLI
+  2.101.0 rejects the newer `sbp_v0_…` PAT format outright ("Invalid access token format")
+  *and* is linked to staging; the Management API takes the same token fine. The script
+  preserves each function's existing `verify_jwt` rather than resetting it.
 - **Radio discovery pool (prod, as of the 2026-08-14 pull):** 1,122 future RA events,
   159 DICE, 27 TM; 2,061 RA artists with a SoundCloud link. **No cron pulls any of this** —
   `cron.job` runs only publish/retention/YouTube. The pool is as fresh as the last manual
@@ -47,18 +48,17 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Decide on `radio/window-by-lineup`** (below): merge + deploy, or keep holding. Until then
-the radio window is still hiding artists on every pull, so anything episode-planning-shaped
-is working from a short list.
+**Click "↻ Pull shows", then "↻ Refresh music & data"** on the Radio panel (items 1–2). The
+fix is live but unexercised, and the pool is still the 2026-08-14 pull with 677 unscanned
+artists in it.
 
 ## Parked / next
-1. **`radio/window-by-lineup` awaits Keith's go.** Two steps, in either order:
-   - `git checkout master && git merge radio/window-by-lineup && git push` → Netlify
-     publishes the dashboard fix.
-   - `supabase functions deploy pull-dice pull-ticketmaster --project-ref yaytdosxfhcqatmhctzk`
-     → the DICE + Ticketmaster coverage fixes go live. CLI 2.101.0 is installed but linked to
-     **staging**, hence the explicit ref. Verify after: run "↻ Pull shows" and check the toast
-     reports DICE reaching past week 1 and TM returning Brooklyn venues.
+1. **Exercise the deployed fix — nobody has run a pull through it yet.** Hit "↻ Pull shows"
+   and check: the toast reports DICE, TM and RA counts (and names any source that didn't
+   answer); DICE now reaches past week 1; Ticketmaster returns Brooklyn/Queens venues. Then
+   confirm the artist count for a **future** start date jumps — that's the 77. Couldn't be
+   done from here: invoking the pulls needs an admin JWT or the service-role key, and neither
+   is on this machine (`.env` carries the publishable key only).
 2. **Scan the 8/18 window.** 677 of 825 in-window artists with a SoundCloud link have never
    been read (148 scanned → 89 producers). "↻ Refresh music & data" on the Radio panel. It
    only reads artists with no cache row at all, so it's safe to re-run.
@@ -74,7 +74,9 @@ is working from a short list.
 
 ## This session shipped (2026-08-15 — Radio discovery audit: the window was filtering on the wrong date)
 Full audit of shows → producers → tracks, run against prod. **No migration, no prod writes.**
-Code is on branch `radio/window-by-lineup` (`768a8a8`), **pushed, unmerged, undeployed.**
+**MERGED + DEPLOYED** (`88b2153`): dashboard live on Netlify (verified — `raWindowPool` is in
+the served file), `pull-dice` **v5** and `pull-ticketmaster` **v7** live on prod (verified by
+reading the deployed source back). Financial views re-checked anon **401** after the deploy.
 - **The bug:** `ra_artists` collapses each artist to ONE row carrying `next_event_date` — their
   *soonest* show. The radio window filtered on that column, so an artist playing the 16th **and**
   the 25th vanished from a window starting the 18th. Keith's 8/18 + 4-week filter was hiding
