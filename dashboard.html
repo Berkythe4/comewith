@@ -10540,7 +10540,7 @@ const SITE_ORDER = ['brand', 'strip', 'hero', 'lane1', 'lane2', 'lane3', 'events
 const SITE_AREAS = new Set(['hero.lede', 'di.body', 'di.story', 'di.safer', 'book.body', 'news.note', 'watch.body']);
 const SITE_BOOLS = new Set(['di.donate_show', 'di.ticket_show', 'di.tiers_show']); // rendered as checkboxes
 const SITE_LABELS = {
-  'brand.logo': 'Logo image', 'brand.logo_tint': 'Logo color (blends on the dark site)', 'brand.wordmark': 'Wordmark (text shown if no logo)', 'brand.nav_cta': 'Nav button label',
+  'brand.logo': 'Logo image', 'brand.favicon': 'Favicon image (browser tab icon)', 'brand.logo_tint': 'Logo color (blends on the dark site)', 'brand.wordmark': 'Wordmark (text shown if no logo)', 'brand.nav_cta': 'Nav button label',
   'strip.items': 'Ticker words (separate each with " · ")',
   'hero.kicker': 'Kicker (small label)', 'hero.h1': 'Headline', 'hero.h2': 'Sub-headline', 'hero.lede': 'Intro paragraph', 'hero.cta1': 'Primary button', 'hero.cta2': 'Secondary button',
   'di.goal_total': 'Goal amount ($)', 'di.goal_raised': 'Raised so far ($)', 'di.goal_label': 'Goal caption',
@@ -10594,6 +10594,17 @@ function siteFieldHtml(k) {
         <input class="modal-input" type="file" id="siteLogoFile" accept="image/png,image/svg+xml,image/webp,image/jpeg,image/heic,image/heif,.heic,.heif" style="max-width:340px">
       </div>
       <div class="kpi-hint">Upload a transparent PNG or SVG. The brown logo is auto-tinted to the colour below so it blends on the dark site.</div></div>`;
+  }
+  if (k === 'brand.favicon') {
+    // Same shape as brand.logo. Empty = fall through to the static /icons/favicon-32.png
+    // the pages ship with, which is why the preview says "default" rather than "none".
+    return `<div style="grid-column:1/-1"><label class="modal-label">${lbl}</label>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <span style="display:inline-block;padding:8px 12px;background:var(--surface-2);border-radius:8px"><img src="${escapeHtml(v || '/icons/favicon-32.png')}" alt="favicon" style="height:26px;width:26px;object-fit:contain;display:block"></span>
+        ${v ? '' : '<span class="li-sub">Using the built-in default</span>'}
+        <input class="modal-input" type="file" id="siteFaviconFile" accept="image/png,image/svg+xml,image/webp,image/x-icon,image/vnd.microsoft.icon,.ico" style="max-width:340px">
+      </div>
+      <div class="kpi-hint">Shows in the browser tab. A square PNG or SVG works best — it gets scaled to 180px, so anything bigger is wasted. Leave empty to keep the built-in icon.</div></div>`;
   }
   if (k === 'brand.logo_tint') {
     return `<div><label class="modal-label">${lbl}</label><select class="modal-select" data-sk="${escapeHtml(k)}">${['cream', 'lime', 'white', 'plum', 'none'].map(t => `<option value="${t}"${v === t ? ' selected' : ''}>${t === 'none' ? 'none (keep original colours)' : t}</option>`).join('')}</select></div>`;
@@ -10654,6 +10665,19 @@ async function saveSiteContent() {
       if (upErr) throw new Error('Logo upload failed: ' + upErr.message);
       const pub = sb.storage.from('event-photos').getPublicUrl(path);
       rows.push({ key: 'brand.logo', value: pub.data.publicUrl });
+    }
+    let fav = $('siteFaviconFile')?.files?.[0];
+    if (fav && fav.size > 0) {
+      // Only raster formats go through downscaleImage. SVG it passes through
+      // anyway, but .ico would have to survive createImageBitmap to come out
+      // intact — not worth risking for a file that is already tiny.
+      if (/^image\/(png|webp|jpeg)$/.test(fav.type)) fav = await downscaleImage(fav, 180, 0.92);
+      const safeFav = fav.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const favPath = `site/favicon_${Date.now()}_${safeFav}`;
+      const { error: favErr } = await sb.storage.from('event-photos').upload(favPath, fav, { contentType: fav.type, upsert: true });
+      if (favErr) throw new Error('Favicon upload failed: ' + favErr.message);
+      const favPub = sb.storage.from('event-photos').getPublicUrl(favPath);
+      rows.push({ key: 'brand.favicon', value: favPub.data.publicUrl });
     }
     const payload = rows.map(r => ({ key: r.key, value: r.value, updated_at: new Date().toISOString(), updated_by: ME.id || null }));
     const { error } = await sb.from('site_content').upsert(payload, { onConflict: 'key' });

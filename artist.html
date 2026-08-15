@@ -4,6 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Artist — Come With</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
 <meta name="description" content="A Come With collective artist.">
 <meta property="og:title" content="Come With collective artist">
 <meta property="og:description" content="A Come With collective artist — bio, sets and gig history.">
@@ -101,10 +103,20 @@ function setLogo(url,tint){if(!url)return;tint=tint||'cream';const col=TINTS[tin
     else{const img=new Image();img.onload=function(){const w=Math.round(30*(img.naturalWidth/img.naturalHeight));slot.innerHTML='<span class="logomask" style="width:'+w+'px;height:30px;-webkit-mask:url(\''+url+'\') left center/contain no-repeat;mask:url(\''+url+'\') left center/contain no-repeat;background:'+col+'"></span>';};img.src=url;}});}
 function socLink(label,href){return '<a class="soc" href="'+esc(href)+'" target="_blank" rel="noopener">'+label+' ↗</a>';}
 function igUrl(h){h=String(h||'').trim();if(!h)return '';if(/^https?:/i.test(h))return h;return 'https://instagram.com/'+h.replace(/^@/,'');}
+// Swaps the tab icon to the one uploaded in Site Editor → Brand & logo. The
+// static <link> in <head> is the default, so an empty brand.favicon is a no-op.
+function setFavicon(url){
+  if(!url)return;
+  const l=document.getElementById('favicon');if(!l)return;
+  l.removeAttribute('sizes');
+  l.type=/\.svg(\?|$)/i.test(url)?'image/svg+xml':/\.ico(\?|$)/i.test(url)?'image/x-icon':'image/png';
+  l.href=url;
+}
 (async function(){
   const rows=await api('site_content?select=key,value');const C={};rows.forEach(r=>C[r.key]=r.value);
   document.querySelectorAll('[data-cw]').forEach(el=>{const v=C[el.dataset.cw];if(v!=null&&v!=='')el.textContent=v;});
   if(C['brand.logo'])setLogo(C['brand.logo'],C['brand.logo_tint']);
+  setFavicon(C['brand.favicon']);
   if(!AID){$('#name').textContent='Artist not found';return;}
   const a=(await api('v_public_artists?id=eq.'+encodeURIComponent(AID)))[0];
   if(!a){$('#name').textContent='Artist not found';$('#bio').textContent='This profile isn’t available.';return;}

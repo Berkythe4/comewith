@@ -91,6 +91,17 @@ Four Come-With-specific rules on top of whichever variant you run:
 - **Apply discipline:** apply additively, verify on prod (objects, RLS has a real
   policy — never RLS-enabled-with-no-policy, admin can read/write, anon blocked),
   then commit the migration file so tracked history matches prod.
+- **`db.py` needs `SBP_REF` passed explicitly** — `.env` deliberately holds only
+  `SBP_REF_PROD`, so `SBP_REF=$SBP_REF_PROD python db.py …`. Do NOT add a bare
+  `SBP_REF` to `.env`: the whole point is that the target project is visible in the
+  command you approve, and `db.py` echoes it back (`[db.py] project=… source=…`).
+- **Batch the checks — one query, one call.** Each `db.py` invocation is a separate
+  prod approval, so the pre/post checks live as single UNION ALL statements in
+  `supabase/checks/`: `pre_apply.sql` (edit its `targets` list, run before writing
+  the migration) and `post_apply.sql` (run after; every row must read PASS). Two
+  approvals per migration instead of one per check. `post_apply.sql` covers the
+  anon grants behind the financial views, but still run the anon REST GET → 401
+  as well — that exercises PostgREST end to end, which a grants query can't.
 - **`INSERT..RETURNING` enforces the SELECT policy mid-statement.** A security-definer
   helper that re-queries the table cannot see the not-yet-visible new row, so
   `.insert().select()` fails RLS even for the creator (bit us on 097 chat DMs).
@@ -270,6 +281,20 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **CSS: never use the `background:` shorthand on a variant/state class** (e.g.
   `.benefit`, `.audio`) layered over a base that set `background-size/position/
   repeat` — the shorthand resets them and breaks hero photos. Use `background-image:`.
+
+## Editing `dashboard.html` (1.3 MB, one inline `<script type="module">`)
+
+- **Never read the whole file into context.** It is ~1.3 MB and effectively all one
+  inline module. Reading it once costs more than an entire ordinary session, and it
+  gets read on nearly every dashboard PR. Locate the region with `grep -n`, pull only
+  that window with `sed -n 'A,Bp'`, then `Edit` on an exact unique string. To review a
+  change, `git diff` it — never `cat` the file.
+- **Syntax-check by extraction, not by re-reading.** Extract the inline module body to
+  a temp `.mjs` and run `node --check` on it. Run the **same extraction against the
+  pre-edit version** (`git show HEAD:dashboard.html`) as a control — otherwise an
+  artifact of the extraction itself reads as a real error introduced by the edit.
+- **There is no local console check** — the Browser pane can't open `file://` URLs. The
+  loop is `node --check` plus the deployed Netlify build.
 
 ## Scope
 
