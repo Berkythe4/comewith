@@ -61,6 +61,17 @@ Two Come-With-specific additions to whichever variant you run:
 - **Apply discipline:** apply additively, verify on prod (objects, RLS has a real
   policy — never RLS-enabled-with-no-policy, admin can read/write, anon blocked),
   then commit the migration file so tracked history matches prod.
+- **`db.py` needs `SBP_REF` passed explicitly** — `.env` deliberately holds only
+  `SBP_REF_PROD`, so `SBP_REF=$SBP_REF_PROD python db.py …`. Do NOT add a bare
+  `SBP_REF` to `.env`: the whole point is that the target project is visible in the
+  command you approve, and `db.py` echoes it back (`[db.py] project=… source=…`).
+- **Batch the checks — one query, one call.** Each `db.py` invocation is a separate
+  prod approval, so the pre/post checks live as single UNION ALL statements in
+  `supabase/checks/`: `pre_apply.sql` (edit its `targets` list, run before writing
+  the migration) and `post_apply.sql` (run after; every row must read PASS). Two
+  approvals per migration instead of one per check. `post_apply.sql` covers the
+  anon grants behind the financial views, but still run the anon REST GET → 401
+  as well — that exercises PostgREST end to end, which a grants query can't.
 - **`INSERT..RETURNING` enforces the SELECT policy mid-statement.** A security-definer
   helper that re-queries the table cannot see the not-yet-visible new row, so
   `.insert().select()` fails RLS even for the creator (bit us on 097 chat DMs).
