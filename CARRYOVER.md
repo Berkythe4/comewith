@@ -32,9 +32,17 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `140_site_owner.sql`; 138 + 139 + 140 APPLIED to prod 2026-08-15.**
-  ⚠ 140 was authored as `138` on the desktop while the laptop was landing its own 138/139 —
-  **take the next number only after `git fetch`.** Duplicate numbers conflict in prod, not git.
+- **Migrations: files through `141_brand_favicon.sql`; 138 + 139 + 140 APPLIED to prod
+  2026-08-15. `141` is written but NOT applied.**
+  ⚠ **The numbering collided TWICE in one day.** First: 140 was authored as `138` on the
+  desktop while the laptop was landing its own 138/139. Then, hours later, on Henry's
+  machine: `141_brand_favicon.sql` was authored as `140` — the number read off a local
+  `master` that had not been fetched — while the desktop's `140_site_owner.sql` was already
+  reaching prod. Renumbered to 141 in `19de619` because site_owner got there first.
+  **Take the next number only after `git fetch`.** Note what makes this bite: neither
+  collision failed loudly. Git merged two `140_*.sql` files without a murmur, because
+  duplicate numbers conflict in **prod**, not in git — nothing tells you until the wrong
+  thing runs, or doesn't.
   Applied via the Management API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is
   linked to **staging**, so always pass the prod ref explicitly. The migration **files** are
   the tracked source of truth.
@@ -52,10 +60,11 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   PROJECT — the service key, `SBP_PAT`, Supabase dashboard, GitHub and Netlify all sit
   above it and stay Keith-only.
 - **Latest LEARNINGS §:** 19.
-- **Git:** `master` = this merge, pushed and live. `radio/window-by-lineup`,
-  `feature/notes-assignment` (PR #1) and `feature/notes-edit-and-convert` (PR #2) all
-  **merged**. Older unmerged branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`,
-  `event-hub-sprint-1`.
+- **Git:** `master` = `a5d4e2e`, pushed and live. `radio/window-by-lineup`,
+  `feature/notes-assignment` (PR #1), `feature/notes-edit-and-convert` (PR #2),
+  `docs/dashboard-editing-convention` (PR #3) and `site/favicon-remaining-pages` (PR #4)
+  all **merged**. Older unmerged branches: `fix-lognumbers-optgroups`,
+  `docs/roadmap-reconcile`, `event-hub-sprint-1`.
 - **Edge functions on prod:** `dj-station` **v9**, `pull-dice` **v6**, `pull-ticketmaster`
   **v8**, `pull-ra-market` **v15** — all deployed 2026-08-15 from the laptop and verified by
   reading the live bundles back.
@@ -96,6 +105,18 @@ Second, cheap while you're in there: **exercise the Notes module end to end** (a
 edit one, convert one to a task). Deployed and structurally verified, never clicked.
 
 ## Parked / next
+
+**FIRST — migration `141_brand_favicon.sql` is written but NOT applied.** The Site Editor's
+favicon picker shipped to prod and is **inert until this runs**: the field only renders if a
+`brand.favicon` row exists in `site_content`, and 141 is what seeds it. Additive, one row.
+```
+SBP_REF=$SBP_REF_PROD python db.py supabase/migrations/141_brand_favicon.sql
+```
+Follow it with `supabase/checks/post_apply.sql`, which has **never been executed** — it was
+written this session, but every `db.py` call was blocked by the permission classifier, so a
+syntax error or a wrong `information_schema` column in it would only surface on first use.
+Running it right after 141 validates the migration and the check together.
+
 0. **Access change just landed — nobody has signed in under it yet.** Martin and Henry are
    full `master_admin` as of 2026-08-15. Worth saying out loud to both: they can now see and
    edit all company money (income, expenses, mileage, ticketing, sponsorships, donations),
@@ -144,6 +165,47 @@ edit one, convert one to a task). Deployed and structurally verified, never clic
    with `toISOString()` but compares it to a local `today`, so in New York the window can run a
    day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
    overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-15 — site favicon, batched prod checks, toolchain · HENRY'S machine)
+PRs **#3** and **#4** merged and deployed. Migration **141 written, NOT applied** (see Parked / next).
+
+- **The public site had no favicon at all.** `dashboard.html` had linked
+  `/icons/favicon-32.png` since it shipped, but no public page ever did — so comewith.org
+  rendered the browser's blank default in every tab. The icon files were already in
+  `/icons`; only `sw.js` and the dashboard referenced them. Static `<link>` tags now on all
+  13 public pages, verified live (HTTP 200 + link present on each, and both icon assets
+  serve as `image/png`).
+- **`brand.favicon` is the override**, next to Logo image in Site Editor → Brand & logo.
+  Uploads to `event-photos` at `site/favicon_<ts>_<name>`, same shape as `brand.logo`.
+  `setFavicon()` only fires on a non-empty key, so an unset override falls through to the
+  shipped icon rather than blanking the tab. **Only `index` / `watch` / `artist` honour the
+  override** — the other ten don't fetch `site_content`, and adding a request per page load
+  purely for a tab icon wasn't worth it until someone actually sets one.
+- **Batched prod checks** — `supabase/checks/pre_apply.sql` + `post_apply.sql`, each a single
+  `UNION ALL` statement. Every `db.py` call is its own prod approval, so the six-query
+  checklist cost six interruptions per migration; this makes it two. `post_apply.sql` asserts
+  the things this repo has actually regressed on — anon grants on the five financial views
+  (016/017), anon grants on `sc_playlists`/`sc_playlist_tracks` (103, which returned
+  `200 []` rather than failing loudly and hid for four migrations), RLS-enabled-with-no-policy,
+  and role helpers that dropped the 098 `deleted_at` guard. **Never executed** — see above.
+- **`db.py` needs `SBP_REF` passed explicitly.** `.env` holds only `SBP_REF_PROD`, so a bare
+  `python db.py …` exits with "Set SBP_PAT and SBP_REF". Deliberately not fixed by adding
+  `SBP_REF` to `.env`: passing it on the command line is what makes the target project
+  visible in the call you're approving.
+- **`db.py` has no read/write split.** Inline SQL and migration files share one code path,
+  and the Management API endpoint takes multi-statement SQL, so `select …; drop …` runs
+  both. No `Bash(python db.py:*)` pattern can be safely allowlisted, not even a
+  `select`-prefixed one. Every call stays a manual approval, by design.
+- **Toolchain on Henry's machine is complete** — `python` 3.12.10, `gh`, `node`, `git` all on
+  PATH by bare name. Lesson worth keeping: **a tool that "isn't on PATH" mid-session is
+  usually a stale process env, not shadowing.** Claude Code captures PATH at launch. The
+  WindowsApps `python.exe` stub was never shadowing the real install — user PATH already
+  ordered `Python312\` first. The fix was a restart, not clearing App Execution Aliases.
+- **⚠ The `master` push guard is partial.** `Bash(git push:*)` in the local allowlist meant
+  `git push origin master` — a live Netlify deploy — went through with no prompt; an `ask`
+  rule did **not** override `allow`. Narrowed to per-branch-prefix allows so master prompts.
+  But `gh pr merge` is still allowlisted and merging to `master` deploys just the same, so
+  the PR route remains ungated. Local-settings-only, not committed.
 
 ## This session shipped (2026-08-15 — full admin for Martin & Henry, behind a site-owner guard · DESKTOP)
 Migration **140 applied to prod**; `invite-user` **v9** deployed; dashboard owner chip merged.
