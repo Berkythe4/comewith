@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 6264aafb-c0a6-4e5c-bdca-a6f2c2a39988
-  modified: 2026-08-15T20:35:05.670Z
+  modified: 2026-08-15T20:54:08.357Z
 ---
 
 Audited 2026-08-15 against prod for the **2026-08-18 + 4 weeks** window.
@@ -25,10 +25,11 @@ Same audit, same family of silent shortfall:
   Brooklyn/Queens.
 - "↻ Pull shows" swallowed both sources' failures, so an outage looked like a zero.
 
-**Status:** branch **`radio/window-by-lineup`** (`768a8a8`), pushed, **unmerged and
-undeployed** pending Keith's go — `master` auto-deploys to Netlify, and the two edge
-functions need `supabase functions deploy pull-dice pull-ticketmaster --project-ref
-yaytdosxfhcqatmhctzk` (CLI is linked to staging, so pass the ref).
+**Status: MERGED + DEPLOYED 2026-08-15** (`88b2153`). Dashboard live on Netlify;
+`pull-dice` v5 + `pull-ticketmaster` v7 live on prod, both verified by reading the
+deployed source back. **Not yet exercised** — no pull has run through it, because
+invoking the pulls needs an admin JWT or the service-role key and neither is on the
+desktop. One "↻ Pull shows" proves DICE past week 1, TM in Brooklyn, and the 77 back.
 
 **Also found, NOT fixed:** `dj-station` caps its artist query at `.limit(160)` with no
 notice against an ~879-artist window; the scan cache never re-reads a cached profile;
