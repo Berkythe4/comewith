@@ -160,6 +160,15 @@ Four Come-With-specific rules on top of whichever variant you run:
 - **Targets are edited from the dashboard ("Edit target"), never in SQL.** Duplicate active
   rows were deactivated in 142; `v_kpi_targets_current` de-dupes by `metric_key` with
   `DISTINCT ON`, so a second active row silently wins or loses on `effective_date`.
+- **Charts on this board are RIGHT-ANCHORED — labels included.** The newest data is
+  always at the right edge: bar tracks right-align so the most recent event sits at a
+  fixed edge regardless of how many bars there are, and a sparkline's latest point is its
+  last one. So chart titles and captions right-align too (`.cat-chart-cap` is
+  `justify-content: flex-end`, with any secondary note pushed left by `margin-right:auto`
+  so a note-less title does not fall back to the left). Bars also have a fixed preferred
+  width that only shrinks on overflow — `flex: 1` makes three events fill the screen and
+  stops reading as a chart at all. This took three corrective passes after merge (#9,
+  #12, #15); match it rather than rediscovering it.
 - **Never render a blank as zero.** "0" and "cannot be measured" are opposite claims.
   Progress bars only draw where a value AND a target exist; funnel conversions return null
   when the denominator is missing. LEARNINGS §23.
