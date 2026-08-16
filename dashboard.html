@@ -329,7 +329,73 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .cal-board tr.done td { opacity: 0.4; text-decoration: line-through; }
 .cal-board td .tb-star { cursor: pointer; opacity: 0.35; }
 .cal-board td .tb-star.on { opacity: 1; }
+.cal-board tbody tr:hover td { background: var(--surface-2); }
+.cal-board tbody tr.over td:first-child { box-shadow: inset 3px 0 0 var(--red); }
 .cal-due-over { color: #C75A3C; font-weight: 700; }
+
+/* ---- Focus band (top of Calendar & Tasks) ---------------------------------
+   The page used to open on the month grid with the task board below the fold,
+   so nothing on screen said what was actually due. The band answers the two
+   questions the page exists for, before you scroll:
+     LEFT  — work that EXISTS and is late / near / stuck.
+     RIGHT — work that DOESN'T exist yet: an event whose standard workflow was
+             never generated, a radio week never created, tasks with no date
+             or no owner. A gap is invisible by definition; it has to be named.
+   Section bars below it label the grid and the board, so the page reads
+   Focus → Calendar → Tasks instead of one undifferentiated wall. */
+.cal-focus { margin: 0 0 20px; }
+.cal-focus-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; margin-bottom: 11px; }
+.cal-focus-h { font-family: 'Bebas Neue', sans-serif; font-size: 1.7rem; line-height: 1; letter-spacing: 0.02em; margin: 0; color: var(--ink); }
+.cal-focus-h .n { color: var(--red); }
+.cal-focus-h.clear .n { color: var(--lime); }
+.cal-focus-sub { font-size: 0.7rem; color: var(--mid); }
+.cal-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(102px, 1fr)); gap: 8px; margin-bottom: 13px; }
+.cal-tile {
+  text-align: left; cursor: pointer; padding: 7px 10px 8px; border-radius: 6px;
+  background: var(--surface); border: 1px solid var(--border); color: var(--ink);
+  font-family: 'Inconsolata', monospace; transition: border-color .12s, background .12s;
+}
+.cal-tile:hover { border-color: var(--border-strong); background: var(--surface-2); }
+.cal-tile.on { border-color: var(--red); background: rgba(232,74,134,0.10); }
+.cal-tile .n { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 1.55rem; line-height: 1; }
+.cal-tile .l { display: block; font-size: 0.56rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--mid); margin-top: 3px; }
+.cal-tile.red .n { color: var(--red); }
+.cal-tile.amber .n { color: var(--amber); }
+.cal-tile.blue .n { color: var(--blue); }
+.cal-tile.zero { opacity: 0.4; }
+.cal-tile.zero .n { color: var(--mid); }
+.cal-cols { display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 13px; align-items: start; }
+@media (max-width: 1000px) { .cal-cols { grid-template-columns: 1fr; } }
+.cal-card { border: 1px solid var(--border); background: var(--surface); border-radius: 8px; overflow: hidden; }
+.cal-card > .hd {
+  display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--off);
+  border-bottom: 1px solid var(--border); font-size: 0.6rem; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--mid);
+}
+.cal-card > .hd .cnt { margin-left: auto; font-weight: 700; color: var(--ink); letter-spacing: 0.04em; }
+.cal-card .ft { padding: 7px 12px; border-top: 1px solid var(--border); font-size: 0.66rem; color: var(--mid); }
+.cal-row { display: flex; gap: 9px; align-items: flex-start; padding: 8px 12px; border-bottom: 1px solid var(--border); }
+.cal-row:last-child { border-bottom: none; }
+.cal-row:hover { background: var(--surface-2); }
+.cal-row .flag { flex: 0 0 3px; align-self: stretch; border-radius: 2px; background: var(--mid); }
+.cal-row .flag.red { background: var(--red); }
+.cal-row .flag.amber { background: var(--amber); }
+.cal-row .flag.blue { background: var(--blue); }
+.cal-row .bd { flex: 1 1 auto; min-width: 0; }
+.cal-row .bd strong { font-weight: 700; font-size: 0.79rem; }
+.cal-row .bd a { color: inherit; }
+.cal-row .bd .li-sub { font-size: 0.67rem; color: var(--mid); margin-top: 2px; line-height: 1.45; }
+.cal-row .rt { flex: 0 0 auto; display: flex; gap: 5px; align-items: center; }
+.cal-when { font-size: 0.6rem; letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; }
+.cal-when.red { color: var(--red); font-weight: 700; }
+.cal-when.amber { color: var(--amber); }
+.cal-when.mid { color: var(--mid); }
+.cal-tick { border: 1px solid var(--border-strong); background: transparent; color: var(--mid);
+  border-radius: 4px; cursor: pointer; font: inherit; font-size: 0.7rem; line-height: 1; padding: 3px 6px; }
+.cal-tick:hover { border-color: var(--lime); color: var(--lime); }
+/* Today deserves more than a border — it is the whole point of opening the page. */
+.cal-cell.today { border-color: var(--red); background: rgba(232,74,134,0.06); }
+.cal-cell.today .cal-dnum > span:first-child { color: var(--red); }
 
 /* ---- Team chat slide-in ---- */
 .chat-unread {
@@ -16088,9 +16154,27 @@ const CAL = {
   selDay: null,
   data: null,                                            // month bundle
   tasks: [],                                             // full board list (not month-bound)
-  board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', pillar: '', due: 'all', msOnly: false, sort: 'due', dir: 1 },
+  gap: null,                                             // gap-scan bundle (null = scan unavailable)
+  gapErr: null,
+  signals: null,                                         // derived counts behind the focus tiles
+  focus: null,                                           // which focus tile is driving the board
+  board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', pillar: '', due: 'all', msOnly: false, unassigned: false, sort: 'due', dir: 1 },
 };
+// How far ahead the gap scan looks, and how many events it will scan. The cap
+// is real: the per-event task lookup passes those ids in the query string, so
+// an unbounded list is a URL long enough to be rejected. If it bites, the
+// Gaps card says so rather than quietly scanning less than it claims to.
+const CAL_GAP_HORIZON = 90;
+const CAL_GAP_MAX_EVENTS = 60;
+// Board rows: every OPEN task, plus done ones closed inside this window. The
+// list used to be a bare .limit(600) — a silent cap (§18), and the counts in
+// the focus band are only true if the set behind them is complete.
+const CAL_DONE_WINDOW = 90;
+const CAL_DEFAULT_STATUS = ['todo', 'doing', 'blocked'];
 function calToday() { return new Date().toISOString().slice(0, 10); }
+// Local-midnight arithmetic, same convention as the grid (`ds + 'T00:00:00'`).
+function calAddDays(ds, n) { const d = new Date(ds + 'T00:00:00'); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); }
+function calDaysBetween(a, b) { return Math.round((new Date(b + 'T00:00:00') - new Date(a + 'T00:00:00')) / 864e5); }
 function calMonthRange() {
   const [y, m] = CAL.month.split('-').map(Number);
   const last = new Date(y, m, 0).getDate();
@@ -16105,7 +16189,10 @@ async function loadCalendar() {
 async function calFetch() {
   const { from, to } = calMonthRange();
   const wantMarket = CAL.layers.market || CAL.layers.elsewhere;
-  const [evs, ms, so, mk, roster, ven, tasks] = await Promise.all([
+  const todayISO = calToday();
+  const gapTo = calAddDays(todayISO, CAL_GAP_HORIZON);
+  const doneSince = calAddDays(todayISO, -CAL_DONE_WINDOW);
+  const [evs, ms, so, mk, roster, ven, tasks, upEv, tpl, stns] = await Promise.all([
     sb.from('events').select('id,slug,name,series,type,status,event_date,doors_time,venue_id,venue:venues(name)')
       .is('deleted_at', null).gte('event_date', from).lte('event_date', to).order('event_date'),
     sb.from('tasks').select('id,title,due_date,status,event_id,link_url').eq('milestone', true)
@@ -16123,15 +16210,44 @@ async function calFetch() {
       ? sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').in('role', ['artist', 'dj', 'performer', 'dancer']).eq('active', true)
       : Promise.resolve({ data: [] }),
     sb.from('venues').select('id,name').is('deleted_at', null).order('name'),
-    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,link_url,event_id,event:events(id,name),task_assignments(id,role,actor:actors(id,display_name))')
-      .is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }).limit(600),
+    // Paged by primary key, not capped: see CAL_DONE_WINDOW. The board sorts
+    // client-side anyway, so losing the due_date order here costs nothing.
+    sbAll(() => sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,pillar,link_url,event_id,event:events(id,name),task_assignments(id,role,actor:actors(id,display_name))')
+      .is('deleted_at', null).or(`status.neq.done,updated_at.gte.${doneSince}`), 'id'),
+    // ---- gap scan inputs (deliberately NOT month-bound: a workflow that was
+    // never generated for next month is a gap you need to see this month) ----
+    sb.from('events').select('id,name,type,series,event_date,status,cw_providing_gear')
+      .is('deleted_at', null).gte('event_date', todayISO).lte('event_date', gapTo)
+      .order('event_date').limit(CAL_GAP_MAX_EVENTS),
+    sb.from('task_templates').select('event_type,title,phase,default_offset_days,gear_applicability'),
+    sb.from('sc_playlists').select('id,station_no,name,status,drop_date').in('status', ['building', 'testing']),
   ]);
   for (const r of [evs, ms, ven, tasks]) if (r.error) throw r.error;
   const events = evs.data || [];
   const ids = events.map(e => e.id);
-  const parts = ids.length
-    ? await sb.from('event_participants').select('event_id,roles,role,bill_order,actor:actors(id,display_name)').in('event_id', ids)
-    : { data: [] };
+  // The gap scan needs EVERY task on an upcoming event / open station, including
+  // ones finished long ago — a completed template step is not a missing one. So
+  // it gets its own narrow, unfiltered read rather than reusing the board list.
+  const gapEvents = (upEv.data || []), gapStations = (stns.data || []);
+  const gapOr = [];
+  if (gapEvents.length) gapOr.push(`event_id.in.(${gapEvents.map(e => e.id).join(',')})`);
+  if (gapStations.length) gapOr.push(`station_id.in.(${gapStations.map(s => s.id).join(',')})`);
+  const [parts, gapT] = await Promise.all([
+    ids.length
+      ? sb.from('event_participants').select('event_id,roles,role,bill_order,actor:actors(id,display_name)').in('event_id', ids)
+      : Promise.resolve({ data: [] }),
+    gapOr.length
+      ? sbAll(() => sb.from('tasks').select('id,event_id,station_id,title,status,milestone').is('deleted_at', null).or(gapOr.join(',')), 'id')
+      : Promise.resolve({ data: [] }),
+  ]);
+  // A gap-scan failure degrades to "scan unavailable" on one card; it must never
+  // take the calendar down with it.
+  const gapErr = [upEv, tpl, stns, gapT].map(r => r && r.error).find(Boolean);
+  CAL.gapErr = gapErr ? (gapErr.message || String(gapErr)) : null;
+  CAL.gap = gapErr ? null : {
+    events: gapEvents, templates: tpl.data || [], stations: gapStations, tasks: gapT.data || [],
+    capped: gapEvents.length >= CAL_GAP_MAX_EVENTS,
+  };
   const partsByEvent = {};
   (parts.data || []).forEach(p => { (partsByEvent[p.event_id] ||= []).push(p); });
   Object.values(partsByEvent).forEach(l => l.sort((a, b) => (a.bill_order || 99) - (b.bill_order || 99)));
@@ -16184,6 +16300,186 @@ function calDD(key, label, opts) {
     `<label><input type="checkbox" data-cal-filt="${key}" value="${escapeHtml(o.v)}"${sel.includes(o.v) ? ' checked' : ''}> ${escapeHtml(o.l)}</label>`).join('');
   return `<details class="cal-dd" data-key="${key}" data-label="${escapeHtml(label)}"><summary>${label}${sel.length ? ` (${sel.length})` : ''} ▾</summary><div class="cal-dd-pop">${boxes || '<span class="li-sub">none this month</span>'}</div></details>`;
 }
+// ---- Focus band: what needs me, and what should exist but doesn't ----------
+// Counts are computed off CAL.tasks, which is the COMPLETE open-task set (see
+// CAL_DONE_WINDOW) — a capped list here would produce a confident wrong number,
+// which is worse than no number.
+function calSignals() {
+  const today = calToday(), d7 = calAddDays(today, 7), d14 = calAddDays(today, 14);
+  const open = CAL.tasks.filter(t => t.status !== 'done');
+  const unowned = t => !(t.task_assignments || []).length;
+  return {
+    open,
+    overdue: open.filter(t => t.due_date && t.due_date < today),
+    today: open.filter(t => t.due_date === today),
+    next7: open.filter(t => t.due_date && t.due_date > today && t.due_date <= d7),
+    blocked: open.filter(t => t.status === 'blocked'),
+    unassigned: open.filter(t => unowned(t) && t.due_date && t.due_date <= d14),
+    nodate: open.filter(t => !t.due_date),
+  };
+}
+// The "needs you" queue: late first, then today, then the week — and blocked
+// items regardless of date, because a blocked task is waiting on a person and
+// will never surface by getting closer to its due date.
+function calFocusQueue() {
+  const s = CAL.signals, seen = new Set(), pool = [];
+  [...s.overdue, ...s.today, ...s.next7, ...s.blocked].forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); } });
+  pool.sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'))
+    || (CAL_PRIO_RANK[a.priority] ?? 3) - (CAL_PRIO_RANK[b.priority] ?? 3));
+  return pool;
+}
+function calWhen(ds, today) {
+  if (!ds) return { txt: 'no date', cls: 'mid' };
+  if (ds < today) { const n = calDaysBetween(ds, today); return { txt: n === 1 ? '1 day late' : `${n} days late`, cls: 'red' }; }
+  if (ds === today) return { txt: 'today', cls: 'red' };
+  const n = calDaysBetween(today, ds);
+  return { txt: n === 1 ? 'tomorrow' : `in ${n}d`, cls: n <= 3 ? 'amber' : 'mid' };
+}
+// Gaps = work that SHOULD exist and doesn't. Every row is a thing you can only
+// notice by looking for it, so each carries the action that closes it.
+// sev: 0 = act now, 1 = soon, 2 = worth knowing.
+function calGaps() {
+  const g = CAL.gap, s = CAL.signals, out = [];
+  const today = calToday();
+  if (g) {
+    const byEv = new Map(), bySt = new Map();
+    (g.tasks || []).forEach(t => {
+      if (t.event_id) { const a = byEv.get(t.event_id) || []; a.push(t); byEv.set(t.event_id, a); }
+      if (t.station_id) { const a = bySt.get(t.station_id) || []; a.push(t); bySt.set(t.station_id, a); }
+    });
+    const tplByType = {};
+    (g.templates || []).forEach(tp => (tplByType[tp.event_type] ||= []).push(tp));
+    (g.events || []).forEach(ev => {
+      const have = byEv.get(ev.id) || [];
+      const titles = new Set(have.map(t => (t.title || '').trim().toLowerCase()));
+      // Same filter the generator applies, so the count we promise is the count
+      // the button actually creates.
+      const tpl = (tplByType[ev.type] || []).filter(tp =>
+        tp.gear_applicability === 'both' || tp.gear_applicability === (ev.cw_providing_gear ? 'gear' : 'no_gear'));
+      const days = calDaysBetween(today, ev.event_date);
+      const when = `${escapeHtml(fmtDate(ev.event_date))} · ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days}d`}`;
+      const nm = escapeHtml(ev.name || 'Untitled event');
+      if (!tpl.length) {
+        if (!have.length) out.push({ sev: 2, icon: '🧩', title: `${nm} — no tasks, and no workflow defined for “${escapeHtml(ev.type || '?')}”`,
+          sub: `${when}. Nothing will ever generate for this event type until its standard steps exist.`,
+          act: `<button class="hub-mini" data-gap-go="templates">Templates →</button>` });
+        return;
+      }
+      const missing = tpl.filter(tp => !titles.has(tp.title.trim().toLowerCase()));
+      if (!missing.length) return;
+      const late = missing.filter(tp => tp.default_offset_days != null && calAddDays(ev.event_date, tp.default_offset_days) <= today);
+      if (!have.length) {
+        out.push({ sev: days <= 30 ? 0 : 1, icon: '⚙️', title: `${nm} — workflow never generated`,
+          sub: `${when} · ${tpl.length} standard step${tpl.length !== 1 ? 's' : ''} for a ${escapeHtml(ev.type)}${late.length ? ` · ${late.length} already past their start date` : ''}`,
+          act: `<button class="hub-btn" data-gap-gen="${escapeHtml(ev.id)}">Generate ${tpl.length}</button>` });
+      } else {
+        out.push({ sev: late.length ? 1 : 2, icon: '◑', title: `${nm} — ${missing.length} of ${tpl.length} workflow steps missing`,
+          sub: `${when}${late.length ? ` · ${late.length} should already have started` : ''} · missing: ${escapeHtml(missing.slice(0, 3).map(m => m.title).join('; '))}${missing.length > 3 ? ` +${missing.length - 3} more` : ''}`,
+          act: `<button class="hub-mini" data-gap-gen="${escapeHtml(ev.id)}">Fill in ${missing.length}</button>` });
+      }
+    });
+    (g.stations || []).forEach(st => {
+      const have = bySt.get(st.id) || [];
+      const lbl = `SHOW ${st.station_no ?? '—'}${st.name ? ' · ' + escapeHtml(st.name) : ''}`;
+      if (!have.length) out.push({ sev: (st.drop_date && calDaysBetween(today, st.drop_date) <= 14) ? 0 : 1, icon: '📻',
+        title: `${lbl} — production week never created`,
+        sub: `${escapeHtml(st.status)}${st.drop_date ? ` · drops ${escapeHtml(fmtDate(st.drop_date))}` : ' · no drop date set'} · the six weekly tasks (playlist → record → post) don't exist yet`,
+        act: `<button class="hub-mini" data-gap-go="ra-market">Radio →</button>` });
+      else if (!st.drop_date) out.push({ sev: 2, icon: '📻', title: `${lbl} — no drop date`,
+        sub: `${have.length} production ${have.length === 1 ? 'task exists' : 'tasks exist'}, but nothing tells the site when this episode lands.`,
+        act: `<button class="hub-mini" data-gap-go="ra-market">Radio →</button>` });
+    });
+  }
+  if (s.unassigned.length) out.push({ sev: 1, icon: '👤',
+    title: `${s.unassigned.length} task${s.unassigned.length !== 1 ? 's' : ''} due inside 14 days with nobody on ${s.unassigned.length !== 1 ? 'them' : 'it'}`,
+    sub: 'Dated, but no one has been asked to do the work.',
+    act: `<button class="hub-mini" data-cal-focus="unassigned">Show</button>` });
+  if (s.nodate.length) out.push({ sev: 2, icon: '📅',
+    title: `${s.nodate.length} open task${s.nodate.length !== 1 ? 's' : ''} with no due date`,
+    sub: 'These never reach the grid and never become due — they surface only if you go looking.',
+    act: `<button class="hub-mini" data-cal-focus="nodate">Show</button>` });
+  out.sort((a, b) => a.sev - b.sev);
+  return out;
+}
+function calFocusHtml() {
+  const s = CAL.signals = calSignals();
+  const gaps = CAL.gapList = calGaps();
+  const today = calToday();
+  const n = (a) => a.length;
+  const tile = (k, count, lbl, cls) =>
+    `<button class="cal-tile ${count ? cls : 'zero'}${CAL.focus === k ? ' on' : ''}" data-cal-focus="${k}" title="${count ? 'Filter the task board to these' : 'Nothing here right now'}"><span class="n">${count}</span><span class="l">${lbl}</span></button>`;
+  // Headline: the single most urgent true sentence about right now.
+  let hl, clear = false;
+  if (n(s.overdue)) hl = `<span class="n">${n(s.overdue)}</span> overdue${n(s.today) ? ` · <span class="n">${n(s.today)}</span> due today` : ''}`;
+  else if (n(s.today)) hl = `<span class="n">${n(s.today)}</span> due today`;
+  else if (n(s.next7)) hl = `Nothing due today · <span class="n">${n(s.next7)}</span> in the next 7 days`;
+  else { hl = `<span class="n">Nothing due</span>`; clear = true; }
+  const urgentGaps = gaps.filter(x => x.sev === 0).length;
+  const sub = [
+    `${n(s.open)} open task${n(s.open) !== 1 ? 's' : ''}`,
+    gaps.length ? `${gaps.length} gap${gaps.length !== 1 ? 's' : ''}${urgentGaps ? ` (${urgentGaps} needing action now)` : ''}` : 'no gaps found',
+  ].join(' · ');
+
+  const queue = calFocusQueue();
+  const rows = queue.slice(0, 7).map(t => {
+    const w = calWhen(t.due_date, today);
+    const who = (t.task_assignments || []).map(a => a.actor?.display_name).filter(Boolean).join(', ');
+    const bits = [
+      t.status === 'blocked' ? '<span style="color:var(--amber);font-weight:700;">⛔ blocked</span>' : '',
+      t.event ? escapeHtml(t.event.name) : (t.pillar ? escapeHtml(wsPillarLabel(t.pillar)) : ''),
+      who ? escapeHtml(who) : '<span style="color:var(--amber);">unassigned</span>',
+      t.priority === 'high' ? '<span style="color:var(--red);">high</span>' : '',
+    ].filter(Boolean).join(' · ');
+    return `<div class="cal-row">
+      <span class="flag ${w.cls === 'mid' ? 'blue' : w.cls}"></span>
+      <div class="bd"><strong><a href="#" data-tb-edit="${escapeHtml(t.id)}">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</a></strong><div class="li-sub">${bits}</div></div>
+      <div class="rt"><span class="cal-when ${w.cls}">${w.txt}</span><button class="cal-tick" data-tb-done="${escapeHtml(t.id)}" title="Mark done">✓</button></div>
+    </div>`;
+  }).join('');
+  const needBody = rows || `<div class="hub-empty">Nothing late, due, or blocked. ${n(s.open) ? 'The rest of the board is further out.' : ''}</div>`;
+  const needFoot = queue.length > 7
+    ? `<div class="ft"><a href="#" data-cal-focus="7day">+ ${queue.length - 7} more in this window →</a></div>` : '';
+
+  // A failed scan still shows the task-level gaps it didn't depend on — but it
+  // says loudly that the event/radio half didn't run, so an empty card is never
+  // mistaken for a clean one.
+  const gapBody = gaps.length
+    ? gaps.slice(0, 8).map(x => `<div class="cal-row">
+        <span class="flag ${x.sev === 0 ? 'red' : x.sev === 1 ? 'amber' : ''}"></span>
+        <div class="bd"><strong>${x.icon} ${x.title}</strong><div class="li-sub">${x.sub}</div></div>
+        <div class="rt">${x.act}</div></div>`).join('')
+    : (CAL.gapErr ? '' : `<div class="hub-empty">Every event in the next ${CAL_GAP_HORIZON} days has its workflow, and every task has a date and an owner.</div>`);
+  const gapNotes = [];
+  if (CAL.gapErr) gapNotes.push(`⚠ Event + radio scan did NOT run — ${CAL.gapErr}`);
+  if (gaps.length > 8) gapNotes.push(`+${gaps.length - 8} more not shown`);
+  if (CAL.gap?.capped) gapNotes.push(`scan stopped at the first ${CAL_GAP_MAX_EVENTS} upcoming events — later ones were not checked`);
+
+  return `<div class="cal-focus">
+    <div class="cal-focus-head"><h2 class="cal-focus-h${clear ? ' clear' : ''}">${hl}</h2><span class="cal-focus-sub">${sub}</span></div>
+    <div class="cal-tiles">
+      ${tile('overdue', n(s.overdue), 'Overdue', 'red')}
+      ${tile('today', n(s.today), 'Due today', 'red')}
+      ${tile('7day', n(s.next7), 'Next 7 days', 'amber')}
+      ${tile('blocked', n(s.blocked), 'Blocked', 'amber')}
+      ${tile('unassigned', n(s.unassigned), 'No owner', 'blue')}
+      ${tile('nodate', n(s.nodate), 'No date', 'blue')}
+    </div>
+    <div class="cal-cols">
+      <div class="cal-card">
+        <div class="hd">⚡ Needs you now<span class="cnt">${queue.length}</span></div>
+        ${needBody}${needFoot}
+      </div>
+      <div class="cal-card">
+        <div class="hd">🕳 Gaps — should exist, doesn't<span class="cnt">${CAL.gapErr ? gaps.length + '+' : gaps.length}</span></div>
+        ${gapBody}
+        ${gapNotes.length ? `<div class="ft">${escapeHtml(gapNotes.join(' · '))}</div>` : ''}
+      </div>
+    </div>
+  </div>`;
+}
+// Recompute the band in place after a task changes, so the counts above never
+// disagree with the board below.
+function calRefreshFocus() { const el = $('calFocus'); if (el) el.innerHTML = calFocusHtml(); }
 function calRender() {
   const d = CAL.data; if (!d) return;
   const { y, m } = calMonthRange();
@@ -16196,6 +16492,8 @@ function calRender() {
   const legend = Object.entries(CAL_SERIES_COLORS)
     .map(([s, c]) => `<span class="li-sub" style="font-size:.62rem;"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${c};margin-right:3px;"></span>${escapeHtml(s.replace('Come With ', ''))}</span>`).join(' ');
   $('calBody').innerHTML = `
+    <div id="calFocus">${calFocusHtml()}</div>
+    <div class="hub-sec-bar"><h3>📅 Calendar</h3><span class="li-sub" style="margin-left:auto;font-size:.68rem;">events, ⭐ milestones and whatever layers you switch on</span></div>
     <div class="cal-toolbar">
       <button class="hub-mini" data-cal-mon="-1">‹</button><strong style="min-width:120px;text-align:center;">${monthLbl}</strong><button class="hub-mini" data-cal-mon="1">›</button>
       <button class="hub-mini" data-cal-goto-today>Today</button>
@@ -16212,7 +16510,7 @@ function calRender() {
     </div>
     <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : CAL.view === 'week' ? calWeekHtml() : calAgendaHtml()}</div>
     <div id="calDayDetail">${CAL.selDay ? calDayDetailHtml(CAL.selDay) : ''}</div>
-    <div class="hub-sec-bar" style="margin-top:22px;"><h3>Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
+    <div class="hub-sec-bar" style="margin-top:22px;" id="calTasksHead"><h3>✅ Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
     <div class="cal-board" id="calBoard"></div>`;
   calRenderBoard();
 }
@@ -16331,13 +16629,15 @@ function calBoardTasks() {
     (!f.priority || t.priority === f.priority) &&
     (!f.pillar || t.pillar === f.pillar) &&
     (!f.msOnly || t.milestone) &&
+    (!f.unassigned || !(t.task_assignments || []).length) &&
     (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
   if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
+  else if (f.due === 'today') list = list.filter(t => t.due_date === today);
   // A horizon that starts today hides the work that most needs doing. "Next N
   // days" therefore runs from the past to today+N: overdue tasks are always in
   // it. Whether done tasks show stays governed by the status chips, so this
   // doesn't quietly re-decide that too.
-  else if (f.due === '7' || f.due === '30') { const lim = new Date(Date.now() + Number(f.due) * 864e5).toISOString().slice(0, 10); list = list.filter(t => t.due_date && t.due_date <= lim); }
+  else if (f.due === '7' || f.due === '14' || f.due === '30') { const lim = calAddDays(today, Number(f.due)); list = list.filter(t => t.due_date && t.due_date <= lim); }
   else if (f.due === 'none') list = list.filter(t => !t.due_date);
   const dir = f.dir;
   list.sort((a, b) => {
@@ -16352,6 +16652,10 @@ function calRenderBoard() {
   const f = CAL.board;
   const list = calBoardTasks();
   const today = calToday();
+  // A short list because of a filter you forgot you set reads exactly like a
+  // short list because there's no work — so say when the view is narrowed.
+  const dirty = !!(f.q || f.event || f.assignee || f.priority || f.pillar || f.msOnly || f.unassigned
+    || f.due !== 'all' || [...f.status].sort().join(',') !== [...CAL_DEFAULT_STATUS].sort().join(','));
   const evOpts = [...new Map(CAL.tasks.filter(t => t.event).map(t => [t.event.id, t.event.name])).entries()]
     .sort((a, b) => a[1].localeCompare(b[1]))
     .map(([id, name]) => `<option value="${escapeHtml(id)}"${f.event === id ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
@@ -16365,7 +16669,7 @@ function calRenderBoard() {
   const rows = list.map(t => {
     const who = (t.task_assignments || []).map(a => escapeHtml(a.actor?.display_name || '?')).join(', ');
     const over = t.due_date && t.due_date < today && t.status !== 'done';
-    return `<tr class="${t.status === 'done' ? 'done' : ''}">
+    return `<tr class="${t.status === 'done' ? 'done' : ''}${over ? ' over' : ''}">
       <td><span class="tb-star${t.milestone ? ' on' : ''}" data-tb-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
       <td><a href="#" data-tb-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the episode page (tracklist + copy)">📢</a>` : ''}${t.pillar ? ` <span class="role-chip" style="cursor:default;background:${wsPillarColor(t.pillar)};color:#fff;font-size:.6rem;">${escapeHtml(wsPillarLabel(t.pillar))}</span>` : ''}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
       <td>${t.event ? `<a href="#" data-cal-ev="${escapeHtml(t.event.id)}">${escapeHtml(t.event.name)}</a>` : '<span class="li-sub">—</span>'}</td>
@@ -16384,12 +16688,15 @@ function calRenderBoard() {
       <select class="hub-status-sel" data-tb-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
       <select class="hub-status-sel" data-tb-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
       <select class="hub-status-sel" data-tb-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['7', 'Overdue + next 7 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-tb-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['today', 'Due today'], ['7', 'Overdue + next 7 days'], ['14', 'Overdue + next 14 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-tb-mson>⭐ milestones only</button>
-      <span class="li-sub" style="margin-left:auto;">${list.length} task${list.length !== 1 ? 's' : ''}</span>
+      <button class="cal-chipbtn${f.unassigned ? ' on' : ''}" data-tb-unassigned>👤 unassigned only</button>
+      ${dirty ? '<button class="cal-chipbtn on" data-tb-clear>✕ clear filters</button>' : ''}
+      <span class="li-sub" style="margin-left:auto;">${list.length} of ${CAL.tasks.length} task${CAL.tasks.length !== 1 ? 's' : ''}</span>
     </div>
     <table><thead><tr><th>⭐</th>${th('title', 'Task')}${th('event', 'Event')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
-    <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.</div></td></tr>`}</tbody></table>`;
+    <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.${dirty ? ' <a href="#" data-tb-clear>Clear them</a>.' : ''}</div></td></tr>`}</tbody></table>
+    ${f.status.includes('done') ? `<div class="li-sub" style="padding:8px 2px;font-size:.66rem;">Done tasks closed more than ${CAL_DONE_WINDOW} days ago aren't loaded — open work is always complete.</div>` : ''}`;
 }
 // Shared task editor — used by the Calendar tasks board AND the event hub
 // Tasks section. Core fields save on Submit; assignment add/remove applies
@@ -16532,9 +16839,65 @@ async function calAddTask(pre = {}) {
       if (pre.onCreated) await pre.onCreated(); else await loadCalendar();
     }, 'Add');
 }
+// A focus tile is a saved board view, not a new filter axis — it sets the
+// date/status axes it owns and leaves search / event / assignee alone, so
+// clicking "Overdue" while filtered to one event still means that event.
+function calApplyFocus(k) {
+  const f = CAL.board;
+  CAL.focus = CAL.focus === k ? null : k;
+  f.due = 'all'; f.unassigned = false; f.status = [...CAL_DEFAULT_STATUS];
+  if (CAL.focus === 'overdue') f.due = 'overdue';
+  else if (CAL.focus === 'today') f.due = 'today';
+  else if (CAL.focus === '7day') f.due = '7';
+  else if (CAL.focus === 'blocked') f.status = ['blocked'];
+  else if (CAL.focus === 'unassigned') { f.unassigned = true; f.due = '14'; }
+  else if (CAL.focus === 'nodate') f.due = 'none';
+  calRenderBoard(); calRefreshFocus();
+  $('calTasksHead')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 $('panel-calendar').addEventListener('click', async (e) => {
   const ol = e.target.closest('[data-cal-openlink]');
   if (ol) { e.preventDefault(); window.open(ol.dataset.calOpenlink, '_blank', 'noopener'); return; }
+  const foc = e.target.closest('[data-cal-focus]');
+  if (foc) { e.preventDefault(); calApplyFocus(foc.dataset.calFocus); return; }
+  const done = e.target.closest('[data-tb-done]');
+  if (done) {
+    e.preventDefault();
+    const id = done.dataset.tbDone;
+    const { error } = await sb.from('tasks').update({ status: 'done' }).eq('id', id);
+    if (error) { toast(error.message, 'err'); return; }
+    const t = CAL.tasks.find(x => x.id === id); if (t) t.status = 'done';
+    toast('Done ✓', 'ok'); calRefreshFocus(); calRenderBoard(); return;
+  }
+  // Gap: run the standard workflow generator for that event. Idempotent by
+  // title server-side, so re-running only fills what's missing.
+  const gen = e.target.closest('[data-gap-gen]');
+  if (gen) {
+    e.preventDefault();
+    if (!confirm('Generate this event\'s standard workflow?\n\nIt creates the template steps (plus gear/performer tasks) that don\'t exist yet. Steps already on the event are skipped, never duplicated.')) return;
+    gen.disabled = true;
+    const { data, error } = await sb.rpc('generate_day_of_tasks', { p_event_id: gen.dataset.gapGen });
+    gen.disabled = false;
+    if (error) { toast('Generate failed: ' + error.message, 'err'); return; }
+    toast(`${data ?? 0} task${data === 1 ? '' : 's'} created`, 'ok');
+    await loadCalendar(); return;
+  }
+  const go = e.target.closest('[data-gap-go]');
+  if (go) {
+    e.preventDefault();
+    const key = go.dataset.gapGo;
+    // activateTab is a silent no-op when the module isn't in your nav, which
+    // would leave the button looking broken rather than gated.
+    if (!$('sidebarNav').querySelector(`button[data-tab="${key}"]`)) { toast('You don\'t have access to that module — ask a master admin to close this one.', 'err'); return; }
+    activateTab(key); return;
+  }
+  if (e.target.closest('[data-tb-clear]')) {
+    e.preventDefault();
+    CAL.focus = null;
+    Object.assign(CAL.board, { q: '', status: [...CAL_DEFAULT_STATUS], event: '', assignee: '', priority: '', pillar: '', due: 'all', msOnly: false, unassigned: false });
+    calRenderBoard(); calRefreshFocus(); return;
+  }
+  if (e.target.closest('[data-tb-unassigned]')) { CAL.board.unassigned = !CAL.board.unassigned; calRenderBoard(); return; }
   const ted = e.target.closest('[data-tb-edit]');
   if (ted) { e.preventDefault(); openEditTask(ted.dataset.tbEdit, loadCalendar); return; }
   const evLink = e.target.closest('[data-cal-ev]');
@@ -16588,7 +16951,7 @@ $('panel-calendar').addEventListener('change', async (e) => {
     const { error } = await sb.from('tasks').update({ status: st.value }).eq('id', st.dataset.tbStatus);
     if (error) { toast(error.message, 'err'); return; }
     const t = CAL.tasks.find(x => x.id === st.dataset.tbStatus); if (t) t.status = st.value;
-    calRenderBoard(); return;
+    calRenderBoard(); calRefreshFocus(); return;
   }
   const bf = e.target.closest('[data-tb-filter]');
   if (bf) { CAL.board[bf.dataset.tbFilter] = bf.value; calRenderBoard(); return; }
