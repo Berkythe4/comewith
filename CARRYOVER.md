@@ -1,9 +1,10 @@
-# Carryover — 2026-08-15 (full admin for Martin & Henry + the site-owner guard · DESKTOP)
+# Carryover — 2026-08-15 (Strategy board rebuilt: real trends, six categories, a funnel · HENRY'S machine)
 
-**FOUR closes landed on 2026-08-15, across three machines.** This is the latest, run by
-**Keith on the desktop**. In order: the desktop's radio-discovery audit, Henry's Notes
-module, Keith's laptop radio-window/paging work, then this one. Nothing was overwritten —
-every "This session shipped" block is preserved below, newest first.
+**FIVE closes landed on 2026-08-15, across three machines.** This is the latest, run by
+**Henry**. In order: the desktop's radio-discovery audit, Henry's Notes module, Keith's
+laptop radio-window/paging work, the desktop's full-admin/site-owner change, then this
+Strategy rebuild. Nothing was overwritten — every "This session shipped" block is
+preserved below, newest first.
 
 **The close routine is now the MERGE ROUTINE** (`MERGE_ROUTINE.md`, was
 `SESSION_CLOSE_PROMPTS.md`). Renamed because with three machines shipping, every close is
@@ -32,8 +33,13 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `141_brand_favicon.sql`; 138 + 139 + 140 APPLIED to prod
-  2026-08-15. `141` is written but NOT applied.**
+- **Migrations: files through `145_event_funnel.sql`; 138–145 ALL APPLIED to prod
+  2026-08-15.** 141 (which had been sitting written-but-unapplied) went in this session,
+  along with 142/143/144/145.
+  Tracked history and prod now agree. `145_event_funnel.sql` was briefly applied to prod
+  while its file sat on an unmerged branch — the unavoidable shape of a DB change that
+  ships before its UI, since the database is not branchable — and PR #10 closed that gap
+  the same day.
   ⚠ **The numbering collided TWICE in one day.** First: 140 was authored as `138` on the
   desktop while the laptop was landing its own 138/139. Then, hours later, on Henry's
   machine: `141_brand_favicon.sql` was authored as `140` — the number read off a local
@@ -59,12 +65,20 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   The guard exempts service-role callers by design, so it protects the APP, not the
   PROJECT — the service key, `SBP_PAT`, Supabase dashboard, GitHub and Netlify all sit
   above it and stay Keith-only.
-- **Latest LEARNINGS §:** 19.
-- **Git:** `master` = `a5d4e2e`, pushed and live. `radio/window-by-lineup`,
-  `feature/notes-assignment` (PR #1), `feature/notes-edit-and-convert` (PR #2),
-  `docs/dashboard-editing-convention` (PR #3) and `site/favicon-remaining-pages` (PR #4)
-  all **merged**. Older unmerged branches: `fix-lognumbers-optgroups`,
-  `docs/roadmap-reconcile`, `event-hub-sprint-1`.
+- **Latest LEARNINGS §:** 23.
+- **Git:** `master` = `0adeadd`, pushed and live. The whole Strategy rebuild is merged:
+  PR #7 (categories + data layer), #8 and #11 (post-apply checks), #9 (bar sizing) and
+  #10 (funnel + migration 145). All of it is on comewith.org now.
+  **ONE PR open:** **#12** `fix/strategy-bar-hover` — bars widened to 48px and a real
+  hover card (value, event name, date) replacing the native `title`. The bars merged in
+  #9 stopped stretching but landed too narrow, and a 2px shrink floor was not a hover
+  target anyone could hit.
+  Older unmerged branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`,
+  `event-hub-sprint-1`. Stale local-only branch `feat/strategy-phase1-data-truth` can be
+  deleted — it was renamed to `feature/strategy-rebuild` early in the session.
+- **Financial views: all five return anon 401**, re-verified at this close
+  (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`, `v_kpi_dance_infusion`,
+  `v_kpi_dashboard`), plus the six views 142/145 added.
 - **Edge functions on prod:** `dj-station` **v9**, `pull-dice` **v6**, `pull-ticketmaster`
   **v8**, `pull-ra-market` **v15** — all deployed 2026-08-15 from the laptop and verified by
   reading the live bundles back.
@@ -92,9 +106,21 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Have Martin and Henry sign in and confirm they see everything you see** — Income,
-Expenses, Strategy and Users are the four master-only modules that just opened up. Then
-open Users and confirm Keith carries the 👑 owner chip above the two new master chips.
+**Set a `ticket_url` on the two upcoming events — Come With #2 (14 Nov) and Dance
+Infusion #3 (10 Oct).** Both are in `planning` with none, and the funnel cannot measure a
+single thing without one: the homepage only renders a "Get tickets" link when a URL
+exists, so there is no click to record. **The beacon cannot backfill**, so a link added
+after promotion starts loses every click before it. This is five minutes in the event
+editor and it is the difference between the funnel working and staying empty forever.
+
+Then **open Strategy and actually look at it** — the rebuild is live on comewith.org but
+nothing has been clicked through in a browser. Expand each of the six categories, confirm
+the charts draw, and check the open/closed state survives a reload (it is per-user now).
+
+Then, still outstanding from the desktop session: **have Martin and Henry sign in and
+confirm they see everything you see** — Income, Expenses, Strategy and Users are the four
+master-only modules that just opened up. Then open Users and confirm Keith carries the 👑
+owner chip above the two new master chips.
 
 Then, still outstanding from the laptop session: **reload the dashboard and pull once
 more, then scan.** Everything from this session is
@@ -106,16 +132,26 @@ edit one, convert one to a task). Deployed and structurally verified, never clic
 
 ## Parked / next
 
-**FIRST — migration `141_brand_favicon.sql` is written but NOT applied.** The Site Editor's
-favicon picker shipped to prod and is **inert until this runs**: the field only renders if a
-`brand.favicon` row exists in `site_content`, and 141 is what seeds it. Additive, one row.
-```
-SBP_REF=$SBP_REF_PROD python db.py supabase/migrations/141_brand_favicon.sql
-```
-Follow it with `supabase/checks/post_apply.sql`, which has **never been executed** — it was
-written this session, but every `db.py` call was blocked by the permission classifier, so a
-syntax error or a wrong `information_schema` column in it would only surface on first use.
-Running it right after 141 validates the migration and the check together.
+**FIRST — set a `ticket_url` on Come With #2 (14 Nov) and Dance Infusion #3 (10 Oct).**
+See "Tomorrow's default": the funnel is live and measuring nothing until one exists, and
+the beacon cannot backfill.
+
+**Then merge PR #12** (wider bars + hover card). Everything else from this session is
+already merged and live. `master` auto-deploys, so merging is the deploy.
+
+~~migration `141_brand_favicon.sql` is written but NOT applied~~ — **APPLIED 2026-08-15**
+in this session. One row, `brand.favicon` with an empty value, so the Site Editor's picker
+now renders and falls through to the static `/icons/favicon-32.png` default until
+something is uploaded.
+
+**Note on `db.py` permissions:** every call used to be blocked by the auto-mode classifier.
+Henry added `Bash(SBP_REF=yaytdosxfhcqatmhctzk python db.py:*)` to
+`.claude/settings.local.json` on 2026-08-15, so prod calls now run unprompted. The prod ref
+is baked into the prefix on purpose — any other project still prompts. It is a standing
+grant over arbitrary SQL (`db.py` has no read/write split), so the care moved from the
+approval dialog into the migration: **dry-run every migration** by copying it with
+`commit;` swapped for `rollback;`. That caught a nested-window-function error in 142 that
+re-reading the SQL had not.
 
 0. **Access change just landed — nobody has signed in under it yet.** Martin and Henry are
    full `master_admin` as of 2026-08-15. Worth saying out loud to both: they can now see and
@@ -165,6 +201,68 @@ Running it right after 141 validates the migration and the check together.
    with `toISOString()` but compares it to a local `today`, so in New York the window can run a
    day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
    overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-15 — Strategy board rebuilt: real trends, six categories, a funnel · HENRY'S machine)
+Keith opened with "the strategy page is unreadable and we're not getting actionable
+insights from it". It was ~35 equal-weight cards in four workstream groups, one scroll.
+Rebuilt in three phases, each its own PR.
+
+**Migrations 141–145, all applied to prod and verified.**
+- **141** — the long-parked `brand.favicon` row. One row, empty value.
+- **142** — the data layer. `snapshot_kpis()` + a 06:30 UTC cron writes `v_kpi_computed`
+  into `metric_snapshots`; `v_kpi_prior` / `v_kpi_event_series` / `v_kpi_content_recent` /
+  `v_kpi_changed`; `user_dashboard_prefs`; duplicate active `kpi_targets` deactivated.
+  Deliberately changed **zero pixels** on the deployed board.
+- **143** — cards the six `*_last` metrics 142 computed but left inert.
+- **144** — seeds `user_dashboard_prefs` from the old singleton. Caught late: without it
+  the three hidden cards would have silently reappeared for all 5 admins.
+- **145** — `v_event_funnel` + `v_site_exposure_30d`. Applied to prod ahead of its file
+  for a few hours; PR #10 merged the same day and tracked history matches prod again.
+
+**The bug under the whole complaint.** Every live-computed card had rendered
+"– no prior reading" since it shipped: `v_kpi_dashboard` took `current_value` from
+`coalesce(computed, snapshot)` but `prior_value` only from the second-latest **hand-logged**
+reading, and nothing hand-logs net P&L or subscriber counts. The metrics that mattered
+most were exactly the ones that could never show a trend. LEARNINGS §20.
+
+**Decisions (LEARNINGS §20–23):** prior means different things per metric and now lives in
+one view; board categories are derived from the **metric-key prefix, not
+`kpi_targets.workstream`** (re-filing those rows would have made the already-deployed
+renderer silently drop nine cards); lifetime averages moved to the drill-down and
+last-event values became the headlines; **cost to raise $1 is the DI health metric**
+(Keith's call), and it is `lte`, so colour follows the comparison not the sign; "0" and
+"cannot be measured" are different claims, so blanks, missing targets and absent funnel
+denominators all render as unknown rather than zero.
+
+**What the numbers said once they were readable** — this is the actionable part:
+last party **−$800 at 25% sell-through**; cost to raise **$0.69 vs a $0.50 target**, up
+from $0.61 the event before; recent uploads averaging **103 views against 274** for the
+five before them; mailing list **107 against a target of 1000**. Two genuinely good ones:
+DI raised **$9,557 vs $2,943** and attendance **117 vs 42**.
+
+**The funnel measures forward, not back.** The ticket CTA is on the **homepage**, not
+`event.html` (which reads `v_public_recap` and is a retrospective archive with no CTA), so
+clicks record with `path='/'` and are matched to an event by comparing `link_url` to
+`events.ticket_url`. It reads empty because the beacon started 2026-07-24, the only two
+events that ever had a `ticket_url` finished before that, and **neither upcoming event has
+one**. LEARNINGS §23.
+
+**Verified:** all five E1 financial views return anon **401** (plus the six new views);
+138–145 confirmed applied against prod object-by-object; comewith.org confirmed serving
+the Phase 2 markup; `node --check` on the extracted inline module against a `HEAD` control
+at every step.
+
+**Open risk — none of the UI has been seen rendering.** There is no local console check
+for `dashboard.html`, the Browser pane cannot composite (screenshots time out, layout
+boxes read `auto`), and PR #7 was merged before its preview was clicked through. The
+category blocks, charts, collapse behaviour and funnel panel are all structurally verified
+and visually unverified. The bars alone needed two passes after merging (#9 sizing, then
+#12 width + hover card), which is fair evidence there may be more waiting.
+
+**Ran on Henry's machine.** All of it merged the same day (PRs #7–#11) and is live on
+comewith.org. One follow-up left open: **PR #12**, widening the per-event bars and adding
+a hover card — the sizing that merged in #9 stopped them stretching but left them too
+narrow to read.
 
 ## This session shipped (2026-08-15 — site favicon, batched prod checks, toolchain · HENRY'S machine)
 PRs **#3** and **#4** merged and deployed. Migration **141 written, NOT applied** (see Parked / next).

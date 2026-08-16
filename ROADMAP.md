@@ -207,6 +207,43 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-08-15 (Strategy board rebuild: trends, categories, funnel)
+
+**DONE — the KPI layer can finally show a trend.** Migrations 141–145 applied to prod.
+- `snapshot_kpis()` + 06:30 UTC cron writes `v_kpi_computed` into `metric_snapshots`, so
+  the 27 live-computed metrics build history. Before this they had none, and every
+  computed card rendered "– no prior reading" permanently. LEARNINGS §20.
+- `v_kpi_prior` (what "prior" means, per metric, in one place), `v_kpi_event_series`
+  (per-event values), `v_kpi_content_recent` (last 5 uploads vs the 5 before),
+  `v_kpi_changed` (when a number last actually moved).
+- `user_dashboard_prefs` replaces the shared singleton — hidden cards and open categories
+  are per person now.
+
+**DONE — the board reads as six categories, not 35 cards.** Parties · Dance Infusion ·
+Audience · Content · Radio · Site, each leading with two health numbers and one chart,
+collapsed by default, expanding to everything that used to be on the page. Plus an alerts
+row (deterministic rules), source badges on the card face, and deltas that name what they
+compare against. Radio and Site became their own categories. Membership derives from the
+metric-key prefix, so a new metric needs no migration. LEARNINGS §21–22.
+
+**DONE (data), PARKED (usefulness) — the funnel.** `v_event_funnel` +
+`v_site_exposure_30d` measure site exposure → ticket click → ticket sold → attended. It
+reads empty and will keep reading empty until an upcoming event has a `ticket_url`:
+the beacon started 2026-07-24, and the only two events that ever had one finished before
+that. The ticket CTA lives on the **homepage**, not `event.html`, so clicks are attributed
+by matching `link_url` to `events.ticket_url`. LEARNINGS §23.
+
+**PARKED — the flywheel diagram** stays as-is (static, no numbers on the arrows), per
+Keith's standing preference for an earlier design he'll describe on revisit. The funnel is
+the measured version of the same idea and did not replace it.
+
+**BACKLOG from this work:**
+- Per-event funnel history, once enough events have run with the beacon live.
+- `youtube.watch_hours` still needs the YouTube Analytics API + OAuth; unchanged.
+- Instagram auto-pull still not built; all IG numbers remain hand-logged.
+- The five duplicate `kpi_targets` rows were deactivated, not deleted — if targets need
+  re-tuning, do it from the dashboard's "Edit target", never in SQL.
+
 ## Current state — reconciled 2026-07-28 (Radio ecosystem + Content Center + NYC Scene control center)
 
 > Big build-out since the 2026-07-23 radio close. Migrations **107–132 applied to prod**;
