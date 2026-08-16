@@ -371,8 +371,15 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
   display: flex; align-items: center; gap: 8px; padding: 7px 12px; background: var(--off);
   border-bottom: 1px solid var(--border); font-size: 0.6rem; letter-spacing: 0.12em;
   text-transform: uppercase; color: var(--mid);
+  width: 100%; text-align: left; border-width: 0 0 1px; border-style: solid;
+  font-family: 'Inconsolata', monospace; cursor: pointer;
 }
+.cal-card > .hd:hover { color: var(--ink); background: var(--surface-2); }
+.cal-card > .hd .caret { flex: 0 0 auto; width: 0.8em; opacity: 0.7; }
+.cal-card > .hd .scope { text-transform: none; letter-spacing: 0.04em; opacity: 0.65; font-size: 0.95em; }
 .cal-card > .hd .cnt { margin-left: auto; font-weight: 700; color: var(--ink); letter-spacing: 0.04em; }
+.cal-card.collapsed > .hd { border-bottom-width: 0; }
+.cal-card.collapsed > .bdy { display: none; }
 .cal-card .ft { padding: 7px 12px; border-top: 1px solid var(--border); font-size: 0.66rem; color: var(--mid); }
 .cal-row { display: flex; gap: 9px; align-items: flex-start; padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .cal-row:last-child { border-bottom: none; }
@@ -16629,6 +16636,8 @@ const CAL = {
   tasks: [],                                             // full board list (not month-bound)
   gap: null,                                             // gap-scan bundle (null = scan unavailable)
   gapErr: null,
+  meActor: undefined,                                    // my actors row; null = no actor linked to my login
+
   signals: null,                                         // derived counts behind the focus tiles
   focus: null,                                           // which focus tile is driving the board
   board: { q: '', status: ['todo', 'doing', 'blocked'], event: '', assignee: '', priority: '', pillar: '', due: 'all', msOnly: false, unassigned: false, sort: 'due', dir: 1 },
@@ -16665,6 +16674,13 @@ async function calFetch() {
   const todayISO = calToday();
   const gapTo = calAddDays(todayISO, CAL_GAP_HORIZON);
   const doneSince = calAddDays(todayISO, -CAL_DONE_WINDOW);
+  // Assignments hang off actors, not auth users, and actors.user_id is nullable
+  // — a teammate can exist with no login linked. Resolve it once; null is a
+  // real answer the card has to say out loud, not a silently empty filter.
+  if (CAL.meActor === undefined && ME.id) {
+    const { data: mine } = await sb.from('actors').select('id,display_name').eq('user_id', ME.id).is('deleted_at', null).limit(1);
+    CAL.meActor = (mine && mine[0]) || null;
+  }
   const [evs, ms, so, mk, roster, ven, tasks, upEv, tpl, stns] = await Promise.all([
     sb.from('events').select('id,slug,name,series,type,status,event_date,doors_time,venue_id,venue:venues(name)')
       .is('deleted_at', null).gte('event_date', from).lte('event_date', to).order('event_date'),
@@ -16791,12 +16807,23 @@ function calSignals() {
     nodate: open.filter(t => !t.due_date),
   };
 }
+// "Needs YOU" means yours: assigned to me, or assigned to nobody — someone
+// else's dated work is their queue, not mine, and an unowned task is everyone's
+// until it's claimed. The tiles above stay unscoped on purpose: they are the
+// whole picture, this card is my slice of it.
+function calMine(t) {
+  const asg = t.task_assignments || [];
+  if (!asg.length) return true;                                   // unclaimed
+  return !!CAL.meActor && asg.some(a => a.actor && a.actor.id === CAL.meActor.id);
+}
 // The "needs you" queue: late first, then today, then the week — and blocked
 // items regardless of date, because a blocked task is waiting on a person and
 // will never surface by getting closer to its due date.
 function calFocusQueue() {
   const s = CAL.signals, seen = new Set(), pool = [];
-  [...s.overdue, ...s.today, ...s.next7, ...s.blocked].forEach(t => { if (!seen.has(t.id)) { seen.add(t.id); pool.push(t); } });
+  [...s.overdue, ...s.today, ...s.next7, ...s.blocked].forEach(t => {
+    if (!seen.has(t.id) && calMine(t)) { seen.add(t.id); pool.push(t); }
+  });
   pool.sort((a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'))
     || (CAL_PRIO_RANK[a.priority] ?? 3) - (CAL_PRIO_RANK[b.priority] ?? 3));
   return pool;
@@ -16909,9 +16936,17 @@ function calFocusHtml() {
       <div class="rt"><span class="cal-when ${w.cls}">${w.txt}</span><button class="cal-tick" data-tb-done="${escapeHtml(t.id)}" title="Mark done">✓</button></div>
     </div>`;
   }).join('');
-  const needBody = rows || `<div class="hub-empty">Nothing late, due, or blocked. ${n(s.open) ? 'The rest of the board is further out.' : ''}</div>`;
-  const needFoot = queue.length > 7
-    ? `<div class="ft"><a href="#" data-cal-focus="7day">+ ${queue.length - 7} more in this window →</a></div>` : '';
+  // How many the scope hid, so a short queue never reads as a quiet week.
+  const inWindow = new Set([...s.overdue, ...s.today, ...s.next7, ...s.blocked].map(t => t.id)).size;
+  const hidden = inWindow - queue.length;
+  const needBody = rows || `<div class="hub-empty">Nothing of yours is late, due, or blocked.${hidden ? ` ${hidden} in this window ${hidden === 1 ? 'belongs' : 'belong'} to someone else.` : (n(s.open) ? ' The rest of the board is further out.' : '')}</div>`;
+  const needNotes = [];
+  if (queue.length > 7) needNotes.push(`<a href="#" data-cal-focus="7day">+${queue.length - 7} more of yours — open the board →</a>`);
+  if (hidden) needNotes.push(`${hidden} more in this window ${hidden === 1 ? 'is' : 'are'} assigned to someone else`);
+  // No linked actor = "assigned to me" can never match, so the card would show
+  // only unclaimed work and look like a light week. Say why instead.
+  if (CAL.meActor === null) needNotes.push('⚠ your login isn\'t linked to a person record, so only UNASSIGNED work can show here — a master admin can link it in Users');
+  const needFoot = needNotes.length ? `<div class="ft">${needNotes.join(' · ')}</div>` : '';
 
   // A failed scan still shows the task-level gaps it didn't depend on — but it
   // says loudly that the event/radio half didn't run, so an empty card is never
@@ -16938,16 +16973,29 @@ function calFocusHtml() {
       ${tile('nodate', n(s.nodate), 'No date', 'blue')}
     </div>
     <div class="cal-cols">
-      <div class="cal-card">
-        <div class="hd">⚡ Needs you now<span class="cnt">${queue.length}</span></div>
-        ${needBody}${needFoot}
-      </div>
-      <div class="cal-card">
-        <div class="hd">🕳 Gaps — should exist, doesn't<span class="cnt">${CAL.gapErr ? gaps.length + '+' : gaps.length}</span></div>
-        ${gapBody}
-        ${gapNotes.length ? `<div class="ft">${escapeHtml(gapNotes.join(' · '))}</div>` : ''}
-      </div>
+      ${calCardHtml('need', `⚡ Needs you now <span class="scope">${CAL.meActor ? 'mine + unassigned' : 'unassigned only'}</span>`, queue.length, needBody + needFoot)}
+      ${calCardHtml('gaps', `🕳 Gaps — should exist, doesn't`, CAL.gapErr ? gaps.length + '+' : gaps.length,
+        gapBody + (gapNotes.length ? `<div class="ft">${escapeHtml(gapNotes.join(' · '))}</div>` : ''))}
     </div>
+  </div>`;
+}
+// Both cards collapse by clicking their bar — the count stays visible in the
+// header, so a collapsed card still tells you whether it needs opening. State
+// is per-card and remembered, same pattern as the nav groups (cw_nav_collapsed).
+function calCardsCollapsed() {
+  try { return JSON.parse(localStorage.getItem('cw_cal_cards') || '{}'); } catch (_) { return {}; }
+}
+function calSetCardCollapsed(key, collapsed) {
+  const st = calCardsCollapsed(); st[key] = collapsed;
+  try { localStorage.setItem('cw_cal_cards', JSON.stringify(st)); } catch (_) {}
+}
+function calCardHtml(key, label, count, body) {
+  const off = !!calCardsCollapsed()[key];
+  return `<div class="cal-card${off ? ' collapsed' : ''}" data-cal-card="${key}">
+    <button class="hd" data-cal-cardtoggle="${key}" aria-expanded="${!off}" title="${off ? 'Expand' : 'Collapse'}">
+      <span class="caret">${off ? '▸' : '▾'}</span>${label}<span class="cnt">${count}</span>
+    </button>
+    <div class="bdy">${body}</div>
   </div>`;
 }
 // Recompute the band in place after a task changes, so the counts above never
@@ -17331,6 +17379,21 @@ function calApplyFocus(k) {
 $('panel-calendar').addEventListener('click', async (e) => {
   const ol = e.target.closest('[data-cal-openlink]');
   if (ol) { e.preventDefault(); window.open(ol.dataset.calOpenlink, '_blank', 'noopener'); return; }
+  // Checked before the focus/edit handlers: a click anywhere on the bar is a
+  // collapse, and the bar holds no other controls.
+  const cardT = e.target.closest('[data-cal-cardtoggle]');
+  if (cardT) {
+    e.preventDefault();
+    const key = cardT.dataset.calCardtoggle;
+    const card = cardT.closest('.cal-card');
+    const off = !card.classList.contains('collapsed');
+    card.classList.toggle('collapsed', off);
+    cardT.setAttribute('aria-expanded', String(!off));
+    cardT.title = off ? 'Expand' : 'Collapse';
+    const c = cardT.querySelector('.caret'); if (c) c.textContent = off ? '▸' : '▾';
+    calSetCardCollapsed(key, off);
+    return;
+  }
   const foc = e.target.closest('[data-cal-focus]');
   if (foc) { e.preventDefault(); calApplyFocus(foc.dataset.calFocus); return; }
   const done = e.target.closest('[data-tb-done]');
