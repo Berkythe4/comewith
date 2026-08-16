@@ -525,17 +525,40 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
    looking at. The track is right-aligned so the most recent event sits at the
    same edge whether there are 3 bars or 40, and so the average line spans the
    bars rather than a mostly-empty row. */
-.cat-bars { display: flex; justify-content: flex-end; height: 54px; }
+.cat-bars { display: flex; justify-content: flex-end; height: 76px; }
 .cat-bars-track {
-  display: flex; align-items: flex-end; gap: 3px; height: 100%;
+  display: flex; align-items: flex-end; gap: 4px; height: 100%;
   position: relative; flex: 0 1 auto; max-width: 100%;
 }
 .cat-bar {
   /* basis = preferred width, shrink = 1: many bars compress to fit, few bars
-     stay legible instead of stretching. */
-  flex: 0 1 26px; min-width: 2px;
+     stay legible instead of stretching. 48px reads as a bar you can actually
+     look at; 26px was legible but mean, and a 2px minimum was not a hover
+     target anyone could hit. */
+  flex: 0 1 48px; min-width: 6px;
   background: var(--cat-color, var(--mid)); opacity: 0.4; position: relative;
+  cursor: default;
 }
+.cat-bar:hover { opacity: 0.85; }
+.cat-bar.latest:hover { opacity: 1; }
+/* Hover card. Replaces the native `title` tooltip, which takes about a second
+   to appear and cannot show the name and the number as separate lines. */
+.cat-bar-tip {
+  display: none; position: absolute; bottom: calc(100% + 7px); left: 50%;
+  transform: translateX(-50%); z-index: 60; pointer-events: none;
+  background: var(--ink); color: var(--bg); padding: 7px 10px;
+  font-family: 'Inconsolata', monospace; font-size: 0.66rem; line-height: 1.5;
+  letter-spacing: 0.01em; text-align: left; white-space: nowrap;
+  box-shadow: 0 3px 12px rgba(26,20,16,0.25);
+}
+.cat-bar:hover .cat-bar-tip { display: block; }
+.cat-bar-tip .t-val { font-size: 0.8rem; }
+.cat-bar-tip .t-sub { opacity: 0.7; }
+/* The track is right-aligned, so a centred tip on the newest bar is the one
+   that can push past the container edge and scroll the page sideways. Anchor
+   the last two to their right edge instead. */
+.cat-bar:last-child .cat-bar-tip,
+.cat-bar:nth-last-child(2) .cat-bar-tip { left: auto; right: 0; transform: none; }
 .cat-bar.latest { opacity: 1; }
 .cat-bar.neg { background: var(--red); }
 .cat-ref { position: absolute; left: 0; right: 0; border-top: 1px dashed var(--border-strong); pointer-events: none; }
@@ -5329,13 +5352,13 @@ const CATEGORIES = [
   { key: 'parties', label: 'Parties', color: '#C75A3C',
     match: k => k.startsWith('parties.'),
     heads: [['parties.net_pl_last', 'parties.net_pl'], ['parties.sell_through_last', 'parties.sell_through']],
-    chart: { kind: 'events', metric: 'parties.net_pl_last', title: 'Net P&L per event' } },
+    chart: { kind: 'events', metric: 'parties.net_pl_last', title: 'Net P&L per event', unit: '$' } },
   { key: 'dance_infusion', label: 'Dance Infusion', color: '#8362A8',
     match: k => k.startsWith('di.'),
     // Cost to raise leads: it is what Keith judges a DI event's health by, and
     // it is lower-is-better, so the arrow logic has to follow comparison.
     heads: [['di.cost_to_raise_last', 'di.cost_to_raise'], ['di.raised_last', 'di.raised_per_event']],
-    chart: { kind: 'events', metric: 'di.cost_to_raise_last', title: 'Cost to raise $1, per event' } },
+    chart: { kind: 'events', metric: 'di.cost_to_raise_last', title: 'Cost to raise $1, per event', unit: '$' } },
   { key: 'audience', label: 'Audience', color: '#2E8E72',
     // The mailing list leads over follower counts on purpose: it is the only
     // audience we own and can actually contact. Followers stay in the detail.
@@ -5391,7 +5414,7 @@ function headDelta(c) {
 }
 // Bar sequence for per-event metrics. `ref` draws the average as a dashed line
 // so "was the last one better than usual" is answerable at a glance.
-function barSeries(rows, { color = '#C75A3C', lowerBetter = false } = {}) {
+function barSeries(rows, { color = '#C75A3C', lowerBetter = false, unit = '' } = {}) {
   const pts = (rows || []).filter(r => r.value != null);
   if (!pts.length) return '<div class="li-sub">No completed events yet.</div>';
   const vals = pts.map(r => Number(r.value));
@@ -5403,8 +5426,14 @@ function barSeries(rows, { color = '#C75A3C', lowerBetter = false } = {}) {
     const h = Math.max(2, (Math.abs(v) / span) * 100);
     const last = i === pts.length - 1;
     const bad = lowerBetter ? false : v < 0;
-    return `<div class="cat-bar${last ? ' latest' : ''}${bad ? ' neg' : ''}" style="height:${h}%"
-      title="${escapeHtml(r.name || '')}${r.event_date ? ' · ' + escapeHtml(fmtDate(r.event_date)) : ''}: ${fmtNum(v)}"></div>`;
+    // Real hover card instead of `title`: the native tooltip takes about a
+    // second to appear and cannot put the name and the number on separate
+    // lines, which is most of what makes a bar chart readable.
+    return `<div class="cat-bar${last ? ' latest' : ''}${bad ? ' neg' : ''}" style="height:${h}%">
+      <span class="cat-bar-tip">
+        <span class="t-val">${fmtMetric(v, unit)}</span><br>
+        ${escapeHtml(r.name || 'Untitled')}${r.event_date ? `<br><span class="t-sub">${escapeHtml(fmtDate(r.event_date))}</span>` : ''}
+      </span></div>`;
   }).join('');
   const refTop = ((max - avg) / span) * 100;
   // The inner track is what actually holds the bars: it sizes to their content
@@ -5416,7 +5445,7 @@ function barSeries(rows, { color = '#C75A3C', lowerBetter = false } = {}) {
         ${bars}
       </div>
     </div>
-    <div class="li-sub" style="margin-top:4px;">${pts.length} event${pts.length === 1 ? '' : 's'} · average ${fmtNum(avg)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''}</div>`;
+    <div class="li-sub" style="margin-top:4px;">${pts.length} ${unit === 'views' ? 'upload' : 'event'}${pts.length === 1 ? '' : 's'} · average ${fmtMetric(avg, unit)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''} · hover a bar for the detail</div>`;
 }
 // (kpiSubgroup / KPI_VIDEO_KEYS lived here: sub-groups that split one giant
 // Audience grid into mailing / social / radio / site with a hairline between
@@ -5725,7 +5754,8 @@ function catChart(cat) {
   if (ch.kind === 'events') {
     const rows = (strat.series || []).filter(r => r.metric_key === ch.metric)
       .slice().sort((a, b) => (a.event_date || '').localeCompare(b.event_date || ''));
-    body = barSeries(rows, { color: cat.color, lowerBetter: ch.metric === 'di.cost_to_raise_last' });
+    body = barSeries(rows, { color: cat.color, unit: ch.unit || '',
+                             lowerBetter: ch.metric === 'di.cost_to_raise_last' });
   } else if (ch.kind === 'history') {
     const ser = strat.history?.[ch.metric] || [];
     body = ser.length
@@ -5735,7 +5765,7 @@ function catChart(cat) {
   } else if (ch.kind === 'videos') {
     const vids = (strat.recentVideos || []).slice().reverse();
     body = barSeries(vids.map(v => ({ value: v.views, name: v.title, event_date: (v.published_at || '').slice(0, 10) })),
-                     { color: cat.color });
+                     { color: cat.color, unit: 'views' });
   } else if (ch.kind === 'daily') {
     const days = (strat.traffic?.daily || []).slice(-30);
     body = days.length > 1
