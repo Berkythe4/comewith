@@ -612,6 +612,29 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
   border: 1px solid var(--border-strong); color: var(--mid); padding: 1px 4px; margin-left: 6px;
 }
 .kpi-src.stale { color: var(--red); border-color: var(--red); }
+/* ===== Funnel (Phase 3) =====
+   Four stages across, each narrower than the last. Stage 1 is site-wide, the
+   rest are per event — the widths are proportional to the numbers, but the
+   LABEL says which is which, because a funnel drawn from mismatched
+   denominators would imply a conversion rate that does not exist. */
+.funnel { display: flex; gap: 8px; align-items: stretch; flex-wrap: wrap; margin-top: 4px; }
+.fn-stage {
+  flex: 1 1 130px; min-width: 118px; background: var(--off);
+  border-left: 3px solid var(--cat-color, var(--mid)); padding: 10px 13px;
+}
+.fn-stage.empty { opacity: 0.55; }
+.fn-label { font-size: 0.56rem; letter-spacing: 0.11em; text-transform: uppercase; color: var(--mid); }
+.fn-val { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; line-height: 1.05; color: var(--ink); }
+.fn-val.none { color: var(--mid); }
+.fn-note { font-size: 0.6rem; color: var(--mid); line-height: 1.45; margin-top: 2px; }
+.fn-arrow { align-self: center; color: var(--mid); font-size: 0.9rem; }
+/* The blocker state. An upcoming event with no ticket link cannot be measured
+   at all, and saying "0 clicks" would read as "nobody clicked" rather than
+   "nothing was ever measurable". */
+.fn-blocked {
+  border: 1px solid var(--red); border-left-width: 3px; padding: 11px 14px;
+  font-size: 0.76rem; line-height: 1.55; margin-top: 8px;
+}
 /* Things that want a decision, above everything else. */
 .strat-alerts { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
 .strat-alert {
@@ -5557,7 +5580,8 @@ const METRIC_SOURCE = {
 const strat = { cards: [], hidden: new Set(), parties: null, di: null, traffic: null,
   // Which categories are open, per user. Empty = everything collapsed, which is
   // the point of the rebuild: the summary IS the page.
-  expanded: new Set(), series: [], history: {}, recentVideos: [] };
+  expanded: new Set(), series: [], history: {}, recentVideos: [],
+  funnel: [], exposure: null };
 
 const fmtNum = (v) => (v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 2 }));
 function fmtMetric(v, unit) {
@@ -5770,6 +5794,17 @@ function stratAlerts() {
   if (offTarget(upCard)) out.push({ sev: 'warn', t: 'Nothing published lately',
     d: `${fmtNum(upCard.current_value)} days since the last upload, against a ${fmtNum(upCard.target_value)}-day target.` });
 
+  // The funnel's blocker, surfaced where decisions live rather than three
+  // clicks deep inside Parties. This one is time-critical in a way the others
+  // are not: the beacon cannot backfill, so a ticket link added after promotion
+  // starts loses every click that came before it.
+  const nf = nextFunnelEvent();
+  if (nf && !nf.has_ticket_link) {
+    const days = Math.max(0, Math.round((new Date(nf.event_date + 'T00:00:00').getTime() - Date.now()) / 86400000));
+    out.push({ sev: 'warn', t: 'No ticket link on the next event',
+      d: `${escapeHtml(nf.name || 'It')} is ${days} day${days === 1 ? '' : 's'} out with no ticket URL set, so nothing between site traffic and tickets can be measured. The homepage only renders a “Get tickets” link when there is one.` });
+  }
+
   // Hand-logged metrics rot silently: the card keeps showing a number that
   // stopped being true months ago.
   const stale = strat.cards.filter(c => c.source_kind === 'manual' && daysSince(c.as_of) > STALE_DAYS);
@@ -5814,6 +5849,63 @@ function catChart(cat) {
     ${body}</div>`;
 }
 
+// The soonest event that has not happened yet -- the only one you can still do
+// anything about, which is the whole reason this is a tracker and not a report.
+function nextFunnelEvent() {
+  const today = new Date().toISOString().slice(0, 10);
+  return (strat.funnel || [])
+    .filter(f => f.event_date && f.event_date >= today)
+    .sort((a, b) => a.event_date.localeCompare(b.event_date))[0] || null;
+}
+// site exposure -> ticket click -> ticket sold -> attended.
+// Stage 1 is SITE-WIDE and the other three are per event, so the label says so.
+// Drawing them as one tapering shape would imply a conversion rate between
+// numbers that do not share a denominator.
+function renderFunnel() {
+  const el = $('strat-funnel'); if (!el) return;
+  const f = nextFunnelEvent(), exp = strat.exposure;
+  const everMeasured = (strat.funnel || []).some(r => Number(r.ticket_clicks) > 0);
+
+  if (!f) {
+    el.innerHTML = `<div class="section-sub" style="margin-top:14px;">Next event funnel</div>
+      <div class="li-sub">No upcoming events on the calendar. Log one and this starts tracking it.</div>`;
+    return;
+  }
+  const stage = (label, val, note, empty) => `<div class="fn-stage${empty ? ' empty' : ''}">
+      <div class="fn-label">${escapeHtml(label)}</div>
+      <div class="fn-val${val == null ? ' none' : ''}">${val == null ? '—' : fmtNum(val)}</div>
+      <div class="fn-note">${escapeHtml(note)}</div>
+    </div>`;
+  const arrow = '<div class="fn-arrow">→</div>';
+
+  // An upcoming event with no ticket link is not "0 clicks" -- nothing was ever
+  // measurable. Saying 0 would read as "nobody clicked", which is a different
+  // and much more discouraging claim than the truth.
+  const blocked = !f.has_ticket_link
+    ? `<div class="fn-blocked"><b>No ticket link on this event yet</b><br>
+        Nothing between site traffic and tickets can be measured until
+        <code>ticket_url</code> is set on ${escapeHtml(f.name || 'it')} — the homepage only renders a
+        “Get tickets” link when there is one, so there is no click to record. The beacon cannot
+        backfill, so this needs setting <em>before</em> promotion starts, not after.</div>`
+    : '';
+
+  el.innerHTML = `<div class="section-sub" style="margin-top:14px;">Next event funnel —
+      ${escapeHtml(f.name || '')} · ${escapeHtml(fmtDate(f.event_date))}${f.series ? ' · ' + escapeHtml(f.series) : ''}</div>
+    <div class="funnel" style="--cat-color:${WORKSTREAM.parties.color}">
+      ${stage('Site visitors', exp?.home_visitors ?? null, 'homepage, last 30 days — shared across every upcoming event, not this one alone', !exp?.home_visitors)}
+      ${arrow}
+      ${stage('Ticket clicks', f.has_ticket_link ? f.ticket_clickers : null,
+              f.has_ticket_link ? `${fmtNum(f.ticket_clicks)} clicks from ${fmtNum(f.ticket_clickers)} people` : 'no ticket link set', !f.ticket_clickers)}
+      ${arrow}
+      ${stage('Tickets sold', f.tickets_sold ?? null,
+              f.capacity ? `of ${fmtNum(f.capacity)} capacity` : 'no venue capacity on record', !f.tickets_sold)}
+      ${arrow}
+      ${stage('Attended', f.total_attendance ?? null, 'filled in after the event', !f.total_attendance)}
+    </div>
+    ${blocked}
+    ${!everMeasured ? `<div class="fn-note" style="margin-top:8px;">No event has click data yet: the site beacon started 24 Jul 2026, and the only two events that ever had a ticket link had already finished by then. This measures forward, not back.</div>` : ''}`;
+}
+
 function renderStrategy() {
   // Alerts first -- the only part of the page that tells you to do something.
   const alerts = stratAlerts();
@@ -5827,7 +5919,7 @@ function renderStrategy() {
   // metric_key was added without a matching category.
   const claimed = new Set();
   const extra = {
-    parties: '<div id="strat-parties"></div><div id="strat-attendance"></div>',
+    parties: '<div id="strat-funnel"></div><div id="strat-parties"></div><div id="strat-attendance"></div>',
     dance_infusion: '<div id="strat-di"></div>',
     audience: '<div id="strat-ig"></div>',
     content: '<div id="strat-videos"></div>',
@@ -5928,13 +6020,14 @@ function renderStrategy() {
   ).join('');
   renderStratTraffic();
   renderStratTrends();
+  renderFunnel();
 }
 
 async function loadStrategy() {
   setStratState('loading', 'Loading strategy…');
   $('refreshBtn').disabled = true;
   try {
-    const [dash, parties, di, prefs, igHist, att, ytVids, tDaily, tPages, tLinks, tRefs, tListeners, evSeries, recentVids] = await Promise.all([
+    const [dash, parties, di, prefs, igHist, att, ytVids, tDaily, tPages, tLinks, tRefs, tListeners, evSeries, recentVids, funnel, exposure] = await Promise.all([
       // prior_as_of / prior_basis / source_kind / changed_on are the columns 142
       // appended: what the number is compared against, where it came from, and
       // when it last actually moved.
@@ -5964,6 +6057,10 @@ async function loadStrategy() {
       // Chronological, unlike the by-views list below it: the Content chart is
       // asking "is what we publish NOW landing", which needs recency order.
       sb.from('youtube_videos').select('title, views, published_at').order('published_at', { ascending: false }).limit(12),
+      // Funnel (145). Every event, not just completed ones -- the whole point is
+      // the NEXT one, while there is still time to do something about it.
+      sb.from('v_event_funnel').select('*').order('event_date', { ascending: false }),
+      sb.from('v_site_exposure_30d').select('*').maybeSingle(),
     ]);
     const err = dash.error || parties.error || di.error || prefs.error;
     if (err) {
@@ -5987,6 +6084,8 @@ async function loadStrategy() {
     // take the whole screen down.
     strat.series = evSeries?.data || [];
     strat.recentVideos = recentVids?.data || [];
+    strat.funnel = funnel?.data || [];
+    strat.exposure = exposure?.data || null;
     strat.attendance = att.data || [];
     strat.ytVideos = ytVids.data || [];
     // Traffic is supplementary — a failure here (view missing on an older
