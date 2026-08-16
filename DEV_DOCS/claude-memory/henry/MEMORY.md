@@ -1,0 +1,2 @@
+- [User identity](user-identity.md) — Henry Zaradich; repo belongs to Keith Berkman, so push rights aren't a given.
+- [Come With local setup](comewith-local-setup.md) — what's installed at C:\comewith and what's still blocking (push auth, .env, Python).

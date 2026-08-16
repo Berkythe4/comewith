@@ -52,6 +52,11 @@ carries the state:
   `cp ~/.claude/projects/<path-slug>/memory/*.md DEV_DOCS/claude-memory/`
   (the slug is derived from the checkout path, so it differs per machine).
   Scan for credentials before committing — that folder is public in the repo.
+  ⚠ **Do NOT run that `cp` verbatim from a machine other than the desktop.** The folder
+  root holds the DESKTOP's ~64 files and `MEMORY.md` is its index; a machine with 3
+  memories would overwrite a 64-entry index with a 3-entry one and lose the map to files
+  that are still sitting right there. Per-machine snapshots go in a subfolder —
+  `DEV_DOCS/claude-memory/henry/` is the worked example (2026-08-15).
 - **Say in CARRYOVER which machine the session ran on**, and name any branch the
   work is parked on, with the exact command to pick it up.
 - **`master` auto-deploys to Netlify.** Never merge un-green-lit work to master

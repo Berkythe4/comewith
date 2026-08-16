@@ -312,3 +312,110 @@ two remaining master_admins can still remove *each other*, invite further
 master_admins, read and write all company money, and flip `financials_released` on any
 event. The 041–043 financial gate now applies only to Janelle and Liz. That was the
 accepted trade of "same full access as me, except ownership".
+
+---
+
+## Section 20 — A prior value nobody writes is not a trend (2026-08-15)
+
+The Strategy board rendered `– no prior reading` on every live-computed card since it
+shipped, and nobody noticed *why*. `v_kpi_dashboard` took `current_value` from
+`coalesce(computed, snapshot)` but `prior_value` **only** from `v_metric_prior` — the
+second-latest **hand-logged** reading. Nothing hand-logs net P&L or subscriber counts,
+so the metrics that mattered most were precisely the ones that could never show a trend.
+Prod introspection settled it: `metric_snapshots` held readings for `youtube.*`,
+`instagram.*` and `tiktok.*` and nothing else.
+
+**A computed value has no history unless something writes one down.** `snapshot_kpis()`
+plus a 06:30 UTC cron (after the 06:00 YouTube pull) now writes `v_kpi_computed` into
+`metric_snapshots` as `source='computed'`. 27 metrics build history the same way YouTube
+already did.
+
+**"Prior" is not one thing, so it lives in one place.** `v_kpi_prior` defines it per
+metric: the **previous completed event** for event metrics, the **previous 5 uploads**
+for recent content, and the reading **nearest 30 days ago** for everything else. The
+fallback when history is shorter than 30 days is the **earliest** reading on record,
+never the latest — falling back to the latest compares a number to itself and renders a
+permanent, confident "no change".
+
+**A delta must say what it is measured against.** The old card showed `▲ 47`, which
+never said *47 since when*. `prior_basis` now travels with the number, so the card reads
+"▲ +47 vs about 30 days ago".
+
+**Corollary — a nightly snapshot destroys "as of".** Once something writes daily,
+"last captured" is always today and means nothing. `v_kpi_changed` walks the history and
+returns when the value last actually **moved**, so a card can say "unchanged since Jul 2"
+instead of "updated today" every day forever.
+
+---
+
+## Section 21 — The board's categories come from the metric key, not a column (2026-08-15)
+
+The rebuild needed six categories where `kpi_targets.workstream` had four (Radio was
+seven cards buried inside Audience; Site was a section of its own). The obvious move —
+`update kpi_targets set workstream = 'radio' where metric_key like 'radio.%'` — is a
+**silent production break**: the deployed renderer only resolves four workstreams, so the
+instant that migration landed, nine cards would have vanished from the live board with no
+error anywhere. The database and the front end deploy on different clocks, and a
+migration cannot wait for a merge.
+
+**So membership is derived from the metric key prefix in the client.** `radio.*` → Radio,
+`site.*` → Site, and so on. Three things fall out of it: the DB change disappears
+entirely; a new `metric_key` lands in the right category with no migration at all; and
+anything matching nothing renders under **Other** rather than disappearing.
+
+**The general rule:** when a schema change would alter what already-deployed code
+renders, prefer deriving the same fact in the client. Ship the two halves on the same
+clock, or don't couple them.
+
+---
+
+## Section 22 — A lifetime average cannot answer "did the last one work" (2026-08-15)
+
+Almost every money card was an average across **every completed event ever**:
+`parties.net_pl`, `parties.sell_through`, `di.cost_to_raise`. Those numbers blend a 2024
+loss into a 2026 win and barely move, so the board could not answer the only question
+anyone actually asks — *was the last one better than the one before?*
+
+`v_kpi_event_series` now gives per-event values, and the `*_last` metrics read event 1
+against event 2. The lifetime averages **stay**, in the drill-down, where they belong.
+
+**Cost to raise $1 is the Dance Infusion health metric** (Keith's call, 2026-08-15): it
+is what a DI event is judged by, over raised-per-event or cumulative-to-MS, which are
+outcomes rather than efficiency. It is `comparison = 'lte'`, so **colour follows the
+comparison, not the sign** — a falling number is the good one, and any renderer that
+assumes "up is good" gets this backwards.
+
+**Same trap, content edition:** `youtube.avg_views` is lifetime views ÷ all videos. Its
+own tooltip admitted it "is NOT a read on recent performance", and it was still the
+Content headline. `content.avg_views_recent` (last 5 uploads vs the 5 before) replaced
+it, and immediately said something the old card structurally could not: 103 against 274.
+
+---
+
+## Section 23 — "0" and "cannot be measured" are different claims (2026-08-15)
+
+A blank hand-logged card and a genuine zero rendered identically on the old board. They
+are opposite statements — one is *we have no idea*, the other is *we checked and it is
+nothing* — and conflating them makes the board quietly dishonest. Source badges
+(`live` / `api` / `logged`, with a stale flag past 60 days) now sit on the card face
+rather than inside a hover, progress bars render only where a value **and** a target
+exist (0% for an untargeted metric read as failing badly rather than untracked), and
+funnel conversion rates return **null, not 0**, when the denominator is missing.
+
+**The funnel is where this matters most.** `v_event_funnel` measures site exposure →
+ticket click → ticket sold → attended. It reads empty, and the empty state had to
+explain itself: the beacon started 2026-07-24; the only two events that ever carried a
+`ticket_url` (Knicks G5, Come With 7-11) finished before that; and **neither upcoming
+event has one set**. Showing "0 clicks" would say *nobody clicked*. The truth is *nothing
+was ever measurable*, so the UI names the missing field and raises a dated alert instead.
+
+**Where the ticket CTA actually lives, because it is not where you would look.** The
+ticket link is on the **homepage** — `index.html` renders one per upcoming event plus the
+`#nsBtn` hero button. `event.html` reads `v_public_recap` and is a **retrospective
+archive page with no CTA at all**. So a ticket click is recorded with `path='/'`, and
+attributing by page path returns exactly zero forever. Clicks are matched to an event by
+comparing `link_url` to `events.ticket_url`, **query string stripped on both sides** —
+one stored URL is a Partiful link carrying an `fbclid` that whole-string equality misses.
+
+**The operational consequence:** the beacon cannot backfill. A `ticket_url` added after
+promotion starts loses every click that came before it, so it has to be set *first*.

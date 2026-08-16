@@ -91,10 +91,22 @@ Four Come-With-specific rules on top of whichever variant you run:
 - **Apply discipline:** apply additively, verify on prod (objects, RLS has a real
   policy — never RLS-enabled-with-no-policy, admin can read/write, anon blocked),
   then commit the migration file so tracked history matches prod.
-- **`db.py` needs `SBP_REF` passed explicitly** — `.env` deliberately holds only
-  `SBP_REF_PROD`, so `SBP_REF=$SBP_REF_PROD python db.py …`. Do NOT add a bare
-  `SBP_REF` to `.env`: the whole point is that the target project is visible in the
-  command you approve, and `db.py` echoes it back (`[db.py] project=… source=…`).
+- **`db.py` needs `SBP_REF` passed explicitly, as a LITERAL** —
+  `SBP_REF=yaytdosxfhcqatmhctzk python db.py …`. Do NOT add a bare `SBP_REF` to `.env`:
+  the whole point is that the target project is visible in the command you approve, and
+  `db.py` echoes it back (`[db.py] project=… source=…`).
+  ⚠ `SBP_REF=$SBP_REF_PROD` **does not work from Claude Code's Bash tool** (it did from a
+  normal shell, which is why it was written that way). `SBP_REF_PROD` lives only in `.env`,
+  which `db.py` reads for itself and which is never sourced into the shell — so it expands
+  to empty, `SBP_REF=""` lands in `os.environ`, `load_dotenv()` skips the key because it is
+  already present, and you get the misleading "Set SBP_PAT and SBP_REF" error naming both
+  even though only one is missing. The literal form is also what Henry's allowlist prefix
+  matches, so it is the only form that runs unprompted.
+- **DRY-RUN EVERY MIGRATION BEFORE APPLYING IT.** Copy the file with `commit;` swapped for
+  `rollback;` and run that first. It executes the whole thing against real prod schema and
+  data, then throws it away. This caught a nested-window-function error in 142 that
+  re-reading the SQL had not — and with `db.py` now allowlisted for prod, the dry run is
+  the only gate left between a typo and production.
 - **Batch the checks — one query, one call.** Each `db.py` invocation is a separate
   prod approval, so the pre/post checks live as single UNION ALL statements in
   `supabase/checks/`: `pre_apply.sql` (edit its `targets` list, run before writing
@@ -125,6 +137,39 @@ Four Come-With-specific rules on top of whichever variant you run:
   correct because every pull ran [today, today+90]. Once a fetch can be narrower or
   start later, a bottom-bounded delete throws away everything past the window it just
   fetched. Widening a read is not just a read change if a write shares its range.
+
+## Strategy board / KPIs
+
+- **Categories are derived from the METRIC KEY PREFIX in `dashboard.html`, not from
+  `kpi_targets.workstream`.** `radio.*` → Radio, `site.*` → Site, and so on. Do **not**
+  "tidy up" by re-filing workstream values in a migration: the deployed renderer resolves
+  categories client-side, so a DB re-file would silently drop those cards from the live
+  board the moment it applied. A new `metric_key` lands in the right category with no
+  migration; anything matching nothing renders under **Other**. LEARNINGS §21.
+- **A computed metric has no history unless something writes one down.** `snapshot_kpis()`
+  runs at 06:30 UTC (after the 06:00 YouTube pull) and writes `v_kpi_computed` into
+  `metric_snapshots` as `source='computed'`. If you add a value to `v_kpi_computed`, it
+  starts building history automatically — but it has **no prior value until tomorrow**.
+- **"Prior" is defined per metric in `v_kpi_prior`, and nowhere else.** Previous completed
+  event for event metrics, previous 5 uploads for recent content, nearest-30-days-ago for
+  the rest. Never fall back to the LATEST reading when history is short — that compares a
+  number to itself and renders a confident permanent "no change". LEARNINGS §20.
+- **A value in `v_kpi_computed` is inert until a `kpi_targets` row exists.** That is the
+  seam to use when a data change must not alter the deployed board: ship the view now,
+  card it with the UI later.
+- **Targets are edited from the dashboard ("Edit target"), never in SQL.** Duplicate active
+  rows were deactivated in 142; `v_kpi_targets_current` de-dupes by `metric_key` with
+  `DISTINCT ON`, so a second active row silently wins or loses on `effective_date`.
+- **Never render a blank as zero.** "0" and "cannot be measured" are opposite claims.
+  Progress bars only draw where a value AND a target exist; funnel conversions return null
+  when the denominator is missing. LEARNINGS §23.
+- **The funnel's ticket CTA is on the HOMEPAGE, not `event.html`.** `event.html` reads
+  `v_public_recap` and is a retrospective archive page with no CTA at all, so ticket clicks
+  record with `path='/'` and are matched to an event by comparing `link_url` to
+  `events.ticket_url` (query string stripped both sides). **The beacon cannot backfill** —
+  an event's `ticket_url` must be set BEFORE promotion starts or every click before it is
+  lost. Keep `v_event_funnel` / `v_site_exposure_30d` anon-revoked like the other
+  financial-adjacent views.
 
 ## Series contract (events.series)
 
