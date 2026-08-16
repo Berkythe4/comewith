@@ -586,7 +586,14 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .cat-chev { color: var(--mid); font-size: 0.8rem; flex-shrink: 0; transition: transform 0.15s; }
 .strat-cat.open .cat-chev { transform: rotate(90deg); }
 .cat-chart { padding: 0 17px 13px; }
-.cat-chart-cap { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 3px; }
+/* Title right-aligned, not left. Every chart on this board puts its newest data
+   at the RIGHT edge — the bar tracks are right-aligned, and a sparkline's latest
+   point is its last one — so a title hard against the left margin sat over empty
+   space and had to be mentally dragged across to whatever it labelled. The
+   secondary note keeps to the far left via margin-right:auto, so the title still
+   right-aligns when there is no note at all. */
+.cat-chart-cap { display: flex; justify-content: flex-end; gap: 10px; align-items: baseline; margin-bottom: 3px; }
+.cat-chart-cap .li-sub { margin-right: auto; }
 .strat-cat-body { display: none; padding: 0 17px 17px; border-top: 1px solid var(--border); margin-top: 3px; }
 .strat-cat.open .strat-cat-body { display: block; }
 .strat-cat-body > .section-label:first-child { margin-top: 14px; display: block; }
@@ -5541,7 +5548,7 @@ function barSeries(rows, { color = '#C75A3C', lowerBetter = false, unit = '' } =
         ${bars}
       </div>
     </div>
-    <div class="li-sub" style="margin-top:4px;">${pts.length} ${unit === 'views' ? 'upload' : 'event'}${pts.length === 1 ? '' : 's'} · average ${fmtMetric(avg, unit)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''} · hover a bar for the detail</div>`;
+    <div class="li-sub" style="margin-top:4px;text-align:right;">${pts.length} ${unit === 'views' ? 'upload' : 'event'}${pts.length === 1 ? '' : 's'} · average ${fmtMetric(avg, unit)}${zero >= 0 && min < 0 ? ' · bars below the line are losses' : ''} · hover a bar for the detail</div>`;
 }
 // (kpiSubgroup / KPI_VIDEO_KEYS lived here: sub-groups that split one giant
 // Audience grid into mailing / social / radio / site with a hairline between
@@ -5881,8 +5888,8 @@ function catChart(cat) {
       : '<div class="li-sub">Not enough traffic recorded yet.</div>';
   }
   return `<div class="cat-chart">
-    <div class="cat-chart-cap"><span class="kpi-label">${escapeHtml(ch.title)}</span>
-      ${note ? `<span class="li-sub">${escapeHtml(note)}</span>` : ''}</div>
+    <div class="cat-chart-cap">${note ? `<span class="li-sub">${escapeHtml(note)}</span>` : ''}
+      <span class="kpi-label">${escapeHtml(ch.title)}</span></div>
     ${body}</div>`;
 }
 
