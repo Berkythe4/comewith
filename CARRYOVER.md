@@ -66,13 +66,16 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   PROJECT — the service key, `SBP_PAT`, Supabase dashboard, GitHub and Netlify all sit
   above it and stay Keith-only.
 - **Latest LEARNINGS §:** 23.
-- **Git:** `master` = `0adeadd`, pushed and live. The whole Strategy rebuild is merged:
-  PR #7 (categories + data layer), #8 and #11 (post-apply checks), #9 (bar sizing) and
-  #10 (funnel + migration 145). All of it is on comewith.org now.
-  **ONE PR open:** **#12** `fix/strategy-bar-hover` — bars widened to 48px and a real
-  hover card (value, event name, date) replacing the native `title`. The bars merged in
-  #9 stopped stretching but landed too narrow, and a 2px shrink floor was not a hover
-  target anyone could hit.
+- **Git:** `master` = `f5e4242`, pushed and live. **Everything from this session is
+  merged — no open PRs.** PR #7 (categories + data layer), #8 and #11 (post-apply
+  checks), #9 (bar sizing), #10 (funnel + migration 145), #12 (bar width + hover card),
+  #13 (this close), #14 (calendar focus band, from another machine) and #15 (chart title
+  alignment). All of it is on comewith.org.
+  ⚠ **The per-event bar chart took THREE passes after its first merge** — #9 stopped it
+  stretching, #12 widened it from an unreadable 26px and added a hover card, #15
+  right-aligned the titles so they sat over the data instead of over empty space. Every
+  one was found by Keith looking at the deployed page, because there is no local render
+  check (see the risk note in this session's block).
   Older unmerged branches: `fix-lognumbers-optgroups`, `docs/roadmap-reconcile`,
   `event-hub-sprint-1`. Stale local-only branch `feat/strategy-phase1-data-truth` can be
   deleted — it was renamed to `feature/strategy-rebuild` early in the session.
@@ -136,8 +139,7 @@ edit one, convert one to a task). Deployed and structurally verified, never clic
 See "Tomorrow's default": the funnel is live and measuring nothing until one exists, and
 the beacon cannot backfill.
 
-**Then merge PR #12** (wider bars + hover card). Everything else from this session is
-already merged and live. `master` auto-deploys, so merging is the deploy.
+Everything from this session is merged and live; there is nothing left to merge.
 
 ~~migration `141_brand_favicon.sql` is written but NOT applied~~ — **APPLIED 2026-08-15**
 in this session. One row, `brand.favicon` with an empty value, so the Site Editor's picker
@@ -256,13 +258,14 @@ at every step.
 for `dashboard.html`, the Browser pane cannot composite (screenshots time out, layout
 boxes read `auto`), and PR #7 was merged before its preview was clicked through. The
 category blocks, charts, collapse behaviour and funnel panel are all structurally verified
-and visually unverified. The bars alone needed two passes after merging (#9 sizing, then
-#12 width + hover card), which is fair evidence there may be more waiting.
+and visually unverified. The bar chart alone needed THREE corrective passes after it
+merged — #9 (stop stretching), #12 (48px + hover card), #15 (right-align the titles) —
+every one caught by Keith on the deployed page rather than by any check here. Treat that
+as the honest error rate for UI shipped without a render check, and assume the parts
+nobody has hovered over yet carry the same.
 
-**Ran on Henry's machine.** All of it merged the same day (PRs #7–#11) and is live on
-comewith.org. One follow-up left open: **PR #12**, widening the per-event bars and adding
-a hover card — the sizing that merged in #9 stopped them stretching but left them too
-narrow to read.
+**Ran on Henry's machine.** All of it merged the same day (PRs #7–#13, #15) and is live
+on comewith.org.
 
 ## This session shipped (2026-08-15 — site favicon, batched prod checks, toolchain · HENRY'S machine)
 PRs **#3** and **#4** merged and deployed. Migration **141 written, NOT applied** (see Parked / next).

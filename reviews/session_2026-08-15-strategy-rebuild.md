@@ -1,7 +1,7 @@
 # Session review — 2026-08-15 · Strategy board rebuild (Henry's machine)
 
 Fifth close of the day. Ran on Henry's machine. All of it merged the same day (PRs
-#7–#11) and is live on comewith.org; one follow-up, PR #12, is still open.
+#7–#13 and #15) and is live on comewith.org. Nothing left open.
 
 ## The arc
 
@@ -53,8 +53,9 @@ attendance **117 vs 42**.
 
 - **Set `ticket_url` on Come With #2 and Dance Infusion #3.** The funnel is live and
   measures nothing until one exists, and the beacon cannot backfill.
-- **Merge PR #12** — the bars merged in #9 stopped stretching but landed too narrow to
-  read; #12 widens them and adds a hover card with the event name and value.
+- Nothing left to merge. The bar chart needed three corrective passes after its first
+  merge (#9 stretching, #12 width + hover card, #15 title alignment) — all three found by
+  Keith on the live page.
 
 ## One honest note
 
@@ -63,6 +64,7 @@ None of this UI has been seen rendering. There is no local console check for
 boxes read `auto`, and PR #7 was merged before anyone clicked its deploy preview. Six
 category blocks, five charts, the collapse behaviour and the funnel panel are all
 structurally verified — `node --check` against a HEAD control at every step — and visually
-unverified. Bar widths alone needed two passes after merge (#9, then #12), which is fair
-evidence there may be more waiting. The first person to open Strategy is doing
+unverified. The bar chart alone needed THREE corrective passes after merging (#9, #12,
+#15), every one caught by Keith on the deployed page rather than by anything here. That
+is the honest error rate for UI shipped without a render check. The first person to open Strategy is doing
 QA, whether they mean to or not.
