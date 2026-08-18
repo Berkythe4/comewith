@@ -1624,6 +1624,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
       <div class="panel" id="panel-gearwatch"><div id="gearWatchBody"></div></div>
+      <div class="panel" id="panel-pl"><div id="plBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
       <div class="panel" id="panel-scene-map"><div id="sceneMapBody"></div></div>
       <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:fixed;bottom:14px;right:14px;width:min(440px,94vw);z-index:1000;"></div></div>
@@ -4579,6 +4580,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'gearwatch') { await loadGearWatch(); return; } // master-only (stolen-gear resale scan)
+  if (tab === 'pl') { await loadPL(); return; } // master-only (month-by-month P&L, actual vs budget)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
   if (tab === 'scene-map') { await loadSceneMap(); return; } // custom (internal Scene Map)
   if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Come With Radio)
@@ -11500,6 +11502,107 @@ $('panel-site-review').addEventListener('click', (e) => { if (e.target.closest('
 $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
 });
+
+// ================= P&L — month by month, actual vs budget ======================
+// MASTER ONLY (module_registry.master_only, migration 147). Reads v_pl_monthly
+// and v_pl_monthly_vs_budget, which roll up `expenses` + `income` by month —
+// including the 112 overhead rows (event_na) that no event-scoped view has ever
+// shown.
+//
+// Two things this deliberately surfaces that the event views cannot:
+//   - OVERHEAD vs EVENT cost, side by side. Most Come With spend is overhead.
+//   - OWNER-FUNDED spend: what Keith carried on his personal card. That is a
+//     capital contribution the business owes him back, not business cash going
+//     out, and it is the number the planner reconciles against.
+let plState = { months: 12 };
+
+async function loadPL() {
+  $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
+  const [plRes, bvRes, ofRes] = await Promise.all([
+    sb.from('v_pl_monthly').select('*'),
+    sb.from('v_pl_monthly_vs_budget').select('*'),
+    sb.from('v_owner_funded').select('*'),
+  ]);
+
+  // The views only exist once 147 is applied. Say so, rather than rendering an
+  // empty P&L that reads like "the business spent nothing".
+  const missing = [plRes.error, bvRes.error, ofRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
+  if (missing) {
+    $('plBody').innerHTML = `<div class="panel-state info">The P&L isn't installed yet — apply <code>supabase/migrations/147_fpa_pl.sql</code> to prod, then reload. Nothing else is needed; it reads the expenses and income already here.</div>`;
+    return;
+  }
+  const err = [plRes.error, bvRes.error, ofRes.error].find(Boolean);
+  if (err) { $('plBody').innerHTML = `<div class="panel-state err">Couldn't load the P&L: ${escapeHtml(err.message)}</div>`; return; }
+
+  const pl = plRes.data || [], bv = bvRes.data || [], owner = ofRes.data || [];
+  if (!pl.length) { $('plBody').innerHTML = '<div class="panel-state">No income or expenses recorded yet.</div>'; return; }
+
+  const periods = [...new Set(pl.map(r => r.period))].sort().reverse().slice(0, plState.months).reverse();
+  const ownerBy = Object.fromEntries(owner.map(o => [o.period, Number(o.owner_funded) || 0]));
+  const sum = (rows, f) => rows.reduce((a, r) => a + (Number(f(r)) || 0), 0);
+
+  const byPeriod = periods.map(p => {
+    const rows = pl.filter(r => r.period === p);
+    const bud = bv.filter(r => r.period === p);
+    const cost = sum(rows, r => r.cost), rev = sum(rows, r => r.revenue);
+    return {
+      period: p, cost, rev, net: rev - cost,
+      overhead: sum(rows.filter(r => r.bucket === 'overhead'), r => r.cost),
+      event: sum(rows.filter(r => r.bucket === 'event'), r => r.cost),
+      ownerFunded: ownerBy[p] || 0,
+      plannedCost: sum(bud, r => r.planned_cost),
+      plannedRev: sum(bud, r => r.planned_revenue),
+    };
+  });
+
+  const T = {
+    cost: sum(byPeriod, r => r.cost), rev: sum(byPeriod, r => r.rev),
+    owner: sum(byPeriod, r => r.ownerFunded), planned: sum(byPeriod, r => r.plannedCost),
+  };
+  const varc = T.cost - T.planned;
+
+  const card = (label, val, sub, cls) =>
+    `<div class="kpi-card"><div class="kpi-label">${label}</div>
+     <div class="kpi-value ${cls || ''}">${money(val)}</div>
+     <div class="kpi-sub">${sub || ''}</div></div>`;
+
+  const rowHtml = r => {
+    const v = r.cost - r.plannedCost;
+    return `<tr>
+      <td>${r.period}</td>
+      <td class="num">${money(r.rev)}</td>
+      <td class="num">${money(r.cost)}</td>
+      <td class="num" style="color:${r.net < 0 ? 'var(--red,#a33)' : 'var(--green,#1f7a1f)'}">${money(r.net)}</td>
+      <td class="num">${money(r.overhead)}</td>
+      <td class="num">${money(r.event)}</td>
+      <td class="num" title="carried on Keith's personal card — owed back">${r.ownerFunded ? money(r.ownerFunded) : muted}</td>
+      <td class="num">${r.plannedCost ? money(r.plannedCost) : muted}</td>
+      <td class="num" style="color:${v > 0 ? 'var(--red,#a33)' : 'var(--mid,#888)'}">${r.plannedCost ? money(v) : muted}</td>
+    </tr>`;
+  };
+
+  $('plBody').innerHTML = `
+    <div class="kpi-row">
+      ${card('Revenue', T.rev, periods.length + ' months')}
+      ${card('Cost', T.cost, 'overhead + event')}
+      ${card('Net', T.rev - T.cost, 'revenue less cost', (T.rev - T.cost) < 0 ? 'neg' : 'pos')}
+      ${card('Owner funded', T.owner, 'Keith paid personally — owed back')}
+      ${card('Vs budget', varc, T.planned ? 'budgeted ' + money(T.planned) : 'no budget set', varc > 0 ? 'neg' : 'pos')}
+    </div>
+    <table class="data-table">
+      <thead><tr>
+        <th>Month</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Net</th>
+        <th class="num">Overhead</th><th class="num">Event</th><th class="num">Owner funded</th>
+        <th class="num">Budget</th><th class="num">Variance</th>
+      </tr></thead>
+      <tbody>${byPeriod.slice().reverse().map(rowHtml).join('')}</tbody>
+    </table>
+    <p class="muted" style="margin-top:10px">
+      Overhead is spend marked <em>not applicable to an event</em>. Owner-funded is
+      what Keith carried personally — a capital contribution, not business cash.
+      Budget rows come from period-scoped <code>budget_lines</code>.
+    </p>`;
+}
 
 // ================= GEAR WATCH — stolen-rig resale scan ==========================
 // MASTER ONLY (module_registry.master_only, migration 146). Reads the tables the

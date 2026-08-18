@@ -52,7 +52,9 @@ supabase secrets unset PUSH_TOKEN_PREVIOUS
 - **Immediately** if `git log --all --full-history -- .env` ever returns a commit.
   That means the value reached history; rotating is step one and rewriting
   history is a separate, bigger decision — raise it with Keith.
-- On offboarding, whenever someone with repo or machine access moves on.
+- On offboarding — but note the token exists in exactly two places, Keith's
+  desktop and Supabase project secrets. It is never on Henry's or Martin's
+  machines and never in this repo, so repo access alone does not expose it.
 - **At least annually**, even when nothing looks wrong. A token nobody has ever
   rotated is a token nobody knows how to rotate.
 
