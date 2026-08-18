@@ -1,0 +1,38 @@
+#!/bin/sh
+# Blocks a commit that carries a push token in the staged diff.
+#
+# Enabled per-clone (hooks are not committed into .git), so EVERY machine that
+# works this repo must run once:
+#
+#     git config core.hooksPath .githooks
+#
+# Three machines ship into this repo, so if a token ever does leak it will be
+# from the one where this was never run. See HANDOFF-push-token-security.md.
+#
+# Bypassable with --no-verify by design: a hook is a safety net for the honest
+# mistake, not an access control. The real control is rotation
+# (docs/ROTATE_PUSH_TOKEN.md).
+
+fail=0
+
+# The Jennifer -> site push token: push_ followed by 64 hex chars.
+if git diff --cached -U0 | grep -qE 'push_[0-9a-f]{64}'; then
+  echo "BLOCKED: looks like a push token in the staged diff."
+  fail=1
+fi
+
+# A .env should never be staged at all, whatever is in it. (Plain ERE — no
+# lookaheads — so .env.example is excluded with a second filter, not a regex.)
+if git diff --cached --name-only | grep -E '^\.env($|\.)' | grep -qv '^\.env\.example$'; then
+  echo "BLOCKED: a .env file is staged. Only .env.example belongs in this repo."
+  fail=1
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo
+  echo "Nothing was committed. If the value is real, rotate it:"
+  echo "  docs/ROTATE_PUSH_TOKEN.md"
+  exit 1
+fi
+
+exit 0
