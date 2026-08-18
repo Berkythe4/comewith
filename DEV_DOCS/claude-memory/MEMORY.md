@@ -1,7 +1,4 @@
-> **This index is the DESKTOP's memory.** Henry's machine keeps its own, snapshotted
-> separately in [`henry/`](henry/) — see [`henry/README.md`](henry/README.md) for why they are
-> not merged (a straight `cp` of one machine's memory would overwrite the other's index).
-
+- [Gear Watch — stolen rig](project_gear_watch.md) — 3x/day scored resale scan (migr 146 + scan-gear-market, master-only panel); BUILT not applied/deployed/pushed; Craigslist IS scannable via sapi.craigslist.org (only the RSS 403s) & is the one source live-verified, OfferUp/FB have no API; asset tags D002/S001 are NOT serials; loss schedule = Financial/ComeWith_Stolen_Gear_Loss.xlsx (10 units/$11,713.07)
 - [Site owner + admin access](project_site_owner_and_admin_access.md) — Martin+Henry are master_admin (2026-08-15); profiles.is_owner=Keith + protect_site_owner() trigger (migr 140) blocks any other admin demoting/deactivating/deleting the owner; deleted_at is the vector, service-role is exempt by design
 - [Two-machine handoff](project_two_machine_handoff.md) — desktop + laptop; Claude memory does NOT sync, so state lives in the repo (CARRYOVER.md + DEV_DOCS/claude-memory/ snapshot, re-snapshot every close; master auto-deploys so held work goes on a branch). Close routine renamed MERGE_ROUTINE.md 2026-08-15 — fetch BEFORE documenting, take migration numbers after pulling
 - [Radio discovery window](project_radio_discovery_window.md) — window filtered on ra_artists.next_event_date (SOONEST show) and hid 77 artists in the 8/18+4wk window; fix indexes ra_events.lineup + DICE 160-cap + TM Manhattan-only; MERGED + DEPLOYED 2026-08-15, not yet exercised by a real pull

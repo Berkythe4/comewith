@@ -1623,6 +1623,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
+      <div class="panel" id="panel-gearwatch"><div id="gearWatchBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
       <div class="panel" id="panel-scene-map"><div id="sceneMapBody"></div></div>
       <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:fixed;bottom:14px;right:14px;width:min(440px,94vw);z-index:1000;"></div></div>
@@ -4577,6 +4578,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
+  if (tab === 'gearwatch') { await loadGearWatch(); return; } // master-only (stolen-gear resale scan)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
   if (tab === 'scene-map') { await loadSceneMap(); return; } // custom (internal Scene Map)
   if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Come With Radio)
@@ -11498,6 +11500,222 @@ $('panel-site-review').addEventListener('click', (e) => { if (e.target.closest('
 $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
 });
+
+// ================= GEAR WATCH — stolen-rig resale scan ==========================
+// MASTER ONLY (module_registry.master_only, migration 146). Reads the tables the
+// scan-gear-market edge function writes: gear_watch_hits / _targets / _config.
+// pg_cron runs the scan three times a day; "Run scan now" here is the same
+// function called by hand.
+//
+// The score is never presented bare — every row can expand its breakdown,
+// because "87/100" is not something you can hand a detective and "serial match
+// +60, local +20, listed 2 days after the theft" is.
+const GW_STATUS = ['new', 'reviewed', 'reported', 'dismissed', 'recovered'];
+const GW_STATUS_COLOR = { new: 'var(--amber,#b58900)', reviewed: '#5b7fb3', reported: 'var(--green,#1f7a1f)', dismissed: 'var(--mid,#888)', recovered: 'var(--green,#1f7a1f)' };
+let gwState = { filter: 'new', open: null, scanning: false };
+
+async function loadGearWatch() {
+  $('gearWatchBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading gear watch…</div>';
+  const [cfgRes, tgtRes, hitRes] = await Promise.all([
+    sb.from('gear_watch_config').select('*').eq('id', true).maybeSingle(),
+    sb.from('gear_watch_targets').select('*').order('label'),
+    sbAll(() => sb.from('gear_watch_hits').select('*'), 'id'),
+  ]);
+
+  // The tables only exist once 146 is applied to prod. Say so plainly instead of
+  // rendering an empty panel that reads like "nothing has ever been found".
+  const missing = [cfgRes.error, tgtRes.error, hitRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
+  if (missing) {
+    $('gearWatchBody').innerHTML = `<div class="panel-state info">Gear Watch isn't installed yet — apply <code>supabase/migrations/146_gear_watch.sql</code> to prod, then deploy the <code>scan-gear-market</code> edge function.</div>`;
+    return;
+  }
+  const cfg = cfgRes.data || {};
+  const targets = tgtRes.data || [];
+  const hits = (hitRes.data || []).sort((a, b) => (b.score - a.score) || (new Date(b.first_seen_at) - new Date(a.first_seen_at)));
+
+  const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
+  const nNew = hits.filter(h => h.status === 'new').length;
+  const top = hits.length ? Math.max(...hits.map(h => h.score)) : 0;
+  const shown = hits.filter(h => gwState.filter === 'all' ? true : h.status === gwState.filter);
+
+  const lastRun = cfg.last_run_at ? new Date(cfg.last_run_at).toLocaleString() : 'never';
+  const statusBad = (cfg.last_status || '').startsWith('skipped') || (cfg.last_status || '').startsWith('partial');
+
+  const q = encodeURIComponent('pioneer cdj 3000');
+  const manual = [
+    ['OfferUp', `https://offerup.com/search?q=${q}`],
+    ['Facebook Marketplace', `https://www.facebook.com/marketplace/nyc/search?query=${q}`],
+    ['eBay sold/completed', `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1`],
+  ].map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener">${l}</a>`).join(' · ');
+
+  const chip = (k, label, n) => `<button class="hub-btn${gwState.filter === k ? ' active' : ''}" data-gw-filter="${k}">${label}${n != null ? ` (${n})` : ''}</button>`;
+
+  const row = (h) => {
+    const bd = h.score_breakdown || {};
+    const chips = Object.entries(bd).map(([k, v]) => `<span class="li-sub" style="display:inline-block;margin-right:8px;">${escapeHtml(k.replace(/_/g, ' '))}: <strong>${escapeHtml(String(v))}</strong></span>`).join('');
+    // The known serial for the model this hit matched, shown right on the row:
+    // eliminating a listing usually means comparing our serial against the one
+    // visible in the seller's photos, and that is not a thing to go hunting for
+    // in another tab. (This is how the Lebanon TN XDJ-AZ was ruled out.)
+    const tgt = (targets || []).find(t => t.id === h.target_id);
+    const known = tgt && tgt.serial
+      ? `ours: <strong>${escapeHtml(tgt.serial)}</strong>`
+      : `<span style="color:var(--amber,#b58900)">our serial unknown — recover it</span>`;
+    return `<tr${h.status === 'dismissed' ? ' style="opacity:.45;"' : ''}>
+      <td style="font-weight:700;font-size:17px;">${h.score}</td>
+      <td>
+        <div style="display:flex;gap:10px;">
+          ${h.image_url ? `<a href="${escapeHtml(h.url)}" target="_blank" rel="noopener"><img src="${escapeHtml(h.image_url)}" alt="" style="width:78px;height:78px;object-fit:cover;border:1px solid #ddd;flex:none;"></a>` : ''}
+          <div style="min-width:0;">
+            <a href="${escapeHtml(h.url)}" target="_blank" rel="noopener"><strong>${escapeHtml(h.title)}</strong></a>
+            <div class="li-sub">${escapeHtml(h.source)} · ${h.price != null ? '$' + fmtNum(h.price) : 'no price'} · ${escapeHtml(h.location || 'location unknown')}${h.seller ? ' · ' + escapeHtml(h.seller) : ''}${h.seller_feedback != null ? ` (${fmtNum(h.seller_feedback)} feedback)` : ''}</div>
+            <div class="li-sub">${tgt ? escapeHtml(tgt.label) + ' · ' : ''}${known}</div>
+            <div style="margin-top:4px;white-space:normal;">${chips}</div>
+            ${h.review_note ? `<div class="li-sub" style="white-space:normal;margin-top:4px;padding:4px 6px;background:#f5f2ed;"><strong>Note:</strong> ${escapeHtml(h.review_note)}</div>` : ''}
+          </div>
+        </div>
+      </td>
+      <td class="li-sub">${h.first_seen_at ? new Date(h.first_seen_at).toLocaleDateString() : '—'}</td>
+      <td><select class="modal-select" data-gw-status="${h.id}" style="max-width:120px;color:${GW_STATUS_COLOR[h.status] || 'inherit'}">${GW_STATUS.map(s => `<option value="${s}"${h.status === s ? ' selected' : ''}>${s}</option>`).join('')}</select></td>
+    </tr>`;
+  };
+
+  const targetRow = (t) => `<tr>
+    <td><strong>${escapeHtml(t.label)}</strong><div class="li-sub">${escapeHtml((t.model_tokens || []).join(', '))}</div></td>
+    <td>${t.qty}</td>
+    <td><input class="modal-input" data-gw-serial="${t.id}" value="${escapeHtml(t.serial || '')}" placeholder="paste serial → instant top score"></td>
+    <td class="li-sub" style="white-space:normal;">${escapeHtml(t.notes || '')}</td>
+  </tr>`;
+
+  $('gearWatchBody').innerHTML = `
+    <div class="hub-cards" style="margin-bottom:12px;">
+      ${card('New hits', fmtNum(nNew), 'awaiting your triage')}
+      ${card('Top score', top ? top + '/100' : '—', 'highest live hit')}
+      ${card('Reported', fmtNum(hits.filter(h => h.status === 'reported').length), 'sent to the detective')}
+      ${card('Last scan', lastRun, statusBad ? `⚠ ${escapeHtml(cfg.last_status || '')}` : escapeHtml(cfg.last_status || 'ok'))}
+    </div>
+
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+      <button class="hub-btn" data-gw-scan${gwState.scanning ? ' disabled' : ''}>${gwState.scanning ? 'Scanning…' : '🔍 Run scan now'}</button>
+      <button class="hub-btn" data-gw-settings>⚙ Settings</button>
+      <span class="kpi-hint" style="margin:0;">Automatic scans run 8am · 2pm · 8pm ET.</span>
+    </div>
+
+    ${!cfg.theft_date ? `<div class="panel-state info" style="margin-bottom:10px;">Set the <strong>theft date</strong> in Settings. Until it's set, listings posted <em>before</em> the theft can't be filtered out and the scores will be noisy.</div>` : ''}
+    ${!cfg.email_to ? `<div class="panel-state info" style="margin-bottom:10px;">No digest email set — hits will collect here but nothing will be mailed. Add one in Settings.</div>` : ''}
+
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+      ${chip('new', 'New', nNew)}${chip('reviewed', 'Reviewed')}${chip('reported', 'Reported')}${chip('dismissed', 'Dismissed')}${chip('all', 'All', hits.length)}
+    </div>
+
+    ${shown.length ? `<table class="data-table"><thead><tr><th style="width:60px;">Score</th><th>Listing</th><th style="width:100px;">First seen</th><th style="width:130px;">Status</th></tr></thead><tbody>${shown.map(row).join('')}</tbody></table>`
+      : `<div class="panel-state info">No ${gwState.filter === 'all' ? '' : gwState.filter + ' '}hits. That is the expected state most days — this only fills up when something matching the rig gets listed.</div>`}
+
+    <div class="hub-sec-bar" style="margin-top:22px;"><h3>What we're hunting <span class="li-sub">(${targets.length})</span></h3></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">Paste a serial as soon as you recover it — a serial match scores +60 on its own and is the only signal that turns a maybe into a certainty.</div>
+    <table class="data-table"><thead><tr><th>Model</th><th style="width:50px;">Qty</th><th style="width:260px;">Serial #</th><th>Notes</th></tr></thead><tbody>${targets.map(targetRow).join('')}</tbody></table>
+
+    <div class="hub-sec-bar" style="margin-top:22px;"><h3>No API — check these by hand</h3></div>
+    <div class="kpi-hint">OfferUp and Facebook Marketplace have no public API and prohibit scraping, so they can't be scanned. ${manual}</div>
+
+    <div class="panel-state" style="margin-top:18px;background:#f5f2ed;">
+      <strong>If a hit looks right: send the link and its score breakdown to the detective.</strong>
+      Do not contact the seller and do not arrange a meet — it puts you at risk and can compromise the case.
+    </div>`;
+}
+
+async function gwRunScan() {
+  gwState.scanning = true; loadGearWatch();
+  const { data, error } = await sb.functions.invoke('scan-gear-market', { body: { trigger: 'manual' } });
+  gwState.scanning = false;
+  if (error) { toast('Scan failed: ' + error.message, 'err'); loadGearWatch(); return; }
+  const failed = Object.entries(data?.sources || {}).filter(([, v]) => String(v).startsWith('FAILED'));
+  if (failed.length) toast(`Scanned with ${failed.length} source(s) down: ${failed.map(([k]) => k).join(', ')}`, 'err');
+  else toast(`Scan done — ${data?.inserted ?? 0} new, ${data?.matched ?? 0} matched`, 'ok');
+  loadGearWatch();
+}
+
+// Dismissing or reporting a hit asks WHY, because the reasoning is the durable
+// part. "Serial letters visible in the seller's photo don't match ours" is what
+// stops the same listing being re-examined from scratch next week — and if it is
+// ever handed to the DA, an elimination without a reason is not evidence of
+// anything. The note is optional on the neutral statuses.
+async function gwSetStatus(id, status) {
+  if (status === 'dismissed' || status === 'reported' || status === 'recovered') {
+    const verb = status === 'dismissed' ? 'Why is this ruled out?'
+      : status === 'reported' ? 'What did you send the detective?'
+      : 'How was it recovered?';
+    openKpi(`Mark ${status}`, verb, `
+      <div class="modal-form-row">
+        <label class="modal-label">Note</label>
+        <textarea class="modal-textarea" id="gwNote" rows="3" placeholder="${status === 'dismissed' ? 'e.g. serial letters visible in the listing photo do not match ours' : 'e.g. emailed link + score breakdown to Det. ____ on ____'}"></textarea>
+      </div>
+      <div class="kpi-hint">Kept with the hit so the reasoning survives — and so nobody re-examines this listing from scratch next week.</div>`,
+      async () => {
+        await gwSaveStatus(id, status, ($('gwNote')?.value || '').trim() || null);
+        closeKpi();
+      }, 'Save');
+    return;
+  }
+  await gwSaveStatus(id, status, null);
+}
+
+async function gwSaveStatus(id, status, note) {
+  const patch = { status, reviewed_at: new Date().toISOString() };
+  if (note) patch.review_note = note;
+  const { data: { user } } = await sb.auth.getUser();
+  if (user) patch.reviewed_by = user.id;
+  const { error } = await sb.from('gear_watch_hits').update(patch).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); }
+  else toast('Status saved', 'ok');
+  loadGearWatch();
+}
+
+async function gwSaveSerial(id, serial) {
+  const { error } = await sb.from('gear_watch_targets').update({ serial: serial.trim() || null }).eq('id', id);
+  if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+  toast(serial.trim() ? 'Serial saved — future scans will match on it' : 'Serial cleared', 'ok');
+}
+
+async function gwOpenSettings() {
+  const { data: cfg } = await sb.from('gear_watch_config').select('*').eq('id', true).maybeSingle();
+  const c = cfg || {};
+  openKpi('Gear Watch settings', 'Thresholds, alerts and the theft date', `
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Date of theft *</label><input class="modal-input" type="date" id="gwTheft" value="${c.theft_date || ''}"></div>
+      <div><label class="modal-label">Digest email</label><input class="modal-input" id="gwEmail" value="${escapeHtml(c.email_to || '')}" placeholder="berky@comewith.org"></div>
+    </div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Email threshold</label><input class="modal-input" type="number" id="gwMin" value="${c.min_score ?? 65}"></div>
+      <div><label class="modal-label">Push threshold</label><input class="modal-input" type="number" id="gwPush" value="${c.push_score ?? 85}"></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label"><input type="checkbox" id="gwEnabled"${c.enabled === false ? '' : ' checked'}> Scanning enabled</label></div>
+    <div class="kpi-hint">The theft date is a hard filter: anything listed before it is dropped rather than scored. Email threshold gates the 3x-daily digest; push threshold gates the phone alert.</div>`,
+    async () => {
+      const theft = $('gwTheft').value || null;
+      const { error } = await sb.from('gear_watch_config').update({
+        theft_date: theft,
+        email_to: ($('gwEmail').value || '').trim() || null,
+        min_score: Number($('gwMin').value) || 65,
+        push_score: Number($('gwPush').value) || 85,
+        enabled: $('gwEnabled').checked,
+      }).eq('id', true);
+      if (error) throw error;
+      closeKpi(); toast('Settings saved', 'ok'); loadGearWatch();
+    }, 'Save');
+}
+
+$('panel-gearwatch').addEventListener('click', (e) => {
+  if (e.target.closest('[data-gw-scan]')) return gwRunScan();
+  if (e.target.closest('[data-gw-settings]')) return gwOpenSettings();
+  const f = e.target.closest('[data-gw-filter]');
+  if (f) { gwState.filter = f.dataset.gwFilter; loadGearWatch(); }
+});
+$('panel-gearwatch').addEventListener('change', (e) => {
+  const s = e.target.closest('[data-gw-status]'); if (s) return gwSetStatus(s.dataset.gwStatus, s.value);
+  const ser = e.target.closest('[data-gw-serial]'); if (ser) return gwSaveSerial(ser.dataset.gwSerial, ser.value);
+});
+
 
 // ================= RA MARKET — Resident Advisor public-data intel + radio =========
 // Reads the ra_events / ra_artists cache (filled by the pull-ra-market edge fn from

@@ -1,4 +1,19 @@
-# Carryover — 2026-08-15 (Strategy board rebuilt: real trends, six categories, a funnel · HENRY'S machine)
+# Carryover — 2026-08-18 (Gear Watch: a scored resale scan for the stolen rig · DESKTOP)
+
+**This close is a build that is NOT yet applied, deployed or pushed.** Everything below
+about Gear Watch sits in the working tree only — migration `146` is written but not on
+prod, `scan-gear-market` is not deployed, and nothing was pushed because `master`
+auto-deploys. Steps are in `DEV_DOCS/GEAR_WATCH.md`.
+
+*Context, because it is not a normal feature:* Keith's DJ rig (~$15K) was stolen from a
+vehicle overnight. NYPD is handling it as grand larceny with a detective and an evidence
+team. Two things came out of this session — the loss schedule that serves the detective,
+the DA's restitution filing and any insurance decision
+(`Financial/ComeWith_Stolen_Gear_Loss.xlsx`), and the automated resale watch below.
+
+*The previous close (2026-08-15, Henry's machine) begins immediately below and is
+unchanged.*
+
 
 **FIVE closes landed on 2026-08-15, across three machines.** This is the latest, run by
 **Henry**. In order: the desktop's radio-discovery audit, Henry's Notes module, Keith's
@@ -33,9 +48,11 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
 
 ## State summary (verified against prod 2026-08-15)
 - **Prod:** Supabase `yaytdosxfhcqatmhctzk`; live at comewith.org (Netlify auto-deploy from `master`).
-- **Migrations: files through `145_event_funnel.sql`; 138–145 ALL APPLIED to prod
-  2026-08-15.** 141 (which had been sitting written-but-unapplied) went in this session,
-  along with 142/143/144/145.
+- **Migrations: files through `146_gear_watch.sql`. 138–145 APPLIED to prod; `146` is
+  written but NOT applied (2026-08-18).** Re-verified against prod on 2026-08-18:
+  `v_event_funnel` (145) and `user_dashboard_prefs` (144) both exist, `gear_watch_hits`
+  (146) correctly does not — no drift. 141 (which had been sitting written-but-unapplied)
+  went in on 2026-08-15, along with 142/143/144/145.
   Tracked history and prod now agree. `145_event_funnel.sql` was briefly applied to prod
   while its file sat on an unmerged branch — the unavoidable shape of a DB change that
   ships before its UI, since the database is not branchable — and PR #10 closed that gap
@@ -52,8 +69,8 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   Applied via the Management API (`db.py`, `SBP_PAT` in `.env`), not the CLI — the CLI is
   linked to **staging**, so always pass the prod ref explicitly. The migration **files** are
   the tracked source of truth.
-- **Financial views:** all five re-verified anon **401** on 2026-08-15, *after* both migrations
-  and both deploys (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+- **Financial views:** all five re-verified anon **401** on **2026-08-18** (and before that on
+  2026-08-15, *after* both migrations and both deploys) (`v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
   `v_kpi_dance_infusion`, `v_kpi_dashboard`).
   ⚠ Still **NOT revoked from `authenticated`** — the GATED BLOCKER before any customer/external login.
 - **Roles:** master_admin / sub_admin / customer via `public.is_admin()`; `donor` + `staff` on `actors`.
@@ -109,7 +126,22 @@ pages) — LEARNINGS §5 and CLAUDE.md "Scope".
   deployed on comewith.org, admin-gated via the staging guard.
 
 ## Tomorrow's default
-**Set a `ticket_url` on the two upcoming events — Come With #2 (14 Nov) and Dance
+**Install Gear Watch — it is the only thing here with a clock on it.** Stolen gear gets
+listed and sold within days, and the scan cannot run until prod has it. In order:
+apply `146`, deploy `scan-gear-market`, set `REVERB_TOKEN` / `EBAY_CLIENT_ID` /
+`EBAY_CLIENT_SECRET`, store the two vault secrets, then open Gear Watch and **set the
+theft date** (it is the hard gate — without it every pre-theft listing scores). Full
+order in `DEV_DOCS/GEAR_WATCH.md`. Then hit "Run scan now" once and confirm Reverb and
+eBay both report `ok — N listing(s) fetched` rather than FAILED — **those two have never
+been exercised against live endpoints**; Craigslist has, and works.
+
+You can watch Craigslist working right now, without deploying anything:
+`node scripts/gearwatch_live_test.mjs` — real listings, real scores, real breakdowns.
+
+Also chasing serials: Sweetwater covers six of the ten items in one call, and a serial
+match is worth +60 in the scorer — nothing else moves a score that far.
+
+Then, **set a `ticket_url` on the two upcoming events — Come With #2 (14 Nov) and Dance
 Infusion #3 (10 Oct).** Both are in `planning` with none, and the funnel cannot measure a
 single thing without one: the homepage only renders a "Get tickets" link when a URL
 exists, so there is no click to record. **The beacon cannot backfill**, so a link added
@@ -134,6 +166,15 @@ Second, cheap while you're in there: **exercise the Notes module end to end** (a
 edit one, convert one to a task). Deployed and structurally verified, never clicked.
 
 ## Parked / next
+
+**HELD — the whole Gear Watch build is uncommitted in the working tree (desktop).**
+Nothing was pushed because `master` auto-deploys and the dashboard change would go live
+immediately. Migration `146` is not applied; `scan-gear-market` is not deployed. Keith
+green-lit the build, not the deploy — see `DEV_DOCS/GEAR_WATCH.md` for the install order.
+Two integrations in it are **written but never run against live endpoints** (Reverb, eBay);
+the first manual scan is the real test, and a wrong request shape will surface as FAILED
+rather than as a silent zero. **Craigslist is live-verified** and can be exercised today
+with `node scripts/gearwatch_live_test.mjs`.
 
 **FIRST — set a `ticket_url` on Come With #2 (14 Nov) and Dance Infusion #3 (10 Oct).**
 See "Tomorrow's default": the funnel is live and measuring nothing until one exists, and
@@ -203,6 +244,75 @@ re-reading the SQL had not.
    with `toISOString()` but compares it to a local `today`, so in New York the window can run a
    day long after ~8pm. Pre-existing, untouched, noticed while making "next 7/30" include
    overdue. One-line fix, deliberately not bundled into an unrelated change.
+
+## This session shipped (2026-08-18 — Gear Watch: stolen-rig resale scan · DESKTOP)
+
+**Held in the working tree. Nothing applied, deployed or pushed.**
+
+The rig was stolen from a vehicle overnight (NYPD grand larceny, detective + evidence
+team assigned). Two deliverables:
+
+**1. The loss schedule — `Financial/ComeWith_Stolen_Gear_Loss.xlsx`.** One file serving
+three readers: the detective (serials for NCIC / LeadsOnline), the DA (restitution
+amount) and any insurance decision. Reconciled twice against Keith's own list; the final
+roster is **10 units** — XDJ-AZ ×1, CDJ-3000 ×2, CDJ-3000 case ×2, Wave 8 ×2, KRK
+monitor ×1, Wave 8 monitor stand ×2 — totalling **$11,713.07** of documented price paid
+across the six rows that have one. Serials/dates/prices came from
+`Financial/ComeWith_Work_Expenses_Master.xlsx` → *Equipment (Capital)*.
+⚠ **That sheet's D/S/C/M/W/A codes are internal asset tags, not manufacturer serials**,
+so every Serial # cell reads NEEDED — police cannot enter an asset tag into NCIC. The
+Simplifi export located the purchases: Sweetwater orders cover six of the ten items.
+Two open threads flagged in the file: the Dec 1 2025 Sweetwater charge is $1,052.79 vs
+$875.00 recorded for Wave 8 #2, leaving **$177.79** that may be the stands; and the Aug 10
+2024 charge is **$318.81 total** while the master lists *each* KRK at $318.81 — if that one
+charge bought both, the claimed monitor cost ~$159, not $318.81.
+
+**2. Gear Watch — the automated scan.** Runs 3×/day, scores every candidate listing,
+alerts three ways (Resend digest → dashboard panel → web push above 85).
+- `supabase/migrations/146_gear_watch.sql` — `gear_watch_targets` / `_hits` / `_config`,
+  admin-only RLS + anon revoked, `gearwatch` module registered **master_only**, and three
+  pg_cron jobs at 12:00/18:00/00:00 UTC (8am/2pm/8pm ET).
+- `supabase/functions/scan-gear-market/` — the scanner, plus `scoring.ts` (the confidence
+  model, split out so it is testable) and `parsers.ts`.
+- **23 tests, no network or credentials:** `node --test supabase/functions/scan-gear-market/scoring.test.ts`
+- `dashboard.html` — Gear Watch panel: triage table with each score's breakdown visible,
+  status workflow, run-now button, settings modal, per-target serial field.
+- `DEV_DOCS/GEAR_WATCH.md` — the runbook (install order, secrets, known soft spots).
+- `scripts/gearwatch_live_test.mjs` — runs the real parser + scorer against a live feed or
+  the checked-in fixture, with no Supabase and no keys.
+
+**Craigslist IS scanned, and it is the one source proven working end to end.** The first
+pass concluded it was impossible (search RSS 403s on every path — still true) and Keith
+corrected that: the site's own search box calls an internal JSON endpoint,
+`sapi.craigslist.org/web/v8/postings/search/full`, which answers 200. Same technique
+CLAUDE.md already documents for Bandcamp. **Live-verified 2026-08-18** — a real Brooklyn
+CDJ-3000 listing at $2,200 scored 55/100 with a resolving URL. LEARNINGS §27 supersedes
+§24's conclusion. OfferUp and Facebook Marketplace remain genuinely unautomatable (no API,
+scraping prohibited) and ship as saved-search links.
+
+**The scoring was recalibrated against those real listings (2026-08-18).** The first live
+hit — a CDJ-3000 in Brooklyn posted the day after the theft — scored only 55, which reads
+as "probably nothing" when it is the exact shape of a real hit. Base model match 25→**35**,
+local 20→**25**, bundle 25→**30**, and recency is now **graduated** (+25 within 3 days,
+sliding to +5 at 60) instead of a flat +10 for anything inside a month — stolen gear is
+flipped in days. That listing now scores **85**. The email threshold moved 55→**65** so
+that model+recency alone (60, e.g. an upstate KRK) stays in the panel instead of mailing.
+
+**Running it live found four bugs the code review could not.** (1) The parser defaulted
+every listing's location, handing out-of-area posts the +20 local bonus. (2) The geo
+string carries **two** indexes into two arrays — using the first for both put a
+Schenectady listing in Bushwick. (3) Geo terms matched by substring, so `"ny"` matched
+**albany** and every upstate listing scored as local. (4) A zero-result query returns
+`decode: 0`, so "nothing listed" was being reported as FAILED — §24's own mistake
+inverted. All four fixed, all four regression-tested; the suite is **29 tests**.
+
+**Standing rule established:** pg_cron calls an edge function with a **service-role bearer
+read from vault at call time**, never a stored JWT. This settles the auth design deferred
+in `014_cron.sql` since Phase 10. LEARNINGS §25, and added to CLAUDE.md.
+
+**Repo hygiene:** local `master` was **34 commits behind** at session start with prod
+migrations already at 145 — fast-forwarded before anything was written, which is the only
+reason `146` is the correct number.
 
 ## This session shipped (2026-08-15 — Strategy board rebuilt: real trends, six categories, a funnel · HENRY'S machine)
 Keith opened with "the strategy page is unreadable and we're not getting actionable

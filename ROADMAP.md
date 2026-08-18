@@ -207,6 +207,35 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-08-18 (Gear Watch: stolen-rig resale scan)
+
+**Not applied, not deployed, not pushed** — held in the desktop working tree at Keith's
+green-light for the build, not the deploy. Install order: `DEV_DOCS/GEAR_WATCH.md`.
+
+- **Migration `146_gear_watch.sql`** — `gear_watch_targets` / `_hits` / `_config`,
+  admin-only RLS with anon revoked, `gearwatch` module registered **master_only**, three
+  pg_cron jobs (8am / 2pm / 8pm ET) calling the edge function through
+  `gear_watch_kick()`.
+- **Edge function `scan-gear-market`** — Reverb + eBay + Craigslist, scoring, dedupe on
+  `(source, listing_id)`, and three alert paths: Resend digest via `send-notice`, the
+  dashboard panel, and web push via `send-push` above a configurable score.
+- **Confidence model** in `scoring.ts` — gates (model named / not an accessory / posted
+  after the theft) then weighted signals, capped at 100, with every award stored in
+  `score_breakdown` so a hit can be explained to a detective. **23 tests, no credentials.**
+- **Dashboard** — Gear Watch panel (triage, breakdown-visible scoring, status workflow,
+  per-target serial entry, manual links for the sites with no API).
+- **Craigslist scanned via the site's own internal JSON endpoint** (`sapi.craigslist.org`),
+  after the RSS path proved dead. **The only source live-verified end to end** — real NYC
+  listings, scored, with resolving URLs. LEARNINGS §27 (which supersedes §24's conclusion).
+  Running it live found four bugs no code review would have: a defaulted location, a
+  two-index geo string, substring geo matching ("ny" inside "albany"), and a zero-result
+  payload that read as FAILED.
+- **pg_cron → edge function auth settled** (service-role bearer from vault), closing the
+  question deferred in `014_cron.sql` since Phase 10. LEARNINGS §25.
+
+Related, same session: `Financial/ComeWith_Stolen_Gear_Loss.xlsx` — the 10-unit loss
+schedule serving the detective, the DA's restitution filing and the insurance decision.
+
 ## Current state — reconciled 2026-08-15 (Strategy board rebuild: trends, categories, funnel)
 
 **DONE — the KPI layer can finally show a trend.** Migrations 141–145 applied to prod.

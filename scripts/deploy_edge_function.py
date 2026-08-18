@@ -71,10 +71,21 @@ def call(method, url, pat, data=None, ctype=None):
 
 
 def deploy(slug, ref, pat):
-    src = ROOT / "supabase" / "functions" / slug / "index.ts"
+    src_dir = ROOT / "supabase" / "functions" / slug
+    src = src_dir / "index.ts"
     if not src.exists():
         print(f"FAIL {slug}: no {src}", file=sys.stderr)
         return False
+
+    # Ship every module in the function's folder, not just index.ts. Functions
+    # were single-file until scan-gear-market split its scorer and parsers out
+    # so they could be unit-tested; uploading index.ts alone fails the bundle
+    # with "Module not found ./scoring.ts". Test files stay behind — they import
+    # node:test, which does not exist in the Deno runtime.
+    modules = [
+        p for p in sorted(src_dir.glob("*.ts"))
+        if not p.name.endswith(".test.ts")
+    ]
 
     # Keep whatever the live function already declares — a deploy should ship new
     # code, not silently change who is allowed to call it.
@@ -91,10 +102,10 @@ def deploy(slug, ref, pat):
         "entrypoint_path": "index.ts",
         "verify_jwt": verify_jwt,
     }
+    ts_type = mimetypes.types_map.get(".ts", "text/typescript")
     body, ctype = multipart(
         {"metadata": json.dumps(meta)},
-        [("file", "index.ts", mimetypes.types_map.get(".ts", "text/typescript"),
-          src.read_bytes())],
+        [("file", p.name, ts_type, p.read_bytes()) for p in modules],
     )
     url = f"{API}/v1/projects/{ref}/functions/deploy?slug={slug}"
     try:
@@ -102,7 +113,8 @@ def deploy(slug, ref, pat):
     except urllib.error.HTTPError as e:
         print(f"FAIL {slug}: HTTP {e.code} {e.read().decode('utf-8', 'replace')[:400]}", file=sys.stderr)
         return False
-    print(f"OK   {slug} -> version {res.get('version')} status {res.get('status')} verify_jwt={verify_jwt}")
+    names = ", ".join(p.name for p in modules)
+    print(f"OK   {slug} -> version {res.get('version')} status {res.get('status')} verify_jwt={verify_jwt} files=[{names}]")
     return True
 
 

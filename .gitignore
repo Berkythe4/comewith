@@ -58,3 +58,6 @@ Radio/Elements-26/render/final/
 Radio/Elements-26/render/final2/
 Radio/Elements-26/render/henryck/
 Radio/Video/_preview/
+
+# Gear Watch scan output (listing data, regenerated on every run)
+gearwatch_results.html

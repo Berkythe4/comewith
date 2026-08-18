@@ -350,6 +350,25 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **There is no local console check** — the Browser pane can't open `file://` URLs. The
   loop is `node --check` plus the deployed Netlify build.
 
+## Scheduled work (pg_cron → edge functions)
+
+- **pg_cron cannot mint an admin JWT.** A scheduled job that needs an edge function calls
+  a `security definer` helper that reads the function URL + **service-role key from
+  `vault.decrypted_secrets` at call time** and posts via `net.http_post`. The key never
+  goes in a migration. Settled 2026-08-18 (`146_gear_watch.sql`, `gear_watch_kick()`),
+  closing the question `014_cron.sql` deferred in Phase 10. LEARNINGS §25.
+- The edge function must accept a **service-role bearer OR an admin JWT** — the pattern
+  `pull-ra-market`, `send-notice` and `send-push` already use.
+- **A missing secret must be a documented no-op**, not a silent error: write the reason to
+  the feature's own `last_status` and return.
+- `search_path` on the helper must include `net`, or `http_post` is not found.
+- **A source that is blocked or down must be reported as such — never as "nothing found".**
+  Validate the payload, not the HTTP status; report per source; and mark a known-dead
+  source DISABLED rather than letting it cry FAILED forever. LEARNINGS §24.
+- **Never default a field that feeds a score, filter or sum.** A placeholder that flows
+  into a computation stops being a placeholder and becomes invented evidence — prefer
+  null and lose the signal. LEARNINGS §26.
+
 ## Scope
 
 - This codebase is **Come With only**. Do **not** add anything Come With Fitness

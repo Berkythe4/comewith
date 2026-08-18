@@ -419,3 +419,136 @@ one stored URL is a Partiful link carrying an `fbclid` that whole-string equalit
 
 **The operational consequence:** the beacon cannot backfill. A `ticket_url` added after
 promotion starts loses every click that came before it, so it has to be set *first*.
+
+---
+
+## Section 24 — "Blocked" and "nothing found" are different answers (2026-08-18)
+
+> ⚠ **Partly superseded the same day — see §27.** The reasoning below stands; the
+> *conclusion drawn from it about Craigslist* was wrong. Craigslist RSS is dead, but
+> Craigslist itself is scannable through the JSON endpoint its own search box calls, and
+> Gear Watch now uses it. Do not cite this section as "Craigslist cannot be pulled".
+
+Gear Watch was designed with Craigslist as a source. Testing it against the live endpoint
+returned **HTTP 403 "Your request has been blocked"** on every search-RSS path, under a
+browser user-agent and a bot one alike, while the Craigslist homepage returned 200 from
+the same machine — proof of a deliberate block rather than a network problem. The HTML
+search page returns 200 and contains **zero** listing markup; it is a JS shell that loads
+results from an internal API.
+
+This is §-worthy not because a source died, but because of what a dead source *renders as*
+if you let it. A scan that reports "0 listings" when it was actually blocked tells the
+reader **"your stolen gear is not being resold"** — the single most harmful sentence this
+system could produce, and indistinguishable from good news. Same failure the Bandcamp
+`fuzzysearch` endpoint produced when it answered HTTP 200 with `{"error":true}` and every
+track came back "not on Bandcamp".
+
+So the rule, now applied in both places:
+
+- **Validate the payload, not the status.** `parseCraigslistRss` throws on a body that is
+  not a feed, rather than returning `[]`.
+- **A source that fails is reported as FAILED**, per source, in the digest and the panel —
+  never folded into the total.
+- **A source that is known-dead is reported as DISABLED, not FAILED.** Craigslist sits
+  behind `CRAIGSLIST_ENABLED` (default off) with the 403 evidence in the header comment.
+  A source that cries FAILED three times a day forever trains the reader to skim past
+  failures — which defeats the point of reporting them at all.
+- **What cannot be automated is handed back as a manual link.** OfferUp and Facebook
+  Marketplace have no public API and prohibit scraping; the digest ends with saved-search
+  links so they stay a 60-second human check instead of a scraper that rots.
+
+## Section 25 — pg_cron gets a service-role bearer from vault, not a stored JWT (2026-08-18)
+
+`014_cron.sql` deferred scheduled campaign sends in Phase 10 with an honest note: pg_cron
+cannot construct an admin JWT, and the two ways out were "cron-secret header" or "vault +
+service_role token in pg_net headers". Every cron job since has been inline SQL, so the
+question stayed open for two months. Gear Watch needed an edge function on a schedule, so
+it is now settled.
+
+**The pattern:** `public.gear_watch_kick()` is `security definer`, reads the function URL
+and the service-role key from `vault.decrypted_secrets` **at call time**, and posts via
+`net.http_post`. The edge function accepts a service-role bearer OR an admin JWT — the
+same door `pull-ra-market` already opened for exactly this purpose.
+
+Three properties worth keeping in any repeat:
+
+1. **The key never enters git.** The migration creates the *caller*; the secrets are
+   stored once by hand with `vault.create_secret`.
+2. **A missing secret is a documented no-op, not a failure.** With no secret the function
+   writes `skipped: secrets not set` to `gear_watch_config.last_status` and returns. A
+   cron job that errors silently every eight hours is worse than one that says why it did
+   nothing.
+3. **`search_path` must include `net`.** pg_net's functions are not in `public`, and a
+   `security definer` function with a pinned search_path will not find `http_post`
+   otherwise.
+
+## Section 26 — A field you default is a signal you invented (2026-08-18)
+
+The Craigslist parser had no per-listing location, so it filled in the obvious-looking
+constant: `location: "New York (craigslist)"`. The feed is the NYC board, after all.
+
+Then the scorer awarded **+20 for "local"** — and every listing on the board became local,
+including the Philadelphia one in the fixture, which scored 55/100 and would have been
+emailed as a candidate. The default did not read as missing data. It read as *evidence*.
+
+The fix is to parse the neighbourhood out of the title's trailing parenthetical and leave
+it **null** when there isn't one, because null scores nothing while a guess scores twenty.
+The NYC board carries plenty of Philadelphia, Connecticut and New Jersey posts.
+
+Generally: **a placeholder that flows into a computation stops being a placeholder.** It is
+safe to default a field that is only ever displayed; it is never safe to default one that
+is scored, filtered, summed or compared. Prefer null and lose the signal.
+
+Caught by running the pipeline on a fixture before deploy — which is the argument for
+having a fixture at all, given the live source was unreachable.
+
+
+## Section 27 — "I couldn't reach it" is not "it can't be reached" (2026-08-18)
+
+§24 concluded, from a real test, that Craigslist could not be scanned. Keith pushed back:
+his brother had built a Craigslist car-listing puller with Claude. He was right and §24's
+conclusion was wrong — and the gap between the evidence and the conclusion is the lesson.
+
+**What the test actually proved:** the `format=rss` search paths return 403 to this
+machine. **What was concluded:** Craigslist cannot be pulled. Those are different claims,
+and the second does not follow from the first. One dead door is not a locked building.
+
+**What works, verified 2026-08-18:** the internal JSON endpoint the site's own search box
+calls —
+
+```
+https://sapi.craigslist.org/web/v8/postings/search/full?batch=<areaId>-0-360-0-0&cc=US&lang=en&searchPath=sss&query=<q>
+```
+
+200, with 47 live NYC results for "cdj". This is precisely the technique already written
+down in CLAUDE.md for Bandcamp — *use the endpoint their own front-end calls* — and it was
+not tried before declaring the source impossible. **When one access path fails, open the
+site's own network tab before writing the obituary.**
+
+Three decoding traps, all found by running it against live data rather than reasoning
+about it:
+
+1. **The payload is delta-encoded.** Posting ids accumulate from
+   `decode.minPostingId`; dates are seconds after `decode.minPostedDate`; `price: -1`
+   means "no price stated", and storing that as a number makes every unpriced listing the
+   cheapest thing on the board.
+2. **The geo string carries TWO indexes into TWO arrays** —
+   `"<locationIdx>:<descriptionIdx>~lat~lon"`. Using the first for both put a Schenectady
+   listing in Bushwick and handed it a local bonus.
+3. **A query with no results returns `decode: 0`** — the number, not an object. Validating
+   `!decode` as a bad payload reported *"nothing listed"* as *"we were blocked"*, which is
+   §24's own mistake pointed the other way. Both directions are harmful; both are now
+   tested.
+
+And one that was not a Craigslist problem at all: geo terms were matched by substring, so
+`"ny"` matched **albany**, and every upstate listing scored as local. Short tokens are
+exactly the ones that need word boundaries. Now `isLocalTerm()`, with regression tests.
+
+The canonical posting URL is `https://www.craigslist.org/view/d/<slug>/<token>`, built
+from the `[6, …]` slug and the `[13, …]` token; the older
+`/<area>/<cat>/d/<slug>/<id>.html` form 404s unless the category segment is exactly right.
+
+**The habit worth keeping:** when a user says "I know for a fact this works", that is
+evidence — usually of a path not tried. Test it before defending the earlier finding. Four
+of the six bugs in this feature were found by running it against something real; none of
+them were visible from the code.
