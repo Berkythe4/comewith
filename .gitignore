@@ -61,3 +61,9 @@ Radio/Video/_preview/
 
 # Gear Watch scan output (listing data, regenerated on every run)
 gearwatch_results.html
+
+# Push token for the Jennifer -> site finance feed (HANDOFF-push-token-security).
+# Broad glob so a new .env variant can never be committed by accident; the
+# example file is re-included because it holds key names only, never values.
+.env.*
+!.env.example
