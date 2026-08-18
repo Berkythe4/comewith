@@ -1,13 +1,15 @@
 #!/bin/sh
 # Blocks a commit that carries a push token in the staged diff.
 #
-# Enabled per-clone (hooks are not committed into .git), so EVERY machine that
-# works this repo must run once:
+# Enable per-clone (hooks are not committed into .git):
 #
 #     git config core.hooksPath .githooks
 #
-# Three machines ship into this repo, so if a token ever does leak it will be
-# from the one where this was never run. See HANDOFF-push-token-security.md.
+# ONLY Keith's machine ever holds a push token — it lives in the planner's .env
+# on his desktop and in Supabase project secrets, and nowhere else. Henry's and
+# Martin's clones have nothing to leak, so this hook is a belt-and-braces guard
+# for the one machine that does. It also blocks any staged .env, which is worth
+# having everywhere. See HANDOFF-push-token-security.md.
 #
 # Bypassable with --no-verify by design: a hook is a safety net for the honest
 # mistake, not an access control. The real control is rotation
