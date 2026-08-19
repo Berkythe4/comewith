@@ -235,10 +235,9 @@ Deno.serve(async (req) => {
   // ── store (upsert on (source, listing_id): re-seeing a listing moves
   //     last_seen_at, it does not create a duplicate or re-alert) ────────────
   let inserted = 0;
-  const fresh: Array<{ id: string; score: number; title: string; url: string; price: number | null; location: string | null; source: string; breakdown: Record<string, unknown> }> = [];
   for (const s of scored) {
     const { data: existing } = await admin.from("gear_watch_hits")
-      .select("id, alerted_at").eq("source", s.source).eq("listing_id", s.listing_id).maybeSingle();
+      .select("id").eq("source", s.source).eq("listing_id", s.listing_id).maybeSingle();
 
     if (existing) {
       await admin.from("gear_watch_hits").update({
@@ -247,22 +246,32 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const { data: row, error } = await admin.from("gear_watch_hits").insert({
+    const { error } = await admin.from("gear_watch_hits").insert({
       source: s.source, listing_id: s.listing_id, url: s.url, title: s.title,
       price: s.price, currency: s.currency, location: s.location, seller: s.seller,
       seller_feedback: s.seller_feedback, posted_at: s.posted_at, image_url: s.image_url,
       target_id: s.target_id, score: s.score, score_breakdown: s.breakdown, raw: s.raw,
-    }).select("id").single();
-    if (!error && row) {
-      inserted++;
-      if (s.score >= (cfg.min_score ?? 65)) {
-        fresh.push({ id: row.id, score: s.score, title: s.title, url: s.url, price: s.price, location: s.location, source: s.source, breakdown: s.breakdown });
-      }
-    }
+    });
+    if (!error) inserted++;
   }
 
   // ── alert ─────────────────────────────────────────────────────────────────
-  fresh.sort((a, b) => b.score - a.score);
+  // What still needs announcing is a question for the DATABASE, not for this run.
+  // Asking "what did I insert just now?" silently strands anything found while
+  // the digest email was unset, and anything whose score crossed the threshold
+  // only on a later scan — a serial pasted in on Tuesday raises Monday's hit to
+  // 100, and that must reach the inbox. `alerted_at is null` is the real test.
+  const minScore = cfg.min_score ?? 65;
+  const { data: pending } = await admin.from("gear_watch_hits")
+    .select("id, score, title, url, price, location, source, score_breakdown")
+    .is("alerted_at", null).gte("score", minScore).eq("status", "new")
+    .order("score", { ascending: false }).limit(25);
+
+  const fresh = (pending || []).map((p: Record<string, any>) => ({
+    id: p.id as string, score: p.score as number, title: p.title as string, url: p.url as string,
+    price: p.price as number | null, location: p.location as string | null,
+    source: p.source as string, breakdown: (p.score_breakdown || {}) as Record<string, unknown>,
+  }));
   const failed = Object.entries(sourceStatus).filter(([, v]) => v.startsWith("FAILED"));
   let emailed = false, pushed = 0;
 

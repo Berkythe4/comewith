@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: ae01d6c5-bc1f-4ab9-9376-130207f0bafe
-  modified: 2026-08-18T21:19:13.304Z
+  modified: 2026-08-19T15:46:00.374Z
 ---
 
 Keith's DJ rig (~$15K) was stolen from a vehicle overnight, 2026-08. NYPD grand larceny,
@@ -20,10 +20,21 @@ police can't enter an asset tag into NCIC, so all serials still read NEEDED. Swe
 invoices carry serials and cover 6 of the 10 items.
 
 **Gear Watch** — migration `146_gear_watch.sql` + edge fn `scan-gear-market` +
-master-only dashboard panel + `DEV_DOCS/GEAR_WATCH.md` runbook. **HELD: not applied to
-prod, not deployed, not pushed** (master auto-deploys; Keith green-lit the build, not the
-deploy). Reverb + eBay have **never been called with live credentials**; Craigslist has,
-and works.
+master-only dashboard panel + `DEV_DOCS/GEAR_WATCH.md` runbook. **LIVE on prod 2026-08-18**:
+146 applied, function at version 3, both vault secrets stored, `theft_date = 2026-08-16`,
+cron path verified end to end (`gear_watch_kick()` → HTTP 200 → hits stored).
+**`dashboard.html` still unpushed**, so the tab isn't on the live site yet. Reverb works
+with a live token; **eBay has no credentials** and reports FAILED every run (correct).
+Digest `email_to` and `push_user_id` are still null — it finds hits and mails nobody.
+
+First live scan with the date set: 173 fetched → 4 matched → 1 at **85** (Craigslist
+CDJ-3000, $2,200, Brooklyn, posted the day of the theft). Without the theft date the same
+scan stored 64 hits of dealer stock at retail.
+
+**Alerting is keyed on `alerted_at is null`, NOT on "inserted this run"** — the run-scoped
+version stranded any hit found before the digest email was configured, and would ignore a
+hit whose score crossed the threshold later (a serial added Tuesday raises Monday's hit to
+100). Found only by running on live data.
 
 Hard facts, tested 2026-08-18 — don't re-litigate:
 - **Craigslist IS scannable.** Its search *RSS* is dead (403 on every `format=rss` path,

@@ -1,9 +1,16 @@
 # Carryover — 2026-08-18 (Gear Watch: a scored resale scan for the stolen rig · DESKTOP)
 
-**This close is a build that is NOT yet applied, deployed or pushed.** Everything below
-about Gear Watch sits in the working tree only — migration `146` is written but not on
-prod, `scan-gear-market` is not deployed, and nothing was pushed because `master`
-auto-deploys. Steps are in `DEV_DOCS/GEAR_WATCH.md`.
+**Gear Watch is LIVE on prod and running. The only thing outstanding is the push.**
+Migration `146` applied 2026-08-18; `scan-gear-market` deployed (**version 3**); both vault
+secrets stored by Keith; `theft_date = 2026-08-16` set; cron verified end to end by calling
+`gear_watch_kick()` by hand — HTTP 200, service-role auth accepted, hits stored.
+**`dashboard.html` has NOT been pushed**, so the Gear Watch tab does not yet exist on the
+live site. Everything else is serving. Steps and runbook: `DEV_DOCS/GEAR_WATCH.md`.
+
+Still open: **digest email is unset** (`gear_watch_config.email_to` is null, so scans find
+hits but mail nobody), **`push_user_id` unset**, and **eBay has no credentials** — it
+reports `FAILED: EBAY_CLIENT_ID / EBAY_CLIENT_SECRET not set` on every run, which is
+correct behaviour, not a bug.
 
 *Context, because it is not a normal feature:* Keith's DJ rig (~$15K) was stolen from a
 vehicle overnight. NYPD is handling it as grand larceny with a detective and an evidence
@@ -247,7 +254,19 @@ re-reading the SQL had not.
 
 ## This session shipped (2026-08-18 — Gear Watch: stolen-rig resale scan · DESKTOP)
 
-**Held in the working tree. Nothing applied, deployed or pushed.**
+**APPLIED AND DEPLOYED to prod. Only `dashboard.html` is still unpushed.**
+
+**First live run, after `theft_date` was set: 173 listings fetched → 4 matched → 1 at 85.**
+That 85 is a Craigslist CDJ-3000, $2,200, Brooklyn, posted 2026-08-16 — the day of the
+theft. Before the theft date was set the same scan stored **64** hits, all dealer stock at
+retail; the date is the whole difference between a triage queue and noise.
+
+**A real bug surfaced only by running it on live data.** The digest was assembled from
+"what did I insert on this run", which permanently strands any hit found while the digest
+email is unset — and would ignore a hit whose score crosses the threshold later (a serial
+pasted in on Tuesday raises Monday's hit to 100). Now the alert list is a query:
+`alerted_at is null and score >= min_score`. Verified: a re-scan reports
+`inserted: 0, alerted: 1`. Fixed in **version 3** of the function.
 
 The rig was stolen from a vehicle overnight (NYPD grand larceny, detective + evidence
 team assigned). Two deliverables:
