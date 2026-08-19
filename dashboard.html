@@ -11124,7 +11124,7 @@ const incomeDash = { rows: [], events: [], actors: [], streams: [], evm: [],
 async function loadIncome() {
   $('incomeBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading income…</div>';
   const [inc, ev, ac, st, em] = await Promise.all([
-    sb.from('income').select('id, date, amount, category, description, event_id, actor_id, verified_at, ledger, cash_source').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('income').select('id, date, amount, category, description, event_id, actor_id, verified_at, ledger, cash_source, status, expected_amount').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date, series').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
     sb.from('revenue_streams').select('*').eq('active', true).order('display_order'),
@@ -11142,7 +11142,8 @@ function incomeFiltered() {
     s.flag === 'unverified' ? !x.verified_at :
     s.flag === 'nocat' ? !x.category :
     s.flag === 'noevent' ? !x.event_id :
-    s.flag === 'nosource' ? !x.cash_source : true;
+    s.flag === 'nosource' ? !x.cash_source :
+    s.flag === 'owed' ? (x.status && x.status !== 'received') : true;
   return s.rows.filter(x =>
     (s.event === '' || (s.event === '__none' ? !x.event_id : x.event_id === s.event)) &&
     (!s.category || (x.category || '') === s.category) &&
@@ -11160,6 +11161,7 @@ function incChips() {
     { k: 'nocat', label: 'No stream', n: r.filter(x => !x.category).length },
     { k: 'noevent', label: 'No event', n: r.filter(x => !x.event_id).length },
     { k: 'nosource', label: 'No source', n: r.filter(x => !x.cash_source).length },
+    { k: 'owed', label: 'Owed to us', n: r.filter(x => x.status && x.status !== 'received').length },
   ];
 }
 function renderIncome() {
@@ -11196,7 +11198,8 @@ function incGapHtml() {
   const total = gaps.reduce((t, e) => t + Number(e.expenses || 0), 0);
   return '<div class="inc-gap"><b>' + gaps.length + ' past event' + (gaps.length > 1 ? 's' : '') +
     ' spent money and recorded no revenue</b> <span class="muted">' + money(total) + ' of cost</span><ul>' +
-    gaps.slice(0, 8).map(e => '<li><button class="hub-mini" data-incaddfor="' + escapeHtml(e.event_id) + '">add revenue</button> ' +
+    gaps.slice(0, 8).map(e => '<li><button class="hub-mini" data-incaddfor="' + escapeHtml(e.event_id) + '">add revenue</button>' +
+      '<button class="hub-mini" data-inczero="' + escapeHtml(e.event_id) + '" title="It genuinely earned nothing">no revenue</button> ' +
       escapeHtml(e.name) + ' <span class="muted">' + escapeHtml(fmtDate(e.event_date)) + ' · cost ' + money(e.expenses) + '</span></li>').join('') +
     '</ul></div>';
 }
@@ -11266,19 +11269,64 @@ async function incAddRevenue(eventId) {
   const stream = prompt('Revenue stream:' + String.fromCharCode(10, 10) +
     s.streams.map(t => t.label).join(', '), suggested || 'DJ Gig fee');
   if (!stream) return;
-  const amtRaw = prompt('Amount received for ' + (ev ? ev.name : 'this') + ':', '');
+  const amtRaw = prompt('Amount for ' + (ev ? ev.name : 'this') + ':', '');
   if (!amtRaw) return;
   const amt = Number(String(amtRaw).replace(/[^0-9.\-]/g, ''));
   if (!Number.isFinite(amt) || amt === 0) { toast('Bad amount', 'err'); return; }
+  const st = await pickFrom('Has this been paid?', [
+    { label: 'Received', hint: 'money is in the account', id: 'received' },
+    { label: 'Invoiced', hint: 'billed, waiting on payment', id: 'invoiced' },
+    { label: 'Accrued', hint: 'agreed, not yet invoiced', id: 'accrued' },
+  ], { placeholder: 'received / invoiced / accrued' });
+  if (!st) return;
   const row = {
     date: ev ? ev.event_date : new Date().toISOString().slice(0, 10),
     amount: amt, category: stream.trim(), event_id: eventId || null,
     description: ev ? ev.name : null,
+    status: st.id,
+    expected_amount: amt,
+    settled_at: st.id === 'received' ? new Date().toISOString() : null,
     ledger: (ev && /dance infusion/i.test(ev.series || '')) ? 'dance_infusion' : 'come_with',
   };
   const { error } = await sb.from('income').insert(row);
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
   toast('Recorded ' + money(amt) + ' — ' + stream, 'ok');
+  loadIncome();
+}
+
+// Convert an accrual to a final. The agreed figure is kept in expected_amount, so
+// when a door split lands at $742.50 against an agreed $600 the variance is still
+// visible instead of being overwritten and forgotten.
+async function incSettle(id) {
+  const x = incomeDash.rows.find(r => r.id === id); if (!x) return;
+  const raw = prompt('Final amount received for "' + (x.description || x.category || 'this') + '":' +
+    String.fromCharCode(10, 10) + 'Agreed: ' + money(x.expected_amount != null ? x.expected_amount : x.amount),
+    String(x.amount));
+  if (raw === null) return;
+  const amt = Number(String(raw).replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(amt) || amt === 0) { toast('Bad amount', 'err'); return; }
+  const patch = {
+    amount: amt, status: 'received', settled_at: new Date().toISOString(),
+    expected_amount: x.expected_amount != null ? x.expected_amount : x.amount,
+  };
+  const { error } = await sb.from('income').update(patch).eq('id', id);
+  if (error) { toast('Could not settle: ' + error.message, 'err'); return; }
+  Object.assign(x, patch);
+  const diff = amt - Number(patch.expected_amount);
+  toast('Settled ' + money(amt) + (Math.abs(diff) > 0.005
+    ? ' (' + (diff > 0 ? '+' : '') + money(diff) + ' vs agreed)' : ''), 'ok');
+  renderIncomeBody();
+}
+
+// "Earned nothing" and "nobody has recorded it" look identical in the data. This
+// is how you say the first one out loud.
+async function incConfirmZero(eventId) {
+  const ev = (incomeDash.evm || []).find(e => e.event_id === eventId);
+  if (!confirm('Confirm "' + ((ev || {}).name || 'this event') + '" earned no revenue?' +
+      String.fromCharCode(10, 10) + 'It stops being flagged as missing. Recording revenue later still works.')) return;
+  const { error } = await sb.from('events').update({ revenue_confirmed_at: new Date().toISOString() }).eq('id', eventId);
+  if (error) { toast('Could not confirm: ' + error.message, 'err'); return; }
+  toast('Confirmed — no revenue expected', 'ok');
   loadIncome();
 }
 
@@ -11299,8 +11347,14 @@ function renderIncomeBody() {
     <td>${escapeHtml(fmtDate(x.date))}</td>
     ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'description')}
     <td>${acSel(x)}</td><td>${evSel(x)}</td>
-    <td class="exp-flags">${(x.ledger === 'dance_infusion' ? '<span class="exp-tag ok">DI</span> ' : '')}${x.cash_source ? '<span class="exp-tag">' + escapeHtml(x.cash_source) + '</span>' : ''}</td>
-    <td class="exp-check"><button class="hub-mini exp-del" data-inc-del="${escapeHtml(x.id)}" title="Delete">✕</button></td>
+    <td class="exp-flags">${(x.ledger === 'dance_infusion' ? '<span class="exp-tag ok">DI</span> ' : '')}${
+      x.status && x.status !== 'received' ? '<span class="exp-tag own" title="Agreed or invoiced, not yet paid">' + escapeHtml(x.status) + '</span> ' : ''}${
+      x.cash_source ? '<span class="exp-tag">' + escapeHtml(x.cash_source) + '</span>' : ''}${
+      x.expected_amount != null && Number(x.expected_amount) !== Number(x.amount)
+        ? ' <span class="exp-tag dupe" title="Agreed ' + money(x.expected_amount) + ', settled ' + money(x.amount) + '">vs ' + money(x.expected_amount) + '</span>' : ''}</td>
+    <td class="exp-check">${x.status && x.status !== 'received'
+      ? '<button class="hub-mini" data-incsettle="' + escapeHtml(x.id) + '" title="Mark paid — you can adjust the final amount">settle</button>'
+      : ''}<button class="hub-mini exp-del" data-inc-del="${escapeHtml(x.id)}" title="Delete">✕</button></td>
   </tr>`).join('') || `<tr><td colspan="10" class="muted" style="padding:14px;">No income matches these filters.</td></tr>`;
   $('incomeTable').innerHTML = `<table class="data-table"><thead><tr>
     <th class="exp-check"><input type="checkbox" data-incselall${allShown ? ' checked' : ''} title="Select everything matching the current filters"></th>
@@ -11374,6 +11428,8 @@ $('panel-income').addEventListener('click', async (e) => {
   if (e.target.closest('[data-incbulkclear]')) { incomeDash.sel.clear(); renderIncomeBody(); return; }
   if (e.target.closest('[data-incadd]')) { incAddRevenue(incomeDash.event && incomeDash.event.indexOf('__') !== 0 ? incomeDash.event : null); return; }
   const af = e.target.closest('[data-incaddfor]'); if (af) { incAddRevenue(af.dataset.incaddfor); return; }
+  const zr = e.target.closest('[data-inczero]'); if (zr) { incConfirmZero(zr.dataset.inczero); return; }
+  const st = e.target.closest('[data-incsettle]'); if (st) { incSettle(st.dataset.incsettle); return; }
   const del = e.target.closest('[data-inc-del]'); if (del) {
     if (!confirm('Delete this income row? (soft delete, reversible)')) return;
     const { error } = await sb.from('income').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.incDel);
@@ -11890,6 +11946,59 @@ $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
 });
 
+// ---- searchable picker -------------------------------------------------------
+// A prompt() with 80 vendor names pasted into it is not a chooser, it is a
+// reading exercise. This filters as you type, arrow-keys through, Enter picks.
+// Resolves to the chosen item, or null if dismissed.
+function pickFrom(title, items, opts) {
+  opts = opts || {};
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.className = 'pick-ov';
+    ov.innerHTML =
+      '<div class="pick-box"><div class="pick-head">' + escapeHtml(title) +
+        '<span class="pick-x" title="Cancel">&times;</span></div>' +
+      '<input class="pick-input" placeholder="' + escapeHtml(opts.placeholder || 'Type to filter…') + '" autocomplete="off">' +
+      '<div class="pick-list"></div>' +
+      (opts.allowNew ? '<div class="pick-new muted">Enter a name not on the list to create it.</div>' : '') +
+      '</div>';
+    document.body.appendChild(ov);
+    const input = ov.querySelector('.pick-input');
+    const list = ov.querySelector('.pick-list');
+    let shown = items.slice(), cursor = 0;
+
+    const draw = () => {
+      const q = input.value.trim().toLowerCase();
+      shown = q ? items.filter(i => i.label.toLowerCase().includes(q)) : items.slice();
+      if (cursor >= shown.length) cursor = Math.max(0, shown.length - 1);
+      list.innerHTML = shown.length
+        ? shown.map((i, n) => '<div class="pick-row' + (n === cursor ? ' on' : '') + '" data-n="' + n + '">' +
+            escapeHtml(i.label) + (i.hint ? ' <span class="muted">' + escapeHtml(i.hint) + '</span>' : '') + '</div>').join('')
+        : '<div class="pick-row muted">' + (opts.allowNew ? 'No match — Enter creates "' + escapeHtml(input.value.trim()) + '"' : 'No match') + '</div>';
+      const on = list.querySelector('.pick-row.on');
+      if (on && on.scrollIntoView) on.scrollIntoView({ block: 'nearest' });
+    };
+    const done = (val) => { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(val); };
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+      else if (e.key === 'ArrowDown') { e.preventDefault(); cursor = Math.min(cursor + 1, shown.length - 1); draw(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); cursor = Math.max(cursor - 1, 0); draw(); }
+      else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (shown.length) done(shown[cursor]);
+        else if (opts.allowNew && input.value.trim()) done({ label: input.value.trim(), isNew: true });
+      }
+    };
+    input.addEventListener('input', () => { cursor = 0; draw(); });
+    list.addEventListener('click', (e) => {
+      const row = e.target.closest('[data-n]'); if (row) done(shown[+row.dataset.n]);
+    });
+    ov.addEventListener('click', (e) => { if (e.target === ov || e.target.classList.contains('pick-x')) done(null); });
+    document.addEventListener('keydown', onKey, true);
+    draw(); input.focus();
+  });
+}
+
 // ================= P&L — revenue, direct, indirect, profit =====================
 // MASTER ONLY. Reads v_pl_summary (the three profit lines), v_pl_monthly
 // (sectioned detail), v_capital and v_cash_position.
@@ -12314,15 +12423,24 @@ async function plMergeVendor(key) {
   const rows = d.exp.filter(x => linked ? x.vendor_actor_id === key : (x.vendor || x.description) === key.slice(1));
   if (!rows.length) return;
   const spellings = [...new Set(rows.map(r => r.vendor).filter(Boolean))];
-  const names = (d.actors || []).map(a => a.display_name).sort();
-  const target = prompt(
-    'Fold ' + (linked ? ((d.actors.find(a => a.id === key) || {}).display_name || 'this vendor') : key.slice(1)) +
-    ' into which vendor?' + String.fromCharCode(10, 10) + names.join(', '),
-    '');
-  if (!target) return;
-  const actor = (d.actors || []).find(a => a.display_name.toLowerCase() === target.trim().toLowerCase());
-  if (!actor) { toast('No vendor called "' + target + '"', 'err'); return; }
-  if (linked && actor.id === key) { toast('That is the same vendor', 'err'); return; }
+  const from = linked ? ((d.actors.find(a => a.id === key) || {}).display_name || 'this vendor') : key.slice(1);
+  const items = (d.actors || [])
+    .filter(a => !linked || a.id !== key)
+    .map(a => ({ label: a.display_name, id: a.id }))
+    .sort((x, y) => x.label.localeCompare(y.label));
+  const chosen = await pickFrom('Fold “' + from + '” into which vendor?', items,
+    { placeholder: 'Type to filter vendors…', allowNew: true });
+  if (!chosen) return;
+
+  let actor = chosen.id ? (d.actors || []).find(a => a.id === chosen.id) : null;
+  if (!actor) {
+    // Every payee should end up as a vendor in the system, so creating one is
+    // part of the same flow rather than a detour into another screen.
+    const ins = await sb.from('actors').insert({ display_name: chosen.label, status: 'active' }).select('id, display_name').maybeSingle();
+    if (ins.error) { toast('Could not create vendor: ' + ins.error.message, 'err'); return; }
+    actor = ins.data; d.actors.push(actor);
+    toast('Created vendor ' + actor.display_name, 'ok');
+  }
 
   const ids = rows.map(r => r.id);
   const up = await sb.from('expenses').update({ vendor_actor_id: actor.id }).in('id', ids);
@@ -19965,6 +20083,22 @@ table.pl-table td.pl-indent{padding-left:26px}
 .inc-gap ul{margin:6px 0 0;padding-left:18px}
 .inc-gap li{margin:3px 0}
 .inc-gap .hub-mini{margin-right:6px}
+
+/* ---- searchable picker (161) ---- */
+.pick-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;
+  align-items:flex-start;justify-content:center}
+.pick-box{background:var(--panel,#fff);color:inherit;margin-top:9vh;width:min(460px,94vw);
+  border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden}
+.pick-head{padding:11px 14px;font-weight:700;font-size:13.5px;border-bottom:1px solid var(--line,#e3e3e6);
+  display:flex;justify-content:space-between;align-items:center;gap:8px}
+.pick-x{cursor:pointer;opacity:.5;font-size:17px;line-height:1}
+.pick-x:hover{opacity:1}
+.pick-input{width:100%;border:0;border-bottom:1px solid var(--line,#e3e3e6);padding:10px 14px;
+  font:inherit;font-size:13px;background:transparent;color:inherit;outline:none}
+.pick-list{max-height:46vh;overflow-y:auto}
+.pick-row{padding:7px 14px;font-size:13px;cursor:pointer}
+.pick-row.on,.pick-row:hover{background:rgba(48,84,150,.12)}
+.pick-new{padding:8px 14px;font-size:11px;border-top:1px solid var(--line,#e3e3e6)}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
