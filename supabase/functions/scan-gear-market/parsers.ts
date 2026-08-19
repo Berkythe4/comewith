@@ -53,6 +53,77 @@ export const reverbHeaders = (token: string) => ({
   "Content-Type": "application/hal+json",
 });
 
+// ── Facebook Marketplace (via Apify) ────────────────────────────────────────
+// Meta has NO public Marketplace search API — verified 2026-08-19: every
+// marketplace URL answers HTTP 400 unauthenticated, and Meta's only Commerce
+// Platform API is partner-only for managing your OWN catalog. The route that
+// works is a third-party scraping service; Apify is the one with a documented
+// REST API and pay-per-result pricing (~$5 per 1,000 items).
+//
+// The actor is configurable (APIFY_FB_ACTOR) so a different scraper can be
+// swapped in without a code change — they all return roughly this shape.
+
+export const APIFY_FB_ACTOR_DEFAULT = "apify~facebook-marketplace-scraper";
+
+export const apifyRunUrl = (actor: string, token: string) =>
+  `https://api.apify.com/v2/acts/${actor}/run-sync-get-dataset-items?token=${encodeURIComponent(token)}`;
+
+export const facebookSearchUrl = (query: string, location = "nyc") =>
+  `https://www.facebook.com/marketplace/${location}/search/?query=${encodeURIComponent(query)}`;
+
+/** "$1,200" -> 1200 · "Free"/"" -> null. Never returns 0 for an unpriced item. */
+export function parseMoney(s: unknown): number | null {
+  if (typeof s === "number") return Number.isFinite(s) && s > 0 ? s : null;
+  const m = /([0-9][0-9,]*)(?:\.(\d{2}))?/.exec(String(s ?? ""));
+  if (!m) return null;
+  const n = Number(m[1].replace(/,/g, "") + (m[2] ? "." + m[2] : ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+/**
+ * Maps Apify's Facebook Marketplace dataset items into listings.
+ *
+ * Throws when handed something that isn't an array — a quota error, an expired
+ * token or an actor failure must surface as FAILED, not as an empty market.
+ * Sold and pending listings are dropped: they cannot be acted on.
+ */
+export function parseFacebookMarketplace(payload: unknown): Listing[] {
+  if (!Array.isArray(payload)) {
+    const m = (payload as Record<string, any>)?.error?.message ?? (payload as Record<string, any>)?.message;
+    throw new Error("Facebook/Apify: unexpected payload shape" + (m ? ` — ${String(m).slice(0, 140)}` : ""));
+  }
+  const out: Listing[] = [];
+  for (const raw of payload as Record<string, any>[]) {
+    if (!raw || typeof raw !== "object") continue;
+    if (raw.is_sold === true || raw.is_pending === true) continue;
+
+    const id = String(raw.id ?? raw.listing_id ?? "").trim();
+    const title = String(raw.marketplace_listing_title ?? raw.title ?? "").trim();
+    if (!id || !title) continue;
+
+    const city = raw.location?.reverse_geocode?.city ?? raw.location?.city ?? raw.city ?? null;
+    const state = raw.location?.reverse_geocode?.state ?? raw.location?.state ?? null;
+    const created = Number(raw.creation_time ?? raw.creationTime ?? 0);
+
+    out.push({
+      source: "facebook",
+      listing_id: id,
+      url: String(raw.listingUrl ?? raw.url ?? `https://www.facebook.com/marketplace/item/${id}/`),
+      title,
+      price: parseMoney(raw.listing_price?.formatted_amount ?? raw.listing_price?.amount ?? raw.price),
+      currency: raw.listing_price?.currency ?? "USD",
+      location: [city, state].filter(Boolean).join(", ") || null,
+      seller: raw.marketplace_listing_seller?.name ?? raw.sellerName ?? null,
+      seller_feedback: null,
+      posted_at: created > 0 ? new Date(created * 1000).toISOString() : null,
+      image_url: raw.primary_listing_photo?.image?.uri ?? raw.imageUrl ?? null,
+      description: raw.description ?? raw.redacted_description?.text ?? null,
+      raw,
+    });
+  }
+  return out;
+}
+
 export const reverbDetailUrl = (id: string) => `https://api.reverb.com/api/listings/${id}`;
 
 /**

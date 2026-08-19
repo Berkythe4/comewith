@@ -13,9 +13,14 @@
 //                own search box calls, sapi.craigslist.org — the same approach
 //                track-sources takes with Bandcamp. Area-scoped to NYC.
 //
-// OfferUp and Facebook Marketplace are deliberately absent: neither has a public
-// API and both prohibit scraping. The digest emits saved-search links for those
-// instead, so they stay a 60-second manual check rather than a broken scraper.
+//   facebook   — Meta has NO public Marketplace search API (verified 2026-08-19:
+//                every marketplace URL answers 400 unauthenticated; the Commerce
+//                Platform API is partner-only, for your own catalog). Goes
+//                through Apify, which is billed per result, so it runs only when
+//                APIFY_TOKEN is set and reports NOT CONFIGURED otherwise.
+//
+// OfferUp is still absent — no API and no scraping service worth wiring — so it
+// stays a saved-search link in the digest, a 60-second manual check.
 //
 // Auth: service-role bearer (pg_cron) OR a master/sub admin JWT (dashboard).
 // Body (all optional): { trigger?: "cron" | "manual", dryRun?: boolean }
@@ -29,6 +34,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 // credentials or network: node --test supabase/functions/scan-gear-market/scoring.test.ts
 import { bestMatch, type Listing, type Target } from "./scoring.ts";
 import {
+  APIFY_FB_ACTOR_DEFAULT, apifyRunUrl, facebookSearchUrl, parseFacebookMarketplace,
   CRAIGSLIST_HEADERS, craigslistSapiUrl, parseCraigslistSapi,
   mergeReverbDetail, parseReverbListings, reverbDetailUrl, reverbHeaders, reverbSearchUrl,
 } from "./parsers.ts";
@@ -99,6 +105,27 @@ async function fromEbay(query: string, token: string): Promise<Listing[]> {
   }));
 }
 
+async function fromFacebook(query: string): Promise<Listing[]> {
+  const token = Deno.env.get("APIFY_TOKEN");
+  if (!token) throw new Error("APIFY_TOKEN not set");
+  const actor = Deno.env.get("APIFY_FB_ACTOR") || APIFY_FB_ACTOR_DEFAULT;
+  const loc = Deno.env.get("FB_MARKETPLACE_LOCATION") || "nyc";
+  const res = await fetch(apifyRunUrl(actor, token), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      startUrls: [{ url: facebookSearchUrl(query, loc) }],
+      resultsLimit: 40,
+      includeListingDetails: false,
+    }),
+  });
+  if (!res.ok) {
+    const b = await res.text().catch(() => "");
+    throw new Error(`Apify responded ${res.status}${res.status === 402 ? " — out of credit" : ""}${b ? ": " + b.slice(0, 120) : ""}`);
+  }
+  return parseFacebookMarketplace(await res.json());
+}
+
 async function fromCraigslist(query: string): Promise<Listing[]> {
   // The undocumented endpoint Craigslist's own search box calls. The decode
   // lives in parsers.ts so it can be re-checked against the live response
@@ -115,7 +142,6 @@ function manualLinks(queries: string[]): { label: string; url: string }[] {
   const q = encodeURIComponent(queries[0] || "pioneer cdj");
   return [
     { label: "OfferUp — NYC", url: `https://offerup.com/search?q=${q}` },
-    { label: "Facebook Marketplace — NYC", url: `https://www.facebook.com/marketplace/nyc/search?query=${q}` },
     { label: "eBay — sold & completed", url: `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1` },
   ];
 }
@@ -155,7 +181,7 @@ Deno.serve(async (req) => {
   // ── collect ───────────────────────────────────────────────────────────────
   const queries = (targets as Target[]).map((t) => `${t.make || ""} ${t.model_tokens[0]}`.trim());
   const listings: Listing[] = [];
-  const counts: Record<string, number> = { reverb: 0, ebay: 0, craigslist: 0 };
+  const counts: Record<string, number> = { reverb: 0, ebay: 0, craigslist: 0, facebook: 0 };
   const fails: Record<string, string> = {};
 
   for (const q of queries) {
@@ -176,11 +202,26 @@ Deno.serve(async (req) => {
     catch (e) { fails.craigslist = e instanceof Error ? e.message : String(e); }
   }
 
+  // Facebook Marketplace goes through Apify and is billed per result, so it runs
+  // only when a token exists and it is capped tighter than the free sources.
+  const fbOn = !!Deno.env.get("APIFY_TOKEN");
+  if (fbOn) {
+    for (const q of queries) {
+      try { const r = await fromFacebook(q); listings.push(...r); counts.facebook += r.length; }
+      catch (e) { fails.facebook = e instanceof Error ? e.message : String(e); }
+    }
+  }
+
   // One line per source, and a source that threw says FAILED — never "0 found".
   const sourceStatus: Record<string, string> = {};
   for (const k of ["reverb", "ebay", "craigslist"]) {
     sourceStatus[k] = fails[k] ? `FAILED: ${fails[k]}` : `ok — ${counts[k]} listing(s) fetched`;
   }
+  // "Not configured" is its own answer. It is not a failure, and it is certainly
+  // not zero results — nobody should read this line as "Facebook has nothing".
+  sourceStatus.facebook = !fbOn
+    ? "NOT CONFIGURED — set APIFY_TOKEN to include Facebook Marketplace"
+    : (fails.facebook ? `FAILED: ${fails.facebook}` : `ok — ${counts.facebook} listing(s) fetched`);
 
   // ── score ─────────────────────────────────────────────────────────────────
   const scoreCfg = { theft_date: cfg.theft_date, geo_terms: cfg.geo_terms || [] };

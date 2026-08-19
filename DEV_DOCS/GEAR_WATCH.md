@@ -25,8 +25,25 @@ with its score breakdown. Never contact the seller, never arrange a meet.
 | Reverb | Official API, `REVERB_TOKEN` | **Live-verified 2026-08-18.** Search + a per-candidate detail lookup |
 | eBay | Browse API, `EBAY_CLIENT_ID` + `EBAY_CLIENT_SECRET` | Client-credentials OAuth, minted per run. **Never run live yet.** |
 | Craigslist | `sapi.craigslist.org` — the internal JSON endpoint its own search box calls | **Live-verified 2026-08-18.** No credentials needed |
-| OfferUp | — | No public API, bot-blocked |
-| Facebook Marketplace | — | No public API, scraping prohibited |
+| Facebook Marketplace | Apify actor, `APIFY_TOKEN` | Meta has **no** public Marketplace API. Billed per result (~$5/1,000). Off until the token is set |
+| OfferUp | — | No public API, bot-blocked. Manual link only |
+
+**On Facebook.** Verified 2026-08-19: every `facebook.com/marketplace/...` URL answers
+**HTTP 400** unauthenticated, and Meta's only Commerce Platform API is partner-only for
+managing your *own* catalog. There is no first-party search API to find — unlike
+Craigslist, where one existed and simply hadn't been tried (§27). The working route is a
+third-party scraping service; Apify is the one with a documented REST API and
+pay-per-result billing.
+
+Two things worth knowing before switching it on:
+- **It costs money per scan.** Four queries × 3 scans/day is ~500 results/day at the
+  default cap of 40 per query. Watch the first day's spend before leaving it running.
+- **Never point this at your own Facebook session.** The scraper runs on Apify's
+  infrastructure. Automated collection is against Meta's terms either way, but using your
+  personal account's cookies is what gets an account restricted.
+
+The actor is swappable: set `APIFY_FB_ACTOR` to a different actor id (the vehicles-focused
+ones return the same field names) and `FB_MARKETPLACE_LOCATION` to a city other than `nyc`.
 
 The last two are emitted as **saved-search links** in the digest and in the
 panel, so they stay a 60-second manual check instead of a scraper that breaks
@@ -127,6 +144,9 @@ panel as they arrive.
      `reverb FAILED: HTTP 401 — token rejected`.
    - **eBay** → developer.ebay.com → create an app → production App ID (client id) +
      Cert ID (client secret)
+   - **Facebook Marketplace** → apify.com → sign up → Settings → Integrations → API
+     token. Store as `APIFY_TOKEN`. The free tier carries a small monthly credit; the
+     Marketplace actor is roughly $5 per 1,000 results.
 3. **Set the function secrets** (Supabase dashboard → Edge Functions → Secrets):
    `REVERB_TOKEN`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`
    (`RESEND_API_KEY` and the VAPID keys are already set — the digest goes

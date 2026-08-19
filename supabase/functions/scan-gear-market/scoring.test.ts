@@ -380,3 +380,66 @@ test("reverb listings carry no location and never score local", async () => {
   assert.equal(r.breakdown.local, undefined);
   assert.equal(r.breakdown.note_local_pickup_offered, "yes", "context only, worth no points");
 });
+
+// ── facebook marketplace (via Apify) ────────────────────────────────────────
+const FB_ITEMS = [
+  { id: "24680", marketplace_listing_title: "Pioneer CDJ-3000 pair",
+    listing_price: { formatted_amount: "$3,400", currency: "USD" },
+    location: { reverse_geocode: { city: "Brooklyn", state: "NY" } },
+    listingUrl: "https://www.facebook.com/marketplace/item/24680/",
+    primary_listing_photo: { image: { uri: "https://scontent.example/p.jpg" } },
+    marketplace_listing_seller: { name: "A Seller" },
+    creation_time: 1786982400, is_sold: false },
+  { id: "13579", marketplace_listing_title: "Pioneer CDJ-3000 SOLD",
+    listing_price: { formatted_amount: "$2,000" }, is_sold: true },
+  { id: "11223", marketplace_listing_title: "Pioneer CDJ-3000 make offer",
+    listing_price: { formatted_amount: "Free" },
+    location: { reverse_geocode: { city: "Queens", state: "NY" } } },
+];
+
+test("facebook: maps titles, prices, location, photo and posted date", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const out = parseFacebookMarketplace(FB_ITEMS);
+  assert.equal(out.length, 2, "sold listings are dropped — they cannot be acted on");
+  assert.equal(out[0].source, "facebook");
+  assert.equal(out[0].price, 3400);
+  assert.equal(out[0].location, "Brooklyn, NY");
+  assert.equal(out[0].seller, "A Seller");
+  assert.equal(out[0].url, "https://www.facebook.com/marketplace/item/24680/");
+  assert.equal(out[0].posted_at, new Date(1786982400 * 1000).toISOString());
+});
+
+test("facebook: an unpriced listing is null, never 0", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const out = parseFacebookMarketplace(FB_ITEMS);
+  const free = out.find((l) => l.listing_id === "11223")!;
+  assert.equal(free.price, null, "0 would make it the cheapest thing on the market");
+  assert.equal(free.url, "https://www.facebook.com/marketplace/item/11223/", "url built from id when absent");
+});
+
+test("facebook: an Apify error body throws instead of reading as an empty market", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  assert.throws(() => parseFacebookMarketplace({ error: { message: "Monthly usage hard limit exceeded" } }),
+    /unexpected payload/);
+  assert.deepEqual(parseFacebookMarketplace([]), []);
+});
+
+test("facebook listings score like any other source", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const out = parseFacebookMarketplace([FB_ITEMS[0]]);
+  const r = bestMatch(out[0], ALL, { theft_date: "2026-08-16", geo_terms: CFG.geo_terms })!;
+  assert.equal(r.breakdown.local, 25, "Brooklyn, NY is local");
+  assert.equal(r.breakdown.bundle_pair, 18, "'pair' of a model we lost two of");
+  assert.ok(r.score >= 85);
+});
+
+test("parseMoney handles the formats Marketplace actually returns", async () => {
+  const { parseMoney } = await import("./parsers.ts");
+  assert.equal(parseMoney("$1,200"), 1200);
+  assert.equal(parseMoney("$65"), 65);
+  assert.equal(parseMoney("$2,499.99"), 2499.99);
+  assert.equal(parseMoney("Free"), null);
+  assert.equal(parseMoney(""), null);
+  assert.equal(parseMoney(null), null);
+  assert.equal(parseMoney(3400), 3400);
+});

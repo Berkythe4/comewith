@@ -11647,7 +11647,7 @@ async function loadGearWatch() {
   const q = encodeURIComponent('pioneer cdj 3000');
   const manual = [
     ['OfferUp', `https://offerup.com/search?q=${q}`],
-    ['Facebook Marketplace', `https://www.facebook.com/marketplace/nyc/search?query=${q}`],
+    ['Facebook Marketplace (browser)', `https://www.facebook.com/marketplace/nyc/search?query=${q}`],
     ['eBay sold/completed', `https://www.ebay.com/sch/i.html?_nkw=${q}&LH_Sold=1`],
   ].map(([l, u]) => `<a href="${u}" target="_blank" rel="noopener">${l}</a>`).join(' · ');
 
@@ -11719,7 +11719,7 @@ async function loadGearWatch() {
     <table class="data-table"><thead><tr><th>Model</th><th style="width:50px;">Qty</th><th style="width:260px;">Serial #</th><th>Notes</th></tr></thead><tbody>${targets.map(targetRow).join('')}</tbody></table>
 
     <div class="hub-sec-bar" style="margin-top:22px;"><h3>No API — check these by hand</h3></div>
-    <div class="kpi-hint">OfferUp and Facebook Marketplace have no public API and prohibit scraping, so they can't be scanned. ${manual}</div>
+    <div class="kpi-hint">OfferUp has no public API, so it stays a manual check. Facebook Marketplace has none either, but is scanned through Apify — it shows as <em>not configured</em> until an <code>APIFY_TOKEN</code> is set, and it is billed per result. ${manual}</div>
 
     <div class="panel-state" style="margin-top:18px;background:#f5f2ed;">
       <strong>If a hit looks right: send the link and its score breakdown to the detective.</strong>

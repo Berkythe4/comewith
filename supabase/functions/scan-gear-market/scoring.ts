@@ -23,7 +23,7 @@ export type Target = {
 };
 
 export type Listing = {
-  source: "reverb" | "ebay" | "craigslist";
+  source: "reverb" | "ebay" | "craigslist" | "facebook";
   listing_id: string;
   url: string;
   title: string;
