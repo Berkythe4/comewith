@@ -207,6 +207,42 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-08-19 (FP&A close-out: 1099s, gear, photo library, Blue Sky)
+
+**Done this pass**
+- 🟢 **1099 tracking** — `v_contractor_1099`, per payee per year across all categories.
+  Reportability stored on `actors.tax_1099_status`; unreviewed payees over $600 surface
+  as a working list. One open item: Janelle Sochet, $900.
+- 🟢 **Expense ledger reconciled** — missing XDJ-AZ added, $2,031.08 of gear
+  recategorised, three 2024 charges confirmed, one $900 duplicate removed. Equipment
+  now exceeds the theft, which it did not before. Net loss $31,334.20, invested capital
+  $34,885.26.
+- 🟢 **Venmo-as-actor removed** — a payment rail was seeded as a payee by 158.
+- 🟢 **Bulk-edit selection bug fixed** — selections were writing to rows hidden by the
+  filter. The most consequential fix of the session.
+- 🟢 **Delete fixed** — `NL` scoping meant the ✕ and bulk Delete had never worked.
+- 🟢 **Sticky headers + click-to-sort on every data table**, one DOM-level
+  implementation; `.main` is now the desktop scroll container.
+- 🟢 **Photo library** — photos no longer require an event; subject + photographer +
+  credit line; private by default; new Photos tab with a photographer portfolio view.
+- 🟢 **Blue Sky pipeline** — `stage = 'idea'` + expected revenue + confidence,
+  weighted in `v_pipeline`; `needs_revenue_estimate` flags upcoming events with no
+  money on them.
+
+**Parked (needs a decision, not code)**
+- 🟡 **Janelle's W-9** and confirmation that 19th & 7th is incorporated — both due
+  before the January 2027 filing.
+- 🟡 **§83(b) elections** for the 5%-each sweat equity (Martin, Henry, Janelle). None
+  vested. If grants exist, the 30-day window is running and cannot be reopened.
+- 🟡 **Expected revenue on the 8 upcoming events** — all 8 currently have nothing.
+- 🟡 **Review the 10 We Belong Here charges** changed during the selection bug's window.
+
+**Backlog**
+- ⚪ Weighted pipeline surfaced in the P&L forecast band (the view exists; the P&L tab
+  still reads budget lines only).
+- ⚪ Photographer portfolio as a shareable link rather than an in-dashboard modal.
+- ⚪ Insurance claim on the theft — still not filed.
+
 ## Current state — reconciled 2026-08-18 (Gear Watch: stolen-rig resale scan)
 
 **Not applied, not deployed, not pushed** — held in the desktop working tree at Keith's

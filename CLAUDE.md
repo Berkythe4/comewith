@@ -350,6 +350,48 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **There is no local console check** — the Browser pane can't open `file://` URLs. The
   loop is `node --check` plus the deployed Netlify build.
 
+- **Patch scripts must write atomically.** `open(path, "w")` truncates *before* it
+  writes; on 2026-08-19 an encoding error mid-write left `dashboard.html` at zero
+  bytes. Write to `path + ".tmp"` then `os.replace()`. Commit before any scripted
+  sweep, because that is what recovery depends on.
+- **Non-BMP characters in patch scripts:** write the literal character, never a
+  surrogate-pair escape — Python turns those into lone surrogates and the write fails
+  *after* it has already truncated. Use `chr(0x1F4F7)` if the literal is awkward.
+
+## Bulk-edit surfaces (any tab with checkboxes)
+
+- **A selection may only ever contain rows the current filter shows.** Prune on every
+  render via `pruneSelection(sel, visibleRows)` and tell the user how many were
+  dropped. Before this existed, narrowing a filter and applying a bulk change wrote to
+  rows that were off screen — see LEARNINGS §28.
+- Naming the count on the button is not enough; the count can be right while the
+  membership is wrong.
+
+## Money that leaves the business
+
+- **Reportability (1099) is a stored decision on `actors.tax_1099_status`, never
+  inferred from an expense category.** The $600 threshold is per payee per calendar
+  year across every category. Payees with no actor row read `'no vendor'`, not
+  `'undecided'` — they need linking before they can be ruled on. LEARNINGS §30.
+- **Never seed a payment rail as an actor.** `Venmo`, `Sq *`, `Ubr `, `In *` and the
+  like are statement descriptors describing how money moved, not who received it. One
+  actor per rail silently merges unrelated payees. LEARNINGS §31.
+
+## Pipeline / speculative work
+
+- **Blue Sky = `events.stage = 'idea'`** with `expected_revenue` + `confidence`; there
+  is no separate prospects table. `v_pipeline` returns the weighted number, and
+  `needs_revenue_estimate` lists upcoming events with no money attached. Promote by
+  moving the stage and booking real income; drop via `status = 'cancelled'`. Never let
+  a speculative number reach the P&L. LEARNINGS §33.
+
+## Photos
+
+- **A photo needs an event *or* a subject, enforced by CHECK** — press shoots have no
+  event, and inventing one puts a photo session in the events list and the P&L.
+- **`is_public` defaults to FALSE.** The bucket itself is public, so never put
+  documents there; publishing an image is a deliberate toggle. LEARNINGS §32.
+
 ## Scheduled work (pg_cron → edge functions)
 
 - **pg_cron cannot mint an admin JWT.** A scheduled job that needs an edge function calls

@@ -552,3 +552,140 @@ from the `[6, …]` slug and the `[13, …]` token; the older
 evidence — usually of a path not tried. Test it before defending the earlier finding. Four
 of the six bugs in this feature were found by running it against something real; none of
 them were visible from the code.
+
+---
+
+## Section 28 — A selection the filter cannot see is a mass update with no blast radius (2026-08-19)
+
+The Expenses tab kept selected row IDs in `expDash.sel` and never reconciled them
+against the active filter. Select 30 rows, narrow the filter to 5, apply a bulk
+category change — and all 30 were written. Twenty-five of them were invisible at the
+moment they changed. Keith found it the way these are always found: by discovering
+work he had just done had been silently overwritten.
+
+The bulk bar was already careful in the way that is easy to be careful: every button
+named the count it would affect. That is worth nothing when the count is right and
+the *membership* is wrong.
+
+**The rule: a selection may only ever contain rows the current view shows.** Prune on
+every render, and say how many were dropped. A selection that quietly shrinks is only
+marginally better than one that quietly grows — both are the UI knowing something the
+person does not.
+
+`pruneSelection(sel, visibleRows)` now enforces this for Expenses and Income. Anything
+that grows a bulk-edit surface should call it too.
+
+---
+
+## Section 29 — `position: sticky` needs a scrollport that actually scrolls (2026-08-19)
+
+Sticky table headers were added and did nothing. The CSS was right; the containing
+block was not.
+
+`.main` carries `overflow-x: auto`. Per spec that coerces `overflow-y` from `visible`
+to `auto`, so `.main` became the nearest scroll container for every table inside it —
+but `.main` has no height limit, so it never scrolls. The window does. A sticky
+element resolves against a scrollport that never moves, so it never moves either.
+
+Two things worth carrying:
+
+1. **`overflow-x: auto` is never only horizontal.** It silently makes the element a
+   scroll container in both axes, which changes what every `position: sticky`
+   descendant is measured against.
+2. **Fixing the shell has a blast radius.** Making `.main` the real scroller broke
+   fourteen `window.scrollY` / `window.scrollTo` call sites that preserved scroll
+   position across re-renders — they would have read 0 from a window that no longer
+   moves, silently. They now go through `scrollPos()` / `scrollToPos()`, which ask
+   whichever element is actually scrolling. Search for those before changing a scroll
+   container again.
+
+The first attempt at this shipped the CSS alone and was reported back as still broken.
+Setting the property is not the same as verifying the behaviour.
+
+---
+
+## Section 30 — Reportability is a stored decision, not a category (2026-08-19)
+
+`v_contractor_1099` was first built on `category = 'Contractors'`. It under-reported
+two payees who had crossed the $600 threshold — Janelle Sochet showed $700 against
+$900 actually paid, 19th & 7th showed $900 against $1,800 — because the rest of their
+money sat in 'Marketing' and 'Production'. The threshold is measured per payee per
+calendar year across all service payments; it does not care about our buckets.
+
+Deeper than the query bug: **the ledger does not hold the facts the answer depends
+on.** Entity type, goods-versus-services, whether a payment was a reimbursement — none
+of it is in an expense row. Inferring it from category is what produced the wrong
+numbers in the first place.
+
+So the decision is stored on the actor (`tax_1099_status`), set by a person, with
+'undecided' surfacing on a review list rather than being guessed. A list that says it
+is incomplete is worth more than a confident wrong one.
+
+Corollary found the same day: a payee that exists only as vendor text has nowhere to
+record a decision, so it would sit on the review list forever with no action available
+that could clear it. Those now read `'no vendor'` rather than `'undecided'` — a
+different problem needing a different fix should not share a label.
+
+---
+
+## Section 31 — A payment rail is not a counterparty (2026-08-19)
+
+Migration 158 seeded **Venmo** as an actor with a matching alias rule. Every Venmo
+payment therefore resolved to a single payee called Venmo, regardless of who received
+the money. It surfaced as a $650 false positive on the 1099 review list — two charges
+to two different people for two different things, aggregated because they shared an
+app.
+
+The false positive was the harmless direction. The dangerous one is the same mechanism
+running the other way: one person paid repeatedly through Venmo, their real total
+hidden inside a bucket named after the rail.
+
+**Vendor text from a bank statement describes how the money moved, not who received
+it.** `Venmo`, `Sq *`, `Ubr `, `In *` are all descriptors. Checked for the same pattern
+across PayPal, Zelle, Cash App, Square and Stripe — no other rail had an actor row.
+Check again before seeding vendor aliases in bulk.
+
+---
+
+## Section 32 — A model that requires a parent will meet something with no parent (2026-08-19)
+
+`event_photos.event_id` was NOT NULL, which was fine for as long as every photo came
+from a show. It failed on the first press shoot: Keith paid a photographer to
+photograph *him*, and there is no event those images belong to.
+
+The tempting fix — create an event called "Press shoot" — would have put a photo
+session in the events list, in the pipeline, and in the P&L next to real shows. The
+schema would have stayed clean while the *meaning* of "event" quietly rotted.
+
+A photo now hangs off a subject as well as, or instead of, an event, with a CHECK that
+it has at least one so nothing can be uploaded into nowhere.
+
+Shipped alongside it, and the more important half: **`is_public` defaulted to `true`.**
+Every upload went live on the public site the moment it finished. For a library you
+pick *from*, publishing is a decision, not the resting state. Default flipped to
+false — and existing rows deliberately left alone, because silently un-publishing live
+gallery images would have been a worse surprise than the default was.
+
+---
+
+## Section 33 — Blue Sky is a stage, not a new table (2026-08-19)
+
+Keith needed somewhere to put gigs he wants but does not have, that later either
+become real bookings or get dropped. The instinct is a new `prospects` table. The
+right answer was already in the schema: `events.stage` permits `'idea'`.
+
+Two numbers make it useful — `expected_revenue` and `confidence` (0-100) — and
+`v_pipeline` returns the product. Ten $1,000 gigs at 30% is $3,000 of forecast, not
+$10,000, which is the entire point of writing them down instead of hoping.
+
+Because it is the same row throughout, a Blue Sky event is **promoted** (stage →
+confirmed, book real income) or **dropped** (status → cancelled) without moving
+anything between tables. The row survives either way, so the hit rate becomes
+measurable rather than anecdotal. Nothing reaches the P&L: `v_pl_monthly` reads income
+and expenses, and a Blue Sky event has neither until it is real.
+
+Related gap closed at the same time: `v_event_money.missing_revenue` only looked
+backwards — past events carrying costs with no fee. An upcoming show with no money on
+it stayed invisible until it became a past show with no money on it, which is too late
+to do anything about. `v_pipeline.needs_revenue_estimate` is the forward-looking
+version. It currently returns all 8 upcoming events.

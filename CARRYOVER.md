@@ -1,3 +1,90 @@
+# Carryover — 2026-08-19 (FP&A close-out: 1099s, gear, photo library, Blue Sky · DESKTOP)
+
+**State summary**
+- **Migrations 165–176 applied and in repo, no drift.** Highest applied: `176_blue_sky_pipeline.sql`.
+- **All 5 financial views return anon 401** (re-verified this close), as do the four
+  views added this session — `v_contractor_1099`, `v_photo_credits`, `v_pipeline`, `v_capital`.
+- **Latest LEARNINGS: §33.** Six new sections this session (§28–§33).
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: everything committed and **pushed to master** (`1cbf466`), Netlify auto-deploying.
+- Ran on the **desktop**. No parked branches from this session.
+
+**Come With's numbers moved this session, materially.** Net loss $28,079.05 → **$31,334.20**;
+invested capital $31,630.11 → **$34,885.26**; equipment $10,651.77 → **$16,838.00**. All three
+were understated. Causes, in order of size: the Pioneer XDJ-AZ ($3,410.93, the largest stolen
+item) was missing from the ledger entirely because Simplifi coded it *Entertainment* on a
+Discover card; $2,031.08 of gear sat under Production/Operations/Supplies; three 2024 charges
+($744.22) were confirmed as business by Keith. Against that, a $900 duplicate came out.
+
+**This session shipped**
+
+*Financial / tax*
+- `v_contractor_1099` rebuilt **per payee, not per category** (166). The first version
+  under-reported Janelle Sochet ($700 vs $900) and 19th & 7th ($900 vs $1,800). Reportability
+  is now a stored decision on `actors.tax_1099_status`, never inferred. See LEARNINGS §30.
+- **Venmo was seeded as an actor by 158** — a payment rail masquerading as a payee, collapsing
+  unrelated recipients into one. Removed (167, 168); no other rail affected. LEARNINGS §31.
+- 19th & 7th was paid **once**, not twice — the 2026-02-04 import row duplicated the
+  hand-entered 2026-01-17 videographer fee. `external_ref` moved to the survivor first so a
+  re-import cannot resurrect it (169). Its descriptor reads "Inc.", which also settles its
+  1099 status: exempt.
+- Missing gear added and recategorised (169, 170, 173). Equipment now exceeds the $11,837.51
+  theft, which it could not before.
+- **One open 1099 item: Janelle Sochet, $900.** No W-9 on file.
+- Accountant memo (artifact) rebuilt on correct figures. An earlier draft mixed the Come With
+  and Dance Infusion ledgers in its per-year table; it does not now. All $7,329.56 of
+  non-deductible-flagged spend is Dance Infusion, none is Come With.
+
+*Dashboard*
+- **Bulk-edit selection bug that wrote to hidden rows** — fixed, and the more important item
+  of the session. LEARNINGS §28.
+- **Delete never ran**: `NL` was declared inside `plExportCsv()` but used by
+  `deleteExpenses()`, so both the row ✕ and bulk Delete threw a ReferenceError before
+  reaching `confirm()`. Silent failure, no console error surfaced to the user.
+- **Sticky headers + click-to-sort on every data table.** Sorting is one DOM-level
+  implementation rather than ~20 per-render ones. The sticky fix needed `.main` to become the
+  real scroll container, which broke 14 `window.scrollY`/`scrollTo` call sites — all rerouted.
+  LEARNINGS §29.
+- Shift-click ranges, Esc to clear, prominent "Deselect all N", "Changed in last 24h" filter.
+
+*Photos*
+- `event_photos.event_id` is now **nullable**, with `subject_actor_id` and a CHECK that a photo
+  has at least one home (175). `is_public` **flipped to false by default**; existing rows
+  untouched. LEARNINGS §32.
+- New **Photos tab**: filter by subject / photographer / no-credit, per-photo credit + publish
+  toggles, upload that asks who the photos are *of* and who *shot* them before any file moves.
+  Hash dedup now spans the whole library, not one event.
+- `photographer_actor_id` + `credit_line` + `v_photo_credits` (174), plus a portfolio modal
+  showing everything one photographer has shot with a copyable credit line.
+
+*Pipeline*
+- **Blue Sky** = `events.stage = 'idea'` plus `expected_revenue` and `confidence`; `v_pipeline`
+  returns the weighted number (176). LEARNINGS §33.
+- `v_pipeline.needs_revenue_estimate` is the forward-looking gap list —
+  **all 8 upcoming events currently have no revenue or estimate against them.**
+
+**Parked / next**
+- **Janelle's W-9** and confirmation that 19th & 7th is incorporated — both needed before
+  January 2027 filing.
+- **§83(b) elections**: Martin, Henry and Janelle can each earn 5% over two years; none has
+  vested. If grants have already been made the 30-day window is running and cannot be reopened.
+  Grant dates still unknown.
+- **Amanda Brundige has no surname issue but Angela/Zach/Amanda are guest records only** —
+  fine as is.
+- The 10 We Belong Here charges were bulk-set to Marketing / Networking at 19:44 on 2026-08-19
+  during the selection bug's window. They look right, but **Keith has not confirmed** that was
+  his intent rather than the accident. Use the "Changed in last 24h" filter to review.
+- The 8 upcoming events need expected revenue + confidence entering.
+- Photos: nothing has been uploaded to the new library yet.
+
+**Tomorrow's default:** put expected revenue + confidence on the 8 upcoming events so the
+forecast stops being budget-lines-only, then upload the Tori Mumtaz shoot into the Photos tab
+and credit it.
+
+*The previous close (2026-08-18, Gear Watch) begins immediately below and is unchanged.*
+
+---
+
 # Carryover — 2026-08-18 (Gear Watch: a scored resale scan for the stolen rig · DESKTOP)
 
 **Gear Watch is LIVE, deployed, pushed and alerting** (2026-08-19). Migrations 146, 147,
