@@ -77,6 +77,14 @@ Discover card; $2,031.08 of gear sat under Production/Operations/Supplies; three
 - The 8 upcoming events need expected revenue + confidence entering.
 - Photos: nothing has been uploaded to the new library yet.
 
+*Guides (added after the close)*
+- `photos-guide.html` — **The Photo Library**. Linked from the Photos tab toolbar and the
+  Event Hub → Photos section.
+- `revenue-guide.html` — **Blue Sky to Banked**. Linked from the Income tab toolbar and the
+  event edit modal's Pipeline section.
+- Both are root-level (subdirectories are not served) and follow the `dj-guide.html` house
+  style. Self-contained — no external fonts — so they render anywhere.
+
 **Tomorrow's default:** put expected revenue + confidence on the 8 upcoming events so the
 forecast stops being budget-lines-only, then upload the Tori Mumtaz shoot into the Photos tab
 and credit it.
