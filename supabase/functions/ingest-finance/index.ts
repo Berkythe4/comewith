@@ -36,6 +36,7 @@ type Row = {
   external_ref?: string; date?: string; amount?: number; kind?: string;
   category?: string; vendor?: string; description?: string;
   funded_by?: string; event_na?: boolean;
+  cash_source?: string; ledger?: string;
 };
 type BudgetLine = {
   period?: string; category?: string; planned_amount?: number;
@@ -132,10 +133,17 @@ Deno.serve(async (req) => {
       category: r.category ?? null,
       description: r.description ?? null,
     };
+    const CASH = ["paypal", "bank", "personal", "other"];
     if (table === "expenses") {
       rec.vendor = r.vendor ?? null;
       rec.funded_by = r.funded_by === "owner" ? "owner" : "business";
       rec.event_na = r.event_na !== false;
+      // Only the sender knows where the money physically moved; an unrecognised
+      // value becomes null rather than a guess, because this drives the cash float.
+      if (CASH.indexOf(r.cash_source ?? "") >= 0) rec.cash_source = r.cash_source;
+      if (r.ledger === "dance_infusion") rec.ledger = "dance_infusion";
+    } else if (CASH.indexOf(r.cash_source ?? "") >= 0) {
+      rec.cash_source = r.cash_source;
     }
 
     // 1. Already ours? Update in place.
@@ -160,6 +168,9 @@ Deno.serve(async (req) => {
       // event link are the site's own curation and are deliberately preserved.
       const claim: Record<string, unknown> = { external_ref: r.external_ref };
       if (table === "expenses") claim.funded_by = rec.funded_by;
+      // cash_source too: an adopted row is the same charge, and where the money
+      // moved is exactly what the site could not know on its own.
+      if (rec.cash_source) claim.cash_source = rec.cash_source;
       const { error } = await db.from(table).update(claim).eq("id", (orphan as any).id);
       error ? problems.push(error.message) : adopted++;
       continue;

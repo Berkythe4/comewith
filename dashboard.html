@@ -4024,11 +4024,19 @@ setPwForm.addEventListener('submit', async (e) => {
 // One loader per tab. Each returns {rows, error}.
 // renderRows is responsible for empty/error/loaded states.
 
+// mm/dd/yy everywhere (133 call sites read this one function).
+//
+// A date-only string is formatted by SLICING, never via a Date object: '2026-08-19'
+// parses as UTC midnight, and reading local getMonth/getDate east of Greenwich
+// hands back the 18th. Timestamps keep using UTC parts for the same reason.
 const fmtDate = (s) => {
   if (!s) return '';
+  const iso = String(s).match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return iso[2] + '/' + iso[3] + '/' + iso[1].slice(2);
   const d = new Date(s);
   if (isNaN(d)) return s;
-  return d.toISOString().slice(0, 10);
+  const p2 = (n) => String(n).padStart(2, '0');
+  return p2(d.getUTCMonth() + 1) + '/' + p2(d.getUTCDate()) + '/' + String(d.getUTCFullYear()).slice(2);
 };
 
 const fmtDateTime = (s) => {
@@ -11722,7 +11730,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // KPI cards are grouped into THREE labelled rows rather than one long strip,
 // because seven numbers in a line is a list, not a story: what came in and what
 // it cost, then whether events pay for themselves, then where the money stands.
-const plState = { from: '', to: '', open: {}, data: null };
+const plState = { from: '', to: '', open: {}, openMonth: {}, data: null, ledger: 'come_with', detail: 'month' };
 
 const PL_SECTIONS = [
   { key: 'revenue',  label: 'Revenue',        sign: 1 },
@@ -11747,7 +11755,7 @@ async function loadPL() {
     sb.from('v_pl_monthly_vs_budget').select('*'),
     sb.from('v_capital').select('*').maybeSingle(),
     sb.from('v_cash_position').select('*').maybeSingle(),
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at')
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, ledger, cash_source')
       .is('deleted_at', null).order('date', { ascending: false }).limit(2000),
   ]);
   const missing = [sumRes.error, plRes.error, cashRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
@@ -11770,10 +11778,12 @@ async function loadPL() {
 }
 
 function plInRange(period) { return period && period >= plState.from && period <= plState.to; }
+function plLedgerOf(r) { return r.ledger || 'come_with'; }
+function plKeep(r) { return plInRange(r.period) && plLedgerOf(r) === plState.ledger; }
 
 function renderPL() {
   const d = plState.data; if (!d) return;
-  const sum = d.sum.filter(r => plInRange(r.period));
+  const sum = d.sum.filter(plKeep);
   const months = [...new Set(d.sum.map(r => r.period))].filter(Boolean).sort();
   const nMonths = Math.max(1, sum.length);
 
@@ -11807,20 +11817,20 @@ function renderPL() {
     card('Cost per revenue $', rev ? '$' + ((dir + ind) / rev).toFixed(2) : '—', 'spent per $1 earned', (dir + ind) > rev ? 'neg' : 'pos'),
   ].join(''));
 
-  const unreviewed = plNum(cash.unreviewed_funding_rows);
+  const unreviewed = plNum(cash.unknown_source_rows);
   const line3 = band('Where the money stands', [
     card('Cash reserve', money(cash.cash_reserve),
-         money(cash.capital_in) + ' in + ' + money(cash.revenue_in) + ' earned − ' + money(cash.spent_by_business) + ' spent',
+         money(cash.capital_in) + ' float + ' + money(cash.revenue_in) + ' in − ' + money(cash.spent_from_float) + ' out',
          plNum(cash.cash_reserve) < 0 ? 'neg' : 'pos',
-         'Money the business itself can spend. Excludes anything Keith paid for personally, which never touched business cash.'),
+         'The $5,000 float. Moves only when money enters or leaves PayPal or the business bank - anything paid on the personal card is capital, not business cash.'),
     card('Invested', money(cap.invested_net), money(cap.contributed) + ' founding + ' + money(cap.personally_paid) + ' personal', 'accent',
          'Capital you have put in, less anything reimbursed to you'),
     card('Reimbursable', money(cap.outstanding_reimbursable), 'personally paid, not yet repaid', '',
          'You can reimburse these individually from the Expenses tab'),
     unreviewed
-      ? card('Funding unreviewed', String(unreviewed), money(cash.unreviewed_funding_amount) + ' — check who paid', 'warn',
-             'These rows defaulted to "paid by the business" and have never been reviewed. Until they are, cash reserve is an estimate.')
-      : card('Funding reviewed', 'all', 'every row has a payer', 'pos'),
+      ? card('Source unknown', String(unreviewed), money(cash.unknown_source_amount) + ' - where did it come from?', 'warn',
+             'These rows have no payment source, so they are not counted against the float. Set it in the Expenses tab to make cash reserve exact.')
+      : card('Source known', 'all', 'every row is attributed', 'pos'),
   ].join(''));
 
   const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
@@ -11829,6 +11839,12 @@ function renderPL() {
   $('plBody').innerHTML =
     line1 + line2 + line3 +
     '<div class="pl-bar">' +
+      '<span class="pl-bar-l">Books</span>' +
+      '<button class="hub-mini' + (plState.ledger === 'come_with' ? ' on' : '') + '" data-plledger="come_with"' +
+        (plState.ledger === 'come_with' ? ' style="background:#305496;color:#fff"' : '') + '>Come With</button>' +
+      '<button class="hub-mini' + (plState.ledger === 'dance_infusion' ? ' on' : '') + '" data-plledger="dance_infusion"' +
+        (plState.ledger === 'dance_infusion' ? ' style="background:#1f7a4d;color:#fff"' : '') + '>Dance Infusion</button>' +
+      '<span class="pl-bar-sep"></span>' +
       '<span class="pl-bar-l">Range</span>' +
       '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
       '<span class="muted">to</span>' +
@@ -11840,7 +11856,10 @@ function renderPL() {
       '<span class="pl-bar-sep"></span>' +
       '<button class="hub-mini" data-plcsv>Export CSV</button>' +
     '</div>' +
-    '<div id="plGrid"></div>';
+    '<div id="plGrid"></div>' +
+    (plState.ledger === 'dance_infusion'
+      ? '<p class="muted" style="margin-top:10px">Dance Infusion keeps its own bank account and donates its proceeds to the MS Society. None of this money touches Come With, and none of it counts toward the Come With float.</p>'
+      : '<p class="muted" style="margin-top:10px">Come With only. Dance Infusion is a separate set of books - switch above. Cash reserve moves only when money leaves PayPal or the business bank; anything you paid personally is capital, not business cash.</p>');
   renderPLGrid();
 }
 
@@ -11848,10 +11867,10 @@ function renderPL() {
 // computed between them so the statement reads down the page.
 function renderPLGrid() {
   const d = plState.data;
-  const rows = d.pl.filter(r => plInRange(r.period));
+  const rows = d.pl.filter(plKeep);
   const bv = d.bv.filter(r => plInRange(r.period));
   const months = [...new Set(rows.map(r => r.period))].filter(Boolean).sort();
-  const sum = d.sum.filter(r => plInRange(r.period));
+  const sum = d.sum.filter(plKeep);
   const byMonth = {}; sum.forEach(r => byMonth[r.period] = r);
 
   const val = {};   // section|category|period -> amount
@@ -11919,41 +11938,74 @@ function renderPLGrid() {
 // Expanded charges, GROUPED BY MONTH. Previously one flat list, so a category
 // spanning a year was an undifferentiated wall and you could not tell which
 // charge belonged to which column above it.
+// Expanded category detail. A wide date range made this a wall of charges with no
+// way to tell which month any of them belonged to, so months are now COLLAPSED by
+// default: one row per month with its total and count, expandable to the charges.
+// A payee roll-up is available too, since "who did I pay" is often the real
+// question rather than "what did I pay for".
 function plDetailRows(sec, category, months) {
   const d = plState.data;
+  const span = months.length + 2;
   if (sec.key === 'revenue') {
-    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + (months.length + 2) + '">' +
-      'Revenue detail lives on the event — open the event to see tickets, sponsors and donations.</td></tr>';
+    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + span + '">' +
+      'Revenue detail lives on the event - open the event to see tickets, sponsors and donations.</td></tr>';
   }
   const want = sec.key === 'direct';
   const list = d.exp.filter(x =>
     (x.category || 'Uncategorised') === category &&
     (!!x.event_id) === want &&
+    (x.ledger || 'come_with') === plState.ledger &&
     plInRange(String(x.date).slice(0, 7)));
   if (!list.length) {
-    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + (months.length + 2) + '">No charges in this range.</td></tr>';
+    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + span + '">No charges in this range.</td></tr>';
   }
+
+  const catKey = sec.key + '|' + category;
+  const mode = plState.detail;
+  const toggle = '<tr class="pl-detailbar"><td class="pl-lbl" colspan="' + span + '">' +
+    '<span class="muted">Show:</span> ' +
+    '<button class="hub-mini' + (mode === 'month' ? ' on' : '') + '" data-pldetail="month">by month</button> ' +
+    '<button class="hub-mini' + (mode === 'payee' ? ' on' : '') + '" data-pldetail="payee">by payee</button>' +
+    '</td></tr>';
+
+  if (mode === 'payee') {
+    const byPayee = {};
+    list.forEach(x => { const k = x.vendor || x.description || 'Unknown payee';
+      byPayee[k] = byPayee[k] || { amt: 0, n: 0 }; byPayee[k].amt += plNum(x.amount); byPayee[k].n++; });
+    return toggle + Object.keys(byPayee).sort((a, b) => byPayee[b].amt - byPayee[a].amt).map(k =>
+      '<tr class="pl-sub"><td class="pl-lbl">' + escapeHtml(k) +
+      ' <span class="muted">' + byPayee[k].n + '&times;</span></td>' +
+      '<td colspan="' + (months.length) + '"></td>' +
+      '<td class="num">' + money(byPayee[k].amt) + '</td></tr>').join('');
+  }
+
   const groups = {};
   list.forEach(x => { const m = String(x.date).slice(0, 7); (groups[m] = groups[m] || []).push(x); });
-  return Object.keys(groups).sort().reverse().map(m => {
+  return toggle + Object.keys(groups).sort().reverse().map(m => {
     const g = groups[m].sort((a, b) => String(b.date).localeCompare(String(a.date)));
     const gt = g.reduce((t, x) => t + plNum(x.amount), 0);
-    return '<tr class="pl-monthhead"><td class="pl-lbl" colspan="' + (months.length + 1) + '">' +
-        '<span class="pl-mh">' + m + '</span> <span class="muted">' + g.length + ' charge' + (g.length > 1 ? 's' : '') + '</span></td>' +
-        '<td class="num">' + money(gt) + '</td></tr>' +
-      g.map(x => '<tr class="pl-sub">' +
-        '<td class="pl-lbl">' +
-          '<span class="pl-sub-date">' + escapeHtml(fmtDate(x.date)) + '</span> ' +
-          escapeHtml(x.vendor || x.description || 'no vendor') + ' ' +
-          (x.funded_by === 'owner' ? '<span class="exp-tag own">personal</span> ' : '') +
-          (x.verified_at ? '<span class="exp-tag ok">✓</span> ' : '') +
-        '</td>' +
-        '<td colspan="' + (months.length - 1 > 0 ? months.length - 1 : 1) + '"></td>' +
-        '<td class="num">' + money(x.amount) + '</td>' +
-        '<td class="num pl-sub-act">' +
-          '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '" title="Mark checked">' + (x.verified_at ? '✓' : '○') + '</button>' +
-          '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '" title="Change category">edit</button>' +
-        '</td></tr>').join('');
+    const mk = catKey + '|' + m;
+    const open = !!plState.openMonth[mk];
+    const head = '<tr class="pl-monthhead' + (open ? ' open' : '') + '" data-plmonth="' + escapeHtml(mk) + '">' +
+      '<td class="pl-lbl"><span class="pl-caret">' + (open ? '▾' : '▸') + '</span> ' +
+      '<span class="pl-mh">' + m + '</span> <span class="muted">' + g.length + ' charge' + (g.length > 1 ? 's' : '') + '</span></td>' +
+      '<td colspan="' + months.length + '"></td>' +
+      '<td class="num">' + money(gt) + '</td></tr>';
+    if (!open) return head;
+    return head + g.map(x => '<tr class="pl-sub">' +
+      '<td class="pl-lbl pl-indent">' +
+        '<span class="pl-sub-date">' + escapeHtml(fmtDate(x.date)) + '</span> ' +
+        escapeHtml(x.vendor || x.description || 'no vendor') + ' ' +
+        (x.funded_by === 'owner' ? '<span class="exp-tag own">personal</span> ' : '') +
+        (x.cash_source === 'paypal' ? '<span class="exp-tag">paypal</span> ' : '') +
+        (x.verified_at ? '<span class="exp-tag ok">&check;</span> ' : '') +
+      '</td>' +
+      '<td colspan="' + (months.length - 1 > 0 ? months.length - 1 : 1) + '"></td>' +
+      '<td class="num">' + money(x.amount) + '</td>' +
+      '<td class="num pl-sub-act">' +
+        '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '" title="Mark checked">' + (x.verified_at ? '&check;' : '&#9675;') + '</button>' +
+        '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '" title="Change category">edit</button>' +
+      '</td></tr>').join('');
   }).join('');
 }
 
@@ -11991,6 +12043,12 @@ function plExportCsv() {
 }
 
 $('panel-pl').addEventListener('click', (e) => {
+  const lg = e.target.closest('[data-plledger]');
+  if (lg) { plState.ledger = lg.dataset.plledger; plState.open = {}; plState.openMonth = {}; renderPL(); return; }
+  const dm = e.target.closest('[data-pldetail]');
+  if (dm) { plState.detail = dm.dataset.pldetail; renderPLGrid(); return; }
+  const mh = e.target.closest('[data-plmonth]');
+  if (mh) { const k = mh.dataset.plmonth; plState.openMonth[k] = !plState.openMonth[k]; renderPLGrid(); return; }
   const cat = e.target.closest('[data-plcat]');
   if (cat) { const k = cat.dataset.plcat; plState.open[k] = !plState.open[k]; renderPLGrid(); return; }
   const vf = e.target.closest('[data-plverify]'); if (vf) { plSetVerified(vf.dataset.plverify); return; }
@@ -19563,6 +19621,13 @@ table.pl-table tr.pl-monthhead td{background:rgba(48,84,150,.06);font-size:11.5p
 .pl-mh{font-weight:700;letter-spacing:.02em}
 table.pl-table td.num.neg,table.pl-table td.num.neg b{color:#be3c3c}
 table.pl-table td.num.pos,table.pl-table td.num.pos b{color:#1f7a4d}
+
+/* ---- P&L detail: month rows collapse, payee roll-up (156/157) ---- */
+table.pl-table tr.pl-monthhead{cursor:pointer}
+table.pl-table tr.pl-monthhead:hover td{background:rgba(48,84,150,.11)}
+table.pl-table tr.pl-monthhead.open td{background:rgba(48,84,150,.09)}
+table.pl-table tr.pl-detailbar td{background:var(--bg,#fafafa);font-size:11px;padding:3px 8px}
+table.pl-table td.pl-indent{padding-left:26px}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
