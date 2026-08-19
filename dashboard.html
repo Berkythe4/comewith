@@ -10766,11 +10766,11 @@ $('panel-events').addEventListener('click', (e) => {
 // pick the event from the dropdown on each event-specific row (most stay unassigned
 // = business overhead / capital).
 // ============================================================
-const expDash = { rows: [], events: [], q: '', event: '' };
+const expDash = { rows: [], events: [], q: '', event: '', cat: '', flag: '', funded: '', sel: new Set() };
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
   const [ex, ev, ac] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
@@ -10780,6 +10780,17 @@ async function loadExpenses() {
   expDash.rows = ex.data || [];
   renderExpenses();
 }
+// Same date + same amount as another row. The 66-duplicate episode across the two
+// systems is exactly why this is surfaced rather than left to be noticed later.
+function expDupeKeys() {
+  if (expDash._dupe) return expDash._dupe;
+  const seen = {}, dupe = new Set();
+  expDash.rows.forEach(x => { const k = x.date + '|' + Number(x.amount).toFixed(2);
+    if (seen[k]) dupe.add(k); else seen[k] = 1; });
+  expDash._dupe = dupe; return dupe;
+}
+function expIsDupe(x) { return expDupeKeys().has(x.date + '|' + Number(x.amount).toFixed(2)); }
+
 function expFiltered() {
   const s = expDash, ql = s.q.toLowerCase();
   const matchEvent = (x) =>
@@ -10787,25 +10798,103 @@ function expFiltered() {
     s.event === '__none' ? (!x.event_id && !x.event_na) :   // truly unassigned — needs an event
     s.event === '__na' ? !!x.event_na :
     x.event_id === s.event;
-  return s.rows.filter(x => matchEvent(x) && (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
+  const matchFlag = (x) =>
+    s.flag === '' ? true :
+    s.flag === 'unverified' ? !x.verified_at :
+    s.flag === 'verified' ? !!x.verified_at :
+    s.flag === 'nocat' ? !x.category :
+    s.flag === 'noreceipt' ? (!x.receipt_path && Number(x.amount) >= 100) :
+    s.flag === 'dupe' ? expIsDupe(x) : true;
+  const matchFunded = (x) =>
+    s.funded === '' ? true :
+    s.funded === 'owner' ? x.funded_by === 'owner' :
+    s.funded === 'owner_open' ? (x.funded_by === 'owner' && !x.reimbursed_at) :
+    x.funded_by !== 'owner';
+  return s.rows.filter(x => matchEvent(x) && matchFlag(x) && matchFunded(x)
+    && (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
 }
 function renderExpenses() {
   const s = expDash;
   $('expensesBody').innerHTML = `
     <div id="expAgg"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
-      <input class="modal-input" data-expq placeholder="Search vendor / category / note…" style="max-width:240px;" value="${escapeHtml(s.q)}">
+      <input class="modal-input" data-expq placeholder="Search vendor / category / note…" style="max-width:230px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-expevfilter>
-        <option value="">All</option>
+        <option value="">Any event</option>
         <option value="__none"${s.event === '__none' ? ' selected' : ''}>⚠ Needs an event</option>
         <option value="__na"${s.event === '__na' ? ' selected' : ''}>N/A (overhead)</option>
         ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}
       </select>
+      <select class="hub-status-sel" data-expcatfilter>
+        <option value="">Any category</option>
+        ${expCategories().map(c => `<option value="${escapeHtml(c)}"${s.cat === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}
+      </select>
+      <select class="hub-status-sel" data-expfundedfilter>
+        <option value="">Any funding</option>
+        <option value="owner"${s.funded === 'owner' ? ' selected' : ''}>Paid personally</option>
+        <option value="owner_open"${s.funded === 'owner_open' ? ' selected' : ''}>Personally paid, not reimbursed</option>
+        <option value="business"${s.funded === 'business' ? ' selected' : ''}>Paid by the business</option>
+      </select>
       <button class="hub-mini" data-expclear>clear</button>
     </div>
+    <div class="exp-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 12px;">
+      ${expChips().map(c => `<button class="hub-mini${s.flag === c.k ? ' on' : ''}" data-expflag="${c.k}"
+         style="${s.flag === c.k ? 'background:var(--accent,#305496);color:#fff;' : ''}">${c.label} ${c.n}</button>`).join('')}
+    </div>
+    <div id="expBulk"></div>
     <div id="expTable"></div>`;
   renderExpensesBody();
 }
+// Distinct categories actually in use, so the filter can never offer a category
+// that matches nothing.
+function expCategories() {
+  return [...new Set(expDash.rows.map(r => r.category).filter(Boolean))].sort();
+}
+// The four things that make a P&L wrong, each as a one-click filter with its own
+// count. Counts are over ALL rows, not the current filter, so they read as a
+// to-do list rather than shifting under you.
+function expChips() {
+  const r = expDash.rows;
+  return [
+    { k: '', label: 'All', n: r.length },
+    { k: 'unverified', label: 'Unverified', n: r.filter(x => !x.verified_at).length },
+    { k: 'nocat', label: 'No category', n: r.filter(x => !x.category).length },
+    { k: 'noreceipt', label: 'No receipt ≥$100', n: r.filter(x => !x.receipt_path && Number(x.amount) >= 100).length },
+    { k: 'dupe', label: 'Possible duplicate', n: r.filter(expIsDupe).length },
+  ];
+}
+
+
+// Bulk bar. Appears only when something is selected, and every action names the
+// count it will affect — a mass update you can't see the blast radius of is how
+// 200 rows get the wrong category at once.
+function renderExpBulk() {
+  const s = expDash, el = $('expBulk'); if (!el) return;
+  const ids = [...s.sel];
+  if (!ids.length) { el.innerHTML = ''; return; }
+  const sum = s.rows.filter(r => s.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
+  el.innerHTML = `<div class="exp-bulk">
+    <b>${ids.length} selected</b> <span class="muted">${money(sum)}</span>
+    <span class="exp-bulk-sep"></span>
+    <select class="hub-status-sel" data-bulkcat><option value="">Set category…</option>
+      ${expCategories().map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('')}
+      <option value="__new">+ new category…</option></select>
+    <select class="hub-status-sel" data-bulkev><option value="">Set event…</option>
+      <option value="__na">N/A (overhead)</option>
+      ${s.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)}</option>`).join('')}</select>
+    <select class="hub-status-sel" data-bulkva><option value="">Set vendor actor…</option>
+      ${s.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select>
+    <select class="hub-status-sel" data-bulkfunded><option value="">Set funding…</option>
+      <option value="owner">Paid personally</option><option value="business">Paid by the business</option></select>
+    <span class="exp-bulk-sep"></span>
+    <button class="hub-mini" data-bulkverify="1">✓ Verify</button>
+    <button class="hub-mini" data-bulkverify="0">○ Un-verify</button>
+    <button class="hub-mini" data-bulkreimburse>Mark reimbursed</button>
+    <button class="hub-mini danger" data-bulkdel>Delete ${ids.length}</button>
+    <button class="hub-mini" data-bulkclear>clear</button>
+  </div>`;
+}
+
 function renderExpensesBody() {
   const s = expDash, list = expFiltered();
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
@@ -10826,17 +10915,35 @@ function renderExpensesBody() {
     ${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>`;
   const vaSel = (x) => `<select class="hub-status-sel" data-expva="${escapeHtml(x.id)}"><option value="">— link —</option>${s.actors.map(a => `<option value="${escapeHtml(a.id)}"${x.vendor_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
   const receipt = (x) => x.receipt_path ? `<button class="hub-mini" data-exprcpt="${escapeHtml(x.id)}">📎 view</button>` : `<button class="hub-mini" data-exprcptup="${escapeHtml(x.id)}">upload</button>`;
-  const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}>
+  const allShown = list.length > 0 && list.every(x => s.sel.has(x.id));
+  const flags = (x) => {
+    const f = [];
+    if (x.funded_by === 'owner') f.push(x.reimbursed_at
+      ? '<span class="exp-tag" title="You paid this, and have been reimbursed">repaid</span>'
+      : '<span class="exp-tag own" title="You paid this personally — counts as invested capital">personal</span>');
+    if (expIsDupe(x)) f.push('<span class="exp-tag dupe" title="Another charge shares this date and amount">dupe?</span>');
+    if (x.deductible === false) f.push('<span class="exp-tag" title="Marked non-deductible">non-ded</span>');
+    return f.join(' ');
+  };
+  const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}${s.sel.has(x.id) ? ' class="exp-selected"' : ''}>
+    <td class="exp-check"><input type="checkbox" data-expsel="${escapeHtml(x.id)}"${s.sel.has(x.id) ? ' checked' : ''}></td>
+    <td class="exp-check"><button class="hub-mini exp-verify${x.verified_at ? ' done' : ''}" data-expverify="${escapeHtml(x.id)}"
+      title="${x.verified_at ? 'Verified ' + fmtDate(x.verified_at) + ' — click to un-verify' : 'Mark this row checked'}">${x.verified_at ? '✓' : '○'}</button></td>
     <td>${escapeHtml(fmtDate(x.date))}</td>
     ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'vendor')}
     <td>${vaSel(x)}</td>
     ${ed(x, 'description')}
     <td>${evSel(x)}</td>
     <td>${receipt(x)}</td>
-  </tr>`).join('') || `<tr><td colspan="8" class="muted" style="padding:14px;">No expenses match.</td></tr>`;
+    <td class="exp-flags">${flags(x)}</td>
+    <td class="exp-check"><button class="hub-mini exp-del" data-expdel="${escapeHtml(x.id)}" title="Delete this expense">✕</button></td>
+  </tr>`).join('') || `<tr><td colspan="11" class="muted" style="padding:14px;">No expenses match these filters.</td></tr>`;
   $('expTable').innerHTML = `<table class="data-table"><thead><tr>
-    <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Vendor actor</th><th>Description</th><th>Event</th><th>Receipt</th>
+    <th class="exp-check"><input type="checkbox" data-expselall${allShown ? ' checked' : ''} title="Select everything matching the current filters"></th>
+    <th class="exp-check" title="Verified">✓</th>
+    <th>Date</th><th class="num">Amount</th><th>Category</th><th>Vendor</th><th>Vendor actor</th><th>Description</th><th>Event</th><th>Receipt</th><th></th><th></th>
   </tr></thead><tbody>${rows}</tbody></table>`;
+  renderExpBulk();
 }
 async function saveExpenseField(td) {
   const id = td.dataset.id, field = td.dataset.expedit;
@@ -10892,13 +10999,111 @@ async function setExpenseEvent(id, val) {
 $('panel-expenses').addEventListener('input', (e) => { const q = e.target.closest('[data-expq]'); if (q) { expDash.q = q.value; renderExpensesBody(); } });
 $('panel-expenses').addEventListener('change', (e) => {
   const ef = e.target.closest('[data-expevfilter]'); if (ef) { expDash.event = ef.value; renderExpensesBody(); return; }
+  const cf = e.target.closest('[data-expcatfilter]'); if (cf) { expDash.cat = cf.value; renderExpensesBody(); return; }
+  const ff = e.target.closest('[data-expfundedfilter]'); if (ff) { expDash.funded = ff.value; renderExpensesBody(); return; }
   const ev = e.target.closest('[data-expev]'); if (ev) { setExpenseEvent(ev.dataset.expev, ev.value); return; }
   const va = e.target.closest('[data-expva]'); if (va) { setExpenseVendorActor(va.dataset.expva, va.value); return; }
+  const sel = e.target.closest('[data-expsel]'); if (sel) {
+    sel.checked ? expDash.sel.add(sel.dataset.expsel) : expDash.sel.delete(sel.dataset.expsel);
+    renderExpensesBody(); return;
+  }
+  if (e.target.closest('[data-expselall]')) {
+    const shown = expFiltered();
+    const all = shown.every(x => expDash.sel.has(x.id));
+    shown.forEach(x => all ? expDash.sel.delete(x.id) : expDash.sel.add(x.id));
+    renderExpensesBody(); return;
+  }
+  const bc = e.target.closest('[data-bulkcat]'); if (bc && bc.value) {
+    let v = bc.value;
+    if (v === '__new') { v = (prompt('New category name:') || '').trim(); if (!v) { bc.value = ''; return; } }
+    bulkExpense({ category: v }, 'category to "' + v + '"'); bc.value = ''; return;
+  }
+  const be = e.target.closest('[data-bulkev]'); if (be && be.value) {
+    const v = be.value;
+    const patch = v === '__na' ? { event_id: null, event_na: true } : { event_id: v, event_na: false };
+    const label = v === '__na' ? 'to overhead (N/A)' : 'to ' + ((expDash.events.find(x => x.id === v) || {}).name || 'event');
+    bulkExpense(patch, label); be.value = ''; return;
+  }
+  const bv = e.target.closest('[data-bulkva]'); if (bv && bv.value) {
+    const name = (expDash.actors.find(a => a.id === bv.value) || {}).display_name || 'actor';
+    bulkExpense({ vendor_actor_id: bv.value }, 'vendor actor to ' + name); bv.value = ''; return;
+  }
+  const bf = e.target.closest('[data-bulkfunded]'); if (bf && bf.value) {
+    bulkExpense({ funded_by: bf.value }, 'funding to ' + (bf.value === 'owner' ? 'paid personally' : 'paid by the business'));
+    bf.value = ''; return;
+  }
 });
+
+// One write for the whole selection, then one re-render. Always confirms with the
+// count and what is changing - a mass update whose blast radius you cannot see is
+// how 200 rows quietly get the wrong category.
+async function bulkExpense(patch, label) {
+  const ids = [...expDash.sel];
+  if (!ids.length) return;
+  if (!confirm('Change ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' - set ' + label + '?')) return;
+  const { error } = await sb.from('expenses').update(patch).in('id', ids);
+  if (error) { toast('Bulk update failed: ' + error.message, 'err'); return; }
+  expDash.rows.forEach(r => { if (expDash.sel.has(r.id)) Object.assign(r, patch); });
+  expDash._dupe = null;
+  toast('Updated ' + ids.length + ' expense' + (ids.length > 1 ? 's' : ''), 'ok');
+  renderExpensesBody();
+}
+
+async function setExpenseVerified(ids, on) {
+  if (!ids.length) return;
+  const patch = { verified_at: on ? new Date().toISOString() : null };
+  const { error } = await sb.from('expenses').update(patch).in('id', ids);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  expDash.rows.forEach(r => { if (ids.indexOf(r.id) >= 0) r.verified_at = patch.verified_at; });
+  renderExpensesBody();
+}
+
+// Soft delete - deleted_at, never a hard row removal. Every view in this database
+// already filters on deleted_at is null, so the row vanishes from the P&L while
+// staying recoverable.
+async function deleteExpenses(ids) {
+  if (!ids.length) return;
+  const rows = expDash.rows.filter(r => ids.indexOf(r.id) >= 0);
+  const sum = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
+  const head = ids.length === 1
+    ? 'Delete this expense?' + NL + NL + fmtDate(rows[0].date) + '  ' + money(rows[0].amount) + '  ' + (rows[0].vendor || rows[0].category || 'no vendor')
+    : 'Delete ' + ids.length + ' expenses totalling ' + money(sum) + '?';
+  if (!confirm(head + NL + NL + 'Soft delete: the rows stay in the database with deleted_at set, so this can be undone.')) return;
+  const { error } = await sb.from('expenses').update({ deleted_at: new Date().toISOString() }).in('id', ids);
+  if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+  expDash.rows = expDash.rows.filter(r => ids.indexOf(r.id) < 0);
+  ids.forEach(i => expDash.sel.delete(i));
+  expDash._dupe = null;
+  toast('Deleted ' + ids.length + ' expense' + (ids.length > 1 ? 's' : ''), 'ok');
+  renderExpenses();
+}
 $('panel-expenses').addEventListener('focusout', (e) => { const td = e.target.closest('[data-expedit]'); if (td) saveExpenseField(td); });
 $('panel-expenses').addEventListener('keydown', (e) => { const td = e.target.closest('[data-expedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
 $('panel-expenses').addEventListener('click', (e) => {
-  if (e.target.closest('[data-expclear]')) { expDash.q = ''; expDash.event = ''; renderExpenses(); return; }
+  if (e.target.closest('[data-expclear]')) {
+    Object.assign(expDash, { q: '', event: '', cat: '', flag: '', funded: '' }); renderExpenses(); return;
+  }
+  const fl = e.target.closest('[data-expflag]'); if (fl) { expDash.flag = fl.dataset.expflag; renderExpenses(); return; }
+  const vf = e.target.closest('[data-expverify]'); if (vf) {
+    const row = expDash.rows.find(r => r.id === vf.dataset.expverify);
+    setExpenseVerified([vf.dataset.expverify], !(row && row.verified_at)); return;
+  }
+  const dl = e.target.closest('[data-expdel]'); if (dl) { deleteExpenses([dl.dataset.expdel]); return; }
+  if (e.target.closest('[data-bulkdel]')) { deleteExpenses([...expDash.sel]); return; }
+  const bvf = e.target.closest('[data-bulkverify]'); if (bvf) { setExpenseVerified([...expDash.sel], bvf.dataset.bulkverify === '1'); return; }
+  if (e.target.closest('[data-bulkreimburse]')) {
+    const ids = [...expDash.sel].filter(i => (expDash.rows.find(r => r.id === i) || {}).funded_by === 'owner');
+    if (!ids.length) { toast('None of the selected rows were paid personally', 'err'); return; }
+    if (!confirm('Mark ' + ids.length + ' personally-paid charge' + (ids.length > 1 ? 's' : '') + ' as reimbursed to you?')) return;
+    const now = new Date().toISOString();
+    sb.from('expenses').update({ reimbursed_at: now }).in('id', ids).then(function (res) {
+      if (res.error) { toast('Failed: ' + res.error.message, 'err'); return; }
+      expDash.rows.forEach(r => { if (ids.indexOf(r.id) >= 0) r.reimbursed_at = now; });
+      toast(ids.length + ' marked reimbursed', 'ok'); renderExpensesBody();
+    });
+    return;
+  }
+  if (e.target.closest('[data-bulkclear]')) { expDash.sel.clear(); renderExpensesBody(); return; }
   const rc = e.target.closest('[data-exprcpt]'); if (rc) { viewReceipt(rc.dataset.exprcpt); return; }
   const ru = e.target.closest('[data-exprcptup]'); if (ru) { uploadReceipt(ru.dataset.exprcptup); return; }
 });
@@ -11504,105 +11709,248 @@ $('panel-site-review').addEventListener('change', (e) => {
 });
 
 // ================= P&L — month by month, actual vs budget ======================
-// MASTER ONLY (module_registry.master_only, migration 149). Reads v_pl_monthly
-// and v_pl_monthly_vs_budget, which roll up `expenses` + `income` by month —
-// including the 112 overhead rows (event_na) that no event-scoped view has ever
-// shown.
+// MASTER ONLY (module_registry.master_only, migration 149). Modelled on the
+// planner's finance grid, because that is the shape Keith already reads fluently:
+// a compact KPI strip, then collapsible category buckets, then the individual
+// charges behind any figure — editable in place.
 //
-// Two things this deliberately surfaces that the event views cannot:
-//   - OVERHEAD vs EVENT cost, side by side. Most Come With spend is overhead.
-//   - OWNER-FUNDED spend: what Keith carried on his personal card. That is a
-//     capital contribution the business owes him back, not business cash going
-//     out, and it is the number the planner reconciles against.
-let plState = { months: 12 };
+// Deliberate choices:
+//   - Headers are KPI CARDS in one line, not stacked panels. The old layout spent
+//     a third of the screen before the first number.
+//   - RUNWAY sits in that strip. Cash position is the question the P&L is being
+//     opened to answer; it should not require arithmetic.
+//   - "Paid personally" is INVESTED CAPITAL, not a debt. The founding $5,000 is
+//     part of it (capital_contributions), and each charge can be reimbursed
+//     individually rather than the whole balance being owed.
+const plState = { from: '', to: '', open: {}, mode: 'bva', drill: null, data: null };
+
+function plMonthsBack(n) {
+  const d = new Date(); const out = [];
+  for (let i = n - 1; i >= 0; i--) { const x = new Date(d.getFullYear(), d.getMonth() - i, 1);
+    out.push(x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0')); }
+  return out;
+}
 
 async function loadPL() {
   $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
-  const [plRes, bvRes, ofRes] = await Promise.all([
+  const [plRes, bvRes, capRes, expRes] = await Promise.all([
     sb.from('v_pl_monthly').select('*'),
     sb.from('v_pl_monthly_vs_budget').select('*'),
-    sb.from('v_owner_funded').select('*'),
+    sb.from('v_capital').select('*').maybeSingle(),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, receipt_path')
+      .is('deleted_at', null).order('date', { ascending: false }).limit(2000),
   ]);
-
-  // The views only exist once 147 is applied. Say so, rather than rendering an
-  // empty P&L that reads like "the business spent nothing".
-  const missing = [plRes.error, bvRes.error, ofRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
+  const missing = [plRes.error, bvRes.error, capRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
   if (missing) {
-    $('plBody').innerHTML = `<div class="panel-state info">The P&L isn't installed yet — apply <code>supabase/migrations/149_fpa_pl.sql</code> to prod, then reload. Nothing else is needed; it reads the expenses and income already here.</div>`;
+    $('plBody').innerHTML = '<div class="panel-state info">The P&L is not installed yet - apply <code>supabase/migrations/149_fpa_pl.sql</code> and <code>151_capital_and_expense_ops.sql</code> to prod, then reload.</div>';
     return;
   }
-  const err = [plRes.error, bvRes.error, ofRes.error].find(Boolean);
-  if (err) { $('plBody').innerHTML = `<div class="panel-state err">Couldn't load the P&L: ${escapeHtml(err.message)}</div>`; return; }
+  const err = [plRes.error, bvRes.error, expRes.error].find(Boolean);
+  if (err) { $('plBody').innerHTML = '<div class="panel-state err">Could not load the P&L: ' + escapeHtml(err.message) + '</div>'; return; }
 
-  const pl = plRes.data || [], bv = bvRes.data || [], owner = ofRes.data || [];
-  if (!pl.length) { $('plBody').innerHTML = '<div class="panel-state">No income or expenses recorded yet.</div>'; return; }
-
-  const periods = [...new Set(pl.map(r => r.period))].sort().reverse().slice(0, plState.months).reverse();
-  const ownerBy = Object.fromEntries(owner.map(o => [o.period, Number(o.owner_funded) || 0]));
-  const sum = (rows, f) => rows.reduce((a, r) => a + (Number(f(r)) || 0), 0);
-
-  const byPeriod = periods.map(p => {
-    const rows = pl.filter(r => r.period === p);
-    const bud = bv.filter(r => r.period === p);
-    const cost = sum(rows, r => r.cost), rev = sum(rows, r => r.revenue);
-    return {
-      period: p, cost, rev, net: rev - cost,
-      overhead: sum(rows.filter(r => r.bucket === 'overhead'), r => r.cost),
-      event: sum(rows.filter(r => r.bucket === 'event'), r => r.cost),
-      ownerFunded: ownerBy[p] || 0,
-      plannedCost: sum(bud, r => r.planned_cost),
-      plannedRev: sum(bud, r => r.planned_revenue),
-    };
-  });
-
-  const T = {
-    cost: sum(byPeriod, r => r.cost), rev: sum(byPeriod, r => r.rev),
-    owner: sum(byPeriod, r => r.ownerFunded), planned: sum(byPeriod, r => r.plannedCost),
-  };
-  const varc = T.cost - T.planned;
-
-  const card = (label, val, sub, cls) =>
-    `<div class="kpi-card"><div class="kpi-label">${label}</div>
-     <div class="kpi-value ${cls || ''}">${money(val)}</div>
-     <div class="kpi-sub">${sub || ''}</div></div>`;
-
-  const rowHtml = r => {
-    const v = r.cost - r.plannedCost;
-    return `<tr>
-      <td>${r.period}</td>
-      <td class="num">${money(r.rev)}</td>
-      <td class="num">${money(r.cost)}</td>
-      <td class="num" style="color:${r.net < 0 ? 'var(--red,#a33)' : 'var(--green,#1f7a1f)'}">${money(r.net)}</td>
-      <td class="num">${money(r.overhead)}</td>
-      <td class="num">${money(r.event)}</td>
-      <td class="num" title="carried on Keith's personal card — owed back">${r.ownerFunded ? money(r.ownerFunded) : muted}</td>
-      <td class="num">${r.plannedCost ? money(r.plannedCost) : muted}</td>
-      <td class="num" style="color:${v > 0 ? 'var(--red,#a33)' : 'var(--mid,#888)'}">${r.plannedCost ? money(v) : muted}</td>
-    </tr>`;
-  };
-
-  $('plBody').innerHTML = `
-    <div class="kpi-row">
-      ${card('Revenue', T.rev, periods.length + ' months')}
-      ${card('Cost', T.cost, 'overhead + event')}
-      ${card('Net', T.rev - T.cost, 'revenue less cost', (T.rev - T.cost) < 0 ? 'neg' : 'pos')}
-      ${card('Owner funded', T.owner, 'Keith paid personally — owed back')}
-      ${card('Vs budget', varc, T.planned ? 'budgeted ' + money(T.planned) : 'no budget set', varc > 0 ? 'neg' : 'pos')}
-    </div>
-    <table class="data-table">
-      <thead><tr>
-        <th>Month</th><th class="num">Revenue</th><th class="num">Cost</th><th class="num">Net</th>
-        <th class="num">Overhead</th><th class="num">Event</th><th class="num">Owner funded</th>
-        <th class="num">Budget</th><th class="num">Variance</th>
-      </tr></thead>
-      <tbody>${byPeriod.slice().reverse().map(rowHtml).join('')}</tbody>
-    </table>
-    <p class="muted" style="margin-top:10px">
-      Overhead is spend marked <em>not applicable to an event</em>. Owner-funded is
-      what Keith carried personally — a capital contribution, not business cash.
-      Budget rows come from period-scoped <code>budget_lines</code>.
-    </p>`;
+  plState.data = { pl: plRes.data || [], bv: bvRes.data || [], cap: capRes.data || {}, exp: expRes.data || [] };
+  if (!plState.from) {
+    const months = [...new Set(plState.data.pl.map(r => r.period))].sort();
+    const recent = plMonthsBack(12);
+    plState.from = months.length ? (months.find(m => m >= recent[0]) || months[0]) : recent[0];
+    plState.to = months.length ? months[months.length - 1] : recent[recent.length - 1];
+  }
+  renderPL();
 }
+
+function plInRange(period) { return period >= plState.from && period <= plState.to; }
+
+function renderPL() {
+  const d = plState.data; if (!d) return;
+  const rows = d.pl.filter(r => plInRange(r.period));
+  const bv = d.bv.filter(r => plInRange(r.period));
+  const months = [...new Set(d.pl.map(r => r.period))].sort();
+  const num = (v) => Number(v) || 0;
+
+  const cost = rows.reduce((t, r) => t + num(r.cost), 0);
+  const rev = rows.reduce((t, r) => t + num(r.revenue), 0);
+  const overhead = rows.filter(r => r.bucket === 'overhead').reduce((t, r) => t + num(r.cost), 0);
+  const evCost = cost - overhead;
+  const plannedCost = bv.reduce((t, r) => t + num(r.planned_cost), 0);
+  const plannedRev = bv.reduce((t, r) => t + num(r.planned_revenue), 0);
+  const cap = d.cap || {};
+  const nMonths = Math.max(1, new Set(rows.map(r => r.period)).size);
+  const burn = cost / nMonths;
+  // Runway: capital still in the business, against the recent monthly burn. Stated
+  // as a horizon, not a date, because burn this variable does not deserve a date.
+  const cashIn = num(cap.invested_net);
+  const runway = burn > 0 ? cashIn / burn : null;
+
+  const card = (label, val, sub, cls, title) =>
+    '<div class="pl-kpi' + (cls ? ' ' + cls : '') + '"' + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
+    '<div class="pl-kpi-l">' + label + '</div><div class="pl-kpi-v">' + val + '</div>' +
+    '<div class="pl-kpi-s">' + (sub || '') + '</div></div>';
+
+  const varc = cost - plannedCost;
+  const kpis = [
+    card('Net', money(rev - cost), money(rev) + ' in · ' + money(cost) + ' out', (rev - cost) < 0 ? 'neg' : 'pos'),
+    card('Cost', money(cost), nMonths + ' mo · ' + money(burn) + '/mo'),
+    card('Overhead', money(overhead), pct(overhead, cost) + ' of spend', '', 'Spend not tied to any single event'),
+    card('Event cost', money(evCost), pct(evCost, cost) + ' of spend'),
+    card('Vs budget', plannedCost ? money(varc) : '—', plannedCost ? 'budget ' + money(plannedCost) : 'no budget set', varc > 0 ? 'neg' : 'pos'),
+    card('Invested', money(cap.invested_net), money(cap.contributed) + ' founding + ' + money(cap.personally_paid) + ' personal', 'accent',
+         'Capital you have put in: the founding contribution plus everything you paid for personally, less anything reimbursed'),
+    card('Runway', runway == null ? '—' : (runway >= 24 ? '24+ mo' : runway.toFixed(1) + ' mo'),
+         'at ' + money(burn) + '/mo', runway != null && runway < 6 ? 'neg' : '',
+         'Invested capital divided by the average monthly burn over the selected range'),
+  ].join('');
+
+  const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
+  const preset = (label, n) => '<button class="hub-mini" data-plrange="' + n + '">' + label + '</button>';
+
+  $('plBody').innerHTML =
+    '<div class="pl-kpis">' + kpis + '</div>' +
+    '<div class="pl-bar">' +
+      '<span class="pl-bar-l">Range</span>' +
+      '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
+      '<span class="muted">to</span>' +
+      '<select class="hub-status-sel" data-plto>' + monthOpt(plState.to) + '</select>' +
+      preset('3m', 3) + preset('6m', 6) + preset('12m', 12) + preset('All', 0) +
+      '<span class="pl-bar-sep"></span>' +
+      '<button class="hub-mini" data-plexpand>Expand all</button>' +
+      '<button class="hub-mini" data-plcollapse>Collapse all</button>' +
+      '<span class="pl-bar-sep"></span>' +
+      '<button class="hub-mini" data-plcsv>Export CSV</button>' +
+    '</div>' +
+    '<div id="plGrid"></div>' +
+    '<p class="muted" style="margin-top:10px">Click any category to open its charges. Click a figure to edit it. ' +
+    'Overhead is spend not tied to an event; <b>personal</b> marks what you paid for yourself, which counts as invested capital.</p>';
+  renderPLGrid();
+}
+
+function pct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '0%'; }
+
+// The grid: one collapsible row per category, months across. Budget vs actual by
+// default, because a number with nothing to compare it to is just trivia.
+function renderPLGrid() {
+  const d = plState.data;
+  const rows = d.pl.filter(r => plInRange(r.period));
+  const bv = d.bv.filter(r => plInRange(r.period));
+  const months = [...new Set(rows.map(r => r.period))].sort();
+  const cats = [...new Set(rows.map(r => r.category))].sort();
+  const num = (v) => Number(v) || 0;
+
+  const actual = {}, planned = {};
+  rows.forEach(r => { actual[r.category + '|' + r.period] = (actual[r.category + '|' + r.period] || 0) + num(r.cost) - num(r.revenue); });
+  bv.forEach(r => { planned[r.category + '|' + r.period] = (planned[r.category + '|' + r.period] || 0) + num(r.planned_cost) - num(r.planned_revenue); });
+
+  const catTotal = (c) => months.reduce((t, m) => t + (actual[c + '|' + m] || 0), 0);
+  const ordered = cats.sort((a, b) => catTotal(b) - catTotal(a));
+
+  const head = '<tr><th>Category</th>' + months.map(m => '<th class="num">' + m.slice(2) + '</th>').join('') +
+               '<th class="num">Total</th><th class="num">Budget</th><th class="num">Var</th></tr>';
+
+  const body = ordered.map(c => {
+    const open = !!plState.open[c];
+    const tot = catTotal(c);
+    const bud = months.reduce((t, m) => t + (planned[c + '|' + m] || 0), 0);
+    const v = tot - bud;
+    const cells = months.map(m => {
+      const a = actual[c + '|' + m] || 0;
+      return '<td class="num' + (a ? ' pl-click' : '') + '"' + (a ? ' data-pldrill="' + escapeHtml(c) + '|' + m + '"' : '') + '>' +
+             (a ? money(a) : '<span class="muted">–</span>') + '</td>';
+    }).join('');
+    const main = '<tr class="pl-cat' + (open ? ' open' : '') + '" data-plcat="' + escapeHtml(c) + '">' +
+      '<td><span class="pl-caret">' + (open ? '▾' : '▸') + '</span> ' + escapeHtml(c) + '</td>' + cells +
+      '<td class="num"><b>' + money(tot) + '</b></td>' +
+      '<td class="num">' + (bud ? money(bud) : '<span class="muted">–</span>') + '</td>' +
+      '<td class="num ' + (v > 0 ? 'neg' : 'pos') + '">' + (bud ? money(v) : '<span class="muted">–</span>') + '</td></tr>';
+    if (!open) return main;
+    const detail = d.exp.filter(x => (x.category || '(none)') === c && plInRange(String(x.date).slice(0, 7)))
+      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const sub = detail.length ? detail.map(x =>
+      '<tr class="pl-sub" data-plrow="' + escapeHtml(x.id) + '">' +
+      '<td colspan="' + (months.length + 1) + '">' +
+        '<span class="pl-sub-date">' + escapeHtml(fmtDate(x.date)) + '</span> ' +
+        '<span class="pl-sub-vendor">' + escapeHtml(x.vendor || x.description || 'no vendor') + '</span> ' +
+        (x.funded_by === 'owner' ? '<span class="exp-tag own">personal</span> ' : '') +
+        (x.verified_at ? '<span class="exp-tag ok">✓</span> ' : '') +
+      '</td>' +
+      '<td class="num">' + money(x.amount) + '</td>' +
+      '<td colspan="2" class="pl-sub-act">' +
+        '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '">' + (x.verified_at ? '✓' : '○') + '</button>' +
+        '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '">recategorise</button>' +
+      '</td></tr>').join('')
+      : '<tr class="pl-sub"><td colspan="' + (months.length + 4) + '" class="muted">No charges in this range.</td></tr>';
+    return main + sub;
+  }).join('');
+
+  const totRow = '<tr class="pl-total"><td><b>Total</b></td>' +
+    months.map(m => { const t = cats.reduce((a, c) => a + (actual[c + '|' + m] || 0), 0);
+      return '<td class="num"><b>' + money(t) + '</b></td>'; }).join('') +
+    '<td class="num"><b>' + money(cats.reduce((a, c) => a + catTotal(c), 0)) + '</b></td><td></td><td></td></tr>';
+
+  $('plGrid').innerHTML = '<div class="pl-scroll"><table class="data-table pl-table"><thead>' + head +
+    '</thead><tbody>' + body + totRow + '</tbody></table></div>';
+}
+
+async function plSetVerified(id) {
+  const row = plState.data.exp.find(x => x.id === id); if (!row) return;
+  const val = row.verified_at ? null : new Date().toISOString();
+  const { error } = await sb.from('expenses').update({ verified_at: val }).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  row.verified_at = val; renderPLGrid();
+}
+
+async function plRecategorise(id) {
+  const row = plState.data.exp.find(x => x.id === id); if (!row) return;
+  const cats = [...new Set(plState.data.exp.map(x => x.category).filter(Boolean))].sort();
+  const next = prompt('Category for ' + (row.vendor || 'this charge') + ':' + String.fromCharCode(10) + String.fromCharCode(10) + cats.join(', '), row.category || '');
+  if (next === null) return;
+  const v = next.trim() || null;
+  const { error } = await sb.from('expenses').update({ category: v }).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  row.category = v;
+  toast('Recategorised - reloading totals', 'ok');
+  loadPL();
+}
+
+function plExportCsv() {
+  const d = plState.data;
+  const rows = d.exp.filter(x => plInRange(String(x.date).slice(0, 7)));
+  const head = ['date', 'amount', 'category', 'vendor', 'description', 'funded_by', 'verified', 'overhead'];
+  const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = [head.join(',')].concat(rows.map(x => [x.date, x.amount, x.category, x.vendor, x.description,
+    x.funded_by, x.verified_at ? 'yes' : 'no', x.event_na ? 'yes' : 'no'].map(esc).join(','))).join(String.fromCharCode(10));
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'come-with-pl-' + plState.from + '-to-' + plState.to + '.csv';
+  a.click(); URL.revokeObjectURL(a.href);
+}
+
+$('panel-pl').addEventListener('click', (e) => {
+  const cat = e.target.closest('[data-plcat]');
+  if (cat && !e.target.closest('[data-pldrill]')) {
+    const k = cat.dataset.plcat; plState.open[k] = !plState.open[k]; renderPLGrid(); return;
+  }
+  const dr = e.target.closest('[data-pldrill]');
+  if (dr) { const c = dr.dataset.pldrill.split('|')[0]; plState.open[c] = true; renderPLGrid(); return; }
+  const vf = e.target.closest('[data-plverify]'); if (vf) { plSetVerified(vf.dataset.plverify); return; }
+  const rc = e.target.closest('[data-plrecat]'); if (rc) { plRecategorise(rc.dataset.plrecat); return; }
+  if (e.target.closest('[data-plexpand]')) {
+    [...new Set(plState.data.pl.map(r => r.category))].forEach(c => plState.open[c] = true); renderPLGrid(); return;
+  }
+  if (e.target.closest('[data-plcollapse]')) { plState.open = {}; renderPLGrid(); return; }
+  if (e.target.closest('[data-plcsv]')) { plExportCsv(); return; }
+  const pr = e.target.closest('[data-plrange]');
+  if (pr) {
+    const n = Number(pr.dataset.plrange);
+    const months = [...new Set(plState.data.pl.map(r => r.period))].sort();
+    if (!n) { plState.from = months[0]; plState.to = months[months.length - 1]; }
+    else { const win = months.slice(-n); plState.from = win[0]; plState.to = win[win.length - 1]; }
+    renderPL(); return;
+  }
+});
+$('panel-pl').addEventListener('change', (e) => {
+  const f = e.target.closest('[data-plfrom]'); if (f) { plState.from = f.value; if (plState.to < plState.from) plState.to = plState.from; renderPL(); return; }
+  const t = e.target.closest('[data-plto]'); if (t) { plState.to = t.value; if (plState.from > plState.to) plState.from = plState.to; renderPL(); return; }
+});
 
 // ================= GEAR WATCH — stolen-rig resale scan ==========================
 // MASTER ONLY (module_registry.master_only, migration 146). Reads the tables the
@@ -19060,6 +19408,55 @@ document.addEventListener('DOMContentLoaded', () => {
 .wf-go{background:#3B6D11;color:#fff;border:none;border-radius:9px;padding:9px 14px;font-weight:600;cursor:pointer;font-size:.85rem}
 .wf-go:hover{background:#2f570d}
 @media(max-width:720px){.wf-arrow{display:none}.wf-row{flex-direction:column}}
+
+/* ---- P&L: KPI strip, collapsible grid, drill rows (migration 149/151) ---- */
+.pl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin:0 0 12px}
+.pl-kpi{background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:8px;padding:8px 11px;min-width:0}
+.pl-kpi.accent{border-color:#305496;background:rgba(48,84,150,.05)}
+.pl-kpi.neg{border-color:rgba(190,60,60,.45)}
+.pl-kpi.pos{border-color:rgba(40,140,80,.35)}
+.pl-kpi-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-kpi-v{font-size:19px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;margin:1px 0}
+.pl-kpi.neg .pl-kpi-v{color:#be3c3c}
+.pl-kpi.pos .pl-kpi-v{color:#1f7a4d}
+.pl-kpi-s{font-size:10.5px;color:var(--mid,#888);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pl-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 12px;font-size:12px}
+.pl-bar-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888)}
+.pl-bar-sep{width:1px;height:16px;background:var(--line,#e3e3e6);margin:0 3px}
+.pl-scroll{overflow-x:auto;border:1px solid var(--line,#e3e3e6);border-radius:8px}
+table.pl-table{min-width:640px;font-variant-numeric:tabular-nums}
+table.pl-table tr.pl-cat{cursor:pointer}
+table.pl-table tr.pl-cat:hover{background:rgba(48,84,150,.05)}
+table.pl-table tr.pl-cat.open{background:rgba(48,84,150,.07)}
+table.pl-table .pl-caret{display:inline-block;width:11px;color:var(--mid,#888)}
+table.pl-table td.pl-click{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+table.pl-table td.pl-click:hover{background:rgba(48,84,150,.12)}
+table.pl-table tr.pl-sub td{background:var(--bg,#fafafa);font-size:12px;padding-top:4px;padding-bottom:4px}
+.pl-sub-date{color:var(--mid,#888);margin-right:6px}
+.pl-sub-vendor{font-weight:600}
+.pl-sub-act{text-align:right;white-space:nowrap}
+.pl-sub-act .hub-mini{margin-left:4px}
+table.pl-table tr.pl-total td{border-top:2px solid #305496;background:var(--panel,#fff)}
+
+/* ---- Expenses: selection, verify, tags, bulk bar (migration 151) ---- */
+td.exp-check,th.exp-check{width:30px;text-align:center;padding-left:4px;padding-right:4px}
+tr.exp-selected>td{background:rgba(48,84,150,.09)}
+.exp-verify{opacity:.45;min-width:24px}
+.exp-verify.done{opacity:1;color:#1f7a4d;font-weight:700}
+.exp-verify:hover{opacity:1}
+.exp-del{opacity:.35}
+.exp-del:hover{opacity:1;color:#be3c3c}
+.exp-flags{white-space:nowrap}
+.exp-tag{display:inline-block;font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;
+  padding:1px 5px;border-radius:8px;border:1px solid var(--line,#ddd);color:var(--mid,#777);background:var(--bg,#fafafa)}
+.exp-tag.own{color:#8a5a1e;border-color:#e6d3b3;background:#fdf6ea}
+.exp-tag.dupe{color:#be3c3c;border-color:#eccaca;background:#fdf0f0}
+.exp-tag.ok{color:#1f7a4d;border-color:#c6e2d2;background:#f0f8f4}
+.exp-bulk{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 10px;padding:9px 11px;
+  border:1px solid #305496;border-radius:8px;background:rgba(48,84,150,.06);font-size:12px}
+.exp-bulk-sep{width:1px;height:16px;background:var(--line,#ccd);margin:0 2px}
+.hub-mini.danger{color:#be3c3c;border-color:#eccaca}
+.hub-mini.danger:hover{background:#fdf0f0}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
