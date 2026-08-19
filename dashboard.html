@@ -7173,7 +7173,8 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
-    <div class="kpi-section-h">Pipeline &amp; expected money</div>
+    <div class="kpi-section-h" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span>Pipeline &amp; expected money</span><a class="guide-link" href="/revenue-guide.html" target="_blank" rel="noopener" title="Blue Sky to Banked — how future events carry revenue through to cash">📖 Blue Sky to Banked ↗</a></div>
     <div class="modal-form-row"><label class="modal-label">Stage</label>
       <select class="modal-select" name="stage">
         ${[['idea', 'Blue Sky — hoping to book it'], ['planning', 'Planning'], ['confirmed', 'Confirmed'],
@@ -8845,7 +8846,10 @@ async function hubSecPhotos() {
     <div class="section-sub">Social posts (${hub.eventPosts.length})</div>
     <div class="hub-list" style="margin-bottom:16px;">${postRows || '<div class="li-sub">No posts for this event yet — hit “➕ Create post”.</div>'}</div>
     <div class="hub-sec-bar"><h3>📸 Photos</h3>
-      <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page · ⬇ saves the full-size to pick for a post</span></div>
+      <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+        <span class="li-sub">${hub.photos.length} photo${hub.photos.length === 1 ? '' : 's'} · public gallery on the event page · ⬇ saves the full-size to pick for a post</span>
+        <a class="guide-link" href="/photos-guide.html" target="_blank" rel="noopener" title="How the photo library works — where photos go, credits, what is public">📖 How photos work ↗</a>
+      </span></div>
     <div class="kpi-hint" style="margin-bottom:8px;">Drop event photos here — each is resized in your browser to a ~1600px full version plus a small grid thumbnail before upload. “On site” controls what the public gallery lists; the photo bucket is public, so never upload anything sensitive here (documents belong in Files).</div>
     <div class="hub-card" style="padding:10px 12px;margin-bottom:10px;">
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
@@ -11535,6 +11539,7 @@ function renderPhotoLib() {
       </select>
       <button class="hub-mini" data-plibclear>clear</button>
       <span style="flex:1"></span>
+      <a class="guide-link" href="/photos-guide.html" target="_blank" rel="noopener" title="How the photo library works — where photos go, credits, what is public">📖 How photos work ↗</a>
       <button class="hub-btn" data-plibadd>➕ Add photos</button>
     </div>
     <div id="plibGrid"></div>`;
@@ -11752,6 +11757,7 @@ function renderIncome() {
         <option value="come_with"${s.ledger === 'come_with' ? ' selected' : ''}>Come With</option>
         <option value="dance_infusion"${s.ledger === 'dance_infusion' ? ' selected' : ''}>Dance Infusion</option></select>
       <button class="hub-mini" data-incclear>clear</button>
+      <a class="guide-link" href="/revenue-guide.html" target="_blank" rel="noopener" title="Blue Sky to Banked — how future events carry revenue through to cash">📖 Blue Sky to Banked ↗</a>
       <span style="flex:1"></span>
       <button class="hub-mini primary" data-incadd>+ Record revenue</button>
     </div>
@@ -12656,7 +12662,7 @@ function plNow() { const d = new Date(); return d.getFullYear() + '-' + String(d
 const PL_PRESETS = [
   { key: 'current',  label: 'This month', hint: 'the current month only' },
   { key: 'recent',   label: 'Last 3 + now', hint: 'current month and the three before it' },
-  { key: 'forecast', label: 'Forecast', hint: 'current month and the next three — budget, not actuals' },
+  { key: 'forecast', label: 'Forecast', hint: 'current month and the next three — budget, not actuals. See the guide for how Blue Sky feeds this.' },
   { key: 'ytd',      label: 'YTD', hint: 'January through the current month' },
   { key: 'year',     label: 'Full year', hint: 'the whole calendar year: actuals so far, budget after' },
 ];
@@ -20800,6 +20806,16 @@ table.pl-table td.pl-indent{padding-left:26px}
 .sel-note {
   font-size: .72rem; color: var(--mid); padding: 6px 0 0;
 }
+
+/* ---- guide links -------------------------------------------------------- */
+/* A reference doc nobody can find from the screen it describes may as well not
+   exist, so each guide is linked from the page it explains. */
+.guide-link{
+  display:inline-flex;align-items:center;gap:6px;font-size:.74rem;letter-spacing:.02em;
+  color:var(--blue);text-decoration:none;border:1px solid var(--border-strong);
+  border-radius:999px;padding:4px 11px;white-space:nowrap;background:var(--off);
+}
+.guide-link:hover{border-color:var(--blue);color:var(--cream)}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">

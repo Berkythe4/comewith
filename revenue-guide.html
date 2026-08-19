@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Blue Sky to Banked</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<style>
+  /* Same house style as dj-guide / photos-guide. The one addition is the stage
+     rail, and it is numbered because this genuinely IS a sequence — money moves
+     through these four states in order. */
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg0:#140a17;--bg1:#241534;--cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;
+    --lime:#a7e02e;--limed:#8fb339;--hot:#ff5ca8;--sky:#5aa9e6;--amber:#e9b949;
+    --line:#3a2850;--panel:#1e1326;
+    --disp:"Arial Black","Arial Narrow",Arial,sans-serif;
+    --body:"Segoe UI",system-ui,-apple-system,sans-serif;
+    --mono:"Consolas",ui-monospace,monospace;
+  }
+  html{background:var(--bg0)}
+  body{color:var(--cream);font-family:var(--body);line-height:1.55;
+    background:radial-gradient(120% 48% at 88% -5%,rgba(167,224,46,.13),transparent 58%),
+               linear-gradient(180deg,var(--bg1),var(--bg0) 42%);
+    background-attachment:fixed;}
+  .page{max-width:880px;margin:0 auto;padding:38px 26px 60px;}
+
+  .badge{font-family:var(--mono);font-size:.7rem;letter-spacing:.24em;text-transform:uppercase;color:var(--lime);}
+  h1{font-family:var(--disp);font-weight:900;font-size:clamp(1.9rem,6vw,2.7rem);line-height:1;
+    margin:.3em 0 .2em;letter-spacing:-.015em;text-wrap:balance;}
+  .lede{color:var(--dim);font-size:1.02rem;max-width:62ch;}
+
+  .lbl{font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--lime);margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  h2{font-family:var(--body);font-weight:700;font-size:1.04rem;margin:0 0 5px;letter-spacing:-.01em;}
+  p{margin:0 0 10px;color:var(--dim);}
+  strong{color:var(--cream);font-weight:650}
+  em{color:var(--cream);font-style:italic}
+  code{font-family:var(--mono);font-size:.86em;background:rgba(237,228,211,.07);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--cream);}
+
+  /* Stage rail — four states money passes through, in order. */
+  .rail{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:4px 0 14px;}
+  @media(max-width:760px){.rail{grid-template-columns:1fr 1fr}}
+  @media(max-width:430px){.rail{grid-template-columns:1fr}}
+  .stg{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 14px 15px;
+    position:relative;border-top:3px solid var(--c,var(--line));}
+  .stg .n{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;color:var(--faint);}
+  .stg h3{font-family:var(--body);font-size:1rem;font-weight:700;margin:2px 0 4px;color:var(--c,var(--cream));}
+  .stg p{font-size:.88rem;margin:0;color:var(--dim);}
+  .stg .amt{font-family:var(--mono);font-size:.72rem;color:var(--faint);margin-top:8px;display:block;
+    padding-top:7px;border-top:1px dashed var(--line);}
+  .s1{--c:var(--faint)} .s2{--c:var(--sky)} .s3{--c:var(--amber)} .s4{--c:var(--lime)}
+
+  .rule{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lime);
+    border-radius:0 10px 10px 0;padding:13px 16px;margin:12px 0;}
+  .rule.warn{border-left-color:var(--hot)}
+  .rule.note{border-left-color:var(--sky)}
+  .rule h2{margin-bottom:4px}
+  .rule p{margin-bottom:0;font-size:.94rem}
+  .rule p + p{margin-top:7px}
+
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin:6px 0 4px;}
+  th{text-align:left;font-family:var(--mono);font-size:.66rem;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;padding:6px 10px 6px 0;
+    border-bottom:1px solid var(--line);}
+  td{padding:8px 10px 8px 0;border-bottom:1px solid rgba(58,40,80,.55);color:var(--dim);vertical-align:top;}
+  td:first-child{color:var(--cream);white-space:nowrap;}
+  .num{text-align:right;font-family:var(--mono);white-space:nowrap;}
+  .wrap{overflow-x:auto;}
+
+  .maths{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:15px 17px;margin:10px 0;}
+  .maths .eq{font-family:var(--mono);font-size:1rem;color:var(--cream);margin-bottom:9px;}
+  .maths .eq b{color:var(--lime)}
+
+  ol.recipes{list-style:none;counter-reset:r;padding:0;margin:6px 0 0;}
+  ol.recipes li{counter-increment:r;position:relative;padding:12px 0 12px 40px;
+    border-bottom:1px solid rgba(58,40,80,.55);}
+  ol.recipes li:last-child{border-bottom:0}
+  ol.recipes li::before{content:counter(r);position:absolute;left:0;top:12px;
+    font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--bg0);background:var(--lime);
+    width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;}
+  ol.recipes b{display:block;color:var(--cream);margin-bottom:2px;font-weight:650;}
+  ol.recipes span{color:var(--dim);font-size:.93rem;}
+
+  .foot{margin-top:38px;padding-top:14px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:.72rem;color:var(--faint);}
+  .foot a{color:var(--sky)}
+  a{color:var(--hot)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="badge">Come With · how it works</p>
+  <h1>Blue Sky to Banked</h1>
+  <p class="lede">A gig starts as something you want and ends as money in the account. There are
+    four states in between, and the whole point of writing the early ones down is that a
+    forecast built on hope is not a forecast.</p>
+
+  <p class="lbl">The four states</p>
+  <div class="rail">
+    <div class="stg s1">
+      <span class="n">01</span>
+      <h3>Blue Sky</h3>
+      <p>You want it. You do not have it. Nobody has agreed to anything.</p>
+      <span class="amt">counts at expected × confidence</span>
+    </div>
+    <div class="stg s2">
+      <span class="n">02</span>
+      <h3>Confirmed</h3>
+      <p>It is happening. There is a date and an agreement, but no money has moved.</p>
+      <span class="amt">counts at the agreed fee</span>
+    </div>
+    <div class="stg s3">
+      <span class="n">03</span>
+      <h3>Accrued</h3>
+      <p>Earned. You have played it or delivered it, and you are owed.</p>
+      <span class="amt">counts in full · shows as owed</span>
+    </div>
+    <div class="stg s4">
+      <span class="n">04</span>
+      <h3>Realized</h3>
+      <p>Received. The money is in the account.</p>
+      <span class="amt">the only state that is cash</span>
+    </div>
+  </div>
+  <p>An event moves left to right, and the row never changes identity — the same event carries
+    its history from wishful thinking to banked. That is what makes your hit rate measurable
+    instead of anecdotal.</p>
+
+  <p class="lbl">Two dials, not one</p>
+  <div class="rule note">
+    <h2>Stage is how real it is. Status is whether it is still alive.</h2>
+    <p>These are separate on purpose and easy to conflate. <strong>Stage</strong> runs
+      <em>Blue Sky → Planning → Confirmed → Live → Wrapped → Reported</em>. <strong>Status</strong> runs
+      <em>planning → announced → on sale → sold out → completed → cancelled</em>.</p>
+    <p>A Blue Sky gig that dies is <strong>Status = cancelled</strong>. You do not delete it, and you do
+      not move its stage backwards. It stays in the record as a thing you chased and did not
+      get, which is the only way you ever learn what your conversion rate is.</p>
+  </div>
+
+  <p class="lbl">Why the forecast discounts you</p>
+  <div class="maths">
+    <div class="eq">expected revenue &nbsp;×&nbsp; confidence % &nbsp;=&nbsp; <b>weighted forecast</b></div>
+    <p style="margin:0">Ten $1,000 gigs at 30% confidence is <strong>$3,000</strong> of forecast, not $10,000.
+      If you enter the full number and hope, the forecast tells you what you want to hear —
+      and the whole reason to write down speculative work is to stop it doing that.</p>
+  </div>
+  <p>Set both on <strong>Edit event → Pipeline &amp; expected money</strong>. Confidence is 0–100. A rough
+    number beats a blank: blank is treated as zero and contributes nothing at all.</p>
+
+  <p class="lbl">What reaches the P&amp;L, and when</p>
+  <div class="wrap">
+  <table>
+    <thead><tr><th>State</th><th>In the forecast</th><th>In the P&amp;L</th><th>Is it cash</th></tr></thead>
+    <tbody>
+      <tr><td>Blue Sky</td><td>Weighted</td><td class="num">No</td><td class="num">No</td></tr>
+      <tr><td>Confirmed</td><td>Weighted, or in full at 100%</td><td class="num">No</td><td class="num">No</td></tr>
+      <tr><td>Accrued / Invoiced</td><td>—</td><td>Yes, as revenue</td><td class="num">No</td></tr>
+      <tr><td>Received</td><td>—</td><td>Yes, as revenue</td><td>Yes</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="rule warn">
+    <h2>Nothing speculative ever touches the P&amp;L</h2>
+    <p>The P&amp;L reads income and expense rows. A Blue Sky event has neither until it becomes
+      real, so no amount of optimism in the pipeline can inflate your actuals. The two numbers
+      answer different questions and must never be added together.</p>
+    <p>Cash reserve is stricter still: it moves only on <strong>Received</strong>. An invoice you are
+      sure of is revenue, and it is not money.</p>
+  </div>
+
+  <p class="lbl">The gap list</p>
+  <div class="rule">
+    <h2>Upcoming events with no money on them</h2>
+    <p>Any future event with no booked revenue, no accrual and no estimate is flagged. Left
+      alone, an event with nothing on it stays invisible until it becomes a <em>past</em> event with
+      nothing on it — which is too late to do anything about.</p>
+    <p><strong>All 8 upcoming events currently sit on this list</strong> — RainbowTuTu, NYC Rave Girls,
+      b2b Open Decks, JunXion, Dance Infusion #3, Hulaween, Come With #2 and the Toddler Rave
+      Fundraiser. Ten minutes with expected revenue and confidence clears it.</p>
+  </div>
+
+  <p class="lbl">Recipes</p>
+  <ol class="recipes">
+    <li><b>Add a gig you want but do not have</b>
+      <span>Create the event as normal, then <strong>Edit event → Pipeline &amp; expected money</strong>:
+      Stage <strong>Blue Sky</strong>, expected revenue, confidence. Give it your best-guess date —
+      it needs one to land in the right forecast month.</span></li>
+    <li><b>It got booked</b>
+      <span>Same panel: Stage → <strong>Confirmed</strong>, and raise confidence to 100. Then record the
+      fee on the <strong>Income</strong> tab against that event, status <strong>Accrued</strong>. The expected
+      figure stops mattering the moment a real income row exists.</span></li>
+    <li><b>It fell through</b>
+      <span><strong>Status → cancelled.</strong> Do not delete it. It drops out of the pipeline and stays
+      in the history so you can see how many you chased per one you landed.</span></li>
+    <li><b>You played it and you are owed</b>
+      <span>Income tab → the fee, status <strong>Accrued</strong> (“agreed, not yet invoiced”) or
+      <strong>Invoiced</strong> (“billed, waiting on payment”). Both count as revenue immediately;
+      neither counts as cash. Filter <strong>Owed to us</strong> to see everything outstanding.</span></li>
+    <li><b>The money arrived</b>
+      <span>Set the row to <strong>Received</strong>. If the amount differs from what was agreed, enter
+      what actually landed — the difference against the agreed figure is reported back to you
+      rather than quietly absorbed.</span></li>
+    <li><b>The event genuinely made nothing</b>
+      <span>Say so explicitly with <strong>Confirm no revenue</strong>. “Earned nothing” and “nobody has
+      recorded it yet” look identical in the data, and only one of them is a problem. Recording
+      revenue later still works if you were wrong.</span></li>
+  </ol>
+
+  <p class="foot">Come With · internal reference · updated 19 Aug 2026 ·
+    companion guide: <a href="/photos-guide.html">The Photo Library →</a></p>
+</div>
+</body>
+</html>

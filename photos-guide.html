@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>The Photo Library</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<style>
+  /* House style, inherited from dj-guide.html: plum-black ground, cream ink,
+     lime for labels, hot pink for anything you can get wrong. */
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg0:#140a17;--bg1:#241534;--cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;
+    --lime:#a7e02e;--limed:#8fb339;--hot:#ff5ca8;--sky:#5aa9e6;--amber:#e9b949;
+    --line:#3a2850;--panel:#1e1326;
+    --disp:"Arial Black","Arial Narrow",Arial,sans-serif;
+    --body:"Segoe UI",system-ui,-apple-system,sans-serif;
+    --mono:"Consolas",ui-monospace,monospace;
+  }
+  html{background:var(--bg0)}
+  body{color:var(--cream);font-family:var(--body);line-height:1.55;
+    background:radial-gradient(120% 48% at 88% -5%,rgba(255,92,168,.13),transparent 58%),
+               linear-gradient(180deg,var(--bg1),var(--bg0) 42%);
+    background-attachment:fixed;}
+  .page{max-width:880px;margin:0 auto;padding:38px 26px 60px;}
+
+  .badge{font-family:var(--mono);font-size:.7rem;letter-spacing:.24em;text-transform:uppercase;color:var(--hot);}
+  h1{font-family:var(--disp);font-weight:900;font-size:clamp(1.9rem,6vw,2.7rem);line-height:1;
+    margin:.3em 0 .2em;letter-spacing:-.015em;text-wrap:balance;}
+  .lede{color:var(--dim);font-size:1.02rem;max-width:62ch;}
+
+  .lbl{font-family:var(--mono);font-size:.7rem;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--lime);margin:34px 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line);}
+  h2{font-family:var(--body);font-weight:700;font-size:1.04rem;margin:0 0 5px;letter-spacing:-.01em;}
+  p{margin:0 0 10px;color:var(--dim);}
+  p.tight{margin-bottom:4px}
+  strong{color:var(--cream);font-weight:650}
+  em{color:var(--cream);font-style:italic}
+  code{font-family:var(--mono);font-size:.86em;background:rgba(237,228,211,.07);
+    border:1px solid var(--line);border-radius:4px;padding:1px 5px;color:var(--cream);}
+
+  /* The two doors are PARALLEL, not sequential — so they sit side by side and
+     carry no numbers. Only the revenue guide earns a numbered rail. */
+  .doors{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:4px 0 6px;}
+  @media(max-width:680px){.doors{grid-template-columns:1fr}}
+  .door{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 17px;}
+  .door .where{font-family:var(--mono);font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--sky);margin-bottom:9px;display:block;}
+  .door ul{margin:8px 0 0;padding-left:17px;color:var(--dim);font-size:.93rem;}
+  .door li{margin-bottom:5px;}
+  .door li::marker{color:var(--hot)}
+
+  .merge{text-align:center;font-family:var(--mono);font-size:.74rem;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--faint);margin:12px 0 2px;}
+
+  .rule{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--lime);
+    border-radius:0 10px 10px 0;padding:13px 16px;margin:12px 0;}
+  .rule.warn{border-left-color:var(--hot)}
+  .rule.note{border-left-color:var(--sky)}
+  .rule h2{margin-bottom:4px}
+  .rule p{margin-bottom:0;font-size:.94rem}
+  .rule p + p{margin-top:7px}
+
+  table{width:100%;border-collapse:collapse;font-size:.92rem;margin:6px 0 4px;}
+  th{text-align:left;font-family:var(--mono);font-size:.66rem;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--faint);font-weight:600;padding:6px 10px 6px 0;
+    border-bottom:1px solid var(--line);}
+  td{padding:8px 10px 8px 0;border-bottom:1px solid rgba(58,40,80,.55);color:var(--dim);vertical-align:top;}
+  td:first-child{color:var(--cream);white-space:nowrap;}
+  .wrap{overflow-x:auto;}
+
+  ol.recipes{list-style:none;counter-reset:r;padding:0;margin:6px 0 0;}
+  ol.recipes li{counter-increment:r;position:relative;padding:12px 0 12px 40px;
+    border-bottom:1px solid rgba(58,40,80,.55);}
+  ol.recipes li:last-child{border-bottom:0}
+  ol.recipes li::before{content:counter(r);position:absolute;left:0;top:12px;
+    font-family:var(--mono);font-size:.72rem;font-weight:700;color:var(--bg0);background:var(--lime);
+    width:22px;height:22px;border-radius:6px;display:flex;align-items:center;justify-content:center;}
+  ol.recipes b{display:block;color:var(--cream);margin-bottom:2px;font-weight:650;}
+  ol.recipes span{color:var(--dim);font-size:.93rem;}
+
+  .foot{margin-top:38px;padding-top:14px;border-top:1px solid var(--line);
+    font-family:var(--mono);font-size:.72rem;color:var(--faint);}
+  .foot a{color:var(--sky)}
+  a{color:var(--hot)}
+</style>
+</head>
+<body>
+<div class="page">
+
+  <p class="badge">Come With · how it works</p>
+  <h1>The Photo Library</h1>
+  <p class="lede">Every photo Come&nbsp;With holds lives in one library. There are two ways in
+    depending on where the photo came from, one rule about where it can live, and one
+    thing that is easy to get wrong: what is public.</p>
+
+  <p class="lbl">Two ways in, one library</p>
+  <div class="doors">
+    <div class="door">
+      <span class="where">Event Hub → Photos</span>
+      <h2>Photos from a show</h2>
+      <p class="tight">Open the event, go to its Photos section, drag files onto the drop zone.</p>
+      <ul>
+        <li>The event is filled in for you</li>
+        <li>Order them with ↑ ↓ — that order is the public gallery's order</li>
+        <li>Pick a photographer once and the rest of the shoot inherits it</li>
+      </ul>
+    </div>
+    <div class="door">
+      <span class="where">Photos tab → ➕ Add photos</span>
+      <h2>Everything else</h2>
+      <p class="tight">Press shoots, portraits, gear, anything that did not come from a show.</p>
+      <ul>
+        <li>You choose the subject — who or what the photos are <em>of</em></li>
+        <li>Event is optional. Name the session instead, e.g. <em>Press shoot — July 2026</em></li>
+        <li>Photographer and date are set for the whole batch before anything uploads</li>
+      </ul>
+    </div>
+  </div>
+  <p class="merge">↓ both land in the same library ↓</p>
+  <p>The <strong>Photos tab</strong> shows everything from both doors together, and is where you
+    search, filter, credit and publish. Filter by subject, by photographer, or by
+    <strong>“No photographer credited”</strong> to find the gaps.</p>
+
+  <p class="lbl">The one rule</p>
+  <div class="rule">
+    <h2>A photo needs an event <em>or</em> a subject</h2>
+    <p>At least one, enforced by the database. A photo with neither has no way of ever being
+      found again, so it cannot be uploaded in the first place.</p>
+    <p>This is why a press shoot does <strong>not</strong> need a fake event. Making one would put a
+      photo session in the events list, in the pipeline, and in the P&amp;L next to real shows.
+      Give it a subject and a shoot name instead.</p>
+  </div>
+
+  <p class="lbl">Public is a decision, not a default</p>
+  <div class="rule warn">
+    <h2>Nothing goes on the site until you tick “on site”</h2>
+    <p>Uploads are <strong>private</strong>. The library is there for you to pick from; publishing is a
+      separate, deliberate click, per photo.</p>
+    <p><strong>But the storage bucket itself is public.</strong> “On site” controls whether the public
+      gallery <em>lists</em> a photo — it does not make the file unreachable to someone holding the
+      URL. That is fine for photographs. It is not fine for documents, contracts or anything
+      with personal data: those go in <strong>Files</strong>, which is a private bucket.</p>
+  </div>
+
+  <p class="lbl">Credit the photographer</p>
+  <p>Crediting is usually a condition of using someone's work, and doing it from memory is how
+    it gets missed. Set the photographer and the credit writes itself everywhere.</p>
+  <div class="wrap">
+  <table>
+    <thead><tr><th>To do this</th><th>Do this</th></tr></thead>
+    <tbody>
+      <tr><td>Credit one photo</td><td>Pick the name in the dropdown on the photo's card. Saves immediately.</td></tr>
+      <tr><td>Credit a whole shoot</td><td>Event Hub → Photos: pick the photographer at the top, then <strong>Credit the N uncredited</strong> or <strong>Credit all N</strong>.</td></tr>
+      <tr><td>Credit as you upload</td><td>Pick the photographer <em>before</em> dropping files — it sticks to everything you add next.</td></tr>
+      <tr><td>Find what is missing</td><td>Photos tab → filter <strong>No photographer credited</strong>. Untagged photos also show a red <strong>no credit</strong> flag on the card.</td></tr>
+      <tr><td>Send someone their work</td><td><strong>View portfolio →</strong> — everything they have shot, grouped by event, with full-size downloads.</td></tr>
+      <tr><td>Publish a photo somewhere</td><td>Copy the credit line from the portfolio view: <em>Photo by Tori Mumtaz (@handle)</em>. Built once, so it reads the same everywhere.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="rule note">
+    <h2>If the credit should differ from the name</h2>
+    <p>A studio name, or an agreed handle — set <code>credit_line</code> on the photo and it overrides
+      the photographer's display name. Leave it empty and the name is used.</p>
+  </div>
+
+  <p class="lbl">Things that take care of themselves</p>
+  <div class="wrap">
+  <table>
+    <tbody>
+      <tr><td>Duplicates</td><td>Every file is fingerprinted by its <em>contents</em>, not its name, across the whole library. Re-dropping the same shoot is harmless — copies are skipped and counted, and two cameras both producing <code>IMG_0001</code> are not confused for each other.</td></tr>
+      <tr><td>File size</td><td>Each photo is resized in your browser before upload: a ~1600px version for downloads and a small thumbnail for grids. The galleries serve thumbnails.</td></tr>
+      <tr><td>iPhone photos</td><td>HEIC is converted to JPEG automatically. Just drop them.</td></tr>
+      <tr><td>Deleting</td><td>Removes the image files too, and cannot be undone — unlike expenses, which are only ever soft-deleted.</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <p class="lbl">Recipes</p>
+  <ol class="recipes">
+    <li><b>Professional photos taken of you</b>
+      <span>Photos tab → ➕ Add photos. Subject <strong>Keith</strong>, photographer <strong>Tori Mumtaz</strong>,
+      leave Event empty, shoot name <em>Press shoot — July 2026</em>. Everything lands private;
+      publish individual shots later if you ever want them on the site.</span></li>
+    <li><b>Photos from a show you just played</b>
+      <span>Event Hub → the event → Photos. Pick the photographer at the top first, then drop
+      the whole folder. Order them, then tick “on site” on the ones the public gallery should carry.</span></li>
+    <li><b>You inherited photos and do not know who shot them</b>
+      <span>Upload them anyway. They show a red <strong>no credit</strong> flag and appear under the
+      <strong>No photographer credited</strong> filter until someone says. That is the point — an unanswered
+      question stays visible instead of disappearing.</span></li>
+    <li><b>A photographer asks for their portfolio</b>
+      <span>Photos tab → pick them → <strong>View portfolio →</strong>. Grouped by event, click any image
+      for the full-size file, and the credit line is there to copy.</span></li>
+    <li><b>You need a photo for a post</b>
+      <span>Filter to the event or subject, then the ⬇ button on the card saves the full-size
+      version. It downloads named after the credit, so the attribution travels with the file.</span></li>
+  </ol>
+
+  <p class="foot">Come With · internal reference · updated 19 Aug 2026 ·
+    companion guide: <a href="/revenue-guide.html">Blue Sky to Banked →</a></p>
+</div>
+</body>
+</html>
