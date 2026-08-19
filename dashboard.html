@@ -11119,24 +11119,48 @@ $('panel-expenses').addEventListener('click', (e) => {
 // ============================================================
 // INCOME — table with inline edit + event + payer (actor) assignment + filters.
 // ============================================================
-const incomeDash = { rows: [], events: [], actors: [], q: '', event: '', category: '' };
+const incomeDash = { rows: [], events: [], actors: [], streams: [], evm: [],
+                     q: '', event: '', category: '', flag: '', ledger: '', sel: new Set() };
 async function loadIncome() {
   $('incomeBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading income…</div>';
-  const [inc, ev, ac] = await Promise.all([
-    sb.from('income').select('id, date, amount, category, description, event_id, actor_id').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
-    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+  const [inc, ev, ac, st, em] = await Promise.all([
+    sb.from('income').select('id, date, amount, category, description, event_id, actor_id, verified_at, ledger, cash_source').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('events').select('id, name, event_date, series').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+    sb.from('revenue_streams').select('*').eq('active', true).order('display_order'),
+    sb.from('v_event_money').select('*'),
   ]);
   if (inc.error) { $('incomeBody').innerHTML = `<div class="panel-state err">${escapeHtml(inc.error.message)}</div>`; return; }
   incomeDash.events = ev.data || []; incomeDash.actors = ac.data || []; incomeDash.rows = inc.data || [];
+  incomeDash.streams = (st && st.data) || []; incomeDash.evm = (em && em.data) || [];
   renderIncome();
 }
 function incomeFiltered() {
   const s = incomeDash, ql = s.q.toLowerCase();
+  const matchFlag = (x) =>
+    s.flag === '' ? true :
+    s.flag === 'unverified' ? !x.verified_at :
+    s.flag === 'nocat' ? !x.category :
+    s.flag === 'noevent' ? !x.event_id :
+    s.flag === 'nosource' ? !x.cash_source : true;
   return s.rows.filter(x =>
     (s.event === '' || (s.event === '__none' ? !x.event_id : x.event_id === s.event)) &&
     (!s.category || (x.category || '') === s.category) &&
+    (!s.ledger || (x.ledger || 'come_with') === s.ledger) &&
+    matchFlag(x) &&
     (!ql || [x.category, x.description].join(' ').toLowerCase().includes(ql)));
+}
+// Same four-question triage the Expenses tab uses, counted over every row so the
+// chips read as a to-do list rather than shifting with the filter.
+function incChips() {
+  const r = incomeDash.rows;
+  return [
+    { k: '', label: 'All', n: r.length },
+    { k: 'unverified', label: 'Unverified', n: r.filter(x => !x.verified_at).length },
+    { k: 'nocat', label: 'No stream', n: r.filter(x => !x.category).length },
+    { k: 'noevent', label: 'No event', n: r.filter(x => !x.event_id).length },
+    { k: 'nosource', label: 'No source', n: r.filter(x => !x.cash_source).length },
+  ];
 }
 function renderIncome() {
   const s = incomeDash;
@@ -11146,13 +11170,118 @@ function renderIncome() {
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
       <input class="modal-input" data-incq placeholder="Search category / note…" style="max-width:220px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-incevfilter><option value="">All events</option><option value="__none"${s.event === '__none' ? ' selected' : ''}>— No event —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-inccatfilter><option value="">All categories</option>${cats.map(c => `<option value="${escapeHtml(c)}"${s.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-inccatfilter><option value="">All streams</option>${cats.map(c => `<option value="${escapeHtml(c)}"${s.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-incledgerfilter><option value="">Both books</option>
+        <option value="come_with"${s.ledger === 'come_with' ? ' selected' : ''}>Come With</option>
+        <option value="dance_infusion"${s.ledger === 'dance_infusion' ? ' selected' : ''}>Dance Infusion</option></select>
       <button class="hub-mini" data-incclear>clear</button>
+      <span style="flex:1"></span>
+      <button class="hub-mini primary" data-incadd>+ Record revenue</button>
     </div>
+    <div class="exp-chips" style="display:flex;gap:6px;flex-wrap:wrap;margin:-6px 0 12px;">
+      ${incChips().map(c => `<button class="hub-mini" data-incflag="${c.k}"${s.flag === c.k ? ' style="background:#305496;color:#fff"' : ''}>${c.label} ${c.n}</button>`).join('')}
+    </div>
+    ${incGapHtml()}
+    <div id="incBulk"></div>
     <div id="incomeTable"></div>
     <div class="kpi-hint" style="margin-top:8px;">Click Amount / Category / Description to edit inline. Assign a Payer + Event from the dropdowns. Income is where bar / vendor / merch &amp; <strong>service fees</strong> land.</div>`;
   renderIncomeBody();
 }
+// Events that spent money and earned none. This is the single most valuable thing
+// this tab can say: every DJ fee, production fee and rental that was never
+// recorded is sitting in this list.
+function incGapHtml() {
+  const gaps = (incomeDash.evm || []).filter(e => e.missing_revenue);
+  if (!gaps.length) return '';
+  const total = gaps.reduce((t, e) => t + Number(e.expenses || 0), 0);
+  return '<div class="inc-gap"><b>' + gaps.length + ' past event' + (gaps.length > 1 ? 's' : '') +
+    ' spent money and recorded no revenue</b> <span class="muted">' + money(total) + ' of cost</span><ul>' +
+    gaps.slice(0, 8).map(e => '<li><button class="hub-mini" data-incaddfor="' + escapeHtml(e.event_id) + '">add revenue</button> ' +
+      escapeHtml(e.name) + ' <span class="muted">' + escapeHtml(fmtDate(e.event_date)) + ' · cost ' + money(e.expenses) + '</span></li>').join('') +
+    '</ul></div>';
+}
+
+function renderIncBulk() {
+  const s = incomeDash, el = $('incBulk'); if (!el) return;
+  const ids = [...s.sel];
+  if (!ids.length) { el.innerHTML = ''; return; }
+  const sum = s.rows.filter(r => s.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
+  el.innerHTML = '<div class="exp-bulk"><b>' + ids.length + ' selected</b> <span class="muted">' + money(sum) + '</span>' +
+    '<span class="exp-bulk-sep"></span>' +
+    '<select class="hub-status-sel" data-incbulkcat><option value="">Set stream…</option>' +
+      s.streams.map(t => '<option value="' + escapeHtml(t.label) + '">' + escapeHtml(t.label) + '</option>').join('') + '</select>' +
+    '<select class="hub-status-sel" data-incbulkev><option value="">Set event…</option>' +
+      s.events.map(e => '<option value="' + escapeHtml(e.id) + '">' + escapeHtml(e.name) + '</option>').join('') + '</select>' +
+    '<select class="hub-status-sel" data-incbulksrc><option value="">Set source…</option>' +
+      '<option value="paypal">PayPal</option><option value="bank">Bank</option>' +
+      '<option value="personal">Personal</option><option value="other">Other</option></select>' +
+    '<span class="exp-bulk-sep"></span>' +
+    '<button class="hub-mini" data-incbulkverify="1">✓ Verify</button>' +
+    '<button class="hub-mini" data-incbulkverify="0">○ Un-verify</button>' +
+    '<button class="hub-mini danger" data-incbulkdel>Delete ' + ids.length + '</button>' +
+    '<button class="hub-mini" data-incbulkclear>clear</button></div>';
+}
+
+async function incBulk(patch, label) {
+  const ids = [...incomeDash.sel];
+  if (!ids.length) return;
+  if (!confirm('Change ' + ids.length + ' income row' + (ids.length > 1 ? 's' : '') + ' - set ' + label + '?')) return;
+  const { error } = await sb.from('income').update(patch).in('id', ids);
+  if (error) { toast('Bulk update failed: ' + error.message, 'err'); return; }
+  incomeDash.rows.forEach(r => { if (incomeDash.sel.has(r.id)) Object.assign(r, patch); });
+  toast('Updated ' + ids.length, 'ok');
+  renderIncomeBody();
+}
+
+async function incSetVerified(ids, on) {
+  if (!ids.length) return;
+  const patch = { verified_at: on ? new Date().toISOString() : null };
+  const { error } = await sb.from('income').update(patch).in('id', ids);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  incomeDash.rows.forEach(r => { if (ids.indexOf(r.id) >= 0) r.verified_at = patch.verified_at; });
+  renderIncomeBody();
+}
+
+async function incDelete(ids) {
+  if (!ids.length) return;
+  const rows = incomeDash.rows.filter(r => ids.indexOf(r.id) >= 0);
+  const sum = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
+  if (!confirm('Delete ' + ids.length + ' income row' + (ids.length > 1 ? 's' : '') + ' totalling ' + money(sum) +
+      '?' + String.fromCharCode(10, 10) + 'Soft delete - recoverable.')) return;
+  const { error } = await sb.from('income').update({ deleted_at: new Date().toISOString() }).in('id', ids);
+  if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+  incomeDash.rows = incomeDash.rows.filter(r => ids.indexOf(r.id) < 0);
+  ids.forEach(i => incomeDash.sel.delete(i));
+  toast('Deleted ' + ids.length, 'ok');
+  renderIncome();
+}
+
+// Record a fee against an event. Prefilled from the event so the common case is
+// three keystrokes, because the reason these are missing is that nothing made it
+// easy.
+async function incAddRevenue(eventId) {
+  const s = incomeDash;
+  const ev = s.events.find(e => e.id === eventId);
+  const suggested = ev ? (s.streams.find(t => t.applies_to === ev.series) || {}).label : null;
+  const stream = prompt('Revenue stream:' + String.fromCharCode(10, 10) +
+    s.streams.map(t => t.label).join(', '), suggested || 'DJ Gig fee');
+  if (!stream) return;
+  const amtRaw = prompt('Amount received for ' + (ev ? ev.name : 'this') + ':', '');
+  if (!amtRaw) return;
+  const amt = Number(String(amtRaw).replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(amt) || amt === 0) { toast('Bad amount', 'err'); return; }
+  const row = {
+    date: ev ? ev.event_date : new Date().toISOString().slice(0, 10),
+    amount: amt, category: stream.trim(), event_id: eventId || null,
+    description: ev ? ev.name : null,
+    ledger: (ev && /dance infusion/i.test(ev.series || '')) ? 'dance_infusion' : 'come_with',
+  };
+  const { error } = await sb.from('income').insert(row);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  toast('Recorded ' + money(amt) + ' — ' + stream, 'ok');
+  loadIncome();
+}
+
 function renderIncomeBody() {
   const s = incomeDash, list = incomeFiltered();
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
@@ -11162,13 +11291,23 @@ function renderIncomeBody() {
   const ed = (x, field, num) => `<td contenteditable="true" data-incedit="${field}" data-id="${escapeHtml(x.id)}" data-orig="${escapeHtml(x[field] ?? '')}"${num ? ' class="num"' : ''} style="cursor:text;">${field === 'amount' ? money(x.amount) : (escapeHtml(x[field] || '') || '')}</td>`;
   const evSel = (x) => `<select class="hub-status-sel" data-incev="${escapeHtml(x.id)}"><option value="">— none —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${x.event_id === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>`;
   const acSel = (x) => `<select class="hub-status-sel" data-incactor="${escapeHtml(x.id)}"><option value="">— none —</option>${s.actors.map(a => `<option value="${escapeHtml(a.id)}"${x.actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
-  const rows = list.map(x => `<tr>
+  const allShown = list.length > 0 && list.every(x => s.sel.has(x.id));
+  const rows = list.map(x => `<tr${s.sel.has(x.id) ? ' class="exp-selected"' : ''}>
+    <td class="exp-check"><input type="checkbox" data-incsel="${escapeHtml(x.id)}"${s.sel.has(x.id) ? ' checked' : ''}></td>
+    <td class="exp-check"><button class="hub-mini exp-verify${x.verified_at ? ' done' : ''}" data-incverify="${escapeHtml(x.id)}"
+      title="${x.verified_at ? 'Verified — click to un-verify' : 'Mark this row checked'}">${x.verified_at ? '✓' : '○'}</button></td>
     <td>${escapeHtml(fmtDate(x.date))}</td>
     ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'description')}
     <td>${acSel(x)}</td><td>${evSel(x)}</td>
-    <td><button class="row-btn" data-inc-del="${escapeHtml(x.id)}">Delete</button></td>
-  </tr>`).join('') || `<tr><td colspan="7" class="muted" style="padding:14px;">No income matches.</td></tr>`;
-  $('incomeTable').innerHTML = `<table class="data-table"><thead><tr><th>Date</th><th class="num">Amount</th><th>Category</th><th>Description</th><th>Payer</th><th>Event</th><th>Actions</th></tr></thead><tbody>${rows}</tbody></table>`;
+    <td class="exp-flags">${(x.ledger === 'dance_infusion' ? '<span class="exp-tag ok">DI</span> ' : '')}${x.cash_source ? '<span class="exp-tag">' + escapeHtml(x.cash_source) + '</span>' : ''}</td>
+    <td class="exp-check"><button class="hub-mini exp-del" data-inc-del="${escapeHtml(x.id)}" title="Delete">✕</button></td>
+  </tr>`).join('') || `<tr><td colspan="10" class="muted" style="padding:14px;">No income matches these filters.</td></tr>`;
+  $('incomeTable').innerHTML = `<table class="data-table"><thead><tr>
+    <th class="exp-check"><input type="checkbox" data-incselall${allShown ? ' checked' : ''} title="Select everything matching the current filters"></th>
+    <th class="exp-check" title="Verified">✓</th>
+    <th>Date</th><th class="num">Amount</th><th>Stream</th><th>Description</th><th>Payer</th><th>Event</th><th></th><th></th>
+  </tr></thead><tbody>${rows}</tbody></table>`;
+  renderIncBulk();
 }
 async function saveIncomeField(td) {
   const id = td.dataset.id, field = td.dataset.incedit;
@@ -11193,13 +11332,48 @@ $('panel-income').addEventListener('input', (e) => { const q = e.target.closest(
 $('panel-income').addEventListener('change', (e) => {
   const ef = e.target.closest('[data-incevfilter]'); if (ef) { incomeDash.event = ef.value; renderIncomeBody(); return; }
   const cf = e.target.closest('[data-inccatfilter]'); if (cf) { incomeDash.category = cf.value; renderIncomeBody(); return; }
+  const lf = e.target.closest('[data-incledgerfilter]'); if (lf) { incomeDash.ledger = lf.value; renderIncomeBody(); return; }
   const ev = e.target.closest('[data-incev]'); if (ev) { setIncomeLink(ev.dataset.incev, 'event_id', ev.value); return; }
   const ac = e.target.closest('[data-incactor]'); if (ac) { setIncomeLink(ac.dataset.incactor, 'actor_id', ac.value); return; }
+  const sel = e.target.closest('[data-incsel]'); if (sel) {
+    sel.checked ? incomeDash.sel.add(sel.dataset.incsel) : incomeDash.sel.delete(sel.dataset.incsel);
+    renderIncomeBody(); return;
+  }
+  if (e.target.closest('[data-incselall]')) {
+    const shown = incomeFiltered();
+    const all = shown.every(x => incomeDash.sel.has(x.id));
+    shown.forEach(x => all ? incomeDash.sel.delete(x.id) : incomeDash.sel.add(x.id));
+    renderIncomeBody(); return;
+  }
+  const bc = e.target.closest('[data-incbulkcat]'); if (bc && bc.value) {
+    incBulk({ category: bc.value }, 'stream to "' + bc.value + '"'); bc.value = ''; return;
+  }
+  const be = e.target.closest('[data-incbulkev]'); if (be && be.value) {
+    const ev2 = incomeDash.events.find(x => x.id === be.value);
+    const patch = { event_id: be.value };
+    if (ev2 && /dance infusion/i.test(ev2.series || '')) patch.ledger = 'dance_infusion';
+    incBulk(patch, 'event to ' + ((ev2 || {}).name || 'event')); be.value = ''; return;
+  }
+  const bs = e.target.closest('[data-incbulksrc]'); if (bs && bs.value) {
+    incBulk({ cash_source: bs.value }, 'source to ' + bs.value); bs.value = ''; return;
+  }
 });
 $('panel-income').addEventListener('focusout', (e) => { const td = e.target.closest('[data-incedit]'); if (td) saveIncomeField(td); });
 $('panel-income').addEventListener('keydown', (e) => { const td = e.target.closest('[data-incedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
 $('panel-income').addEventListener('click', async (e) => {
-  if (e.target.closest('[data-incclear]')) { incomeDash.q = incomeDash.event = incomeDash.category = ''; renderIncome(); return; }
+  if (e.target.closest('[data-incclear]')) {
+    Object.assign(incomeDash, { q: '', event: '', category: '', flag: '', ledger: '' }); renderIncome(); return;
+  }
+  const fl = e.target.closest('[data-incflag]'); if (fl) { incomeDash.flag = fl.dataset.incflag; renderIncome(); return; }
+  const vf = e.target.closest('[data-incverify]'); if (vf) {
+    const row = incomeDash.rows.find(r => r.id === vf.dataset.incverify);
+    incSetVerified([vf.dataset.incverify], !(row && row.verified_at)); return;
+  }
+  const bvf = e.target.closest('[data-incbulkverify]'); if (bvf) { incSetVerified([...incomeDash.sel], bvf.dataset.incbulkverify === '1'); return; }
+  if (e.target.closest('[data-incbulkdel]')) { incDelete([...incomeDash.sel]); return; }
+  if (e.target.closest('[data-incbulkclear]')) { incomeDash.sel.clear(); renderIncomeBody(); return; }
+  if (e.target.closest('[data-incadd]')) { incAddRevenue(incomeDash.event && incomeDash.event.indexOf('__') !== 0 ? incomeDash.event : null); return; }
+  const af = e.target.closest('[data-incaddfor]'); if (af) { incAddRevenue(af.dataset.incaddfor); return; }
   const del = e.target.closest('[data-inc-del]'); if (del) {
     if (!confirm('Delete this income row? (soft delete, reversible)')) return;
     const { error } = await sb.from('income').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.incDel);
@@ -11730,7 +11904,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 // KPI cards are grouped into THREE labelled rows rather than one long strip,
 // because seven numbers in a line is a list, not a story: what came in and what
 // it cost, then whether events pay for themselves, then where the money stands.
-const plState = { from: '', to: '', open: {}, openMonth: {}, data: null, ledger: 'come_with', detail: 'month' };
+const plState = { from: '', to: '', open: {}, openMonth: {}, data: null, ledger: 'come_with', detail: 'month', preset: 'recent' };
 
 const PL_SECTIONS = [
   { key: 'revenue',  label: 'Revenue',        sign: 1 },
@@ -11749,14 +11923,16 @@ function plPct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
 
 async function loadPL() {
   $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
-  const [sumRes, plRes, bvRes, capRes, cashRes, diRes, expRes] = await Promise.all([
+  const [sumRes, plRes, bvRes, capRes, cashRes, diRes, actRes, evmRes, expRes] = await Promise.all([
     sb.from('v_pl_summary').select('*'),
     sb.from('v_pl_monthly').select('*'),
     sb.from('v_pl_monthly_vs_budget').select('*'),
     sb.from('v_capital').select('*').maybeSingle(),
     sb.from('v_cash_position').select('*').maybeSingle(),
     sb.from('v_kpi_dance_infusion').select('*'),
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, ledger, cash_source')
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+    sb.from('v_event_money').select('*'),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, ledger, cash_source, vendor_actor_id')
       .is('deleted_at', null).order('date', { ascending: false }).limit(2000),
   ]);
   const missing = [sumRes.error, plRes.error, cashRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
@@ -11769,13 +11945,8 @@ async function loadPL() {
 
   plState.data = { sum: sumRes.data || [], pl: plRes.data || [], bv: bvRes.data || [],
                    cap: capRes.data || {}, cash: cashRes.data || {}, di: diRes.data || [],
-                   exp: expRes.data || [] };
-  if (!plState.from) {
-    const months = [...new Set(plState.data.sum.map(r => r.period))].filter(Boolean).sort();
-    const win = months.slice(-12);
-    plState.from = win[0] || plMonthsBack(12)[0];
-    plState.to = win[win.length - 1] || plMonthsBack(1)[0];
-  }
+                   actors: actRes.data || [], evm: evmRes.data || [], exp: expRes.data || [] };
+  if (!plState.from) plApplyPreset('recent');
   renderPL();
 }
 
@@ -11784,9 +11955,44 @@ function plLedgerOf(r) { return r.ledger || 'come_with'; }
 function plKeep(r) { return plInRange(r.period) && plLedgerOf(r) === plState.ledger; }
 
 // One control bar, used by both ledgers.
+// Named ranges. The default is the current month plus the previous three — near
+// enough to be about now, wide enough to show a trend. Forecast deliberately runs
+// forward from today, where only budget exists.
+function plShiftMonth(m, n) {
+  const y = +m.slice(0, 4), mo = +m.slice(5) - 1;
+  const d = new Date(y, mo + n, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function plNow() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); }
+
+const PL_PRESETS = [
+  { key: 'current',  label: 'This month', hint: 'the current month only' },
+  { key: 'recent',   label: 'Last 3 + now', hint: 'current month and the three before it' },
+  { key: 'forecast', label: 'Forecast', hint: 'current month and the next three — budget, not actuals' },
+  { key: 'ytd',      label: 'YTD', hint: 'January through the current month' },
+  { key: 'year',     label: 'Full year', hint: 'the whole calendar year: actuals so far, budget after' },
+];
+
+function plApplyPreset(key) {
+  const now = plNow(), yr = now.slice(0, 4);
+  if (key === 'current')       { plState.from = now;                    plState.to = now; }
+  else if (key === 'recent')   { plState.from = plShiftMonth(now, -3);   plState.to = now; }
+  else if (key === 'forecast') { plState.from = now;                     plState.to = plShiftMonth(now, 3); }
+  else if (key === 'ytd')      { plState.from = yr + '-01';              plState.to = now; }
+  else if (key === 'year')     { plState.from = yr + '-01';              plState.to = yr + '-12'; }
+  plState.preset = key;
+}
+
 function plControlsHtml(months) {
-  const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
-  const preset = (label, n) => '<button class="hub-mini" data-plrange="' + n + '">' + label + '</button>';
+  // Union of months that have data with the 24 around today, so a forecast range
+  // can be selected before any actuals exist in it.
+  const now = plNow();
+  const span = [];
+  for (let i = -18; i <= 12; i++) span.push(plShiftMonth(now, i));
+  const all = [...new Set(months.concat(span))].filter(Boolean).sort();
+  const monthOpt = (sel) => all.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
+  const preset = (p) => '<button class="hub-mini" data-plpreset="' + p.key + '" title="' + escapeHtml(p.hint) + '"' +
+    (plState.preset === p.key ? ' style="background:#305496;color:#fff"' : '') + '>' + p.label + '</button>';
   return '<div class="pl-bar">' +
     '<span class="pl-bar-l">Books</span>' +
     '<button class="hub-mini" data-plledger="come_with"' +
@@ -11798,7 +12004,7 @@ function plControlsHtml(months) {
     '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
     '<span class="muted">to</span>' +
     '<select class="hub-status-sel" data-plto>' + monthOpt(plState.to) + '</select>' +
-    preset('3m', 3) + preset('6m', 6) + preset('12m', 12) + preset('All', 0) +
+    PL_PRESETS.map(preset).join('') +
     '<span class="pl-bar-sep"></span>' +
     '<button class="hub-mini" data-plexpand>Expand all</button>' +
     '<button class="hub-mini" data-plcollapse>Collapse all</button>' +
@@ -11893,11 +12099,18 @@ function renderPL() {
       card('Events', String(events.length), 'with results recorded'),
     ].join(''));
 
-    const b3 = band('Where the money stands', [
-      card('Cash reserve', money(0), 'DI banks separately — nothing here', '',
-           'Dance Infusion has its own bank account. None of its money passes through the Come With float, so this is zero by design rather than by accident.'),
-      card('Total raised to date', money(pubRaised), 'per the published figures', 'accent'),
-      card('Sent to the MS Society', money(pubNet), 'per the published figures', 'accent'),
+    // Band 1 already states raised and donated, so this band answers different
+    // questions: how many people, how much each one was worth, and does the tab
+    // agree with the website.
+    const heads = events.reduce((t, e) => t + plNum(e.total_attendance), 0);
+    const done = events.length;
+    const upcoming = (d.evm || []).filter(e => e.ledger === 'dance_infusion' && e.upcoming).length;
+    const b3 = band('Reach, and whether this ties out', [
+      card('People through the door', heads ? fmtNum(heads) : '—', done + ' event' + (done === 1 ? '' : 's') + ' with results'),
+      card('Raised per head', heads ? money(pubRaised / heads) : '—', 'across every event', 'accent',
+           'Total raised divided by attendance. The number to beat next time.'),
+      card('Next event', upcoming ? String(upcoming) + ' scheduled' : 'none scheduled',
+           upcoming ? 'not yet counted above' : 'nothing on the calendar'),
       fullRange
         ? card('Ties to the website', tied ? 'yes' : 'NO', tied
               ? 'P&L matches what is published'
@@ -12031,14 +12244,35 @@ function plDetailRows(sec, category, months) {
     '</td></tr>';
 
   if (mode === 'payee') {
-    const byPayee = {};
-    list.forEach(x => { const k = x.vendor || x.description || 'Unknown payee';
-      byPayee[k] = byPayee[k] || { amt: 0, n: 0 }; byPayee[k].amt += plNum(x.amount); byPayee[k].n++; });
-    return toggle + Object.keys(byPayee).sort((a, b) => byPayee[b].amt - byPayee[a].amt).map(k =>
-      '<tr class="pl-sub"><td class="pl-lbl">' + escapeHtml(k) +
-      ' <span class="muted">' + byPayee[k].n + '&times;</span></td>' +
-      '<td colspan="' + (months.length) + '"></td>' +
-      '<td class="num">' + money(byPayee[k].amt) + '</td></tr>').join('');
+    // Rolled up by ACTOR, not by raw payee string. The bank writes the same vendor
+    // five ways; showing those as five lines is how the split went unnoticed for
+    // months. Hover a row to see every spelling folded into it.
+    const actorName = {};
+    (d.actors || []).forEach(a => actorName[a.id] = a.display_name);
+    const byActor = {};
+    list.forEach(x => {
+      const k = x.vendor_actor_id || ('~' + (x.vendor || x.description || 'Unknown payee'));
+      byActor[k] = byActor[k] || { amt: 0, n: 0, spellings: {}, linked: !!x.vendor_actor_id };
+      byActor[k].amt += plNum(x.amount); byActor[k].n++;
+      if (x.vendor) byActor[k].spellings[x.vendor] = (byActor[k].spellings[x.vendor] || 0) + 1;
+    });
+    return toggle + Object.keys(byActor).sort((a, b) => byActor[b].amt - byActor[a].amt).map(k => {
+      const g = byActor[k];
+      const name = g.linked ? (actorName[k] || 'Unknown vendor') : k.slice(1);
+      const sp = Object.keys(g.spellings);
+      const tip = sp.length > 1
+        ? sp.length + ' spellings folded in: ' + sp.join('  ·  ')
+        : (g.linked ? 'one spelling: ' + (sp[0] || '—') : 'not linked to a vendor yet');
+      return '<tr class="pl-sub"><td class="pl-lbl" title="' + escapeHtml(tip) + '">' +
+        (g.linked ? '' : '<span class="exp-tag dupe">unlinked</span> ') +
+        escapeHtml(name) + ' <span class="muted">' + g.n + '&times;</span>' +
+        (sp.length > 1 ? ' <span class="pl-spell">' + sp.length + ' spellings</span>' : '') +
+        '</td>' +
+        '<td colspan="' + (months.length - 1 > 0 ? months.length - 1 : 1) + '"></td>' +
+        '<td class="num">' + money(g.amt) + '</td>' +
+        '<td class="num pl-sub-act"><button class="hub-mini" data-plmerge="' + escapeHtml(k) +
+        '" title="Fold this vendor into another, and remember the rule">merge</button></td></tr>';
+    }).join('');
   }
 
   const groups = {};
@@ -12069,6 +12303,40 @@ function plDetailRows(sec, category, months) {
         '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '" title="Change category">edit</button>' +
       '</td></tr>').join('');
   }).join('');
+}
+
+// Merge one vendor into another AND write the rule, so the next import lands in
+// the right place instead of re-creating the split. This is the whole point: a
+// merge that does not teach the resolver is a chore you repeat every month.
+async function plMergeVendor(key) {
+  const d = plState.data;
+  const linked = key.indexOf('~') !== 0;
+  const rows = d.exp.filter(x => linked ? x.vendor_actor_id === key : (x.vendor || x.description) === key.slice(1));
+  if (!rows.length) return;
+  const spellings = [...new Set(rows.map(r => r.vendor).filter(Boolean))];
+  const names = (d.actors || []).map(a => a.display_name).sort();
+  const target = prompt(
+    'Fold ' + (linked ? ((d.actors.find(a => a.id === key) || {}).display_name || 'this vendor') : key.slice(1)) +
+    ' into which vendor?' + String.fromCharCode(10, 10) + names.join(', '),
+    '');
+  if (!target) return;
+  const actor = (d.actors || []).find(a => a.display_name.toLowerCase() === target.trim().toLowerCase());
+  if (!actor) { toast('No vendor called "' + target + '"', 'err'); return; }
+  if (linked && actor.id === key) { toast('That is the same vendor', 'err'); return; }
+
+  const ids = rows.map(r => r.id);
+  const up = await sb.from('expenses').update({ vendor_actor_id: actor.id }).in('id', ids);
+  if (up.error) { toast('Merge failed: ' + up.error.message, 'err'); return; }
+
+  // Teach the resolver every spelling we just folded in.
+  const patterns = spellings.map(v => ({ pattern: v.toLowerCase().slice(0, 60), actor_id: actor.id, note: 'merged from the P&L' }));
+  if (patterns.length) {
+    const al = await sb.from('vendor_aliases').upsert(patterns, { onConflict: 'pattern' });
+    if (al.error) toast('Rows moved, but the rule did not save: ' + al.error.message, 'err');
+  }
+  toast('Merged ' + ids.length + ' charge' + (ids.length > 1 ? 's' : '') + ' into ' + actor.display_name +
+        (patterns.length ? ' · ' + patterns.length + ' spelling rule' + (patterns.length > 1 ? 's' : '') + ' saved' : ''), 'ok');
+  loadPL();
 }
 
 async function plSetVerified(id) {
@@ -12120,18 +12388,14 @@ $('panel-pl').addEventListener('click', (e) => {
   }
   if (e.target.closest('[data-plcollapse]')) { plState.open = {}; renderPLGrid(); return; }
   if (e.target.closest('[data-plcsv]')) { plExportCsv(); return; }
-  const pr = e.target.closest('[data-plrange]');
-  if (pr) {
-    const n = Number(pr.dataset.plrange);
-    const months = [...new Set(plState.data.sum.map(r => r.period))].filter(Boolean).sort();
-    if (!n) { plState.from = months[0]; plState.to = months[months.length - 1]; }
-    else { const win = months.slice(-n); plState.from = win[0]; plState.to = win[win.length - 1]; }
-    renderPL(); return;
-  }
+  const pp = e.target.closest('[data-plpreset]');
+  if (pp) { plApplyPreset(pp.dataset.plpreset); renderPL(); return; }
+  const mg = e.target.closest('[data-plmerge]');
+  if (mg) { plMergeVendor(mg.dataset.plmerge); return; }
 });
 $('panel-pl').addEventListener('change', (e) => {
-  const f = e.target.closest('[data-plfrom]'); if (f) { plState.from = f.value; if (plState.to < plState.from) plState.to = plState.from; renderPL(); return; }
-  const t = e.target.closest('[data-plto]'); if (t) { plState.to = t.value; if (plState.from > plState.to) plState.from = plState.to; renderPL(); return; }
+  const f = e.target.closest('[data-plfrom]'); if (f) { plState.from = f.value; plState.preset = null; if (plState.to < plState.from) plState.to = plState.from; renderPL(); return; }
+  const t = e.target.closest('[data-plto]'); if (t) { plState.to = t.value; plState.preset = null; if (plState.from > plState.to) plState.from = plState.to; renderPL(); return; }
 });
 
 // ================= GEAR WATCH — stolen-rig resale scan ==========================
@@ -19690,6 +19954,17 @@ table.pl-table tr.pl-monthhead:hover td{background:rgba(48,84,150,.11)}
 table.pl-table tr.pl-monthhead.open td{background:rgba(48,84,150,.09)}
 table.pl-table tr.pl-detailbar td{background:var(--bg,#fafafa);font-size:11px;padding:3px 8px}
 table.pl-table td.pl-indent{padding-left:26px}
+
+/* ---- P&L: vendor roll-up spellings badge (160) ---- */
+.pl-spell{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;
+  background:#eef2f8;color:#4b5c78;border:1px solid #dde4ee;white-space:nowrap}
+
+/* ---- Income: revenue gap banner (160) ---- */
+.inc-gap{border:1px solid #c9922f;border-left-width:4px;border-radius:8px;background:rgba(201,146,47,.07);
+  padding:10px 13px;margin:0 0 12px;font-size:12.5px}
+.inc-gap ul{margin:6px 0 0;padding-left:18px}
+.inc-gap li{margin:3px 0}
+.inc-gap .hub-mini{margin-right:6px}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
