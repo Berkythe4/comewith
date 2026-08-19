@@ -11504,7 +11504,7 @@ $('panel-site-review').addEventListener('change', (e) => {
 });
 
 // ================= P&L — month by month, actual vs budget ======================
-// MASTER ONLY (module_registry.master_only, migration 147). Reads v_pl_monthly
+// MASTER ONLY (module_registry.master_only, migration 149). Reads v_pl_monthly
 // and v_pl_monthly_vs_budget, which roll up `expenses` + `income` by month —
 // including the 112 overhead rows (event_na) that no event-scoped view has ever
 // shown.
@@ -11528,7 +11528,7 @@ async function loadPL() {
   // empty P&L that reads like "the business spent nothing".
   const missing = [plRes.error, bvRes.error, ofRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
   if (missing) {
-    $('plBody').innerHTML = `<div class="panel-state info">The P&L isn't installed yet — apply <code>supabase/migrations/147_fpa_pl.sql</code> to prod, then reload. Nothing else is needed; it reads the expenses and income already here.</div>`;
+    $('plBody').innerHTML = `<div class="panel-state info">The P&L isn't installed yet — apply <code>supabase/migrations/149_fpa_pl.sql</code> to prod, then reload. Nothing else is needed; it reads the expenses and income already here.</div>`;
     return;
   }
   const err = [plRes.error, bvRes.error, ofRes.error].find(Boolean);
