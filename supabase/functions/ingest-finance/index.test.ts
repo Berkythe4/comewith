@@ -206,3 +206,26 @@ test("a row missing its external_ref is skipped, not guessed at", async () => {
   assert.equal(body.skipped, 1);
   assert.equal(db.tables.expenses.length, 0);
 });
+
+test("a gig's revenue and cost budgets coexist in the same month", async () => {
+  // Regression: the delete key was (scope, period, category), so the cost row
+  // deleted the revenue row it shared a category with. Six budgets vanished.
+  const db = fakeDb([]);
+  await useDb(db);
+  const h = await loadHandler(TOKEN);
+  const res = await h(new Request("https://example.test/ingest-finance", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + TOKEN },
+    body: JSON.stringify({
+      rows: [],
+      budget_lines: [
+        { period: "2026-07", category: "DJ Gig #1", planned_amount: 500, direction: "income" },
+        { period: "2026-07", category: "DJ Gig #1", planned_amount: 425, direction: "expense" },
+      ],
+    }),
+  }));
+  assert.equal((await res.json()).budgets, 2);
+  assert.equal(db.tables.budget_lines.length, 2, "both directions must survive");
+  const dirs = db.tables.budget_lines.map((b: any) => b.direction).sort();
+  assert.deepEqual(dirs, ["expense", "income"]);
+});

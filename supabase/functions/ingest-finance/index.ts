@@ -175,8 +175,13 @@ Deno.serve(async (req) => {
   let budgets = 0;
   for (const b of budgetLines) {
     if (!b?.period || !b?.category) continue;
+    // Key MUST include direction: a gig has a revenue budget AND a cost budget in
+    // the same month under the same category, so deleting on (period, category)
+    // alone made the cost row wipe the revenue row. Six gig revenue budgets went
+    // missing exactly this way on the first push.
     await db.from("budget_lines").delete()
-      .eq("scope", "period").eq("period", b.period).eq("category", b.category);
+      .eq("scope", "period").eq("period", b.period).eq("category", b.category)
+      .eq("direction", b.direction === "income" ? "income" : "expense");
     const { error } = await db.from("budget_lines").insert({
       scope: "period", period: b.period, category: b.category,
       planned_amount: b.planned_amount ?? 0,
