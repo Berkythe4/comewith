@@ -10778,7 +10778,7 @@ const expDash = { rows: [], events: [], q: '', event: '', cat: '', flag: '', fun
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
   const [ex, ev, ac] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
@@ -10812,7 +10812,8 @@ function expFiltered() {
     s.flag === 'verified' ? !!x.verified_at :
     s.flag === 'nocat' ? !x.category :
     s.flag === 'noreceipt' ? (!x.receipt_path && Number(x.amount) >= 100) :
-    s.flag === 'dupe' ? expIsDupe(x) : true;
+    s.flag === 'dupe' ? expIsDupe(x) :
+    s.flag === 'nosource' ? !x.cash_source : true;
   const matchFunded = (x) =>
     s.funded === '' ? true :
     s.funded === 'owner' ? x.funded_by === 'owner' :
@@ -10849,6 +10850,10 @@ function renderExpenses() {
       ${expChips().map(c => `<button class="hub-mini${s.flag === c.k ? ' on' : ''}" data-expflag="${c.k}"
          style="${s.flag === c.k ? 'background:var(--accent,#305496);color:#fff;' : ''}">${c.label} ${c.n}</button>`).join('')}
     </div>
+    ${s.flag === 'nosource' ? `<div class="inc-gap"><b>Cash source</b> is which account the money physically left —
+      your personal card, the Come&nbsp;With PayPal, or the Bluevine bank. Only PayPal and bank draw down the $5,000 float,
+      so anything with no source is <em>excluded</em> from cash reserve rather than guessed at. Select rows and use
+      <b>Set cash source</b> to fix them; picking Personal also marks them owner-funded.</div>` : ''}
     <div id="expBulk"></div>
     <div id="expTable"></div>`;
   renderExpensesBody();
@@ -10869,6 +10874,7 @@ function expChips() {
     { k: 'nocat', label: 'No category', n: r.filter(x => !x.category).length },
     { k: 'noreceipt', label: 'No receipt ≥$100', n: r.filter(x => !x.receipt_path && Number(x.amount) >= 100).length },
     { k: 'dupe', label: 'Possible duplicate', n: r.filter(expIsDupe).length },
+    { k: 'nosource', label: 'No cash source', n: r.filter(x => !x.cash_source).length },
   ];
 }
 
@@ -10894,6 +10900,11 @@ function renderExpBulk() {
       ${s.actors.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select>
     <select class="hub-status-sel" data-bulkfunded><option value="">Set funding…</option>
       <option value="owner">Paid personally</option><option value="business">Paid by the business</option></select>
+    <select class="hub-status-sel" data-bulksrc><option value="">Set cash source…</option>
+      <option value="personal">Personal card</option>
+      <option value="paypal">PayPal (business)</option>
+      <option value="bank">Bluevine / bank</option>
+      <option value="other">Other / unknown method</option></select>
     <span class="exp-bulk-sep"></span>
     <button class="hub-mini" data-bulkverify="1">✓ Verify</button>
     <button class="hub-mini" data-bulkverify="0">○ Un-verify</button>
@@ -10931,6 +10942,8 @@ function renderExpensesBody() {
       : '<span class="exp-tag own" title="You paid this personally — counts as invested capital">personal</span>');
     if (expIsDupe(x)) f.push('<span class="exp-tag dupe" title="Another charge shares this date and amount">dupe?</span>');
     if (x.deductible === false) f.push('<span class="exp-tag" title="Marked non-deductible">non-ded</span>');
+    if (x.cash_source) f.push('<span class="exp-tag" title="Which account the money left">' + escapeHtml(x.cash_source) + '</span>');
+    else f.push('<span class="exp-tag dupe" title="Nobody has said which account paid this, so it is left out of the cash reserve">no source</span>');
     return f.join(' ');
   };
   const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}${s.sel.has(x.id) ? ' class="exp-selected"' : ''}>
@@ -11039,6 +11052,16 @@ $('panel-expenses').addEventListener('change', (e) => {
   const bf = e.target.closest('[data-bulkfunded]'); if (bf && bf.value) {
     bulkExpense({ funded_by: bf.value }, 'funding to ' + (bf.value === 'owner' ? 'paid personally' : 'paid by the business'));
     bf.value = ''; return;
+  }
+  const bs = e.target.closest('[data-bulksrc]'); if (bs && bs.value) {
+    // Setting personal also sets funded_by, because a charge on the personal card
+    // is by definition owner-funded. Keeping the two in step by hand is a
+    // guarantee they will drift.
+    const patch = { cash_source: bs.value };
+    if (bs.value === 'personal') patch.funded_by = 'owner';
+    if (bs.value === 'paypal' || bs.value === 'bank') patch.funded_by = 'business';
+    bulkExpense(patch, 'cash source to ' + bs.value);
+    bs.value = ''; return;
   }
 });
 
