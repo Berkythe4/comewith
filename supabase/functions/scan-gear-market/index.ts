@@ -115,8 +115,12 @@ async function fromFacebook(query: string): Promise<Listing[]> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       startUrls: [{ url: facebookSearchUrl(query, loc) }],
-      resultsLimit: 40,
-      includeListingDetails: false,
+      resultsLimit: Number(Deno.env.get("FB_RESULTS_LIMIT") || 15),
+      // Detail mode is REQUIRED, not a nicety: the summary shape has no date at
+      // all, so every listing would skip the theft gate, earn no recency points,
+      // and cap below the alert threshold. It also returns the description,
+      // which is where a serial number would appear.
+      includeListingDetails: true,
     }),
   });
   if (!res.ok) {
@@ -202,9 +206,14 @@ Deno.serve(async (req) => {
     catch (e) { fails.craigslist = e instanceof Error ? e.message : String(e); }
   }
 
-  // Facebook Marketplace goes through Apify and is billed per result, so it runs
-  // only when a token exists and it is capped tighter than the free sources.
-  const fbOn = !!Deno.env.get("APIFY_TOKEN");
+  // Facebook Marketplace is the only source that COSTS MONEY per result, so it
+  // does not ride the 3x-daily cron by default — four queries of detail-mode
+  // results, three times a day, would burn the free Apify credit in days. It
+  // runs on a manual "Run scan now", and on cron only if FB_ON_CRON is set.
+  // A source that is deliberately skipped says so; it never reports zero.
+  const fbConfigured = !!Deno.env.get("APIFY_TOKEN");
+  const fbCronOn = (Deno.env.get("FB_ON_CRON") || "").toLowerCase() === "true";
+  const fbOn = fbConfigured && (body.trigger !== "cron" || fbCronOn);
   if (fbOn) {
     for (const q of queries) {
       try { const r = await fromFacebook(q); listings.push(...r); counts.facebook += r.length; }
@@ -219,9 +228,11 @@ Deno.serve(async (req) => {
   }
   // "Not configured" is its own answer. It is not a failure, and it is certainly
   // not zero results — nobody should read this line as "Facebook has nothing".
-  sourceStatus.facebook = !fbOn
+  sourceStatus.facebook = !fbConfigured
     ? "NOT CONFIGURED — set APIFY_TOKEN to include Facebook Marketplace"
-    : (fails.facebook ? `FAILED: ${fails.facebook}` : `ok — ${counts.facebook} listing(s) fetched`);
+    : !fbOn
+      ? "skipped on the schedule to control cost — press Run scan now to include it"
+      : (fails.facebook ? `FAILED: ${fails.facebook}` : `ok — ${counts.facebook} listing(s) fetched`);
 
   // ── score ─────────────────────────────────────────────────────────────────
   const scoreCfg = { theft_date: cfg.theft_date, geo_terms: cfg.geo_terms || [] };

@@ -443,3 +443,56 @@ test("parseMoney handles the formats Marketplace actually returns", async () => 
   assert.equal(parseMoney(null), null);
   assert.equal(parseMoney(3400), 3400);
 });
+
+// Detail-mode shape, captured from live Apify output 2026-08-19. This is the
+// mode the function uses, because the summary shape has no date at all.
+const FB_DETAIL = [{
+  id: "1063967069621920",
+  listingTitle: "Pioneer CDJ 3000",
+  listingPrice: { amount: "2100.00", formatted_amount_zeros_stripped: "$2,100" },
+  locationText: { text: "Brooklyn, NY" },
+  timestamp: "2026-08-17T20:58:55.000Z",
+  itemUrl: "https://www.facebook.com/marketplace/item/1063967069621920/",
+  listingPhotos: [{ photo_image_url: "https://scontent.example/x.jpg" }],
+  condition: "Used - Good",
+  description: "Selling my CDJ, serial ABX1234567",
+  isSold: false, isPending: false,
+}];
+
+test("facebook detail mode: camelCase shape maps correctly", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const [l] = parseFacebookMarketplace(FB_DETAIL);
+  assert.equal(l.title, "Pioneer CDJ 3000");
+  assert.equal(l.price, 2100);
+  assert.equal(l.location, "Brooklyn, NY");
+  assert.equal(l.posted_at, "2026-08-17T20:58:55.000Z");
+  assert.equal(l.url, "https://www.facebook.com/marketplace/item/1063967069621920/");
+  assert.equal(l.image_url, "https://scontent.example/x.jpg");
+  assert.match(l.description!, /Condition: Used - Good/);
+});
+
+// The reason detail mode is mandatory: dates drive the gate and the recency score.
+test("facebook detail mode scores on recency, unlike the dateless summary shape", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const [l] = parseFacebookMarketplace(FB_DETAIL);
+  const r = bestMatch(l, ALL, CFG)!;
+  assert.equal(r.breakdown.listed_soon_after_theft, 25);
+  assert.equal(r.breakdown.local, 25);
+  assert.ok(r.score >= 85, "a local Brooklyn CDJ listed the day after must clear the push bar");
+});
+
+// A serial in the description is the whole reason to pay for detail mode.
+test("facebook: a serial in the description scores the serial match", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  const [l] = parseFacebookMarketplace(FB_DETAIL);
+  const withSerial = { ...CDJ, serial: "ABX1234567" };
+  const r = scoreListing(l, withSerial, [withSerial], CFG)!;
+  assert.equal(r.breakdown.serial_match, 60);
+  assert.equal(r.score, 100);
+});
+
+test("facebook: sold and pending listings are dropped in both shapes", async () => {
+  const { parseFacebookMarketplace } = await import("./parsers.ts");
+  assert.equal(parseFacebookMarketplace([{ ...FB_DETAIL[0], isSold: true }]).length, 0);
+  assert.equal(parseFacebookMarketplace([{ ...FB_DETAIL[0], isPending: true }]).length, 0);
+});

@@ -95,29 +95,54 @@ export function parseFacebookMarketplace(payload: unknown): Listing[] {
   const out: Listing[] = [];
   for (const raw of payload as Record<string, any>[]) {
     if (!raw || typeof raw !== "object") continue;
-    if (raw.is_sold === true || raw.is_pending === true) continue;
+    // The actor returns TWO different shapes: snake_case for search summaries,
+    // camelCase when includeListingDetails is on. Verified against live output
+    // 2026-08-19. We run detail mode because only it carries `timestamp` — and
+    // without a date there is no theft gate and no recency score, which caps
+    // every Facebook hit below the alert threshold. Both shapes are read here so
+    // a change of mode can't silently empty the source.
+    if (raw.is_sold === true || raw.isSold === true) continue;
+    if (raw.is_pending === true || raw.isPending === true) continue;
 
     const id = String(raw.id ?? raw.listing_id ?? "").trim();
-    const title = String(raw.marketplace_listing_title ?? raw.title ?? "").trim();
+    const title = String(raw.listingTitle ?? raw.marketplace_listing_title ?? raw.title ?? "").trim();
     if (!id || !title) continue;
 
-    const city = raw.location?.reverse_geocode?.city ?? raw.location?.city ?? raw.city ?? null;
-    const state = raw.location?.reverse_geocode?.state ?? raw.location?.state ?? null;
-    const created = Number(raw.creation_time ?? raw.creationTime ?? 0);
+    const price = raw.listingPrice ?? raw.listing_price ?? {};
+    const city = raw.location?.reverse_geocode?.city ?? null;
+    const state = raw.location?.reverse_geocode?.state ?? null;
+    const location = raw.locationText?.text
+      ?? ([city, state].filter(Boolean).join(", ") || null);
+
+    // Detail mode gives an ISO string; summary mode (when it has one at all)
+    // gives epoch seconds.
+    let posted: string | null = null;
+    const ts = raw.timestamp ?? raw.creation_time ?? raw.creationTime ?? null;
+    if (typeof ts === "string" && ts.length >= 10) {
+      const d = new Date(ts);
+      if (!isNaN(d.getTime())) posted = d.toISOString();
+    } else if (Number(ts) > 0) {
+      posted = new Date(Number(ts) * 1000).toISOString();
+    }
+
+    const photo = raw.listingPhotos?.[0] ?? raw.primaryListingPhoto ?? raw.primary_listing_photo ?? null;
 
     out.push({
       source: "facebook",
       listing_id: id,
-      url: String(raw.listingUrl ?? raw.url ?? `https://www.facebook.com/marketplace/item/${id}/`),
+      url: String(raw.itemUrl ?? raw.listingUrl ?? raw.url ?? `https://www.facebook.com/marketplace/item/${id}/`),
       title,
-      price: parseMoney(raw.listing_price?.formatted_amount ?? raw.listing_price?.amount ?? raw.price),
-      currency: raw.listing_price?.currency ?? "USD",
-      location: [city, state].filter(Boolean).join(", ") || null,
+      price: parseMoney(price.amount ?? price.formatted_amount_zeros_stripped ?? price.formatted_amount ?? raw.price),
+      currency: price.currency ?? "USD",
+      location,
       seller: raw.marketplace_listing_seller?.name ?? raw.sellerName ?? null,
       seller_feedback: null,
-      posted_at: created > 0 ? new Date(created * 1000).toISOString() : null,
-      image_url: raw.primary_listing_photo?.image?.uri ?? raw.imageUrl ?? null,
-      description: raw.description ?? raw.redacted_description?.text ?? null,
+      posted_at: posted,
+      image_url: photo?.photo_image_url ?? photo?.image?.uri ?? photo?.uri ?? null,
+      // Detail mode carries the description — which is where a seller writes a
+      // serial number, so this is what makes a serial match possible on Facebook.
+      description: [raw.description, raw.condition ? `Condition: ${raw.condition}` : null]
+        .filter(Boolean).join(" · ") || null,
       raw,
     });
   }

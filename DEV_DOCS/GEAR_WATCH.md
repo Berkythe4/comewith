@@ -35,12 +35,33 @@ Craigslist, where one existed and simply hadn't been tried (§27). The working r
 third-party scraping service; Apify is the one with a documented REST API and
 pay-per-result billing.
 
-Two things worth knowing before switching it on:
-- **It costs money per scan.** Four queries × 3 scans/day is ~500 results/day at the
-  default cap of 40 per query. Watch the first day's spend before leaving it running.
-- **Never point this at your own Facebook session.** The scraper runs on Apify's
-  infrastructure. Automated collection is against Meta's terms either way, but using your
-  personal account's cookies is what gets an account restricted.
+**Facebook does NOT run on the 3×/day cron.** It is the only source that costs money per
+result, so by default it runs on a manual **Run scan now** and reports
+`skipped on the schedule to control cost` otherwise. Set `FB_ON_CRON=true` to put it on
+the schedule — at 4 queries × 15 detail results × 3 runs/day that is ~180 results/day,
+which will outrun the free Apify credit in about a week.
+
+**`includeListingDetails: true` is mandatory, not an optimisation.** The actor returns two
+completely different shapes (verified live 2026-08-19):
+
+| | summary mode | detail mode |
+|---|---|---|
+| field style | `snake_case` | `camelCase` |
+| date | **none at all** | `timestamp` (ISO) |
+| description | no | **yes** |
+
+With no date there is no theft gate and no recency score, so every Facebook hit would cap
+below the alert threshold — the source would look like it worked and quietly never alert.
+The description matters too: it is where a seller writes a serial number, which is the
+only signal worth 60 points. `parseFacebookMarketplace` reads both shapes so a mode change
+cannot silently empty the source.
+
+**Never point this at your own Facebook session.** The scraper runs on Apify's
+infrastructure. Automated collection is against Meta's terms either way, but using your
+personal account's cookies is what gets an account restricted.
+
+Tunable via secrets: `FB_RESULTS_LIMIT` (default 15), `FB_MARKETPLACE_LOCATION` (default
+`nyc`), `APIFY_FB_ACTOR`, `FB_ON_CRON`.
 
 The actor is swappable: set `APIFY_FB_ACTOR` to a different actor id (the vehicles-focused
 ones return the same field names) and `FB_MARKETPLACE_LOCATION` to a city other than `nyc`.
