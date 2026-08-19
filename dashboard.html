@@ -11749,12 +11749,13 @@ function plPct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
 
 async function loadPL() {
   $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
-  const [sumRes, plRes, bvRes, capRes, cashRes, expRes] = await Promise.all([
+  const [sumRes, plRes, bvRes, capRes, cashRes, diRes, expRes] = await Promise.all([
     sb.from('v_pl_summary').select('*'),
     sb.from('v_pl_monthly').select('*'),
     sb.from('v_pl_monthly_vs_budget').select('*'),
     sb.from('v_capital').select('*').maybeSingle(),
     sb.from('v_cash_position').select('*').maybeSingle(),
+    sb.from('v_kpi_dance_infusion').select('*'),
     sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, ledger, cash_source')
       .is('deleted_at', null).order('date', { ascending: false }).limit(2000),
   ]);
@@ -11767,7 +11768,8 @@ async function loadPL() {
   if (err) { $('plBody').innerHTML = '<div class="panel-state err">Could not load the P&L: ' + escapeHtml(err.message) + '</div>'; return; }
 
   plState.data = { sum: sumRes.data || [], pl: plRes.data || [], bv: bvRes.data || [],
-                   cap: capRes.data || {}, cash: cashRes.data || {}, exp: expRes.data || [] };
+                   cap: capRes.data || {}, cash: cashRes.data || {}, di: diRes.data || [],
+                   exp: expRes.data || [] };
   if (!plState.from) {
     const months = [...new Set(plState.data.sum.map(r => r.period))].filter(Boolean).sort();
     const win = months.slice(-12);
@@ -11780,6 +11782,30 @@ async function loadPL() {
 function plInRange(period) { return period && period >= plState.from && period <= plState.to; }
 function plLedgerOf(r) { return r.ledger || 'come_with'; }
 function plKeep(r) { return plInRange(r.period) && plLedgerOf(r) === plState.ledger; }
+
+// One control bar, used by both ledgers.
+function plControlsHtml(months) {
+  const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
+  const preset = (label, n) => '<button class="hub-mini" data-plrange="' + n + '">' + label + '</button>';
+  return '<div class="pl-bar">' +
+    '<span class="pl-bar-l">Books</span>' +
+    '<button class="hub-mini" data-plledger="come_with"' +
+      (plState.ledger === 'come_with' ? ' style="background:#305496;color:#fff"' : '') + '>Come With</button>' +
+    '<button class="hub-mini" data-plledger="dance_infusion"' +
+      (plState.ledger === 'dance_infusion' ? ' style="background:#1f7a4d;color:#fff"' : '') + '>Dance Infusion</button>' +
+    '<span class="pl-bar-sep"></span>' +
+    '<span class="pl-bar-l">Range</span>' +
+    '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
+    '<span class="muted">to</span>' +
+    '<select class="hub-status-sel" data-plto>' + monthOpt(plState.to) + '</select>' +
+    preset('3m', 3) + preset('6m', 6) + preset('12m', 12) + preset('All', 0) +
+    '<span class="pl-bar-sep"></span>' +
+    '<button class="hub-mini" data-plexpand>Expand all</button>' +
+    '<button class="hub-mini" data-plcollapse>Collapse all</button>' +
+    '<span class="pl-bar-sep"></span>' +
+    '<button class="hub-mini" data-plcsv>Export CSV</button>' +
+    '</div>';
+}
 
 function renderPL() {
   const d = plState.data; if (!d) return;
@@ -11833,29 +11859,65 @@ function renderPL() {
       : card('Source known', 'all', 'every row is attributed', 'pos'),
   ].join(''));
 
-  const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
-  const preset = (label, n) => '<button class="hub-mini" data-plrange="' + n + '">' + label + '</button>';
+  // Dance Infusion is a fundraiser, not a business. "Profit" is the wrong word for
+  // every number on it: what it earns is RAISED, what it keeps is SENT TO THE MS
+  // SOCIETY, and it has no float of its own here because the money lives in its
+  // own bank account. These figures are published on the public site, so the tab
+  // also checks itself against v_kpi_dance_infusion and says so either way.
+  if (plState.ledger === 'dance_infusion') {
+    const raised = rev, toMs = net, spend = dir + ind;
+    const perDollar = raised ? (spend / raised) : null;
+    const events = (d.di || []).filter(e => e.total_raised != null);
+    const pubRaised = events.reduce((t, e) => t + plNum(e.total_raised), 0);
+    const pubNet = events.reduce((t, e) => t + plNum(e.net_pl), 0);
+    // Tie-out is against ALL events, so only claim it when the range covers them.
+    const fullRange = plState.from <= (months[0] || '') && plState.to >= (months[months.length - 1] || '');
+    const tieRaised = Math.abs(pubRaised - raised) < 0.01;
+    const tieNet = Math.abs(pubNet - toMs) < 0.01;
+    const tied = tieRaised && tieNet;
+
+    const b1 = band('What was raised, and what it cost', [
+      card('Total raised', money(raised), events.length + ' event' + (events.length === 1 ? '' : 's'), 'pos'),
+      card('Direct costs', money(dir), 'putting the events on'),
+      card('Indirect costs', money(ind), ind ? 'overhead charged to DI' : 'none — DI carries no overhead'),
+      card('To the MS Society', money(toMs), 'raised less every cost', toMs < 0 ? 'neg' : 'pos',
+           'Every penny Dance Infusion keeps is donated. This is the donation figure.'),
+    ].join(''));
+
+    const b2 = band('How efficiently it was raised', [
+      card('Cost to raise $1', perDollar == null ? '—' : '$' + perDollar.toFixed(2), 'spent per dollar raised',
+           perDollar != null && perDollar > 0.75 ? 'neg' : 'pos',
+           'Charity watchdogs look for well under $0.50. Above $0.75 is hard to defend publicly.'),
+      card('Donated share', raised ? plPct(toMs, raised) : '—', 'of everything raised', toMs < 0 ? 'neg' : 'pos'),
+      card('Total costs', money(spend), 'direct plus indirect'),
+      card('Events', String(events.length), 'with results recorded'),
+    ].join(''));
+
+    const b3 = band('Where the money stands', [
+      card('Cash reserve', money(0), 'DI banks separately — nothing here', '',
+           'Dance Infusion has its own bank account. None of its money passes through the Come With float, so this is zero by design rather than by accident.'),
+      card('Total raised to date', money(pubRaised), 'per the published figures', 'accent'),
+      card('Sent to the MS Society', money(pubNet), 'per the published figures', 'accent'),
+      fullRange
+        ? card('Ties to the website', tied ? 'yes' : 'NO', tied
+              ? 'P&L matches what is published'
+              : 'raised ' + (tieRaised ? 'ok' : 'off ' + money(raised - pubRaised)) +
+                ', donated ' + (tieNet ? 'ok' : 'off ' + money(toMs - pubNet)),
+              tied ? 'pos' : 'neg',
+              'These numbers are on the public site. If this says NO, one of the two is wrong and the public one is the one people read.')
+        : card('Tie-out', 'partial range', 'widen to All to check against the site', 'warn',
+              'The published totals cover every event, so the check only means something over the full range.'),
+    ].join(''));
+
+    $('plBody').innerHTML = b1 + b2 + b3 + plControlsHtml(months) + '<div id="plGrid"></div>' +
+      '<p class="muted" style="margin-top:10px">Dance Infusion keeps its own bank account and donates its proceeds to the MS Society. ' +
+      'None of this money touches Come With, and none of it counts toward the Come With float.</p>';
+    renderPLGrid();
+    return;
+  }
 
   $('plBody').innerHTML =
-    line1 + line2 + line3 +
-    '<div class="pl-bar">' +
-      '<span class="pl-bar-l">Books</span>' +
-      '<button class="hub-mini' + (plState.ledger === 'come_with' ? ' on' : '') + '" data-plledger="come_with"' +
-        (plState.ledger === 'come_with' ? ' style="background:#305496;color:#fff"' : '') + '>Come With</button>' +
-      '<button class="hub-mini' + (plState.ledger === 'dance_infusion' ? ' on' : '') + '" data-plledger="dance_infusion"' +
-        (plState.ledger === 'dance_infusion' ? ' style="background:#1f7a4d;color:#fff"' : '') + '>Dance Infusion</button>' +
-      '<span class="pl-bar-sep"></span>' +
-      '<span class="pl-bar-l">Range</span>' +
-      '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
-      '<span class="muted">to</span>' +
-      '<select class="hub-status-sel" data-plto>' + monthOpt(plState.to) + '</select>' +
-      preset('3m', 3) + preset('6m', 6) + preset('12m', 12) + preset('All', 0) +
-      '<span class="pl-bar-sep"></span>' +
-      '<button class="hub-mini" data-plexpand>Expand all</button>' +
-      '<button class="hub-mini" data-plcollapse>Collapse all</button>' +
-      '<span class="pl-bar-sep"></span>' +
-      '<button class="hub-mini" data-plcsv>Export CSV</button>' +
-    '</div>' +
+    line1 + line2 + line3 + plControlsHtml(months) +
     '<div id="plGrid"></div>' +
     (plState.ledger === 'dance_infusion'
       ? '<p class="muted" style="margin-top:10px">Dance Infusion keeps its own bank account and donates its proceeds to the MS Society. None of this money touches Come With, and none of it counts toward the Come With float.</p>'
