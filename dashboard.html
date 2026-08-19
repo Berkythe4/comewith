@@ -1641,6 +1641,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <button class="add-btn" data-add="income">+ Add income</button>
         <div id="incomeBody"></div>
       </div>
+      <div class="panel" id="panel-photos"><div id="photosBody"></div></div>
       <div class="panel" id="panel-expenses">
         <button class="add-btn" data-add="expense">+ Add expense</button>
         <div id="expensesBody"></div>
@@ -2046,6 +2047,7 @@ async function renderNav() {
   // Same resilience for the Calendar module ahead of migration 096.
   if (!MODULES.some(m => m.key === 'calendar')) MODULES.push({ key: 'calendar', label: 'Calendar & Tasks', nav_group: 'Pinned', sort_order: 1, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   // And the Meetings module ahead of migration 114 propagating.
+  if (!MODULES.some(m => m.key === 'photos')) MODULES.push({ key: 'photos', label: 'Photos', nav_group: 'Workflow', sort_order: 40, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   if (!MODULES.some(m => m.key === 'meetings')) MODULES.push({ key: 'meetings', label: 'Meetings', nav_group: 'Pinned', sort_order: 2, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   // Content Center ahead of migration 120 propagating.
   if (!MODULES.some(m => m.key === 'content-center')) MODULES.push({ key: 'content-center', label: 'Content Center', nav_group: 'Marketing', sort_order: 5, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
@@ -4598,6 +4600,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'guests') { await loadGuests(); return; } // custom (guest module)
   if (tab === 'actors') { await loadActors(); return; } // custom (actor registry — inline edit + sort)
   if (tab === 'events') { await loadEventsDash(); return; } // custom (command-center dashboard)
+  if (tab === 'photos') { await loadPhotoLib(); return; } // custom (photo library — subject + photographer)
   if (tab === 'expenses') { await loadExpenses(); return; } // custom (inline event assignment)
   if (tab === 'income') { await loadIncome(); return; } // custom (inline event + payer assignment)
   if (tab === 'artists') { await loadArtists(); return; } // custom (talent roster)
@@ -7135,7 +7138,7 @@ async function checkRecapVids(btn) {
 // editable here yet — that's a later pass (manage per-event line items).
 async function openEditEvent(id) {
   const [{ data: ev, error }, { data: venues }, { data: artistRoles }, { data: allActors }] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date, end_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path, owner_actor_id').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, end_date, status, capacity, total_attendance, is_public, ticket_url, ticket_label, cw_providing_gear, venue_id, doors_time, end_time, description, audited, audited_at, financials_released, financials_released_at, is_featured, youtube_url, recap_videos, recap_blurb, hero_image_path, owner_actor_id, stage, expected_revenue, confidence').eq('id', id).single(),
     sb.from('venues').select('id, name, city, capacity').is('deleted_at', null).order('name'),
     sb.from('actor_roles').select('actor:actors(id, display_name)').in('role', ['dj', 'artist']),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
@@ -7170,6 +7173,23 @@ async function openEditEvent(id) {
       <div><label class="modal-label">Attendance</label><input class="modal-input" type="number" min="0" step="1" name="total_attendance" value="${ev.total_attendance ?? ''}"></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Status</label><select class="modal-select" name="status">${statusOpts}</select></div>
+    <div class="kpi-section-h">Pipeline &amp; expected money</div>
+    <div class="modal-form-row"><label class="modal-label">Stage</label>
+      <select class="modal-select" name="stage">
+        ${[['idea', 'Blue Sky — hoping to book it'], ['planning', 'Planning'], ['confirmed', 'Confirmed'],
+           ['live', 'Live'], ['wrapped', 'Wrapped'], ['reported', 'Reported']]
+          .map(([v, l]) => `<option value="${v}"${(ev.stage || 'planning') === v ? ' selected' : ''}>${l}</option>`).join('')}
+      </select>
+      <div class="kpi-hint" style="margin-top:4px;">Blue&nbsp;Sky is a gig you want but do not have. It never touches the P&amp;L — it only feeds the weighted pipeline. When it lands, move it to Confirmed and book the real income against it; if it dies, set Status to cancelled. Either way the row stays, so your hit rate is measurable.</div></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Expected revenue</label>
+        <input class="modal-input" type="number" min="0" step="0.01" name="expected_revenue" value="${ev.expected_revenue ?? ''}" placeholder="What it pays if it happens">
+      </div>
+      <div><label class="modal-label">Confidence %</label>
+        <input class="modal-input" type="number" min="0" max="100" step="5" name="confidence" value="${ev.confidence ?? ''}" placeholder="0–100">
+      </div>
+    </div>
+    <div class="kpi-hint" style="margin:-4px 0 10px;">The forecast counts <strong>expected × confidence</strong>, not the full number — ten $1,000 gigs at 30% is $3,000, which is the point of writing them down.</div>
     <div class="kpi-section-h">Venue & schedule</div>
     <div class="modal-form-row"><label class="modal-label">Venue</label><select class="modal-select" name="venue_id">${venueOpts}</select></div>
     <div class="modal-form-row"><label class="modal-label">Host / booked by — the actor who owns this event or booked us (add them under Actors first)</label><select class="modal-select" name="owner_actor_id">${ownerOpts}</select></div>
@@ -7250,6 +7270,10 @@ async function submitEditEvent(id) {
   const tlbl = kpiVal('ticket_label'); patch.ticket_label = tlbl || null;
   patch.venue_id = kpiVal('venue_id') || null;
   patch.owner_actor_id = kpiVal('owner_actor_id') || null;
+  patch.stage = kpiVal('stage') || null;
+  const expRev = kpiVal('expected_revenue'); patch.expected_revenue = expRev === '' ? null : Number(expRev);
+  const conf = kpiVal('confidence');
+  patch.confidence = conf === '' ? null : Math.max(0, Math.min(100, Math.round(Number(conf))));
   patch.doors_time = kpiVal('doors_time') || null;
   patch.end_time = kpiVal('end_time') || null;
   patch.description = kpiVal('description') || null;
@@ -11449,6 +11473,221 @@ document.addEventListener('keydown', (e) => {
   }
   if (typeof incomeDash !== 'undefined' && incomeDash.sel && incomeDash.sel.size) {
     incomeDash.sel.clear(); renderIncomeBody(); return;
+  }
+});
+
+
+// ============================================================
+// PHOTO LIBRARY
+// Every photo, whether it came from an event or a shoot that was not one.
+// Two things it exists to fix:
+//   - a press shoot has no event, and inventing one to hold it would put a photo
+//     session in the events list and in the P&L next to real shows
+//   - a paid photographer's work has to be findable and creditable, or the
+//     credit gets missed and the next shoot is a harder conversation
+// Uploads are PRIVATE by default. This is a library to pick from; publishing is
+// a decision, not what happens because you dropped a file.
+// ============================================================
+const photoLib = { rows: [], people: [], events: [], subject: '', photog: '', flag: '', q: '' };
+
+async function loadPhotoLib() {
+  $('photosBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading photos…</div>';
+  const [ph, ac, ev] = await Promise.all([
+    sb.from('v_photo_credits').select('*').order('shot_on', { ascending: false, nullsFirst: false }),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).eq('kind', 'person').order('display_name'),
+    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+  ]);
+  if (ph.error) { $('photosBody').innerHTML = `<div class="panel-state err">${escapeHtml(ph.error.message)}</div>`; return; }
+  photoLib.rows = ph.data || [];
+  photoLib.people = ac.data || [];
+  photoLib.events = ev.data || [];
+  renderPhotoLib();
+}
+
+function photoLibFiltered() {
+  const s = photoLib, ql = s.q.toLowerCase();
+  return s.rows.filter(x =>
+    (!s.subject || x.subject_actor_id === s.subject) &&
+    (!s.photog || x.photographer_actor_id === s.photog) &&
+    (s.flag === '' ? true
+      : s.flag === 'nocredit' ? x.needs_credit
+      : s.flag === 'public' ? x.is_public
+      : s.flag === 'private' ? !x.is_public : true) &&
+    (!ql || [x.event_name, x.subject, x.photographer, x.caption, x.shoot_label]
+      .join(' ').toLowerCase().includes(ql)));
+}
+
+function renderPhotoLib() {
+  const s = photoLib;
+  const opts = (list, sel, blank) => `<option value="">${blank}</option>` +
+    list.map(a => `<option value="${escapeHtml(a.id)}"${a.id === sel ? ' selected' : ''}>${escapeHtml(a.display_name || a.name)}</option>`).join('');
+  $('photosBody').innerHTML = `
+    <div id="plibAgg"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
+      <input class="modal-input" data-plibq placeholder="Search subject / photographer / caption…" style="max-width:250px;" value="${escapeHtml(s.q)}">
+      <select class="hub-status-sel" data-plibsubject>${opts(s.people, s.subject, 'Any subject')}</select>
+      <select class="hub-status-sel" data-plibphotog>${opts(s.people, s.photog, 'Any photographer')}</select>
+      <select class="hub-status-sel" data-plibflag>
+        <option value=""${s.flag === '' ? ' selected' : ''}>All photos</option>
+        <option value="nocredit"${s.flag === 'nocredit' ? ' selected' : ''}>No photographer credited</option>
+        <option value="private"${s.flag === 'private' ? ' selected' : ''}>Private only</option>
+        <option value="public"${s.flag === 'public' ? ' selected' : ''}>On the public site</option>
+      </select>
+      <button class="hub-mini" data-plibclear>clear</button>
+      <span style="flex:1"></span>
+      <button class="hub-btn" data-plibadd>➕ Add photos</button>
+    </div>
+    <div id="plibGrid"></div>`;
+  renderPhotoLibBody();
+  $('panel-photos').querySelector('[data-plibq]').addEventListener('input', (e) => {
+    s.q = e.target.value; renderPhotoLibBody();
+  });
+}
+
+function renderPhotoLibBody() {
+  const s = photoLib, list = photoLibFiltered();
+  const uncredited = list.filter(x => x.needs_credit).length;
+  const pub = list.filter(x => x.is_public).length;
+  const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
+  $('plibAgg').innerHTML = `<div class="hub-cards">
+    ${card('Photos', fmtNum(list.length))}
+    ${card('No credit', fmtNum(uncredited), uncredited ? 'neg' : 'pos')}
+    ${card('On the site', fmtNum(pub))}
+    ${card('Private', fmtNum(list.length - pub))}
+  </div>`;
+  const pname = {}; s.people.forEach(a => pname[a.id] = a.display_name);
+  const cards = list.map(x => `
+    <div class="hub-card" style="padding:10px;width:210px;">
+      <img src="${PHOTO_BASE}${escapeHtml(x.thumb_path || x.storage_path)}" loading="lazy" alt=""
+        style="width:100%;height:130px;object-fit:cover;border-radius:8px;display:block;margin-bottom:8px;">
+      <div class="li-sub" style="font-size:.74rem;margin-bottom:6px;">
+        <strong>${escapeHtml(x.event_name || 'Unfiled')}</strong>${x.subject ? ' · of ' + escapeHtml(x.subject) : ''}
+      </div>
+      <select class="hub-status-sel" data-plib-photog="${escapeHtml(x.photo_id)}" style="width:100%;margin-bottom:6px;font-size:.8em;">
+        <option value="">— no photographer —</option>
+        ${s.people.map(a => `<option value="${escapeHtml(a.id)}"${x.photographer_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <label style="display:flex;gap:5px;align-items:center;cursor:pointer;font-size:.78em;" title="Show on the public site">
+          <input type="checkbox" data-plib-pub="${escapeHtml(x.photo_id)}"${x.is_public ? ' checked' : ''} style="width:auto;margin:0;"> on site</label>
+        <span style="flex:1"></span>
+        <a class="hub-mini" href="${PHOTO_BASE}${escapeHtml(x.storage_path)}?download=${encodeURIComponent((x.credit || 'photo').replace(/[^a-zA-Z0-9]+/g, '-').toLowerCase() + '.jpg')}" download title="Download full size">⬇</a>
+        <button class="hub-mini danger" data-plib-del="${escapeHtml(x.photo_id)}" title="Delete photo + its files">✕</button>
+      </div>
+      <div class="li-sub" style="margin-top:5px;font-size:.72rem;">${x.needs_credit
+        ? '<span style="color:var(--red,#c13b2a)">no credit</span>'
+        : '📷 ' + escapeHtml(x.credit || '')}</div>
+    </div>`).join('');
+  $('plibGrid').innerHTML = `<div style="display:flex;flex-wrap:wrap;gap:10px;">${cards ||
+    '<div class="hub-empty" style="width:100%;">No photos match these filters.</div>'}</div>`;
+}
+
+// Upload straight into the library: pick who they are OF and who SHOT them
+// before the files go anywhere, because tagging later is what never happens.
+function openPhotoLibAdd() {
+  const s = photoLib;
+  openKpi('➕ Add photos', 'Private until you say otherwise', `
+    <div class="modal-form-row"><label class="modal-label">These photos are of…</label>
+      <select class="modal-select" name="plib_subject"><option value="">— nobody in particular —</option>
+        ${s.people.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Photographer</label>
+      <select class="modal-select" name="plib_photog"><option value="">— unknown —</option>
+        ${s.people.map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select>
+      <div class="kpi-hint" style="margin-top:4px;">Sets the credit on every file in this batch and puts them in that photographer's portfolio.</div></div>
+    <div class="modal-form-row"><label class="modal-label">Event <span class="li-sub">— optional</span></label>
+      <select class="modal-select" name="plib_event"><option value="">— not from an event —</option>
+        ${s.events.map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} · ${escapeHtml(fmtDate(e.event_date))}</option>`).join('')}</select></div>
+    <div class="modal-form-row"><label class="modal-label">Shoot name <span class="li-sub">— if it was not an event</span></label>
+      <input class="modal-input" name="plib_label" placeholder="e.g. Press shoot — July 2026"></div>
+    <div class="modal-form-row half-row">
+      <div><label class="modal-label">Date taken</label><input class="modal-input" type="date" name="plib_shot"></div>
+      <div></div>
+    </div>
+    <div class="modal-form-row"><label class="modal-label">Files</label>
+      <input class="modal-input" type="file" id="plibFiles" accept="image/*,.heic,.heif" multiple></div>
+    <div class="li-sub" id="plibStatus"></div>
+    <div class="kpi-hint">Each file is resized in your browser to a ~1600px version plus a thumbnail, and skipped if the same image is already here. <strong>Nothing goes on the public site until you tick “on site”</strong> — but the storage bucket itself is public, so never put documents here.</div>`,
+    async () => {
+      const subject = kpiVal('plib_subject') || null;
+      const eventId = kpiVal('plib_event') || null;
+      const label = (kpiVal('plib_label') || '').trim() || null;
+      if (!subject && !eventId) throw new Error('Pick a subject or an event — a photo needs somewhere to live');
+      const files = [...($('plibFiles')?.files || [])];
+      if (!files.length) throw new Error('Pick at least one file');
+      await photoLibUpload(files, {
+        subject_actor_id: subject,
+        event_id: eventId,
+        shoot_label: label,
+        photographer_actor_id: kpiVal('plib_photog') || null,
+        shot_on: kpiVal('plib_shot') || null,
+      });
+      closeKpi(); loadPhotoLib();
+    }, 'Upload');
+}
+
+async function photoLibUpload(files, meta) {
+  const imgs = files.filter(f => f && f.size);
+  const status = $('plibStatus');
+  const { data: hashRows } = await sb.from('event_photos').select('file_hash').not('file_hash', 'is', null);
+  const seen = new Set((hashRows || []).map(r => r.file_hash));
+  let done = 0, failed = 0, dupes = 0;
+  for (const f of imgs) {
+    if (status) status.textContent = `Uploading ${done + failed + dupes + 1} of ${imgs.length}…`;
+    try {
+      const hash = await fileHash(f).catch(() => null);
+      if (hash && seen.has(hash)) { dupes++; continue; }
+      const full = await downscaleImage(f, 1600, 0.85);
+      const thumb = await downscaleImage(f, 480, 0.8);
+      const safe = (f.name || 'photo').replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9._-]/g, '_').slice(0, 60);
+      const base = `library/${meta.subject_actor_id || meta.event_id}/${Date.now()}_${safe}`;
+      const up1 = await sb.storage.from('event-photos').upload(base + '_full.jpg', full, { contentType: full.type || 'image/jpeg' });
+      if (up1.error) throw up1.error;
+      const up2 = await sb.storage.from('event-photos').upload(base + '_thumb.jpg', thumb, { contentType: thumb.type || 'image/jpeg' });
+      const { error: insErr } = await sb.from('event_photos').insert({
+        ...meta, storage_path: base + '_full.jpg',
+        thumb_path: up2.error ? null : base + '_thumb.jpg',
+        file_hash: hash, is_public: false,
+      });
+      if (insErr) throw insErr;
+      if (hash) seen.add(hash);
+      done++;
+    } catch (err) { failed++; console.warn('Photo upload failed:', f.name, err); }
+  }
+  if (status) status.textContent = '';
+  toast(`${done} photo${done === 1 ? '' : 's'} added${dupes ? ` · ${dupes} duplicate${dupes === 1 ? '' : 's'} skipped` : ''}${failed ? ` · ${failed} failed` : ''}`, failed ? 'err' : 'ok');
+}
+
+$('panel-photos').addEventListener('change', (e) => {
+  const su = e.target.closest('[data-plibsubject]'); if (su) { photoLib.subject = su.value; renderPhotoLibBody(); return; }
+  const ph = e.target.closest('[data-plibphotog]'); if (ph) { photoLib.photog = ph.value; renderPhotoLibBody(); return; }
+  const fl = e.target.closest('[data-plibflag]'); if (fl) { photoLib.flag = fl.value; renderPhotoLibBody(); return; }
+  const pg = e.target.closest('[data-plib-photog]'); if (pg) {
+    const val = pg.value || null;
+    sb.from('event_photos').update({ photographer_actor_id: val }).eq('id', pg.dataset.plibPhotog)
+      .then(r => { if (r.error) { toast(r.error.message, 'err'); return; } toast(val ? 'Credited' : 'Credit removed', 'ok'); loadPhotoLib(); });
+    return;
+  }
+  const pu = e.target.closest('[data-plib-pub]'); if (pu) {
+    sb.from('event_photos').update({ is_public: pu.checked }).eq('id', pu.dataset.plibPub)
+      .then(r => { if (r.error) { toast(r.error.message, 'err'); return; }
+        toast(pu.checked ? 'Now on the public site' : 'Hidden from the site', 'ok'); loadPhotoLib(); });
+  }
+});
+
+$('panel-photos').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-plibadd]')) { openPhotoLibAdd(); return; }
+  if (e.target.closest('[data-plibclear]')) {
+    Object.assign(photoLib, { q: '', subject: '', photog: '', flag: '' }); renderPhotoLib(); return;
+  }
+  const del = e.target.closest('[data-plib-del]'); if (del) {
+    const x = photoLib.rows.find(r => r.photo_id === del.dataset.plibDel); if (!x) return;
+    if (!confirm('Delete this photo?' + NL + NL + (x.event_name || '') +
+      (x.credit ? NL + 'Photo by ' + x.credit : '') + NL + NL +
+      'This removes the files too and cannot be undone.')) return;
+    await sb.storage.from('event-photos').remove([x.storage_path, x.thumb_path].filter(Boolean));
+    const { error } = await sb.from('event_photos').delete().eq('id', x.photo_id);
+    if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+    toast('Photo deleted', 'ok'); loadPhotoLib();
   }
 });
 
