@@ -11708,21 +11708,27 @@ $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
 });
 
-// ================= P&L — month by month, actual vs budget ======================
-// MASTER ONLY (module_registry.master_only, migration 149). Modelled on the
-// planner's finance grid, because that is the shape Keith already reads fluently:
-// a compact KPI strip, then collapsible category buckets, then the individual
-// charges behind any figure — editable in place.
+// ================= P&L — revenue, direct, indirect, profit =====================
+// MASTER ONLY. Reads v_pl_summary (the three profit lines), v_pl_monthly
+// (sectioned detail), v_capital and v_cash_position.
 //
-// Deliberate choices:
-//   - Headers are KPI CARDS in one line, not stacked panels. The old layout spent
-//     a third of the screen before the first number.
-//   - RUNWAY sits in that strip. Cash position is the question the P&L is being
-//     opened to answer; it should not require arithmetic.
-//   - "Paid personally" is INVESTED CAPITAL, not a debt. The founding $5,000 is
-//     part of it (capital_contributions), and each charge can be reimbursed
-//     individually rather than the whole balance being owed.
-const plState = { from: '', to: '', open: {}, mode: 'bva', drill: null, data: null };
+// Shape follows the accounting, not the table:
+//     Revenue
+//   - Direct    cost tied to a specific event
+//   = Gross profit
+//   - Indirect  overhead, the cost of existing at all
+//   = Net profit
+//
+// KPI cards are grouped into THREE labelled rows rather than one long strip,
+// because seven numbers in a line is a list, not a story: what came in and what
+// it cost, then whether events pay for themselves, then where the money stands.
+const plState = { from: '', to: '', open: {}, data: null };
+
+const PL_SECTIONS = [
+  { key: 'revenue',  label: 'Revenue',        sign: 1 },
+  { key: 'direct',   label: 'Direct costs',   sign: -1, note: 'tied to a specific event' },
+  { key: 'indirect', label: 'Indirect costs', sign: -1, note: 'overhead' },
+];
 
 function plMonthsBack(n) {
   const d = new Date(); const out = [];
@@ -11730,81 +11736,98 @@ function plMonthsBack(n) {
     out.push(x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0')); }
   return out;
 }
+function plNum(v) { return Number(v) || 0; }
+function plPct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
 
 async function loadPL() {
   $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
-  const [plRes, bvRes, capRes, expRes] = await Promise.all([
+  const [sumRes, plRes, bvRes, capRes, cashRes, expRes] = await Promise.all([
+    sb.from('v_pl_summary').select('*'),
     sb.from('v_pl_monthly').select('*'),
     sb.from('v_pl_monthly_vs_budget').select('*'),
     sb.from('v_capital').select('*').maybeSingle(),
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at, receipt_path')
+    sb.from('v_cash_position').select('*').maybeSingle(),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, funded_by, reimbursed_at, verified_at')
       .is('deleted_at', null).order('date', { ascending: false }).limit(2000),
   ]);
-  const missing = [plRes.error, bvRes.error, capRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
+  const missing = [sumRes.error, plRes.error, cashRes.error].find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
   if (missing) {
-    $('plBody').innerHTML = '<div class="panel-state info">The P&L is not installed yet - apply <code>supabase/migrations/149_fpa_pl.sql</code> and <code>151_capital_and_expense_ops.sql</code> to prod, then reload.</div>';
+    $('plBody').innerHTML = '<div class="panel-state info">The P&L is not installed yet — apply migrations <code>149</code>, <code>151</code>, <code>153</code> and <code>154</code> to prod, then reload.</div>';
     return;
   }
-  const err = [plRes.error, bvRes.error, expRes.error].find(Boolean);
+  const err = [sumRes.error, plRes.error, expRes.error].find(Boolean);
   if (err) { $('plBody').innerHTML = '<div class="panel-state err">Could not load the P&L: ' + escapeHtml(err.message) + '</div>'; return; }
 
-  plState.data = { pl: plRes.data || [], bv: bvRes.data || [], cap: capRes.data || {}, exp: expRes.data || [] };
+  plState.data = { sum: sumRes.data || [], pl: plRes.data || [], bv: bvRes.data || [],
+                   cap: capRes.data || {}, cash: cashRes.data || {}, exp: expRes.data || [] };
   if (!plState.from) {
-    const months = [...new Set(plState.data.pl.map(r => r.period))].sort();
-    const recent = plMonthsBack(12);
-    plState.from = months.length ? (months.find(m => m >= recent[0]) || months[0]) : recent[0];
-    plState.to = months.length ? months[months.length - 1] : recent[recent.length - 1];
+    const months = [...new Set(plState.data.sum.map(r => r.period))].filter(Boolean).sort();
+    const win = months.slice(-12);
+    plState.from = win[0] || plMonthsBack(12)[0];
+    plState.to = win[win.length - 1] || plMonthsBack(1)[0];
   }
   renderPL();
 }
 
-function plInRange(period) { return period >= plState.from && period <= plState.to; }
+function plInRange(period) { return period && period >= plState.from && period <= plState.to; }
 
 function renderPL() {
   const d = plState.data; if (!d) return;
-  const rows = d.pl.filter(r => plInRange(r.period));
-  const bv = d.bv.filter(r => plInRange(r.period));
-  const months = [...new Set(d.pl.map(r => r.period))].sort();
-  const num = (v) => Number(v) || 0;
+  const sum = d.sum.filter(r => plInRange(r.period));
+  const months = [...new Set(d.sum.map(r => r.period))].filter(Boolean).sort();
+  const nMonths = Math.max(1, sum.length);
 
-  const cost = rows.reduce((t, r) => t + num(r.cost), 0);
-  const rev = rows.reduce((t, r) => t + num(r.revenue), 0);
-  const overhead = rows.filter(r => r.bucket === 'overhead').reduce((t, r) => t + num(r.cost), 0);
-  const evCost = cost - overhead;
-  const plannedCost = bv.reduce((t, r) => t + num(r.planned_cost), 0);
-  const plannedRev = bv.reduce((t, r) => t + num(r.planned_revenue), 0);
-  const cap = d.cap || {};
-  const nMonths = Math.max(1, new Set(rows.map(r => r.period)).size);
-  const burn = cost / nMonths;
-  // Runway: capital still in the business, against the recent monthly burn. Stated
-  // as a horizon, not a date, because burn this variable does not deserve a date.
-  const cashIn = num(cap.invested_net);
-  const runway = burn > 0 ? cashIn / burn : null;
+  const rev = sum.reduce((t, r) => t + plNum(r.revenue), 0);
+  const dir = sum.reduce((t, r) => t + plNum(r.direct_cost), 0);
+  const ind = sum.reduce((t, r) => t + plNum(r.indirect_cost), 0);
+  const gross = rev - dir, net = rev - dir - ind;
+  const cap = d.cap || {}, cash = d.cash || {};
+  const burn = ind / nMonths;
 
   const card = (label, val, sub, cls, title) =>
     '<div class="pl-kpi' + (cls ? ' ' + cls : '') + '"' + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
     '<div class="pl-kpi-l">' + label + '</div><div class="pl-kpi-v">' + val + '</div>' +
     '<div class="pl-kpi-s">' + (sub || '') + '</div></div>';
+  const band = (title, cards) =>
+    '<div class="pl-band"><div class="pl-band-t">' + title + '</div><div class="pl-kpis">' + cards + '</div></div>';
 
-  const varc = cost - plannedCost;
-  const kpis = [
-    card('Net', money(rev - cost), money(rev) + ' in · ' + money(cost) + ' out', (rev - cost) < 0 ? 'neg' : 'pos'),
-    card('Cost', money(cost), nMonths + ' mo · ' + money(burn) + '/mo'),
-    card('Overhead', money(overhead), pct(overhead, cost) + ' of spend', '', 'Spend not tied to any single event'),
-    card('Event cost', money(evCost), pct(evCost, cost) + ' of spend'),
-    card('Vs budget', plannedCost ? money(varc) : '—', plannedCost ? 'budget ' + money(plannedCost) : 'no budget set', varc > 0 ? 'neg' : 'pos'),
+  // Three bands, read top to bottom as a sentence.
+  const line1 = band('What came in, and what it cost', [
+    card('Revenue', money(rev), nMonths + ' months', rev > 0 ? 'pos' : ''),
+    card('Direct costs', money(dir), 'to run the events'),
+    card('Indirect costs', money(ind), money(burn) + '/mo overhead'),
+    card('Net profit', money(net), net < 0 ? 'losing money' : 'profitable', net < 0 ? 'neg' : 'pos'),
+  ].join(''));
+
+  const line2 = band('Do the events pay for themselves?', [
+    card('Gross profit', money(gross), 'revenue less direct cost', gross < 0 ? 'neg' : 'pos'),
+    card('Gross margin', rev ? plPct(gross, rev) : '—', 'of revenue', gross < 0 ? 'neg' : 'pos'),
+    card('Overhead cover', rev ? plPct(rev, ind) : '—', 'revenue vs overhead',
+         rev < ind ? 'neg' : 'pos', 'How much of your overhead the revenue covers. Under 100% means events cannot yet carry the business.'),
+    card('Cost per revenue $', rev ? '$' + ((dir + ind) / rev).toFixed(2) : '—', 'spent per $1 earned', (dir + ind) > rev ? 'neg' : 'pos'),
+  ].join(''));
+
+  const unreviewed = plNum(cash.unreviewed_funding_rows);
+  const line3 = band('Where the money stands', [
+    card('Cash reserve', money(cash.cash_reserve),
+         money(cash.capital_in) + ' in + ' + money(cash.revenue_in) + ' earned − ' + money(cash.spent_by_business) + ' spent',
+         plNum(cash.cash_reserve) < 0 ? 'neg' : 'pos',
+         'Money the business itself can spend. Excludes anything Keith paid for personally, which never touched business cash.'),
     card('Invested', money(cap.invested_net), money(cap.contributed) + ' founding + ' + money(cap.personally_paid) + ' personal', 'accent',
-         'Capital you have put in: the founding contribution plus everything you paid for personally, less anything reimbursed'),
-    card('Runway', runway == null ? '—' : (runway >= 24 ? '24+ mo' : runway.toFixed(1) + ' mo'),
-         'at ' + money(burn) + '/mo', runway != null && runway < 6 ? 'neg' : '',
-         'Invested capital divided by the average monthly burn over the selected range'),
-  ].join('');
+         'Capital you have put in, less anything reimbursed to you'),
+    card('Reimbursable', money(cap.outstanding_reimbursable), 'personally paid, not yet repaid', '',
+         'You can reimburse these individually from the Expenses tab'),
+    unreviewed
+      ? card('Funding unreviewed', String(unreviewed), money(cash.unreviewed_funding_amount) + ' — check who paid', 'warn',
+             'These rows defaulted to "paid by the business" and have never been reviewed. Until they are, cash reserve is an estimate.')
+      : card('Funding reviewed', 'all', 'every row has a payer', 'pos'),
+  ].join(''));
 
   const monthOpt = (sel) => months.map(m => '<option value="' + m + '"' + (m === sel ? ' selected' : '') + '>' + m + '</option>').join('');
   const preset = (label, n) => '<button class="hub-mini" data-plrange="' + n + '">' + label + '</button>';
 
   $('plBody').innerHTML =
-    '<div class="pl-kpis">' + kpis + '</div>' +
+    line1 + line2 + line3 +
     '<div class="pl-bar">' +
       '<span class="pl-bar-l">Range</span>' +
       '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
@@ -11817,76 +11840,121 @@ function renderPL() {
       '<span class="pl-bar-sep"></span>' +
       '<button class="hub-mini" data-plcsv>Export CSV</button>' +
     '</div>' +
-    '<div id="plGrid"></div>' +
-    '<p class="muted" style="margin-top:10px">Click any category to open its charges. Click a figure to edit it. ' +
-    'Overhead is spend not tied to an event; <b>personal</b> marks what you paid for yourself, which counts as invested capital.</p>';
+    '<div id="plGrid"></div>';
   renderPLGrid();
 }
 
-function pct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '0%'; }
-
-// The grid: one collapsible row per category, months across. Budget vs actual by
-// default, because a number with nothing to compare it to is just trivia.
+// Sectioned grid. Revenue, then direct, then indirect, with the profit lines
+// computed between them so the statement reads down the page.
 function renderPLGrid() {
   const d = plState.data;
   const rows = d.pl.filter(r => plInRange(r.period));
   const bv = d.bv.filter(r => plInRange(r.period));
-  const months = [...new Set(rows.map(r => r.period))].sort();
-  const cats = [...new Set(rows.map(r => r.category))].sort();
-  const num = (v) => Number(v) || 0;
+  const months = [...new Set(rows.map(r => r.period))].filter(Boolean).sort();
+  const sum = d.sum.filter(r => plInRange(r.period));
+  const byMonth = {}; sum.forEach(r => byMonth[r.period] = r);
 
-  const actual = {}, planned = {};
-  rows.forEach(r => { actual[r.category + '|' + r.period] = (actual[r.category + '|' + r.period] || 0) + num(r.cost) - num(r.revenue); });
-  bv.forEach(r => { planned[r.category + '|' + r.period] = (planned[r.category + '|' + r.period] || 0) + num(r.planned_cost) - num(r.planned_revenue); });
+  const val = {};   // section|category|period -> amount
+  rows.forEach(r => {
+    const amt = r.section === 'revenue' ? plNum(r.revenue) : plNum(r.cost);
+    const k = r.section + '|' + r.category + '|' + r.period;
+    val[k] = (val[k] || 0) + amt;
+  });
+  const planned = {};
+  bv.forEach(r => { const k = r.category + '|' + r.period; planned[k] = (planned[k] || 0) + plNum(r.planned_cost) + plNum(r.planned_revenue); });
 
-  const catTotal = (c) => months.reduce((t, m) => t + (actual[c + '|' + m] || 0), 0);
-  const ordered = cats.sort((a, b) => catTotal(b) - catTotal(a));
+  const head = '<tr><th class="pl-lbl">Line</th>' + months.map(m => '<th class="num">' + m.slice(2) + '</th>').join('') +
+               '<th class="num">Total</th></tr>';
 
-  const head = '<tr><th>Category</th>' + months.map(m => '<th class="num">' + m.slice(2) + '</th>').join('') +
-               '<th class="num">Total</th><th class="num">Budget</th><th class="num">Var</th></tr>';
+  const catTotal = (sec, c) => months.reduce((t, m) => t + (val[sec + '|' + c + '|' + m] || 0), 0);
 
-  const body = ordered.map(c => {
-    const open = !!plState.open[c];
-    const tot = catTotal(c);
-    const bud = months.reduce((t, m) => t + (planned[c + '|' + m] || 0), 0);
-    const v = tot - bud;
-    const cells = months.map(m => {
-      const a = actual[c + '|' + m] || 0;
-      return '<td class="num' + (a ? ' pl-click' : '') + '"' + (a ? ' data-pldrill="' + escapeHtml(c) + '|' + m + '"' : '') + '>' +
-             (a ? money(a) : '<span class="muted">–</span>') + '</td>';
-    }).join('');
-    const main = '<tr class="pl-cat' + (open ? ' open' : '') + '" data-plcat="' + escapeHtml(c) + '">' +
-      '<td><span class="pl-caret">' + (open ? '▾' : '▸') + '</span> ' + escapeHtml(c) + '</td>' + cells +
-      '<td class="num"><b>' + money(tot) + '</b></td>' +
-      '<td class="num">' + (bud ? money(bud) : '<span class="muted">–</span>') + '</td>' +
-      '<td class="num ' + (v > 0 ? 'neg' : 'pos') + '">' + (bud ? money(v) : '<span class="muted">–</span>') + '</td></tr>';
-    if (!open) return main;
-    const detail = d.exp.filter(x => (x.category || '(none)') === c && plInRange(String(x.date).slice(0, 7)))
-      .sort((a, b) => String(b.date).localeCompare(String(a.date)));
-    const sub = detail.length ? detail.map(x =>
-      '<tr class="pl-sub" data-plrow="' + escapeHtml(x.id) + '">' +
-      '<td colspan="' + (months.length + 1) + '">' +
-        '<span class="pl-sub-date">' + escapeHtml(fmtDate(x.date)) + '</span> ' +
-        '<span class="pl-sub-vendor">' + escapeHtml(x.vendor || x.description || 'no vendor') + '</span> ' +
-        (x.funded_by === 'owner' ? '<span class="exp-tag own">personal</span> ' : '') +
-        (x.verified_at ? '<span class="exp-tag ok">✓</span> ' : '') +
-      '</td>' +
-      '<td class="num">' + money(x.amount) + '</td>' +
-      '<td colspan="2" class="pl-sub-act">' +
-        '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '">' + (x.verified_at ? '✓' : '○') + '</button>' +
-        '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '">recategorise</button>' +
-      '</td></tr>').join('')
-      : '<tr class="pl-sub"><td colspan="' + (months.length + 4) + '" class="muted">No charges in this range.</td></tr>';
-    return main + sub;
-  }).join('');
+  let html = '';
+  PL_SECTIONS.forEach(sec => {
+    const cats = [...new Set(rows.filter(r => r.section === sec.key).map(r => r.category))]
+      .sort((a, b) => catTotal(sec.key, b) - catTotal(sec.key, a));
+    const secTotalFor = (m) => cats.reduce((t, c) => t + (val[sec.key + '|' + c + '|' + m] || 0), 0);
+    const secTotal = months.reduce((t, m) => t + secTotalFor(m), 0);
 
-  const totRow = '<tr class="pl-total"><td><b>Total</b></td>' +
-    months.map(m => { const t = cats.reduce((a, c) => a + (actual[c + '|' + m] || 0), 0);
-      return '<td class="num"><b>' + money(t) + '</b></td>'; }).join('') +
-    '<td class="num"><b>' + money(cats.reduce((a, c) => a + catTotal(c), 0)) + '</b></td><td></td><td></td></tr>';
+    html += '<tr class="pl-section pl-sec-' + sec.key + '"><td class="pl-lbl"><b>' + sec.label + '</b>' +
+            (sec.note ? ' <span class="muted">' + sec.note + '</span>' : '') + '</td>' +
+            months.map(m => '<td class="num"><b>' + money(secTotalFor(m)) + '</b></td>').join('') +
+            '<td class="num"><b>' + money(secTotal) + '</b></td></tr>';
+
+    if (!cats.length) {
+      html += '<tr class="pl-empty"><td class="pl-lbl muted">nothing recorded</td><td colspan="' + (months.length + 1) + '"></td></tr>';
+    }
+    cats.forEach(c => {
+      const open = !!plState.open[sec.key + '|' + c];
+      const tot = catTotal(sec.key, c);
+      html += '<tr class="pl-cat' + (open ? ' open' : '') + '" data-plcat="' + escapeHtml(sec.key + '|' + c) + '">' +
+        '<td class="pl-lbl"><span class="pl-caret">' + (open ? '▾' : '▸') + '</span> ' + escapeHtml(c) + '</td>' +
+        months.map(m => { const a = val[sec.key + '|' + c + '|' + m] || 0;
+          return '<td class="num">' + (a ? money(a) : '<span class="muted">·</span>') + '</td>'; }).join('') +
+        '<td class="num">' + money(tot) + '</td></tr>';
+      if (open) html += plDetailRows(sec, c, months);
+    });
+
+    // Profit line after revenue and after direct
+    if (sec.key === 'revenue' || sec.key === 'direct') {
+      const isGross = sec.key === 'direct';
+      const label = isGross ? 'Gross profit' : 'Total revenue';
+      if (isGross) {
+        html += '<tr class="pl-profit"><td class="pl-lbl"><b>' + label + '</b></td>' +
+          months.map(m => { const v = plNum((byMonth[m] || {}).gross_profit);
+            return '<td class="num ' + (v < 0 ? 'neg' : 'pos') + '"><b>' + money(v) + '</b></td>'; }).join('') +
+          '<td class="num"><b>' + money(sum.reduce((t, r) => t + plNum(r.gross_profit), 0)) + '</b></td></tr>';
+      }
+    }
+  });
+
+  html += '<tr class="pl-profit pl-net"><td class="pl-lbl"><b>Net profit</b></td>' +
+    months.map(m => { const v = plNum((byMonth[m] || {}).net_profit);
+      return '<td class="num ' + (v < 0 ? 'neg' : 'pos') + '"><b>' + money(v) + '</b></td>'; }).join('') +
+    '<td class="num"><b>' + money(sum.reduce((t, r) => t + plNum(r.net_profit), 0)) + '</b></td></tr>';
 
   $('plGrid').innerHTML = '<div class="pl-scroll"><table class="data-table pl-table"><thead>' + head +
-    '</thead><tbody>' + body + totRow + '</tbody></table></div>';
+    '</thead><tbody>' + html + '</tbody></table></div>';
+}
+
+// Expanded charges, GROUPED BY MONTH. Previously one flat list, so a category
+// spanning a year was an undifferentiated wall and you could not tell which
+// charge belonged to which column above it.
+function plDetailRows(sec, category, months) {
+  const d = plState.data;
+  if (sec.key === 'revenue') {
+    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + (months.length + 2) + '">' +
+      'Revenue detail lives on the event — open the event to see tickets, sponsors and donations.</td></tr>';
+  }
+  const want = sec.key === 'direct';
+  const list = d.exp.filter(x =>
+    (x.category || 'Uncategorised') === category &&
+    (!!x.event_id) === want &&
+    plInRange(String(x.date).slice(0, 7)));
+  if (!list.length) {
+    return '<tr class="pl-sub"><td class="pl-lbl muted" colspan="' + (months.length + 2) + '">No charges in this range.</td></tr>';
+  }
+  const groups = {};
+  list.forEach(x => { const m = String(x.date).slice(0, 7); (groups[m] = groups[m] || []).push(x); });
+  return Object.keys(groups).sort().reverse().map(m => {
+    const g = groups[m].sort((a, b) => String(b.date).localeCompare(String(a.date)));
+    const gt = g.reduce((t, x) => t + plNum(x.amount), 0);
+    return '<tr class="pl-monthhead"><td class="pl-lbl" colspan="' + (months.length + 1) + '">' +
+        '<span class="pl-mh">' + m + '</span> <span class="muted">' + g.length + ' charge' + (g.length > 1 ? 's' : '') + '</span></td>' +
+        '<td class="num">' + money(gt) + '</td></tr>' +
+      g.map(x => '<tr class="pl-sub">' +
+        '<td class="pl-lbl">' +
+          '<span class="pl-sub-date">' + escapeHtml(fmtDate(x.date)) + '</span> ' +
+          escapeHtml(x.vendor || x.description || 'no vendor') + ' ' +
+          (x.funded_by === 'owner' ? '<span class="exp-tag own">personal</span> ' : '') +
+          (x.verified_at ? '<span class="exp-tag ok">✓</span> ' : '') +
+        '</td>' +
+        '<td colspan="' + (months.length - 1 > 0 ? months.length - 1 : 1) + '"></td>' +
+        '<td class="num">' + money(x.amount) + '</td>' +
+        '<td class="num pl-sub-act">' +
+          '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '" title="Mark checked">' + (x.verified_at ? '✓' : '○') + '</button>' +
+          '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '" title="Change category">edit</button>' +
+        '</td></tr>').join('');
+  }).join('');
 }
 
 async function plSetVerified(id) {
@@ -11900,48 +11968,42 @@ async function plSetVerified(id) {
 async function plRecategorise(id) {
   const row = plState.data.exp.find(x => x.id === id); if (!row) return;
   const cats = [...new Set(plState.data.exp.map(x => x.category).filter(Boolean))].sort();
-  const next = prompt('Category for ' + (row.vendor || 'this charge') + ':' + String.fromCharCode(10) + String.fromCharCode(10) + cats.join(', '), row.category || '');
+  const next = prompt('Category for ' + (row.vendor || 'this charge') + ':' + String.fromCharCode(10, 10) + cats.join(', '), row.category || '');
   if (next === null) return;
-  const v = next.trim() || null;
-  const { error } = await sb.from('expenses').update({ category: v }).eq('id', id);
+  const { error } = await sb.from('expenses').update({ category: next.trim() || null }).eq('id', id);
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
-  row.category = v;
-  toast('Recategorised - reloading totals', 'ok');
+  toast('Recategorised', 'ok');
   loadPL();
 }
 
 function plExportCsv() {
   const d = plState.data;
-  const rows = d.exp.filter(x => plInRange(String(x.date).slice(0, 7)));
-  const head = ['date', 'amount', 'category', 'vendor', 'description', 'funded_by', 'verified', 'overhead'];
+  const rows = d.pl.filter(r => plInRange(r.period))
+    .sort((a, b) => (a.period + a.section).localeCompare(b.period + b.section));
   const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const csv = [head.join(',')].concat(rows.map(x => [x.date, x.amount, x.category, x.vendor, x.description,
-    x.funded_by, x.verified_at ? 'yes' : 'no', x.event_na ? 'yes' : 'no'].map(esc).join(','))).join(String.fromCharCode(10));
-  const blob = new Blob([csv], { type: 'text/csv' });
+  const NL = String.fromCharCode(10);
+  const csv = ['period,section,category,revenue,cost'].concat(
+    rows.map(r => [r.period, r.section, r.category, r.revenue, r.cost].map(esc).join(','))).join(NL);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
   a.download = 'come-with-pl-' + plState.from + '-to-' + plState.to + '.csv';
   a.click(); URL.revokeObjectURL(a.href);
 }
 
 $('panel-pl').addEventListener('click', (e) => {
   const cat = e.target.closest('[data-plcat]');
-  if (cat && !e.target.closest('[data-pldrill]')) {
-    const k = cat.dataset.plcat; plState.open[k] = !plState.open[k]; renderPLGrid(); return;
-  }
-  const dr = e.target.closest('[data-pldrill]');
-  if (dr) { const c = dr.dataset.pldrill.split('|')[0]; plState.open[c] = true; renderPLGrid(); return; }
+  if (cat) { const k = cat.dataset.plcat; plState.open[k] = !plState.open[k]; renderPLGrid(); return; }
   const vf = e.target.closest('[data-plverify]'); if (vf) { plSetVerified(vf.dataset.plverify); return; }
   const rc = e.target.closest('[data-plrecat]'); if (rc) { plRecategorise(rc.dataset.plrecat); return; }
   if (e.target.closest('[data-plexpand]')) {
-    [...new Set(plState.data.pl.map(r => r.category))].forEach(c => plState.open[c] = true); renderPLGrid(); return;
+    plState.data.pl.forEach(r => plState.open[r.section + '|' + r.category] = true); renderPLGrid(); return;
   }
   if (e.target.closest('[data-plcollapse]')) { plState.open = {}; renderPLGrid(); return; }
   if (e.target.closest('[data-plcsv]')) { plExportCsv(); return; }
   const pr = e.target.closest('[data-plrange]');
   if (pr) {
     const n = Number(pr.dataset.plrange);
-    const months = [...new Set(plState.data.pl.map(r => r.period))].sort();
+    const months = [...new Set(plState.data.sum.map(r => r.period))].filter(Boolean).sort();
     if (!n) { plState.from = months[0]; plState.to = months[months.length - 1]; }
     else { const win = months.slice(-n); plState.from = win[0]; plState.to = win[win.length - 1]; }
     renderPL(); return;
@@ -19457,6 +19519,22 @@ tr.exp-selected>td{background:rgba(48,84,150,.09)}
 .exp-bulk-sep{width:1px;height:16px;background:var(--line,#ccd);margin:0 2px}
 .hub-mini.danger{color:#be3c3c;border-color:#eccaca}
 .hub-mini.danger:hover{background:#fdf0f0}
+
+/* ---- P&L bands + sectioned statement (153/154) ---- */
+.pl-band{margin:0 0 10px}
+.pl-band-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mid,#888);margin:0 0 5px}
+.pl-kpi.warn{border-color:#c9922f;background:rgba(201,146,47,.07)}
+.pl-kpi.warn .pl-kpi-v{color:#8a6208}
+table.pl-table td.pl-lbl,table.pl-table th.pl-lbl{min-width:230px;text-align:left}
+table.pl-table tr.pl-section td{background:rgba(48,84,150,.10);border-top:2px solid #305496;font-size:12.5px}
+table.pl-table tr.pl-sec-revenue td{background:rgba(31,122,77,.10);border-top-color:#1f7a4d}
+table.pl-table tr.pl-profit td{background:var(--panel,#fff);border-top:1px dashed #305496;border-bottom:1px solid var(--line,#e3e3e6)}
+table.pl-table tr.pl-net td{border-top:2px solid #305496;border-bottom:2px solid #305496}
+table.pl-table tr.pl-empty td{font-size:11.5px;padding-top:3px;padding-bottom:3px}
+table.pl-table tr.pl-monthhead td{background:rgba(48,84,150,.06);font-size:11.5px;padding-top:3px;padding-bottom:3px}
+.pl-mh{font-weight:700;letter-spacing:.02em}
+table.pl-table td.num.neg,table.pl-table td.num.neg b{color:#be3c3c}
+table.pl-table td.num.pos,table.pl-table td.num.pos b{color:#1f7a4d}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
