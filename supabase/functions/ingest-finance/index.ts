@@ -23,7 +23,7 @@
 // Rotation: docs/ROTATE_PUSH_TOKEN.md
 //
 // STORAGE: writes to `expenses` / `income` keyed on external_ref, and replaces
-// period budget_lines. Requires migration 147 (external_ref, funded_by,
+// period budget_lines. Requires migration 149 (external_ref, funded_by,
 // budget_lines.period). Uses the service role, so it enforces its own auth — the
 // bearer check above is the only gate.
 //
