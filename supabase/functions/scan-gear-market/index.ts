@@ -193,13 +193,20 @@ Deno.serve(async (req) => {
     catch (e) { fails.reverb = e instanceof Error ? e.message : String(e); }
   }
 
-  try {
-    const tok = await ebayToken();
-    for (const q of queries) {
-      try { const r = await fromEbay(q, tok); listings.push(...r); counts.ebay += r.length; }
-      catch (e) { fails.ebay = e instanceof Error ? e.message : String(e); }
-    }
-  } catch (e) { fails.ebay = e instanceof Error ? e.message : String(e); }
+  // Missing credentials is a CONFIGURATION state, not an outage. Reporting it as
+  // FAILED sent a "1 source failed" digest three times a day saying nothing but
+  // "eBay still isn't set up" — which is precisely how a reader learns to skim
+  // past failure lines, and then misses the one that matters.
+  const ebayConfigured = !!(Deno.env.get("EBAY_CLIENT_ID") && Deno.env.get("EBAY_CLIENT_SECRET"));
+  if (ebayConfigured) {
+    try {
+      const tok = await ebayToken();
+      for (const q of queries) {
+        try { const r = await fromEbay(q, tok); listings.push(...r); counts.ebay += r.length; }
+        catch (e) { fails.ebay = e instanceof Error ? e.message : String(e); }
+      }
+    } catch (e) { fails.ebay = e instanceof Error ? e.message : String(e); }
+  }
 
   for (const q of queries) {
     try { const r = await fromCraigslist(q); listings.push(...r); counts.craigslist += r.length; }
@@ -223,9 +230,12 @@ Deno.serve(async (req) => {
 
   // One line per source, and a source that threw says FAILED — never "0 found".
   const sourceStatus: Record<string, string> = {};
-  for (const k of ["reverb", "ebay", "craigslist"]) {
+  for (const k of ["reverb", "craigslist"]) {
     sourceStatus[k] = fails[k] ? `FAILED: ${fails[k]}` : `ok — ${counts[k]} listing(s) fetched`;
   }
+  sourceStatus.ebay = !ebayConfigured
+    ? "NOT CONFIGURED — set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"
+    : (fails.ebay ? `FAILED: ${fails.ebay}` : `ok — ${counts.ebay} listing(s) fetched`);
   // "Not configured" is its own answer. It is not a failure, and it is certainly
   // not zero results — nobody should read this line as "Facebook has nothing".
   sourceStatus.facebook = !fbConfigured
@@ -287,10 +297,9 @@ Deno.serve(async (req) => {
   // ── store (upsert on (source, listing_id): re-seeing a listing moves
   //     last_seen_at, it does not create a duplicate or re-alert) ────────────
   let inserted = 0;
-  const fresh: Array<{ id: string; score: number; title: string; url: string; price: number | null; location: string | null; source: string; breakdown: Record<string, unknown> }> = [];
   for (const s of scored) {
     const { data: existing } = await admin.from("gear_watch_hits")
-      .select("id, alerted_at").eq("source", s.source).eq("listing_id", s.listing_id).maybeSingle();
+      .select("id").eq("source", s.source).eq("listing_id", s.listing_id).maybeSingle();
 
     if (existing) {
       await admin.from("gear_watch_hits").update({
@@ -299,22 +308,34 @@ Deno.serve(async (req) => {
       continue;
     }
 
-    const { data: row, error } = await admin.from("gear_watch_hits").insert({
+    const { error } = await admin.from("gear_watch_hits").insert({
       source: s.source, listing_id: s.listing_id, url: s.url, title: s.title,
       price: s.price, currency: s.currency, location: s.location, seller: s.seller,
       seller_feedback: s.seller_feedback, posted_at: s.posted_at, image_url: s.image_url,
       target_id: s.target_id, score: s.score, score_breakdown: s.breakdown, raw: s.raw,
-    }).select("id").single();
-    if (!error && row) {
-      inserted++;
-      if (s.score >= (cfg.min_score ?? 65)) {
-        fresh.push({ id: row.id, score: s.score, title: s.title, url: s.url, price: s.price, location: s.location, source: s.source, breakdown: s.breakdown });
-      }
-    }
+    });
+    if (!error) inserted++;
   }
 
   // ── alert ─────────────────────────────────────────────────────────────────
-  fresh.sort((a, b) => b.score - a.score);
+  // What still needs announcing is a question for the DATABASE, not for this run.
+  // Asking "what did I insert just now?" strands anything found while the digest
+  // email was unset — which is exactly what happened: the Brooklyn CDJ-3000 was
+  // stored on 2026-08-18, the email address arrived a day later, and that hit
+  // would have sat unannounced forever. It also misses a hit whose score crosses
+  // the threshold on a later scan, e.g. once a serial is pasted in.
+  const minScore = cfg.min_score ?? 65;
+  const { data: pending, error: pendErr } = await admin.from("gear_watch_hits")
+    .select("id, score, title, url, price, location, source, score_breakdown")
+    .is("alerted_at", null).gte("score", minScore).eq("status", "new")
+    .order("score", { ascending: false }).limit(25);
+  if (pendErr) console.error("pending-alert query failed:", pendErr.message);
+
+  const fresh = (pending || []).map((p: Record<string, any>) => ({
+    id: p.id as string, score: p.score as number, title: p.title as string, url: p.url as string,
+    price: p.price as number | null, location: p.location as string | null,
+    source: p.source as string, breakdown: (p.score_breakdown || {}) as Record<string, unknown>,
+  }));
   const failed = Object.entries(sourceStatus).filter(([, v]) => v.startsWith("FAILED"));
   let emailed = false, pushed = 0;
 

@@ -1,9 +1,19 @@
 # Carryover — 2026-08-18 (Gear Watch: a scored resale scan for the stolen rig · DESKTOP)
 
-**This close is a build that is NOT yet applied, deployed or pushed.** Everything below
-about Gear Watch sits in the working tree only — migration `146` is written but not on
-prod, `scan-gear-market` is not deployed, and nothing was pushed because `master`
-auto-deploys. Steps are in `DEV_DOCS/GEAR_WATCH.md`.
+**Gear Watch is LIVE, deployed, pushed and alerting** (2026-08-19). Migrations 146, 147,
+150 and 152 applied; `scan-gear-market` at **version 12**; both vault secrets stored;
+`theft_date = 2026-08-16`; digest going to **berky@comewith.org**; cron verified end to end
+by calling `gear_watch_kick()` by hand. Sources: Reverb + Craigslist on the 3×/day cron,
+**Facebook via Apify on the manual button only** (billed per result), eBay awaiting
+developer-account approval. Runbook: `DEV_DOCS/GEAR_WATCH.md`.
+
+Still open: **push has 0 device subscriptions** (`push_user_id` unset — Keith must allow
+notifications on a device first), and **eBay credentials**.
+
+⚠ **Two fixes were lost and had to be re-applied** because they lived in a commit on
+`security/push-token-auth` that was never cherry-picked to `master`; checking out master
+silently reverted them and the deployed function regressed. If something that worked
+stops working, check which branch the fix was committed on.
 
 *Context, because it is not a normal feature:* Keith's DJ rig (~$15K) was stolen from a
 vehicle overnight. NYPD is handling it as grand larceny with a detective and an evidence
