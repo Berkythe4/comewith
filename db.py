@@ -121,3 +121,56 @@ except urllib.error.URLError as e:
     sys.exit(1)
 
 print(json.dumps(result, indent=2, default=str))
+
+
+# ---------------------------------------------------------------------------
+# Record the migration, so prod knows what has been run.
+#
+# Only for a real migration FILE, and only when it actually committed. A dry run
+# (commit swapped for rollback) threw its work away and must not be recorded, or
+# the table starts lying in the most dangerous direction — claiming applied when
+# nothing landed.
+# ---------------------------------------------------------------------------
+def _record_migration(sql_text, src):
+    import hashlib
+    import re as _re
+
+    name = Path(src).name
+    m = _re.match(r"^(\d{3,})_.+\.sql$", name)
+    if not m:
+        return                                  # ad-hoc SQL, nothing to record
+    if _re.search(r"(?mi)^\s*rollback\s*;", sql_text):
+        print(f"[db.py] dry run detected - NOT recording {name}", file=sys.stderr)
+        return
+
+    version = m.group(1).lstrip("0") or "0"
+    digest = hashlib.sha256(sql_text.encode("utf-8")).hexdigest()
+    who = os.environ.get("COMPUTERNAME") or os.environ.get("HOSTNAME") or "unknown"
+
+    def lit(v):
+        return "null" if v is None else "'" + str(v).replace("'", "''") + "'"
+
+    # Self-bootstrapping: creating the table here means the recorder works no
+    # matter which order 148 and any other migration are applied in.
+    rec = f"""
+      create table if not exists public.applied_migrations (
+        version text primary key, filename text not null, sha256 text,
+        applied_at timestamptz not null default now(), applied_by text, note text);
+      insert into public.applied_migrations (version, filename, sha256, applied_by)
+      values ({lit(version)}, {lit(name)}, {lit(digest)}, {lit(who)})
+      on conflict (version) do update
+        set filename = excluded.filename, sha256 = excluded.sha256,
+            applied_at = now(), applied_by = excluded.applied_by;
+    """
+    body2 = json.dumps({"query": rec}).encode("utf-8")
+    req2 = urllib.request.Request(URL, data=body2, headers=HEADERS, method="POST")
+    try:
+        with urllib.request.urlopen(req2, timeout=60):
+            print(f"[db.py] recorded migration {version} ({name})", file=sys.stderr)
+    except Exception as exc:                     # never fail the apply over bookkeeping
+        print(f"[db.py] WARNING: applied {name} but could not record it: {exc}",
+              file=sys.stderr)
+
+
+if source not in ("<inline>", "<stdin>"):
+    _record_migration(sql, source)
