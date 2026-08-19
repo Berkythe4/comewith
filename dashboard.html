@@ -4085,6 +4085,7 @@ const fmtWhen = (s) => {
 
 const truncate = (s, n = 80) => (s && s.length > n ? s.slice(0, n - 1) + '…' : s || '');
 
+const NL = String.fromCharCode(10);
 const escapeHtml = (s) => {
   if (s == null) return '';
   return String(s)
@@ -10775,10 +10776,14 @@ $('panel-events').addEventListener('click', (e) => {
 // = business overhead / capital).
 // ============================================================
 const expDash = { rows: [], events: [], q: '', event: '', cat: '', flag: '', funded: '', sel: new Set() };
+// A checkbox 'change' event carries no shiftKey, so it is captured from the
+// click that immediately precedes it.
+let expShiftHeld = false;
+document.addEventListener('click', (e) => { expShiftHeld = e.shiftKey; }, true);
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
   const [ex, ev, ac] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger, updated_at').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
@@ -10813,7 +10818,8 @@ function expFiltered() {
     s.flag === 'nocat' ? !x.category :
     s.flag === 'noreceipt' ? (!x.receipt_path && Number(x.amount) >= 100) :
     s.flag === 'dupe' ? expIsDupe(x) :
-    s.flag === 'nosource' ? !x.cash_source : true;
+    s.flag === 'nosource' ? !x.cash_source :
+    s.flag === 'recent' ? (x.updated_at && (Date.now() - Date.parse(x.updated_at)) < 864e5) : true;
   const matchFunded = (x) =>
     s.funded === '' ? true :
     s.funded === 'owner' ? x.funded_by === 'owner' :
@@ -10875,6 +10881,7 @@ function expChips() {
     { k: 'noreceipt', label: 'No receipt ≥$100', n: r.filter(x => !x.receipt_path && Number(x.amount) >= 100).length },
     { k: 'dupe', label: 'Possible duplicate', n: r.filter(expIsDupe).length },
     { k: 'nosource', label: 'No cash source', n: r.filter(x => !x.cash_source).length },
+    { k: 'recent', label: 'Changed in last 24h', n: r.filter(x => x.updated_at && (Date.now() - Date.parse(x.updated_at)) < 864e5).length },
   ];
 }
 
@@ -10885,7 +10892,7 @@ function expChips() {
 function renderExpBulk() {
   const s = expDash, el = $('expBulk'); if (!el) return;
   const ids = [...s.sel];
-  if (!ids.length) { el.innerHTML = ''; return; }
+  if (!ids.length) { el.innerHTML = ''; syncStickyTop('panel-expenses', 'expBulk'); return; }
   const sum = s.rows.filter(r => s.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
   el.innerHTML = `<div class="exp-bulk">
     <b>${ids.length} selected</b> <span class="muted">${money(sum)}</span>
@@ -10910,12 +10917,18 @@ function renderExpBulk() {
     <button class="hub-mini" data-bulkverify="0">○ Un-verify</button>
     <button class="hub-mini" data-bulkreimburse>Mark reimbursed</button>
     <button class="hub-mini danger" data-bulkdel>Delete ${ids.length}</button>
-    <button class="hub-mini" data-bulkclear>clear</button>
-  </div>`;
+    <button class="hub-mini bulk-deselect" data-bulkclear title="Or press Esc">✕ Deselect all ${ids.length}</button>
+  </div>
+  <div class="sel-note">Shift-click a checkbox to select a range · Esc clears · selection is limited to rows the filter shows</div>`;
+  syncStickyTop('panel-expenses', 'expBulk');
 }
 
 function renderExpensesBody() {
   const s = expDash, list = expFiltered();
+  // Selection may only ever contain rows the current filter shows. Anything
+  // else is a mass update with an invisible blast radius.
+  const dropped = pruneSelection(s.sel, list);
+  if (dropped) toast(dropped + ' row' + (dropped > 1 ? 's were' : ' was') + ' deselected — no longer matches the filter', 'ok');
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
   const needsList = list.filter(x => !x.event_id && !x.event_na);
   const needsTotal = needsList.reduce((t, x) => t + Number(x.amount || 0), 0);
@@ -10967,7 +10980,7 @@ function renderExpensesBody() {
     <td>${receipt(x)}</td>
     <td class="exp-flags">${flags(x)}</td>
     <td class="exp-check"><button class="hub-mini exp-del" data-expdel="${escapeHtml(x.id)}" title="Delete this expense">✕</button></td>
-  </tr>`).join('') || `<tr><td colspan="11" class="muted" style="padding:14px;">No expenses match these filters.</td></tr>`;
+  </tr>`).join('') || `<tr><td colspan="12" class="muted" style="padding:14px;">No expenses match these filters.</td></tr>`;
   $('expTable').innerHTML = `<table class="data-table"><thead><tr>
     <th class="exp-check"><input type="checkbox" data-expselall${allShown ? ' checked' : ''} title="Select everything matching the current filters"></th>
     <th class="exp-check" title="Verified">✓</th>
@@ -11034,7 +11047,19 @@ $('panel-expenses').addEventListener('change', (e) => {
   const ev = e.target.closest('[data-expev]'); if (ev) { setExpenseEvent(ev.dataset.expev, ev.value); return; }
   const va = e.target.closest('[data-expva]'); if (va) { setExpenseVendorActor(va.dataset.expva, va.value); return; }
   const sel = e.target.closest('[data-expsel]'); if (sel) {
-    sel.checked ? expDash.sel.add(sel.dataset.expsel) : expDash.sel.delete(sel.dataset.expsel);
+    const id = sel.dataset.expsel, want = sel.checked;
+    // Shift extends from the last box you touched to this one, applying whatever
+    // this click did — so shift-uncheck clears a run as easily as it sets one.
+    if (expDash._lastSel && expShiftHeld) {
+      const shown = expFiltered().map(x => x.id);
+      const a = shown.indexOf(expDash._lastSel), b = shown.indexOf(id);
+      if (a >= 0 && b >= 0) {
+        shown.slice(Math.min(a, b), Math.max(a, b) + 1)
+             .forEach(i => want ? expDash.sel.add(i) : expDash.sel.delete(i));
+      }
+    }
+    want ? expDash.sel.add(id) : expDash.sel.delete(id);
+    expDash._lastSel = id;
     renderExpensesBody(); return;
   }
   if (e.target.closest('[data-expselall]')) {
@@ -11104,6 +11129,7 @@ async function setExpenseVerified(ids, on) {
 async function deleteExpenses(ids) {
   if (!ids.length) return;
   const rows = expDash.rows.filter(r => ids.indexOf(r.id) >= 0);
+  if (!rows.length) { toast('Those rows are no longer loaded — refresh and try again', 'err'); return; }
   const sum = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
   const head = ids.length === 1
     ? 'Delete this expense?' + NL + NL + fmtDate(rows[0].date) + '  ' + money(rows[0].amount) + '  ' + (rows[0].vendor || rows[0].category || 'no vendor')
@@ -11146,6 +11172,158 @@ $('panel-expenses').addEventListener('click', (e) => {
   if (e.target.closest('[data-bulkclear]')) { expDash.sel.clear(); renderExpensesBody(); return; }
   const rc = e.target.closest('[data-exprcpt]'); if (rc) { viewReceipt(rc.dataset.exprcpt); return; }
   const ru = e.target.closest('[data-exprcptup]'); if (ru) { uploadReceipt(ru.dataset.exprcptup); return; }
+});
+
+
+// ============================================================
+// UNIVERSAL TABLE SORT
+// Click any header on any data table to sort by it. This works on the rendered
+// DOM rather than on each page's underlying array, which is deliberate: there
+// are ~20 tables built by ~20 different render functions, and teaching each one
+// to sort would be twenty chances to get it subtly different. One implementation
+// here behaves identically everywhere.
+//
+// Sort state is keyed by panel + table index so it survives the innerHTML
+// replacement that every render does, and a MutationObserver re-applies it after
+// a re-render. The _tsortBusy flag stops our own row reordering from being
+// mistaken for a re-render and looping.
+// ============================================================
+const TSORT = {};
+
+function tsortKey(table) {
+  const panel = table.closest('.panel') || table.closest('[id]') || document.body;
+  const all = Array.prototype.slice.call(panel.querySelectorAll('table.data-table'));
+  return (panel.id || 'p') + '#' + all.indexOf(table);
+}
+
+// A cell's sort value. Selects report their chosen label, not the raw value, so
+// sorting the Event column groups by the event name you can actually see.
+function tsortCellText(td) {
+  if (!td) return '';
+  const sel = td.querySelector('select');
+  if (sel) return sel.options[sel.selectedIndex] ? sel.options[sel.selectedIndex].text : '';
+  const inp = td.querySelector('input[type="checkbox"]');
+  if (inp) return inp.checked ? '0' : '1';
+  return (td.textContent || '').trim();
+}
+
+// Numbers, currency and dates must not sort as text, or $1,000 lands between
+// $10 and $2.
+function tsortTyped(raw) {
+  const t = String(raw).replace(/\u00a0/g, ' ').trim();
+  const bare = t.replace(/[,$\s]/g, '');
+  let m = bare.match(/^\((\d+(?:\.\d+)?)\)$/);
+  if (m) return { n: -parseFloat(m[1]) };
+  m = bare.match(/^-?\d+(?:\.\d+)?%?$/);
+  if (m) return { n: parseFloat(bare) };
+  m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+  if (m) { let y = +m[3]; if (y < 100) y += 2000; return { n: y * 10000 + (+m[1]) * 100 + (+m[2]) }; }
+  m = t.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (m) return { n: (+m[1]) * 10000 + (+m[2]) * 100 + (+m[3]) };
+  return { s: t.toLowerCase() };
+}
+
+function applyTsort(table) {
+  const st = TSORT[tsortKey(table)];
+  const head = table.tHead && table.tHead.rows[0];
+  if (head) {
+    Array.prototype.forEach.call(head.cells, (th, i) => {
+      th.classList.toggle('tsort-able', !st || st.col !== i);
+      th.classList.toggle('tsort-on', !!st && st.col === i);
+      if (st && st.col === i) th.setAttribute('data-tsort-dir', st.dir < 0 ? 'desc' : 'asc');
+      else th.removeAttribute('data-tsort-dir');
+    });
+  }
+  if (!st) return;
+  const tb = table.tBodies[0]; if (!tb) return;
+  // Rows that do not reach the sorted column (a colspan "nothing here" row) are
+  // left where they are rather than being sorted against an absent cell.
+  const rows = Array.prototype.slice.call(tb.rows).filter(r => r.cells.length > st.col);
+  if (rows.length < 2) return;
+  const keyed = rows.map((r, i) => ({ r: r, i: i, v: tsortTyped(tsortCellText(r.cells[st.col])) }));
+  keyed.sort((a, b) => {
+    const A = a.v, B = b.v;
+    const an = ('n' in A), bn = ('n' in B);
+    // Blanks always sink, in both directions — an empty cell is not "smallest",
+    // it is missing, and it should not push real values off the top of the page.
+    const ae = (!an && !A.s), be = (!bn && !B.s);
+    if (ae !== be) return ae ? 1 : -1;
+    let c;
+    if (an && bn) c = A.n - B.n;
+    else if (an !== bn) c = an ? -1 : 1;
+    else c = A.s.localeCompare(B.s);
+    return c * st.dir || a.i - b.i;
+  });
+  table._tsortBusy = true;
+  const frag = document.createDocumentFragment();
+  keyed.forEach(k => frag.appendChild(k.r));
+  tb.appendChild(frag);
+  table._tsortBusy = false;
+}
+
+document.addEventListener('click', (e) => {
+  const th = e.target.closest('table.data-table thead th');
+  if (!th) return;
+  // A header can hold the select-all checkbox; clicking that must not re-sort.
+  if (e.target.closest('input, select, button, a, label')) return;
+  const table = th.closest('table');
+  const k = tsortKey(table), cur = TSORT[k], col = th.cellIndex;
+  if (cur && cur.col === col && cur.dir === -1) delete TSORT[k];      // third click clears
+  else TSORT[k] = { col: col, dir: (cur && cur.col === col) ? -1 : 1 };
+  applyTsort(table);
+});
+
+let tsortPending = false;
+new MutationObserver((muts) => {
+  if (tsortPending) return;
+  for (let i = 0; i < muts.length; i++) {
+    const t = muts[i].target;
+    if (!t || t.nodeType !== 1) continue;
+    const own = t.closest('table.data-table');
+    if (own && own._tsortBusy) continue;
+    if (own || (t.querySelector && t.querySelector('table.data-table'))) {
+      tsortPending = true;
+      requestAnimationFrame(() => {
+        tsortPending = false;
+        document.querySelectorAll('table.data-table').forEach(applyTsort);
+      });
+      return;
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+
+// Drop anything from a selection that the current filter no longer shows, and
+// report how many went. Returns the count so the caller can tell the user: a
+// selection quietly shrinking is only marginally better than one that quietly
+// grows.
+// Measure whatever sticky toolbar sits above a table and hand the number to
+// CSS, so the locked header parks just below it instead of behind it.
+function syncStickyTop(panelId, barId) {
+  const panel = $(panelId), bar = $(barId);
+  if (!panel) return;
+  requestAnimationFrame(() => {
+    const h = (bar && bar.firstElementChild) ? bar.getBoundingClientRect().height : 0;
+    panel.style.setProperty('--sticky-top', Math.round(h) + 'px');
+  });
+}
+
+function pruneSelection(sel, visibleRows) {
+  if (!sel || !sel.size) return 0;
+  const on = new Set(visibleRows.map(r => r.id));
+  let n = 0;
+  Array.from(sel).forEach(id => { if (!on.has(id)) { sel.delete(id); n++; } });
+  return n;
+}
+
+// Esc is the fastest way out of a selection you did not mean to make.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (typeof expDash !== 'undefined' && expDash.sel && expDash.sel.size) {
+    expDash.sel.clear(); renderExpensesBody(); return;
+  }
+  if (typeof incomeDash !== 'undefined' && incomeDash.sel && incomeDash.sel.size) {
+    incomeDash.sel.clear(); renderIncomeBody(); return;
+  }
 });
 
 // ============================================================
@@ -11254,6 +11432,7 @@ function renderIncBulk() {
     '<button class="hub-mini" data-incbulkverify="1">✓ Verify</button>' +
     '<button class="hub-mini" data-incbulkverify="0">○ Un-verify</button>' +
     '<button class="hub-mini danger" data-incbulkdel>Delete ' + ids.length + '</button>' +
+    '<button class="hub-mini bulk-deselect" data-incbulkclear title="Or press Esc">\u2715 Deselect all ' + ids.length + '</button>' +
     '<button class="hub-mini" data-incbulkclear>clear</button></div>';
 }
 
@@ -11364,6 +11543,8 @@ async function incConfirmZero(eventId) {
 
 function renderIncomeBody() {
   const s = incomeDash, list = incomeFiltered();
+  { const d = pruneSelection(s.sel, list);
+    if (d) toast(d + ' row' + (d > 1 ? 's were' : ' was') + ' deselected — no longer matches the filter', 'ok'); }
   const total = list.reduce((t, x) => t + Number(x.amount || 0), 0);
   const byCat = {}; list.forEach(x => { const c = x.category || '—'; byCat[c] = (byCat[c] || 0) + Number(x.amount || 0); });
   const card = (l, v, cls = '') => `<div class="hub-card"><div class="lbl">${l}</div><div class="val ${cls}">${v}</div></div>`;
@@ -11456,6 +11637,7 @@ $('panel-income').addEventListener('click', async (e) => {
     incSetVerified([vf.dataset.incverify], !(row && row.verified_at)); return;
   }
   const bvf = e.target.closest('[data-incbulkverify]'); if (bvf) { incSetVerified([...incomeDash.sel], bvf.dataset.incbulkverify === '1'); return; }
+  if (e.target.closest('[data-incbulkclear]')) { incomeDash.sel.clear(); renderIncomeBody(); return; }
   if (e.target.closest('[data-incbulkdel]')) { incDelete([...incomeDash.sel]); return; }
   if (e.target.closest('[data-incbulkclear]')) { incomeDash.sel.clear(); renderIncomeBody(); return; }
   if (e.target.closest('[data-incadd]')) { incAddRevenue(incomeDash.event && incomeDash.event.indexOf('__') !== 0 ? incomeDash.event : null); return; }
@@ -12597,7 +12779,6 @@ function plExportCsv() {
   const rows = d.pl.filter(r => plInRange(r.period))
     .sort((a, b) => (a.period + a.section).localeCompare(b.period + b.section));
   const esc = (v) => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
-  const NL = String.fromCharCode(10);
   const csv = ['period,section,category,revenue,cost'].concat(
     rows.map(r => [r.period, r.section, r.category, r.revenue, r.cost].map(esc).join(','))).join(NL);
   const a = document.createElement('a');
@@ -20227,6 +20408,33 @@ table.pl-table td.pl-indent{padding-left:26px}
   letter-spacing:0;color:inherit;padding:6px 8px;border:1px solid var(--line,#ccd);border-radius:5px;background:var(--panel,#fff)}
 .chg-actions{display:flex;gap:6px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e3e3e6)}
 .hub-mini.primary{background:#305496;color:#fff;border-color:#305496}
+
+/* ---- tables: locked headers + click-to-sort (every page) ---- */
+.data-table thead th {
+  position: sticky; top: var(--sticky-top, 0px); z-index: 4;
+  background: var(--off); cursor: pointer; user-select: none;
+  box-shadow: inset 0 -2px 0 var(--ink);
+}
+.data-table thead th.tsort-nosort { cursor: default; }
+/* The arrow is always present so a sortable column looks sortable before you
+   click it; it just gets louder once the sort is active. */
+.data-table thead th.tsort-able::after {
+  content: ' \21C5'; opacity: .28; font-size: .9em;
+}
+.data-table thead th.tsort-on::after { content: ' \25B4'; opacity: 1; color: var(--accent, #c13b2a); }
+.data-table thead th.tsort-on[data-tsort-dir="desc"]::after { content: ' \25BE'; }
+.data-table tbody tr.exp-selected td { background: rgba(193,59,42,0.07); }
+
+/* Bulk bar rides along with you — the count and the way out of a selection
+   should never be scrolled off screen. */
+.exp-bulk {
+  position: sticky; top: 0; z-index: 6;
+  background: var(--bg); border-bottom: 1px solid var(--border);
+}
+.exp-bulk .bulk-deselect { margin-left: auto; }
+.sel-note {
+  font-size: .72rem; color: var(--mid); padding: 6px 0 0;
+}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
