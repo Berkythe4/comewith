@@ -10937,13 +10937,22 @@ function renderExpensesBody() {
   const allShown = list.length > 0 && list.every(x => s.sel.has(x.id));
   const flags = (x) => {
     const f = [];
-    if (x.funded_by === 'owner') f.push(x.reimbursed_at
-      ? '<span class="exp-tag" title="You paid this, and have been reimbursed">repaid</span>'
-      : '<span class="exp-tag own" title="You paid this personally — counts as invested capital">personal</span>');
+    // ONE tag for where the money came from. funded_by and cash_source now agree
+    // by construction (personal implies owner-funded), so rendering both printed
+    // "personal personal" on every row.
+    if (x.reimbursed_at) f.push('<span class="exp-tag" title="You paid this, and have been reimbursed">repaid</span>');
     if (expIsDupe(x)) f.push('<span class="exp-tag dupe" title="Another charge shares this date and amount">dupe?</span>');
     if (x.deductible === false) f.push('<span class="exp-tag" title="Marked non-deductible">non-ded</span>');
-    if (x.cash_source) f.push('<span class="exp-tag" title="Which account the money left">' + escapeHtml(x.cash_source) + '</span>');
-    else f.push('<span class="exp-tag dupe" title="Nobody has said which account paid this, so it is left out of the cash reserve">no source</span>');
+    const SRC = { personal: ['own', 'Your personal card — invested capital, not business cash'],
+                  paypal:   ['', 'Come With PayPal — draws down the $5,000 float'],
+                  bank:     ['', 'Bluevine business account — draws down the $5,000 float'],
+                  other:    ['', 'Paid some other way'] };
+    if (x.cash_source) {
+      const m = SRC[x.cash_source] || ['', 'Which account the money left'];
+      f.push('<span class="exp-tag ' + m[0] + '" title="' + escapeHtml(m[1]) + '">' + escapeHtml(x.cash_source) + '</span>');
+    } else {
+      f.push('<span class="exp-tag dupe" title="Nobody has said which account paid this, so it is left out of the cash reserve">no source</span>');
+    }
     return f.join(' ');
   };
   const rows = list.map(x => `<tr${(!x.event_id && !x.event_na) ? ' style="background:rgba(216,90,48,0.06);"' : ''}${s.sel.has(x.id) ? ' class="exp-selected"' : ''}>
@@ -12432,7 +12441,7 @@ function plDetailRows(sec, category, months) {
       '<td class="num">' + money(x.amount) + '</td>' +
       '<td class="num pl-sub-act">' +
         '<button class="hub-mini" data-plverify="' + escapeHtml(x.id) + '" title="Mark checked">' + (x.verified_at ? '&check;' : '&#9675;') + '</button>' +
-        '<button class="hub-mini" data-plrecat="' + escapeHtml(x.id) + '" title="Change category">edit</button>' +
+        '<button class="hub-mini" data-plopen="' + escapeHtml(x.id) + '" title="Open the full charge — edit category, event, source, or delete it">detail</button>' +
       '</td></tr>').join('');
   }).join('');
 }
@@ -12480,6 +12489,90 @@ async function plMergeVendor(key) {
   loadPL();
 }
 
+// ---- charge detail popup ------------------------------------------------------
+// Opened from any charge in the P&L. Everything that makes a charge wrong is
+// editable here — category, vendor, event, cash source — plus delete, so a
+// miscategorised row can be fixed where it is noticed instead of remembered and
+// hunted down on another tab later.
+function plOpenCharge(id) {
+  const d = plState.data;
+  const x = d.exp.find(r => r.id === id);
+  if (!x) return;
+  const cats = [...new Set(d.exp.map(r => r.category).filter(Boolean))].sort();
+  const actorName = {};
+  (d.actors || []).forEach(a => actorName[a.id] = a.display_name);
+  const events = (d.evm || []).slice().sort((a, b) => String(b.event_date).localeCompare(String(a.event_date)));
+
+  const ov = document.createElement('div');
+  ov.className = 'pick-ov';
+  ov.innerHTML =
+    '<div class="pick-box chg-box"><div class="pick-head">Charge detail<span class="pick-x" title="Close">&times;</span></div>' +
+    '<div class="chg-body">' +
+      '<div class="chg-hero"><b>' + money(x.amount) + '</b> <span class="muted">' + escapeHtml(fmtDate(x.date)) + '</span></div>' +
+      '<div class="chg-vendor">' + escapeHtml(x.vendor || x.description || 'no payee') +
+        (x.vendor_actor_id ? ' <span class="muted">&rarr; ' + escapeHtml(actorName[x.vendor_actor_id] || '') + '</span>' : ' <span class="exp-tag dupe">no vendor</span>') + '</div>' +
+      '<label class="chg-f">Category<select data-chg="category">' +
+        cats.map(c => '<option value="' + escapeHtml(c) + '"' + (c === x.category ? ' selected' : '') + '>' + escapeHtml(c) + '</option>').join('') +
+        '<option value="__new">+ new category…</option></select></label>' +
+      '<label class="chg-f">Event<select data-chg="event_id">' +
+        '<option value="">— overhead, no event —</option>' +
+        events.map(e => '<option value="' + escapeHtml(e.event_id) + '"' + (e.event_id === x.event_id ? ' selected' : '') + '>' +
+          escapeHtml(e.name) + ' · ' + escapeHtml(fmtDate(e.event_date)) + '</option>').join('') + '</select></label>' +
+      '<label class="chg-f">Paid from<select data-chg="cash_source">' +
+        ['personal', 'paypal', 'bank', 'other'].map(v => '<option value="' + v + '"' + (v === x.cash_source ? ' selected' : '') + '>' + v + '</option>').join('') +
+        '</select></label>' +
+      '<label class="chg-f">Books<select data-chg="ledger">' +
+        '<option value="come_with"' + (x.ledger !== 'dance_infusion' ? ' selected' : '') + '>Come With</option>' +
+        '<option value="dance_infusion"' + (x.ledger === 'dance_infusion' ? ' selected' : '') + '>Dance Infusion</option></select></label>' +
+      '<label class="chg-f">Note<input data-chg="description" value="' + escapeHtml(x.description || '') + '"></label>' +
+      '<div class="chg-actions">' +
+        '<button class="hub-mini" data-chg-verify>' + (x.verified_at ? '✓ verified' : '○ mark verified') + '</button>' +
+        '<span style="flex:1"></span>' +
+        '<button class="hub-mini danger" data-chg-del>Delete charge</button>' +
+        '<button class="hub-mini primary" data-chg-save>Save</button>' +
+      '</div>' +
+    '</div></div>';
+  document.body.appendChild(ov);
+
+  const close = () => ov.remove();
+  ov.addEventListener('click', (e) => { if (e.target === ov || e.target.classList.contains('pick-x')) close(); });
+
+  ov.querySelector('[data-chg-save]').addEventListener('click', async () => {
+    const get = (k) => { const el = ov.querySelector('[data-chg="' + k + '"]'); return el ? el.value : null; };
+    let cat = get('category');
+    if (cat === '__new') { cat = (prompt('New category name:') || '').trim(); if (!cat) return; }
+    const patch = {
+      category: cat || null,
+      event_id: get('event_id') || null,
+      event_na: !get('event_id'),
+      cash_source: get('cash_source'),
+      ledger: get('ledger'),
+      description: get('description') || null,
+    };
+    // personal money is owner-funded by definition; keep the pair honest
+    patch.funded_by = patch.cash_source === 'personal' ? 'owner' : 'business';
+    const { error } = await sb.from('expenses').update(patch).eq('id', id);
+    if (error) { toast('Save failed: ' + error.message, 'err'); return; }
+    toast('Saved', 'ok'); close(); loadPL();
+  });
+
+  ov.querySelector('[data-chg-verify]').addEventListener('click', async () => {
+    const val = x.verified_at ? null : new Date().toISOString();
+    const { error } = await sb.from('expenses').update({ verified_at: val }).eq('id', id);
+    if (error) { toast('Failed: ' + error.message, 'err'); return; }
+    x.verified_at = val; toast(val ? 'Verified' : 'Un-verified', 'ok'); close(); renderPLGrid();
+  });
+
+  ov.querySelector('[data-chg-del]').addEventListener('click', async () => {
+    if (!confirm('Delete this charge?' + String.fromCharCode(10, 10) +
+      money(x.amount) + ' · ' + (x.vendor || 'no payee') + String.fromCharCode(10, 10) +
+      'Soft delete — the row stays in the database and can be restored.')) return;
+    const { error } = await sb.from('expenses').update({ deleted_at: new Date().toISOString() }).eq('id', id);
+    if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+    toast('Deleted', 'ok'); close(); loadPL();
+  });
+}
+
 async function plSetVerified(id) {
   const row = plState.data.exp.find(x => x.id === id); if (!row) return;
   const val = row.verified_at ? null : new Date().toISOString();
@@ -12523,6 +12616,7 @@ $('panel-pl').addEventListener('click', (e) => {
   const cat = e.target.closest('[data-plcat]');
   if (cat) { const k = cat.dataset.plcat; plState.open[k] = !plState.open[k]; renderPLGrid(); return; }
   const vf = e.target.closest('[data-plverify]'); if (vf) { plSetVerified(vf.dataset.plverify); return; }
+  const op = e.target.closest('[data-plopen]'); if (op) { plOpenCharge(op.dataset.plopen); return; }
   const rc = e.target.closest('[data-plrecat]'); if (rc) { plRecategorise(rc.dataset.plrecat); return; }
   if (e.target.closest('[data-plexpand]')) {
     plState.data.pl.forEach(r => plState.open[r.section + '|' + r.category] = true); renderPLGrid(); return;
@@ -20122,6 +20216,17 @@ table.pl-table td.pl-indent{padding-left:26px}
 .pick-row{padding:7px 14px;font-size:13px;cursor:pointer}
 .pick-row.on,.pick-row:hover{background:rgba(48,84,150,.12)}
 .pick-new{padding:8px 14px;font-size:11px;border-top:1px solid var(--line,#e3e3e6)}
+
+/* ---- charge detail popup (164) ---- */
+.chg-box{width:min(430px,94vw)}
+.chg-body{padding:14px 16px 16px}
+.chg-hero{font-size:21px;margin-bottom:2px}
+.chg-vendor{font-size:13px;margin-bottom:12px}
+.chg-f{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888);margin:0 0 9px}
+.chg-f select,.chg-f input{display:block;width:100%;margin-top:3px;font:inherit;font-size:13px;text-transform:none;
+  letter-spacing:0;color:inherit;padding:6px 8px;border:1px solid var(--line,#ccd);border-radius:5px;background:var(--panel,#fff)}
+.chg-actions{display:flex;gap:6px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e3e3e6)}
+.hub-mini.primary{background:#305496;color:#fff;border-color:#305496}
 </style>
 <div class="wf-overlay" id="workflowOverlay">
   <div class="wf-modal">
