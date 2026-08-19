@@ -172,6 +172,7 @@ Deno.serve(async (req) => {
   }
   if (!authed) return err(401, "unauthorized");
 
+  const startedAt = Date.now();
   const body = await req.json().catch(() => ({}));
   const dryRun = body.dryRun === true;
 
@@ -418,6 +419,21 @@ Deno.serve(async (req) => {
   const status = failed.length ? `partial: ${failed.map(([k]) => k).join(",")} failed` : "ok";
   await admin.from("gear_watch_config")
     .update({ last_run_at: new Date().toISOString(), last_status: status }).eq("id", true);
+
+  // One row per scan, with the per-source line kept verbatim. A source that
+  // quietly stopped answering has to be visible in the panel, not something you
+  // could only find by reading net._http_response.
+  await admin.from("gear_watch_runs").insert({
+    trigger: body.trigger === "cron" ? "cron" : "manual",
+    sources: sourceStatus,
+    fetched: listings.length,
+    matched: scored.length,
+    inserted,
+    alerted: fresh.length,
+    emailed,
+    pushed,
+    duration_ms: Date.now() - startedAt,
+  });
 
   return new Response(JSON.stringify({
     ok: true, trigger: body.trigger || "manual", sources: sourceStatus,

@@ -12029,10 +12029,11 @@ let gwState = { filter: 'new', open: null, scanning: false };
 
 async function loadGearWatch() {
   $('gearWatchBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading gear watch…</div>';
-  const [cfgRes, tgtRes, hitRes] = await Promise.all([
+  const [cfgRes, tgtRes, hitRes, runRes] = await Promise.all([
     sb.from('gear_watch_config').select('*').eq('id', true).maybeSingle(),
     sb.from('gear_watch_targets').select('*').order('label'),
     sbAll(() => sb.from('gear_watch_hits').select('*'), 'id'),
+    sb.from('gear_watch_runs').select('*').order('ran_at', { ascending: false }).limit(20),
   ]);
 
   // The tables only exist once 146 is applied to prod. Say so plainly instead of
@@ -12045,6 +12046,7 @@ async function loadGearWatch() {
   const cfg = cfgRes.data || {};
   const targets = tgtRes.data || [];
   const hits = (hitRes.data || []).sort((a, b) => (b.score - a.score) || (new Date(b.first_seen_at) - new Date(a.first_seen_at)));
+  const runs = runRes.data || [];
 
   const card = (l, v, sub) => `<div class="hub-card"><div class="lbl">${l}</div><div class="val">${v}</div>${sub ? `<div class="li-sub">${sub}</div>` : ''}</div>`;
   const nNew = hits.filter(h => h.status === 'new').length;
@@ -12093,6 +12095,25 @@ async function loadGearWatch() {
     </tr>`;
   };
 
+  // Colour by KIND of answer, not by good/bad: ok is green, a real failure is
+  // red, and "not configured" / "skipped" are grey — because those are states
+  // you chose, not things that went wrong, and colouring them as errors is how
+  // a reader stops reading the ones that are.
+  const srcColor = (v) => /^ok/i.test(v) ? 'var(--green,#1f7a1f)'
+    : /^FAILED/i.test(v) ? 'var(--red,#c0392b)' : 'var(--mid,#888)';
+  const runRow = (r) => {
+    const src = Object.entries(r.sources || {})
+      .map(([k, v]) => `<div style="white-space:normal;"><strong>${escapeHtml(k)}</strong> <span style="color:${srcColor(String(v))}">${escapeHtml(String(v))}</span></div>`)
+      .join('');
+    const d = r.ran_at ? new Date(r.ran_at) : null;
+    return `<tr>
+      <td class="li-sub">${d ? d.toLocaleDateString() + '<br>' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}</td>
+      <td class="li-sub">${escapeHtml(r.trigger || 'cron')}</td>
+      <td style="font-size:13px;">${src || '<span class="li-sub">no detail recorded</span>'}</td>
+      <td class="li-sub">${fmtNum(r.fetched)} fetched<br>${fmtNum(r.matched)} matched · ${fmtNum(r.inserted)} new<br>${r.alerted ? `<strong>${fmtNum(r.alerted)} alerted</strong>` : '0 alerted'}${r.emailed ? ' · emailed' : ''}${r.pushed ? ' · pushed ' + r.pushed : ''}${r.duration_ms ? `<br>${Math.round(r.duration_ms / 1000)}s` : ''}</td>
+    </tr>`;
+  };
+
   const targetRow = (t) => `<tr>
     <td><strong>${escapeHtml(t.label)}</strong><div class="li-sub">${escapeHtml((t.model_tokens || []).join(', '))}</div></td>
     <td>${t.qty}</td>
@@ -12130,6 +12151,13 @@ async function loadGearWatch() {
 
     <div class="hub-sec-bar" style="margin-top:22px;"><h3>No API — check these by hand</h3></div>
     <div class="kpi-hint">OfferUp has no public API, so it stays a manual check. Facebook Marketplace has none either, but is scanned through Apify — it shows as <em>not configured</em> until an <code>APIFY_TOKEN</code> is set, and it is billed per result. ${manual}</div>
+
+    <div class="hub-sec-bar" style="margin-top:22px;"><h3>Scan log <span class="li-sub">(last ${runs.length})</span></h3></div>
+    <div class="kpi-hint" style="margin-bottom:8px;">Every run, and what each site actually returned. A source that stops answering shows up here — it is never folded into the totals as a zero.</div>
+    ${runs.length ? `<table class="data-table"><thead><tr>
+        <th style="width:130px;">When</th><th style="width:70px;">Run</th><th>Per source</th>
+        <th style="width:150px;">Result</th></tr></thead><tbody>${runs.map(runRow).join('')}</tbody></table>`
+      : `<div class="panel-state info">No scans logged yet. The log starts from the next run — 8am, 2pm and 8pm, or press Run scan now.</div>`}
 
     <div class="panel-state" style="margin-top:18px;background:#f5f2ed;">
       <strong>If a hit looks right: send the link and its score breakdown to the detective.</strong>
