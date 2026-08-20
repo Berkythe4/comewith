@@ -735,3 +735,58 @@ earned from banked, per-row status with a `settle`/`pay` action, and **"Link exi
 — because 203 of 266 expenses were marked `event_na` and re-typing one to attach it to
 an event is how you end up with the charge recorded twice.
 
+---
+
+## Section 35 — A forecast is not a fourth status (2026-08-20)
+
+177 gave income and expenses three states each, but all three are **commitments**:
+`accrued` already means "we have agreed to this", which is why the P&L counts it. There
+was still nowhere to put the line before that — the DJ we intend to book, the bar take we
+expect. Keith asked for it, and the obvious implementation was wrong.
+
+**Adding `planned` to `expenses.status` would have been three lines of DDL and a permanent
+hazard.** Every view that sums expenses or income *without* a status filter would silently
+start counting speculation as fact: `v_pl_monthly`, `v_tax_year`, `v_event_summary`, the
+KPI views, and the 011 / 022 / 026 / 043 / 060 views. One missed filter and a guess is in
+the P&L — the exact failure §33 exists to prevent. **A separate table cannot leak, because
+nothing that computes the P&L reads it.**
+
+`budget_lines` was already the right table and nothing had ever written to it. It has
+carried `(event_id, scope, category, direction, planned_amount)` since 026, its `scope`
+check has permitted `'event'` from the start, it has an admin-only RLS policy — and
+`v_pl_monthly_vs_budget`, the one view that turns budget into a P&L column, filters
+`scope = 'period'`. Event-scoped lines are invisible to it **by construction**, not by
+remembering to filter. The 37 rows in it today are all period rows and were untouched.
+
+**Realising a forecast stamps it, it does not delete it.** When the DJ is actually booked
+the line gets `realized_at` plus the id of the row it became, and stops counting as
+forecast — a forecast that keeps counting after it comes true is an overstatement with a
+good excuse. Keeping the row is what makes the estimate comparable to the outcome, which
+is the only way forecasting ever gets better. Verified on prod: two lines in, P&L
+byte-identical; commit one at $850 against a $900 plan; forecast drops to zero, the P&L
+picks up exactly $850, and the −$50 variance is still readable on the budget line.
+
+### The panel that reads like the P&L
+
+Keith's words were "the main view format is too hard to read". The list of rows was fine
+for five rows and useless for thirty. It is now the **company P&L's own table** — same
+`pl-table` classes, same section bands, same carets, same Expand all / Collapse all —
+scoped to one event, with four columns that read left to right as the life of a dollar:
+
+**FORECAST** (planned, never in the P&L) · **BOOKED** (what the P&L counts, paid or not) ·
+**SETTLED** (of that, money that moved) · **vs plan**.
+
+Two things that only showed up because the render path is now under test:
+
+- **A realised forecast was still counted**, on top of the row it became. `v_event_forecast`
+  filters `realized_at`; the panel reads the *table*, and a filter that lives in only one of
+  two places is a filter that does not exist.
+- **Only forecast and settled rows had an editable amount**, so a committed cost — the row
+  you most want to correct — was read-only. Booked is now the editable figure for anything
+  real; Settled mirrors it, because settled is decided by the status, not typed.
+
+`scripts/test_money_panel.mjs` executes the render path against fixtures and asserts the
+rollup arithmetic. It exists because `node --check` proves the file parses and cannot tell
+you a function the renderer calls was deleted — which is exactly what happened while
+rebuilding this, twice.
+

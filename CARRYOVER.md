@@ -1,54 +1,68 @@
-# Carryover — 2026-08-20 (Payables, accruals on both sides, and reconciliation · DESKTOP)
+# Carryover — 2026-08-20 (Payables, reconciliation, and a per-event P&L with a forecast · DESKTOP)
 
-**Deployed to master for Keith's review.** Migration **177** applied to prod and verified;
-highest applied is now `177_payables.sql`. All financial views (including the new
-`v_payables`) return anon **401**. Latest LEARNINGS: **§34**.
+**Deployed to master for Keith's review.** Migrations **177** and **178** applied to prod
+and verified. All financial views — including the new `v_payables` and `v_event_forecast` —
+return anon **401**. Latest LEARNINGS: **§35**.
 
-**What changed, in one line:** costs can now be recorded as *committed* before they are
-*paid*, and when the real charge shows up later the two get merged instead of double-counted.
+**The arc of the session:** costs can now be recorded before they are paid (177), a real
+charge arriving later gets merged with the commitment it settles instead of double-counted,
+and money that is only *planned* has somewhere to live that the P&L cannot see (178).
 
-*Shipped*
-- **`expenses.status`** (`accrued` → `invoiced` → `paid`) plus `expected_amount`,
-  `settled_at`, `due_date` — the mirror of what 161 did for income. New `v_payables`.
-- **Each view picks a basis, and that is the actual decision:** `v_pl_monthly` counts all
-  three (cost is incurred when agreed); `v_cash_position`, `v_capital`, `v_contractor_1099`
-  and `v_tax_year` count `paid` only. The 1099 / tax year is now
-  `coalesce(settled_at::date, date)` — a fee accrued in December and paid in January is next
-  year's form.
-- **Nothing moved.** Every existing row backfilled to `paid` with `settled_at` null, so the
-  coalesce falls back to `date`. Proved by snapshotting 396 view keys, applying inside a
-  transaction, diffing, and rolling back before applying for real.
-- **Event Money tab rebuilt:** summary strip separating earned from banked · per-row
-  `settle` / `pay` (asks the final amount, keeps the agreed one as variance, and asks which
-  pot paid it) · **🔗 Link existing** searchable drawer, because 203 of 266 expenses were
-  `event_na` and retyping one to attach it is how a charge gets recorded twice · **actor
-  link on the add form** for both payer (income) and payee (expenses), with auto-match when
-  a typed name is already an actor.
-- **Reconciliation on assign.** Filing a charge against an event that has open commitments
-  now asks whether it settles one, ranks the candidates (same actor ≫ same name > amount),
-  merges into the **accrual** (it holds the agreed figure), and shows a confirmation naming
-  the double-counted cost removed and the event's new cost / net. Wired into all three
-  assign paths: the row dropdown, the bulk bar, and Link existing.
-  **`external_ref` moves to the survivor before the duplicate is retired** — the 169 lesson;
-  verified on prod that a re-push is then blocked by `uq_expenses_external_ref`.
-- Expenses tab: `Owed by us` / `Overdue` chips, status + due tags, `pay` button. "No cash
-  source" no longer fires on unpaid bills — a bill that has not been paid has not left an
-  account. P&L gained `Owed by us` / `Owed to us` cards, drawn only when non-zero.
+## What shipped
 
-*Verified on prod, both rolled back*
-- Payable round trip: +$750 accrued left cash at $3,551.06 and raised commitments; settling
-  at $800 from the bank moved cash to $2,751.06 (exactly −$800), cleared the payable, and
-  put $800 on the 2026 1099.
-- Reconcile: $750 commitment + $800 charge = $1,550 on the event → **$800**, one row, agreed
-  $750 / actual $800 preserved, payable cleared, re-import blocked.
+**177 — payables.** `expenses.status` (`accrued` → `invoiced` → `paid`) plus
+`expected_amount`, `settled_at`, `due_date`; new `v_payables`. Each view picks a basis:
+`v_pl_monthly` counts all three (a cost is incurred when agreed); `v_cash_position`,
+`v_capital`, `v_contractor_1099` and `v_tax_year` count `paid` only, and the 1099 / tax
+year is now `coalesce(settled_at::date, date)` — a fee accrued in December and paid in
+January is next year's form. Every existing row backfilled to `paid` with `settled_at`
+null, proved byte-identical across 396 view keys.
 
-*Parked / next*
-- **Keith is reviewing this deploy.** Nothing else was touched.
-- Payables created from the Money tab carry a `vendor` string; if no actor is picked they
-  read `no vendor` on `v_contractor_1099`. The reconcile report now says so explicitly when
-  a merged row still has no actor.
-- Everything in the 2026-08-19 "Parked / next" below still stands — Janelle's W-9, the §83(b)
-  question, the 8 upcoming events needing expected revenue, and the WBH bulk-edit review.
+**Reconciliation on assign.** Filing a charge against an event that has open commitments
+asks whether it settles one, ranks the candidates (same actor ≫ same name > amount), merges
+into the **accrual** (it holds the agreed figure), and shows a confirmation naming the
+double-counted cost removed and the event's new cost / net. All three assign paths: the row
+dropdown, the bulk bar, and Link existing. **`external_ref` moves to the survivor before
+the duplicate is retired** (the 169 lesson) — verified that a re-push is then blocked.
+
+**178 — forecast lines.** Money that is planned but not promised, on `budget_lines`
+(scope `'event'`) rather than as a fourth status. See LEARNINGS §35 for why that choice was
+load-bearing. `v_event_forecast` + forecast columns appended to `v_event_money`. Confidence
+weighting mirrors Blue Sky's. Committing a line turns it into a real accrued row and stamps
+the forecast rather than deleting it, so the estimate stays next to the outcome.
+
+**The event Money tab is now a per-event P&L.** Same `pl-table` markup as the company P&L —
+section bands, carets, Expand all / Collapse all — with four columns: **Forecast · Booked ·
+Settled · vs plan**. Expanding a category gives inline editors for date, payee, **category**,
+status and amount on every row, plus `Pay` / `Settle` / `Commit`. Adds still go through the
+labelled popup forms (Keith liked those). `🔗 Link existing` and the reconcile flow are
+unchanged.
+
+*Earlier corrections in the same session, all from Keith:* category was free text and is now
+a select over the known set; the single unlabelled date field was the *due* date and is now
+two named fields (**Cost date**, which sets the P&L month and defaults to the **event** date
+— not the day you commit — and **Due date**, shown only while unpaid, replaced by **Paid
+from** once paid).
+
+## Verified on prod (every one rolled back)
+- Payable round trip: +$750 accrued left cash at $3,551.06; settling at $800 from the bank
+  moved cash to $2,751.06 and put $800 on the 2026 1099.
+- Reconcile: $750 commitment + $800 charge = $1,550 on the event → **$800**, one row,
+  variance preserved, re-import blocked by `uq_expenses_external_ref`.
+- Forecast: two lines in → **P&L byte-identical**; commit at $850 against a $900 plan →
+  forecast drops to zero, P&L picks up exactly $850, −$50 variance readable.
+
+## Parked / next
+- **Keith is reviewing this deploy.** Nothing outside the money surfaces was touched.
+- `scripts/test_money_panel.mjs` — run it before touching the Money panel. There is no
+  local console for `dashboard.html`, and `node --check` cannot catch a deleted function.
+- Forecast lines are **event-scoped only**. Company-level forecasting still runs through
+  `budget_lines` scope `'period'` on the P&L tab; the two do not talk to each other yet.
+- `v_pipeline.needs_revenue_estimate` still reads `events.expected_revenue`, so an event
+  with forecast *revenue lines* but no `expected_revenue` still shows as needing an
+  estimate. Worth reconciling.
+- Everything in the 2026-08-19 "Parked / next" below still stands — Janelle's W-9, §83(b),
+  the 8 upcoming events needing expected revenue, the WBH bulk-edit review.
 
 *The previous close (2026-08-19, FP&A) begins immediately below and is unchanged.*
 

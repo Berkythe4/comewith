@@ -749,6 +749,29 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .role-chip.owed { color: #8a5a1e; border-color: #e6d3b3; background: #fdf6ea; }
 .role-chip.late { color: #be3c3c; border-color: #eccaca; background: #fdf0f0; }
 /* the labelled add form */
+/* 178 - the grid: the company P&L's own table, scoped to one event */
+.money-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 12px 0 10px; }
+table.money-grid { font-size: 12px; }
+table.money-grid td.m-act, table.money-grid th.m-act { width: 1%; white-space: nowrap; text-align: right; padding-left: 6px; }
+table.money-grid td.m-act .hub-mini { padding: 2px 6px; font-size: 10px; }
+table.money-grid tr.m-row td { background: var(--bg); }
+table.money-grid tr.m-forecast td { background: repeating-linear-gradient(
+  45deg, transparent, transparent 6px, rgba(48,84,150,.045) 6px, rgba(48,84,150,.045) 12px); }
+table.money-grid tr.m-forecast td.pl-lbl { font-style: italic; }
+table.money-grid tr.m-committed td.pl-lbl { border-left: 2px solid #d9a441; }
+.m-ctl { display: flex; gap: 5px; align-items: center; flex-wrap: wrap; padding-left: 14px; }
+.m-in { font-family: 'Inconsolata', monospace; font-size: 11px; padding: 2px 4px;
+  border: 1px solid transparent; background: transparent; color: inherit; border-radius: 2px; min-width: 0; }
+.m-in:hover { border-color: var(--border-strong); background: var(--surface); }
+.m-in:focus { border-color: var(--red); background: var(--surface); outline: none; }
+.m-txt { flex: 1 1 110px; min-width: 80px; }
+.m-date { width: 116px; }
+.m-num { width: 76px; text-align: right; font-variant-numeric: tabular-nums; }
+.m-sel { max-width: 150px; }
+.m-fixed { font-size: 11px; }
+.m-unit { font-size: 10px; color: var(--mid); }
+.m-mirror { color: var(--mid); font-variant-numeric: tabular-nums; }
+table.money-grid td.num .m-num { width: 88px; }
 .money-form { border: 1px solid var(--border-strong); border-left: 3px solid var(--red);
   background: var(--surface); padding: 12px 14px; margin: 8px 0; }
 .mf-head { font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: .06em; margin-bottom: 10px; }
@@ -7534,7 +7557,7 @@ async function loadMoneyData(id) {
     Object.assign(moneyLink, { eventId: id, open: false, q: '', showOther: false, sel: new Set(), rows: null });
     moneyForm.kind = null;
   }
-  const [ev, tk, inc, exp, don, spo, sponsors, actors, cats, streams] = await Promise.all([
+  const [ev, tk, inc, exp, don, spo, sponsors, actors, cats, streams, fc] = await Promise.all([
     sb.from('events').select('id, name, series, event_date').eq('id', id).single(),
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
     sb.from('income').select('id, amount, category, description, date, status, expected_amount, settled_at').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
@@ -7545,6 +7568,9 @@ async function loadMoneyData(id) {
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
     sbAll(() => sb.from('expenses').select('id, category').is('deleted_at', null), 'id'),
     sb.from('revenue_streams').select('label, applies_to, display_order').eq('active', true).order('display_order'),
+    sb.from('budget_lines')
+      .select('id, category, direction, planned_amount, label, confidence, notes, realized_at, realized_income_id, realized_expense_id')
+      .eq('event_id', id).eq('scope', 'event').is('deleted_at', null).order('planned_amount', { ascending: false }),
   ]);
   moneyState.event = ev.data || null;
   moneyState.actors = actors.data || [];
@@ -7553,7 +7579,9 @@ async function loadMoneyData(id) {
   // real use already - typing them again by hand is how the 15th appears.
   moneyState.expCats = [...new Set((cats.data || []).map(r => r.category).filter(Boolean))].sort();
   moneyState.streams = (streams.data || []).map(r => r.label);
-  return { ev, tk, inc, exp, don, spo, sponsors, actors };
+  const out = { ev, tk, inc, exp, don, spo, sponsors, actors, fc };
+  moneyState.data = out;
+  return out;
 }
 
 // Which set of books this event's rows belong to. Same rule the DB views use.
@@ -7564,6 +7592,12 @@ const mShort = (d) => (d ? fmtDate(d) : '');
 // Which add form is open, if any. One at a time - five inline forms stacked
 // open is the sloppiness this replaces.
 const moneyForm = { kind: null };
+// Which category rows are expanded, keyed section|category - the same shape the
+// P&L grid uses, so Expand all / Collapse all behave identically here.
+const moneyGrid = { open: {} };
+// The last load, kept so a pure-UI action (expanding a category, opening a form)
+// repaints from memory instead of costing six round trips.
+
 
 // A row's accrual state, as chips. Only ever drawn when the row is NOT settled -
 // paid/received is the resting state and labelling it adds noise to the 95%
@@ -7590,7 +7624,10 @@ function moneyStatusHTML(tbl, r) {
 // The one number people open this panel for. Revenue and cost are on the ACCRUAL
 // basis (what the event earned and cost); the cash split sits underneath, because
 // "we made $2,400" and "$2,400 is in the bank" are different sentences.
-function moneySummaryHTML({ tk, inc, exp, don, spo }) {
+function moneySummaryHTML({ tk, inc, exp, don, spo, fc }) {
+  const fcRows = ((fc && fc.data) || []).filter(r => !r.realized_at);
+  const fcRev = fcRows.filter(r => r.direction === 'income').reduce((t, r) => t + Number(r.planned_amount || 0), 0);
+  const fcCost = fcRows.filter(r => r.direction === 'expense').reduce((t, r) => t + Number(r.planned_amount || 0), 0);
   const sum = (arr, f) => (arr || []).reduce((t, r) => t + Number(f(r) || 0), 0);
   const tickets = sum(tk.data, r => r.amount_paid);
   const dons = sum(don.data, r => r.amount);
@@ -7608,6 +7645,10 @@ function moneySummaryHTML({ tk, inc, exp, don, spo }) {
     card('Costs', money(expAll), expOwed > 0 ? money(expOwed) + ' still owed by us' : 'all paid') +
     card('Net', money(net), 'revenue &minus; costs', net > 0 ? 'pos' : (net < 0 ? 'neg' : '')) +
     card('Cash so far', money(revenue - incOwed - (expAll - expOwed)), 'received &minus; paid') +
+    (fcRev || fcCost
+      ? card('Forecast net', money(fcRev - fcCost), money(fcRev) + ' in &minus; ' + money(fcCost) + ' out',
+             (fcRev - fcCost) < 0 ? 'neg' : 'pos')
+      : '') +
     '</div>';
 }
 
@@ -7678,6 +7719,16 @@ function moneyFormDefs(kind) {
         ['', '\u2014 not said \u2014'], ['bank', 'Bank (Bluevine)'], ['paypal', 'PayPal (business)'],
         ['personal', 'Personal card'], ['other', 'Other']],
       hint: 'Only bank and PayPal draw down the float. Leave it blank and this row sits outside the cash reserve.' },
+  ] };
+  if (kind === 'forecast') return { title: 'Forecast a line', save: 'Add to forecast', fields: [
+    { f: 'direction', label: 'Money in or out?', type: 'select', options: [
+        ['expense', 'A cost we expect', '', true], ['income', 'Revenue we expect']] },
+    { f: 'amount', label: 'Expected amount ($)', type: 'number', req: true },
+    { f: 'label', label: 'What is it?', placeholder: 'Headline DJ, bar minimum\u2026', req: true },
+    { f: 'category', label: 'Category', type: 'select', options: moneyCatOptions('expense'), req: true,
+      hint: 'Which P&amp;L line it will land on once it is real. Revenue lines can use a stream name.' },
+    { f: 'confidence', label: 'Confidence (%)', type: 'number', placeholder: 'optional',
+      hint: 'Leave blank for 100%. Ten $1,000 lines at 30% is $3,000 of forecast, not $10,000.' },
   ] };
   if (kind === 'donation') return { title: 'Add a donation', save: 'Add donation', fields: [
     { f: 'amount', label: 'Amount ($)', type: 'number', req: true },
@@ -8030,86 +8081,292 @@ async function showReconReport(items, eventId, evName) {
   });
 }
 
-// ---- The panel ---------------------------------------------------------------
-// Control-center format: a section bar with its own actions, a hub-list of rows,
-// and one labelled form that opens under the bar it belongs to.
-function moneySectionsHTML(data) {
-  const { tk, inc, exp, don, spo, sponsors } = data;
+// ---- The panel: a P&L, for one event ----------------------------------------
+// Four columns, read left to right as the life of a dollar:
+//   FORECAST   planned, not promised          (budget_lines, never in the P&L)
+//   BOOKED     on the books                   (what v_pl_monthly counts)
+//   SETTLED    of that, money actually moved  (what cash counts)
+//   VS         booked minus forecast
+// Same table, sections, carets and Expand-all behaviour as the company P&L, so
+// one event reads exactly like the whole business does.
+const MONEY_SECTIONS = [
+  { key: 'revenue', label: 'REVENUE', cls: 'pl-sec-revenue' },
+  { key: 'cost', label: 'COSTS', cls: 'pl-sec-direct' },
+];
+
+// Every source flattened into one shape. Doing this once is what lets the grid,
+// the totals and the inline editor all agree without three sets of rules.
+function moneyLines(data) {
+  const out = [];
+  const push = (o) => out.push(o);
+  (data.tk.data || []).forEach(r => push({
+    tbl: 'ticketing', id: r.id, section: 'revenue', category: 'Ticket sales',
+    label: r.ticket_type || 'General', amount: Number(r.amount_paid || 0), state: 'settled',
+    sub: fmtNum(r.quantity) + ' sold', qty: r.quantity, row: r }));
+  (data.inc.data || []).forEach(r => push({
+    tbl: 'income', id: r.id, section: 'revenue', category: r.category || 'Other income',
+    label: r.description || r.category || 'Income', amount: Number(r.amount || 0),
+    state: moneyIsOwed('income', r) ? 'committed' : 'settled', date: r.date, row: r }));
+  (data.don.data || []).forEach(r => push({
+    tbl: 'third_party_donations', id: r.id, section: 'revenue', category: 'Donations',
+    label: r.donor_name || 'Donation', amount: Number(r.amount || 0), state: 'settled', row: r }));
+  (data.spo.data || []).filter(r => r.status !== 'cancelled').forEach(r => push({
+    tbl: 'sponsorships', id: r.id, section: 'revenue', category: 'Sponsorship',
+    label: (r.actor && r.actor.display_name) || 'Sponsor', amount: Number(r.cash_amount || 0),
+    state: 'settled', sub: Number(r.in_kind_value || 0) ? money(r.in_kind_value) + ' in-kind' : '', row: r }));
+  (data.exp.data || []).forEach(r => push({
+    tbl: 'expenses', id: r.id, section: 'cost', category: r.category || 'Uncategorised',
+    label: r.vendor || r.description || r.category || 'Cost', amount: Number(r.amount || 0),
+    state: moneyIsOwed('expenses', r) ? 'committed' : 'settled', date: r.date, row: r }));
+  ((data.fc && data.fc.data) || []).filter(r => !r.realized_at).forEach(r => push({
+    tbl: 'budget_lines', id: r.id, section: r.direction === 'income' ? 'revenue' : 'cost',
+    category: r.category || 'Uncategorised', label: r.label || r.category || 'Forecast line',
+    amount: Number(r.planned_amount || 0), state: 'forecast', row: r }));
+  return out;
+}
+
+// Section > category > the three buckets. `booked` is committed PLUS settled:
+// a cost does not stop being on the books once it is paid.
+function moneyRollup(lines) {
+  const map = {};
+  lines.forEach(l => {
+    const k = l.section + '|' + l.category;
+    const m = map[k] || (map[k] = { section: l.section, category: l.category, forecast: 0, booked: 0, settled: 0, n: 0 });
+    m.n++;
+    if (l.state === 'forecast') m.forecast += l.amount;
+    else { m.booked += l.amount; if (l.state === 'settled') m.settled += l.amount; }
+  });
+  return map;
+}
+
+const M_STATE_LABEL = { forecast: 'forecast', committed: 'committed', settled: 'settled' };
+
+function moneyToolbarHTML() {
+  const b = (attr, label, title) => '<button class="hub-mini" ' + attr + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' + label + '</button>';
+  const add = (kind, label) => '<button class="hub-btn ghost" data-money-formopen="' + kind + '">' +
+    (moneyForm.kind === kind ? '\u2715 Close' : label) + '</button>';
+  return '<div class="money-toolbar">' +
+    b('data-mexpand', 'Expand all') + b('data-mcollapse', 'Collapse all') +
+    '<span style="flex:1"></span>' +
+    '<button class="hub-btn ghost" data-money-linkopen title="Attach a charge that is already in the books to this event">' +
+      (moneyLink.open ? '\u2715 Close' : '\uD83D\uDD17 Link existing') + '</button>' +
+    add('forecast', '\uD83D\uDCC8 Forecast a line') +
+    add('income', '\u2795 Revenue') +
+    add('expense', '\u2795 Cost') +
+    add('ticket', '\uD83C\uDF9F Tickets') +
+    add('donation', '\u2764 Donation') +
+    (moneyState.sponsorList && moneyState.sponsorList.length ? add('sponsorship', '\uD83C\uDFF7 Sponsor') : '') +
+    '</div>';
+}
+
+// ---- inline editors ----------------------------------------------------------
+// Every control carries the table, the id and the field, so one delegated
+// handler covers six tables without a branch per surface.
+function mEd(l, field, kind, opts) {
+  const base = 'data-medit="' + field + '" data-mt="' + l.tbl + '" data-mid="' + escapeHtml(l.id) + '"';
+  const v = l.row[field];
+  if (kind === 'select') {
+    return '<select class="m-in m-sel" ' + base + '>' + opts.map(o =>
+      '<option value="' + escapeHtml(o[0]) + '"' + (String(v || '') === String(o[0]) ? ' selected' : '') + '>' +
+      escapeHtml(o[1]) + '</option>').join('') + '</select>';
+  }
+  if (kind === 'date') return '<input class="m-in m-date" type="date" ' + base + ' value="' + escapeHtml(v || '') + '">';
+  if (kind === 'num') return '<input class="m-in m-num" type="number" step="0.01" ' + base + ' value="' + escapeHtml(v == null ? '' : v) + '">';
+  return '<input class="m-in m-txt" type="text" ' + base + ' value="' + escapeHtml(v || '') + '"' +
+    (opts && opts.ph ? ' placeholder="' + escapeHtml(opts.ph) + '"' : '') + '>';
+}
+
+function moneyDetailControls(l) {
+  const catOpts = (kind) => moneyCatOptions(kind).filter(o => o[0] !== '__new');
+  const stOpts = (tbl) => MONEY_STATES[tbl].map(([v, lbl]) => [v, lbl]);
+  if (l.tbl === 'expenses') {
+    return mEd(l, 'date', 'date') + mEd(l, 'vendor', 'text', { ph: 'payee' }) +
+      mEd(l, 'category', 'select', catOpts('expense')) + mEd(l, 'status', 'select', stOpts('expenses')) +
+      (moneyIsOwed('expenses', l.row) ? mEd(l, 'due_date', 'date') : '');
+  }
+  if (l.tbl === 'income') {
+    return mEd(l, 'date', 'date') + mEd(l, 'description', 'text', { ph: 'note' }) +
+      mEd(l, 'category', 'select', catOpts('income')) + mEd(l, 'status', 'select', stOpts('income'));
+  }
+  if (l.tbl === 'ticketing') {
+    return mEd(l, 'ticket_type', 'text', { ph: 'tier' }) + mEd(l, 'quantity', 'num');
+  }
+  if (l.tbl === 'third_party_donations') return mEd(l, 'donor_name', 'text', { ph: 'donor' });
+  if (l.tbl === 'sponsorships') {
+    return '<span class="m-fixed">' + escapeHtml(l.label) + '</span>' + mEd(l, 'tier', 'text', { ph: 'tier' }) +
+      mEd(l, 'in_kind_value', 'num');
+  }
+  // forecast
+  return mEd(l, 'label', 'text', { ph: 'what is it' }) +
+    mEd(l, 'category', 'select', catOpts(l.section === 'revenue' ? 'income' : 'expense')) +
+    mEd(l, 'confidence', 'num') + '<span class="m-unit">% sure</span>';
+}
+
+const M_AMOUNT_FIELD = { ticketing: 'amount_paid', income: 'amount', expenses: 'amount',
+                         third_party_donations: 'amount', sponsorships: 'cash_amount',
+                         budget_lines: 'planned_amount' };
+
+function moneyDetailRow(l) {
+  const dot = '<td class="num"><span class="muted">\u00b7</span></td>';
+  const amtEd = '<td class="num">' + mEd(l, M_AMOUNT_FIELD[l.tbl], 'num') + '</td>';
+  const actions =
+    (l.state === 'forecast'
+      ? '<button class="hub-mini primary" data-mcommit="' + escapeHtml(l.id) + '" title="Turn this into a real committed row">Commit</button>'
+      : (l.state === 'committed'
+        ? '<button class="hub-mini primary" data-money-settle="' + l.tbl + ':' + escapeHtml(l.id) + '" title="' +
+          (l.tbl === 'income' ? 'Mark received' : 'Mark paid') + '">' + (l.tbl === 'income' ? 'Settle' : 'Pay') + '</button>'
+        : '')) +
+    '<button class="hub-mini exp-del" data-money-del="' + l.tbl + ':' + escapeHtml(l.id) + '" title="Remove">\u2715</button>';
+  return '<tr class="pl-sub m-row m-' + l.state + '"><td class="pl-lbl"><div class="m-ctl">' +
+    moneyDetailControls(l) + '</div>' +
+    (l.sub ? '<div class="li-sub">' + escapeHtml(l.sub) + '</div>' : '') + '</td>' +
+    (l.state === 'forecast' ? amtEd : dot) +
+    (l.state === 'forecast' ? dot : amtEd) +
+    (l.state === 'settled' ? '<td class="num"><span class="m-mirror" title="Same figure as Booked - settled is decided by the status, not typed here">' +
+      money(l.amount) + '</span></td>' : dot) +
+    dot + '<td class="m-act">' + actions + '</td></tr>';
+}
+
+function moneyGridHTML(data) {
+  const lines = moneyLines(data);
+  const roll = moneyRollup(lines);
+  const num = (v, cls) => '<td class="num' + (cls ? ' ' + cls : '') + '">' + (v ? money(v) : '<span class="muted">\u00b7</span>') + '</td>';
+  const totals = { revenue: { forecast: 0, booked: 0, settled: 0 }, cost: { forecast: 0, booked: 0, settled: 0 } };
+  Object.values(roll).forEach(m => {
+    totals[m.section].forecast += m.forecast; totals[m.section].booked += m.booked; totals[m.section].settled += m.settled;
+  });
+
+  let html = '';
+  MONEY_SECTIONS.forEach(sec => {
+    const cats = Object.values(roll).filter(m => m.section === sec.key)
+      .sort((a, b) => (b.booked + b.forecast) - (a.booked + a.forecast));
+    const t = totals[sec.key];
+    html += '<tr class="pl-section ' + sec.cls + '"><td class="pl-lbl"><b>' + sec.label + '</b></td>' +
+      '<td class="num"><b>' + (t.forecast ? money(t.forecast) : '\u2014') + '</b></td>' +
+      '<td class="num"><b>' + money(t.booked) + '</b></td>' +
+      '<td class="num"><b>' + money(t.settled) + '</b></td>' +
+      '<td class="num"></td><td class="m-act"></td></tr>';
+    if (!cats.length) {
+      html += '<tr class="pl-empty"><td class="pl-lbl muted">nothing recorded or forecast</td><td colspan="5"></td></tr>';
+    }
+    cats.forEach(m => {
+      const key = m.section + '|' + m.category;
+      const open = !!moneyGrid.open[key];
+      // Variance only means something once there IS a forecast to vary from.
+      // Rendering 0 against a blank forecast would claim "exactly on plan".
+      const varCell = m.forecast
+        ? '<td class="num ' + ((m.booked - m.forecast) > 0 ? (m.section === 'cost' ? 'neg' : 'pos')
+            : ((m.booked - m.forecast) < 0 ? (m.section === 'cost' ? 'pos' : 'neg') : '')) + '">' +
+          ((m.booked - m.forecast) > 0 ? '+' : '') + money(m.booked - m.forecast) + '</td>'
+        : '<td class="num"><span class="muted">\u00b7</span></td>';
+      html += '<tr class="pl-cat' + (open ? ' open' : '') + '" data-mcat="' + escapeHtml(key) + '">' +
+        '<td class="pl-lbl"><span class="pl-caret">' + (open ? '\u25be' : '\u25b8') + '</span> ' +
+          escapeHtml(m.category) + ' <span class="muted">' + m.n + '</span></td>' +
+        num(m.forecast) + num(m.booked) + num(m.settled) + varCell + '<td class="m-act"></td></tr>';
+      if (open) {
+        const detail = lines.filter(l => l.section === m.section && l.category === m.category)
+          .sort((a, b) => (a.state === 'forecast' ? 1 : 0) - (b.state === 'forecast' ? 1 : 0) || b.amount - a.amount);
+        html += detail.map(moneyDetailRow).join('');
+      }
+    });
+  });
+
+  const nf = totals.revenue.forecast - totals.cost.forecast;
+  const nb = totals.revenue.booked - totals.cost.booked;
+  const ns = totals.revenue.settled - totals.cost.settled;
+  const nCell = (v) => '<td class="num ' + (v < 0 ? 'neg' : 'pos') + '"><b>' + money(v) + '</b></td>';
+  html += '<tr class="pl-profit pl-net"><td class="pl-lbl"><b>NET</b></td>' +
+    (totals.revenue.forecast || totals.cost.forecast ? nCell(nf) : '<td class="num"><b>\u2014</b></td>') +
+    nCell(nb) + nCell(ns) + '<td class="num"></td><td class="m-act"></td></tr>';
+
+  const head = '<tr><th class="pl-lbl">Line</th>' +
+    '<th class="num" title="Planned, not promised. Never reaches the P&amp;L.">Forecast</th>' +
+    '<th class="num" title="On the books - what the P&amp;L counts, paid or not.">Booked</th>' +
+    '<th class="num" title="Of that, money that actually moved.">Settled</th>' +
+    '<th class="num" title="Booked minus forecast.">vs plan</th><th class="m-act"></th></tr>';
+  return '<div class="pl-scroll"><table class="data-table pl-table money-grid"><thead>' + head +
+    '</thead><tbody>' + html + '</tbody></table></div>';
+}
+
+function moneyPanelInnerHTML(data) {
+  const { sponsors } = data;
   moneyState.sponsorList = (sponsors.data || []).map(x => x.actor).filter(Boolean)
     .sort((a, b) => a.display_name.localeCompare(b.display_name));
+  return moneySummaryHTML(data) + moneyToolbarHTML() +
+    moneyFormHTML(moneyForm.kind) + moneyLinkHTML() + moneyGridHTML(data);
+}
 
-  const del = (tbl, rid) => '<button type="button" class="hub-mini exp-del" data-money-del="' + tbl + ':' +
-    escapeHtml(rid) + '" title="Remove">\u2715</button>';
-  const settle = (tbl, r) => moneyIsOwed(tbl, r)
-    ? '<button type="button" class="hub-mini primary" data-money-settle="' + tbl + ':' + escapeHtml(r.id) +
-      '" title="' + (tbl === 'income' ? 'Mark received' : 'Mark paid') +
-      ' \u2014 you can adjust the final amount">' + (tbl === 'income' ? 'Settle' : 'Pay') + '</button>'
-    : '';
-  const li = (main, subLine, amt, actions) => '<div class="hub-li"><div class="li-main">' + main +
-    '<div class="li-sub">' + subLine + '</div></div><span class="li-amt">' + amt + '</span>' +
-    '<span class="hub-li-actions">' + actions + '</span></div>';
-  const listOf = (arr, fn, empty) => '<div class="hub-list">' +
-    ((arr && arr.length) ? arr.map(fn).join('') : '<div class="hub-empty">' + empty + '</div>') + '</div>';
-  const owedNote = (tbl, arr) => {
-    const owed = (arr || []).filter(r => moneyIsOwed(tbl, r));
-    if (!owed.length) return '';
-    const t = owed.reduce((x, r) => x + Number(r.amount || 0), 0);
-    return '<span class="li-sub">' + money(t) + ' owed \u00b7 ' + owed.length + ' open</span>';
+// The panel owns a wrapper of its own because the hub wraps it in a header and a
+// Dance Infusion hint. Repainting the whole container would throw those away, and
+// the bug would only show the first time somebody expanded a category in the hub.
+function moneySectionsHTML(data) {
+  return '<div data-money-panel>' + moneyPanelInnerHTML(data) + '</div>';
+}
+
+function moneyRepaint(container) {
+  if (!moneyState.data) return;
+  const el = (container && container.querySelector('[data-money-panel]')) || container;
+  if (el) el.innerHTML = moneyPanelInnerHTML(moneyState.data);
+}
+
+// One delegated write path for every inline control in the grid.
+async function moneySaveField(el) {
+  const tbl = el.dataset.mt, id = el.dataset.mid, field = el.dataset.medit;
+  let val = el.value;
+  if (el.type === 'number') {
+    val = val === '' ? null : Number(val);
+    if (val != null && !Number.isFinite(val)) { toast('Bad number', 'err'); return; }
+  } else if (val === '') val = null;
+  const patch = {};
+  patch[field] = val;
+  // Status is not just a label: settling from the grid has to stamp the time, or
+  // the 1099 year and the cash date fall back to the date it was incurred.
+  if (field === 'status') {
+    const settled = val === MONEY_SETTLED[tbl];
+    patch.settled_at = settled ? new Date().toISOString() : null;
+    if (!settled) patch.cash_source = null;
+  }
+  const { error } = await sb.from(tbl).update(patch).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  toast('Saved', 'ok');
+  return true;
+}
+
+// A forecast line coming true. It becomes a real ACCRUED row - committed, not
+// paid - and the forecast is stamped rather than deleted so the estimate stays
+// next to the outcome.
+async function moneyCommitForecast(lineId, eventId) {
+  const fc = ((moneyState.data && moneyState.data.fc && moneyState.data.fc.data) || []).find(r => r.id === lineId);
+  if (!fc) return false;
+  const isRev = fc.direction === 'income';
+  const tbl = isRev ? 'income' : 'expenses';
+  const NL = String.fromCharCode(10);
+  const raw = prompt('Commit "' + (fc.label || fc.category) + '" as a real ' +
+    (isRev ? 'revenue' : 'cost') + ' line.' + NL + NL +
+    'It becomes ' + (isRev ? 'accrued revenue' : 'a committed payable') + ' - on the P&L, not yet cash.' + NL +
+    'Amount:', String(fc.planned_amount));
+  if (raw === null) return false;
+  const amt = Number(String(raw).replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(amt) || amt === 0) { toast('Bad amount', 'err'); return false; }
+  const { data: { session } } = await sb.auth.getSession();
+  const row = {
+    event_id: eventId, date: (moneyState.event && moneyState.event.event_date) || TODAY(),
+    amount: amt, category: fc.category, ledger: moneyLedger(),
+    status: 'accrued', expected_amount: amt, settled_at: null,
+    created_by: (session && session.user && session.user.id) || null,
   };
-  const bar = (title, note, actions) => '<div class="hub-sec-bar"><h3>' + title + '</h3>' +
-    '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' + (note || '') + actions + '</span></div>';
-  const addBtn = (kind, label) => '<button class="hub-btn ghost" data-money-formopen="' + kind + '">' +
-    (moneyForm.kind === kind ? '\u2715 Close' : label) + '</button>';
-
-  return moneySummaryHTML(data) +
-  // ---- Tickets
-  '<div class="money-section">' +
-    bar('Tickets', '', addBtn('ticket', '\u2795 Add tier')) + moneyFormHTML('ticket') +
-    listOf(tk.data, r => li('<strong>' + escapeHtml(r.ticket_type) + '</strong>',
-      fmtNum(r.quantity) + ' sold', money(r.amount_paid), del('ticketing', r.id)),
-      'No ticket tiers recorded.') +
-  '</div>' +
-  // ---- Other income
-  '<div class="money-section">' +
-    bar('Other income', owedNote('income', inc.data), addBtn('income', '\u2795 Record revenue')) +
-    '<div class="section-sub">Bar, vendor, merch, service and performance fees \u2014 not ticket sales.</div>' +
-    moneyFormHTML('income') +
-    listOf(inc.data, r => li('<strong>' + escapeHtml(r.category || 'Income') + '</strong>' + moneyStatusHTML('income', r),
-      escapeHtml(mShort(r.date)) + (r.description ? ' \u00b7 ' + escapeHtml(r.description) : ''),
-      money(r.amount), settle('income', r) + del('income', r.id)),
-      'No other income recorded.') +
-  '</div>' +
-  // ---- Expenses
-  '<div class="money-section">' +
-    bar('Expenses', owedNote('expenses', exp.data),
-      '<button class="hub-btn ghost" data-money-linkopen title="Attach a charge that is already in the books to this event">' +
-      (moneyLink.open ? '\u2715 Close' : '\uD83D\uDD17 Link existing') + '</button>' + addBtn('expense', '\u2795 Add a cost')) +
-    '<div class="section-sub">Costs are counted in the P&amp;L from their <b>cost date</b>, whether or not they have been paid. Only paid ones move cash.</div>' +
-    moneyLinkHTML() + moneyFormHTML('expense') +
-    listOf(exp.data, r => li('<strong>' + escapeHtml(r.vendor || r.category || 'Cost') + '</strong>' + moneyStatusHTML('expenses', r),
-      escapeHtml(mShort(r.date)) + (r.vendor && r.category ? ' \u00b7 ' + escapeHtml(r.category) : '') +
-        (r.cash_source ? ' \u00b7 ' + escapeHtml(r.cash_source) : ''),
-      money(r.amount), settle('expenses', r) + del('expenses', r.id)),
-      'No costs recorded against this event.') +
-  '</div>' +
-  // ---- Donations
-  '<div class="money-section">' +
-    bar('Donations', '', addBtn('donation', '\u2795 Add donation')) + moneyFormHTML('donation') +
-    listOf(don.data, r => li('<strong>' + escapeHtml(r.donor_name || 'Donation') + '</strong>', '',
-      money(r.amount), del('third_party_donations', r.id)),
-      'No donations recorded.') +
-  '</div>' +
-  // ---- Sponsorships
-  '<div class="money-section">' +
-    bar('Sponsorships', '', moneyState.sponsorList.length ? addBtn('sponsorship', '\u2795 Add sponsorship') : '') +
-    (moneyState.sponsorList.length ? moneyFormHTML('sponsorship')
-      : '<div class="section-sub">No sponsors on file \u2014 add one in the Sponsors tab first.</div>') +
-    listOf(spo.data, r => li('<strong>' + escapeHtml((r.actor && r.actor.display_name) || 'Sponsor') + '</strong>' +
-      (r.tier ? ' <span class="role-chip" style="cursor:default;">' + escapeHtml(r.tier) + '</span>' : ''),
-      money(r.cash_amount) + ' cash \u00b7 ' + money(r.in_kind_value) + ' in-kind',
-      money(Number(r.cash_amount || 0) + Number(r.in_kind_value || 0)), del('sponsorships', r.id)),
-      'No sponsorships recorded.') +
-  '</div>';
+  if (isRev) row.description = fc.label || null;
+  else { row.vendor = fc.label || null; row.event_na = false; }
+  const { data: made, error } = await sb.from(tbl).insert(row).select('id').single();
+  if (error) { toast('Could not commit: ' + error.message, 'err'); return false; }
+  const stamp = { realized_at: new Date().toISOString() };
+  stamp[isRev ? 'realized_income_id' : 'realized_expense_id'] = made.id;
+  const { error: ue } = await sb.from('budget_lines').update(stamp).eq('id', lineId);
+  if (ue) toast('Committed, but the forecast line could not be stamped: ' + ue.message, 'err');
+  else toast('Committed ' + money(amt) + ' \u2014 ' + (fc.label || fc.category) +
+    (Math.abs(amt - Number(fc.planned_amount)) > 0.005
+      ? ' (forecast was ' + money(fc.planned_amount) + ')' : ''), 'ok');
+  return true;
 }
 
 // Modal (used from the Events tab).
@@ -8136,25 +8393,14 @@ async function moneyMutate(targetEl, eventId, container) {
     await moneySettleRow(tbl, rid);
     return;
   }
-  const formOpen = targetEl.closest('[data-money-formopen]');
-  if (formOpen) {
-    const k = formOpen.dataset.moneyFormopen;
-    moneyForm.kind = moneyForm.kind === k ? null : k;
-    if (moneyForm.kind) moneyLink.open = false;
-    return;
-  }
-  if (targetEl.closest('[data-money-formclose]')) { moneyForm.kind = null; return; }
-  if (targetEl.closest('[data-money-linkopen]')) {
-    moneyLink.open = !moneyLink.open;
-    if (moneyLink.open) moneyForm.kind = null;
-    if (moneyLink.open && !moneyLink.rows) await moneyLinkLoad(eventId);
-    return;
-  }
-  if (targetEl.closest('[data-money-linkclose]')) { moneyLink.open = false; return; }
+  // Opening a form, expanding a category and the like never reach here - they
+  // are handled by moneyUiClick, which repaints from cache instead of reloading.
+  const commitEl = targetEl.closest('[data-mcommit]');
+  if (commitEl) { await moneyCommitForecast(commitEl.dataset.mcommit, eventId); return; }
   if (targetEl.closest('[data-money-linkgo]')) { await moneyLinkApply(eventId); return; }
   if (delEl) {
     const [tbl, rid] = delEl.dataset.moneyDel.split(':');
-    const op = (tbl === 'income' || tbl === 'expenses')
+    const op = (tbl === 'income' || tbl === 'expenses' || tbl === 'budget_lines')
       ? sb.from(tbl).update({ deleted_at: new Date().toISOString() }).eq('id', rid)
       : sb.from(tbl).delete().eq('id', rid);
     const { error } = await op; if (error) throw error;
@@ -8217,6 +8463,17 @@ async function moneyMutate(targetEl, eventId, container) {
       row.event_na = false;
     }
     op = sb.from(tbl).insert(row);
+  } else if (kind === 'forecast') {
+    const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
+    const cat = vcat();
+    if (!cat) throw new Error('Pick a category');
+    const conf = v('confidence') === '' ? null : Number(v('confidence'));
+    if (conf != null && (!Number.isFinite(conf) || conf < 0 || conf > 100)) throw new Error('Confidence is 0-100, or blank');
+    op = sb.from('budget_lines').insert({
+      event_id: eventId, scope: 'event', direction: v('direction') || 'expense',
+      category: cat, planned_amount: amt, label: v('label') || null,
+      confidence: conf, created_by: uid,
+    });
   } else if (kind === 'donation') {
     const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
     op = sb.from('third_party_donations').insert({ event_id: eventId, date: TODAY(), amount: amt, donor_name: v('donor') || null });
@@ -8235,8 +8492,68 @@ function kindOf(addEl) { return addEl.dataset.moneyAdd; }
 // moneyMutate would re-fetch the whole panel and lose the list's scroll on every
 // click, so it is intercepted first and repaints only what changed.
 const MONEY_SEL = '[data-money-del],[data-money-add],[data-money-settle],' +
-  '[data-money-linkopen],[data-money-linkclose],[data-money-linkgo],' +
-  '[data-money-formopen],[data-money-formclose]';
+  '[data-money-linkgo],[data-mcommit]';
+const MONEY_UI_SEL = '[data-mcat],[data-mexpand],[data-mcollapse],' +
+  '[data-money-formopen],[data-money-formclose],[data-money-linkopen],[data-money-linkclose]';
+
+// Pure-UI clicks: expanding a category, opening a form, opening the drawer.
+// None of them change data, so none of them should cost the six queries a
+// reload costs - they repaint from moneyState.data. Returns true if handled.
+async function moneyUiClick(e, container) {
+  const cat = e.target.closest('[data-mcat]');
+  if (cat) { const k = cat.dataset.mcat; moneyGrid.open[k] = !moneyGrid.open[k]; moneyRepaint(container); return true; }
+  if (e.target.closest('[data-mexpand]')) {
+    if (moneyState.data) moneyLines(moneyState.data).forEach(l => { moneyGrid.open[l.section + '|' + l.category] = true; });
+    moneyRepaint(container); return true;
+  }
+  if (e.target.closest('[data-mcollapse]')) { moneyGrid.open = {}; moneyRepaint(container); return true; }
+  const fo = e.target.closest('[data-money-formopen]');
+  if (fo) {
+    const k = fo.dataset.moneyFormopen;
+    moneyForm.kind = moneyForm.kind === k ? null : k;
+    if (moneyForm.kind) moneyLink.open = false;
+    moneyRepaint(container); return true;
+  }
+  if (e.target.closest('[data-money-formclose]')) { moneyForm.kind = null; moneyRepaint(container); return true; }
+  if (e.target.closest('[data-money-linkclose]')) { moneyLink.open = false; moneyRepaint(container); return true; }
+  if (e.target.closest('[data-money-linkopen]')) {
+    moneyLink.open = !moneyLink.open;
+    if (moneyLink.open) moneyForm.kind = null;
+    if (moneyLink.open && !moneyLink.rows) {
+      moneyRepaint(container);
+      try { await moneyLinkLoad(moneyLink.eventId); }
+      catch (err) { toast(err.message || String(err), 'err'); }
+    }
+    moneyRepaint(container); return true;
+  }
+  return false;
+}
+
+// Which surface is this control on, and how is it reloaded? The panel renders in
+// two places from one set of functions, so the write path has to ask rather than
+// assume.
+function moneySurface(el) {
+  const modal = document.getElementById('kpiModalBody');
+  if (modal && modal.contains(el)) return { container: modal, reload: renderMoneyPanel };
+  const hubEl = document.getElementById('hubSecBody');
+  if (hubEl && hubEl.contains(el)) return { container: hubEl, reload: hubSecMoney };
+  return null;
+}
+
+// Inline edits from the grid. Every save reloads, because changing a category or
+// a status MOVES the row - to a different group, or a different column - and a
+// row that stays where it was after you changed what it is reads as a failed save.
+document.addEventListener('change', async (e) => {
+  const el = e.target.closest('[data-medit]');
+  if (!el) return;
+  const surf = moneySurface(el);
+  const ok = await moneySaveField(el);
+  if (ok && surf) {
+    await surf.reload();
+    refreshStratIfActive();
+    if (document.querySelector('#panel-events.active')) loadTab('events');
+  }
+});
 function moneyLinkLocalClick(e, container) {
   const cb = e.target.closest('[data-money-linksel]');
   if (cb) {
@@ -8273,6 +8590,7 @@ document.addEventListener('input', (e) => {
 $('kpiModalBody').addEventListener('click', async (e) => {
   if (!moneyState.eventId) return;
   if (moneyLinkLocalClick(e, $('kpiModalBody'))) return;
+  if (await moneyUiClick(e, $('kpiModalBody'))) return;
   const target = e.target.closest(MONEY_SEL);
   if (!target) return;
   e.preventDefault();
@@ -10476,6 +10794,7 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
   // Inline Money section uses the shared money add/delete markup.
   if (hub.section === 'money' && moneyLinkLocalClick(e, $('hubSecBody'))) return;
+  if (hub.section === 'money' && e.target.closest(MONEY_UI_SEL)) { moneyUiClick(e, $('hubSecBody')); return; }
   const moneyEl = e.target.closest(MONEY_SEL);
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
