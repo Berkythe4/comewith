@@ -740,40 +740,38 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .money-add input { flex: 1; }
 .money-add .money-add-btn { background: var(--ink); color: var(--bg); border: none; cursor: pointer; padding: 6px 12px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
 .money-empty { font-size: 0.74rem; color: var(--mid); padding: 3px 0; }
-/* 177 — payables, accruals, and linking an expense that already exists */
-.money-add { flex-wrap: wrap; }
-.money-add input[type="date"] { flex: 0 0 auto; }
-.money-sec-head { display: flex; align-items: baseline; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-bottom: 6px; }
-.money-sec-head h4 { border-top: none; padding-top: 0; margin-bottom: 0; flex: 1; }
-.money-sec-head .money-sec-note { font-size: 0.72rem; color: var(--mid); font-variant-numeric: tabular-nums; }
-.money-row.owed { background: #fdfaf3; }
-.money-row .mr-when { font-size: 0.72rem; color: var(--mid); font-variant-numeric: tabular-nums; min-width: 52px; }
-.money-settle { background: var(--ink); color: var(--bg); border: none; cursor: pointer; font-size: 0.68rem;
-  text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; }
-.money-settle:hover { opacity: .85; }
-.money-tools { display: flex; gap: 6px; }
-.money-tool { background: none; border: 1px solid var(--border-strong); color: var(--ink); cursor: pointer;
-  font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; }
-.money-tool:hover { border-color: var(--ink); }
-.money-tool.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
-.money-sum { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
-.money-sum .ms { border: 1px solid var(--border); padding: 7px 10px; min-width: 118px; }
-.money-sum .ms .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: .07em; color: var(--mid); }
-.money-sum .ms .val { font-size: 1rem; font-variant-numeric: tabular-nums; }
-.money-sum .ms .sub { font-size: 0.68rem; color: var(--mid); font-variant-numeric: tabular-nums; }
-.money-sum .ms .val.pos { color: #1f7a4d; } .money-sum .ms .val.neg { color: #be3c3c; }
-.money-link { border: 1px solid var(--border-strong); background: var(--surface); padding: 8px; margin-top: 8px; }
-.money-link-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
-.money-link-top input[type="search"] { flex: 1; min-width: 160px; font-family: 'Inconsolata', monospace;
-  font-size: 0.78rem; padding: 6px 8px; border: 1px solid var(--border-strong); background: var(--bg); }
-.money-link-top label { font-size: 0.72rem; color: var(--mid); display: flex; align-items: center; gap: 4px; }
-.money-link-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); background: var(--bg); }
-.money-link-row { display: flex; align-items: center; gap: 8px; font-size: 0.76rem; padding: 4px 7px;
-  border-bottom: 1px solid var(--border); cursor: pointer; }
-.money-link-row:hover { background: var(--surface); }
-.money-link-row .mlr-date { color: var(--mid); font-variant-numeric: tabular-nums; min-width: 56px; }
-.money-link-row .mlr-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.money-link-row .mlr-amt { font-variant-numeric: tabular-nums; }
+/* 177 - the Money panel, in the control-center format */
+.money-section { margin-bottom: 20px; }
+.money-section .hub-sec-bar { margin-bottom: 0; }
+.money-section .section-sub { margin: 6px 0 8px; }
+.money-section .hub-li { gap: 10px; }
+.money-section .hub-li .li-amt { font-weight: 700; }
+.role-chip.owed { color: #8a5a1e; border-color: #e6d3b3; background: #fdf6ea; }
+.role-chip.late { color: #be3c3c; border-color: #eccaca; background: #fdf0f0; }
+/* the labelled add form */
+.money-form { border: 1px solid var(--border-strong); border-left: 3px solid var(--red);
+  background: var(--surface); padding: 12px 14px; margin: 8px 0; }
+.mf-head { font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: .06em; margin-bottom: 10px; }
+.mf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 10px 14px; }
+.mf-field { min-width: 0; }
+.mf-field .modal-label { display: block; margin-bottom: 3px; }
+.mf-field .modal-input { width: 100%; }
+.mf-hint { font-size: 0.68rem; color: var(--mid); margin-top: 3px; line-height: 1.4; }
+.money-form[data-status="paid"] [data-when="unpaid"],
+.money-form[data-status="unpaid"] [data-when="paid"] { display: none; }
+.mf-foot { display: flex; gap: 8px; align-items: center; margin-top: 12px;
+  border-top: 1px solid var(--border); padding-top: 10px; }
+/* link-existing drawer */
+.money-link { border: 1px solid var(--border-strong); border-left: 3px solid var(--ink);
+  background: var(--surface); padding: 10px 12px; margin: 8px 0; }
+.money-link-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+.money-link-top input[type="search"] { flex: 1; min-width: 170px; font-family: 'Inconsolata', monospace;
+  font-size: 0.8rem; padding: 6px 8px; border: 1px solid var(--border-strong); background: var(--bg); }
+.money-link-top label { font-size: 0.73rem; color: var(--mid); display: flex; align-items: center; gap: 4px; }
+.money-link-list { max-height: 280px; overflow-y: auto; }
+.money-link-row { cursor: pointer; }
+.money-link-row:hover { background: var(--bg); }
+.money-link-foot { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .recon-box { max-width: 560px; width: 92vw; }
 .recon-body { padding: 10px 14px; max-height: 62vh; overflow-y: auto; }
 .recon-sub { font-size: 0.74rem; color: var(--mid); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
@@ -791,7 +789,6 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .recon-total b { font-variant-numeric: tabular-nums; }
 .recon-total b.pos { color: #1f7a4d; } .recon-total b.neg { color: #be3c3c; }
 .recon-foot { display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); }
-.money-link-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 0.74rem; color: var(--mid); }
 .placeholder {
   background: var(--surface); border: 1px dashed var(--border-strong);
   padding: 36px 28px; text-align: center;
@@ -7535,8 +7532,9 @@ async function loadMoneyData(id) {
   // valid for the event they were loaded for. Switching events must drop them.
   if (moneyLink.eventId !== id) {
     Object.assign(moneyLink, { eventId: id, open: false, q: '', showOther: false, sel: new Set(), rows: null });
+    moneyForm.kind = null;
   }
-  const [ev, tk, inc, exp, don, spo, sponsors, actors] = await Promise.all([
+  const [ev, tk, inc, exp, don, spo, sponsors, actors, cats, streams] = await Promise.all([
     sb.from('events').select('id, name, series, event_date').eq('id', id).single(),
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
     sb.from('income').select('id, amount, category, description, date, status, expected_amount, settled_at').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
@@ -7545,9 +7543,16 @@ async function loadMoneyData(id) {
     sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, actor:actors(display_name)').eq('event_id', id),
     sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor'),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+    sbAll(() => sb.from('expenses').select('id, category').is('deleted_at', null), 'id'),
+    sb.from('revenue_streams').select('label, applies_to, display_order').eq('active', true).order('display_order'),
   ]);
   moneyState.event = ev.data || null;
   moneyState.actors = actors.data || [];
+  // Category is a CONTROLLED LIST, not free text. Two spellings of Marketing is
+  // two lines in the P&L that mean one thing, and the tab has 14 categories in
+  // real use already - typing them again by hand is how the 15th appears.
+  moneyState.expCats = [...new Set((cats.data || []).map(r => r.category).filter(Boolean))].sort();
+  moneyState.streams = (streams.data || []).map(r => r.label);
   return { ev, tk, inc, exp, don, spo, sponsors, actors };
 }
 
@@ -7556,29 +7561,35 @@ const moneyLedger = () => /dance infusion/i.test(moneyState.event?.series || '')
 const moneyIsOwed = (tbl, r) => !!r.status && r.status !== MONEY_SETTLED[tbl];
 const mShort = (d) => (d ? fmtDate(d) : '');
 
-// A row's accrual state, as a chip. Only ever drawn when the row is NOT settled —
-// "paid"/"received" is the resting state and labelling it adds noise to the 95%
-// case. Variance (agreed vs settled) is a separate chip because it survives
-// settlement and is the thing worth noticing afterwards.
+// Which add form is open, if any. One at a time - five inline forms stacked
+// open is the sloppiness this replaces.
+const moneyForm = { kind: null };
+
+// A row's accrual state, as chips. Only ever drawn when the row is NOT settled -
+// paid/received is the resting state and labelling it adds noise to the 95%
+// case. Variance survives settlement, so it is a separate chip.
 function moneyStatusHTML(tbl, r) {
   const out = [];
   if (moneyIsOwed(tbl, r)) {
-    const label = (MONEY_STATES[tbl].find(s => s[0] === r.status) || [, r.status])[1];
+    const st = MONEY_STATES[tbl].find(x => x[0] === r.status) || [r.status, r.status, ''];
     const overdue = tbl === 'expenses' && r.due_date && r.due_date < TODAY();
-    out.push(`<span class="exp-tag ${overdue ? 'dupe' : 'own'}" title="${escapeHtml(
-      (MONEY_STATES[tbl].find(s => s[0] === r.status) || [, , ''])[2])}">${escapeHtml(String(label).toLowerCase())}</span>`);
-    if (r.due_date) out.push(`<span class="exp-tag ${overdue ? 'dupe' : ''}" title="${overdue ? 'Past due' : 'Due'} ${escapeHtml(fmtDate(r.due_date))}">${overdue ? 'overdue ' : 'due '}${escapeHtml(fmtDate(r.due_date))}</span>`);
+    out.push('<span class="role-chip owed" style="cursor:default;" title="' + escapeHtml(st[2]) + '">' +
+      escapeHtml(st[1].toLowerCase()) + '</span>');
+    if (r.due_date) out.push('<span class="role-chip' + (overdue ? ' late' : '') + '" style="cursor:default;" title="' +
+      (overdue ? 'Past due' : 'Due') + ' ' + escapeHtml(fmtDate(r.due_date)) + '">' +
+      (overdue ? 'overdue ' : 'due ') + escapeHtml(fmtDate(r.due_date)) + '</span>');
   }
   if (r.expected_amount != null && Number(r.expected_amount) !== Number(r.amount)) {
-    out.push(`<span class="exp-tag dupe" title="Agreed ${money(r.expected_amount)}, settled ${money(r.amount)}">vs ${money(r.expected_amount)}</span>`);
+    const d = Number(r.amount) - Number(r.expected_amount);
+    out.push('<span class="role-chip late" style="cursor:default;" title="Agreed ' + money(r.expected_amount) +
+      ', settled ' + money(r.amount) + '">' + (d > 0 ? '+' : '') + money(d) + ' vs agreed</span>');
   }
   return out.length ? ' ' + out.join(' ') : '';
 }
 
-// The one number people open this panel for. Revenue and cost are shown on the
-// ACCRUAL basis (what the event earned and cost), with the cash split underneath
-// — because "we made $2,400" and "$2,400 is in the bank" are different sentences
-// and this panel used to only be able to say the second one.
+// The one number people open this panel for. Revenue and cost are on the ACCRUAL
+// basis (what the event earned and cost); the cash split sits underneath, because
+// "we made $2,400" and "$2,400 is in the bank" are different sentences.
 function moneySummaryHTML({ tk, inc, exp, don, spo }) {
   const sum = (arr, f) => (arr || []).reduce((t, r) => t + Number(f(r) || 0), 0);
   const tickets = sum(tk.data, r => r.amount_paid);
@@ -7590,80 +7601,163 @@ function moneySummaryHTML({ tk, inc, exp, don, spo }) {
   const expOwed = sum((exp.data || []).filter(r => moneyIsOwed('expenses', r)), r => r.amount);
   const revenue = tickets + dons + spons + incAll;
   const net = revenue - expAll;
-  const card = (lbl, val, sub, cls) =>
-    `<div class="ms"><div class="lbl">${lbl}</div><div class="val ${cls || ''}">${val}</div>` +
-    `<div class="sub">${sub}</div></div>`;
-  return `<div class="money-sum">
-    ${card('Revenue', money(revenue), incOwed > 0 ? money(incOwed) + ' still owed to us' : 'all banked')}
-    ${card('Costs', money(expAll), expOwed > 0 ? money(expOwed) + ' still owed by us' : 'all paid')}
-    ${card('Net', money(net), 'revenue − costs', net > 0 ? 'pos' : (net < 0 ? 'neg' : ''))}
-    ${card('Cash so far', money(revenue - incOwed - (expAll - expOwed)), 'received − paid')}
-  </div>`;
+  const card = (lbl, val, sub, cls) => '<div class="hub-card"><div class="lbl">' + lbl + '</div>' +
+    '<div class="val ' + (cls || '') + '">' + val + '</div><div class="li-sub">' + sub + '</div></div>';
+  return '<div class="hub-cards">' +
+    card('Revenue', money(revenue), incOwed > 0 ? money(incOwed) + ' still owed to us' : 'all banked') +
+    card('Costs', money(expAll), expOwed > 0 ? money(expOwed) + ' still owed by us' : 'all paid') +
+    card('Net', money(net), 'revenue &minus; costs', net > 0 ? 'pos' : (net < 0 ? 'neg' : '')) +
+    card('Cash so far', money(revenue - incOwed - (expAll - expOwed)), 'received &minus; paid') +
+    '</div>';
 }
 
-// The link drawer's list, rendered on its own so typing in the search box
-// repaints the rows without destroying the input that has focus.
+// ---- The add forms -----------------------------------------------------------
+// Every field is LABELLED. The old inline strip was placeholder-only, which is
+// how "Due" ended up being the only date on an expense with no way to tell that
+// it was not the date the cost happened. Both dates are here now, named, with
+// the P&L consequence spelled out on the one that has it.
+function moneyFieldHTML(f) {
+  const id = 'data-f="' + f.f + '"';
+  const cls = 'class="modal-input"';
+  let ctl;
+  if (f.type === 'select') {
+    ctl = '<select ' + cls + ' ' + id + '>' + f.options.map(o =>
+      '<option value="' + escapeHtml(o[0]) + '"' + (o[2] ? ' title="' + escapeHtml(o[2]) + '"' : '') +
+      (o[3] ? ' selected' : '') + '>' + escapeHtml(o[1]) + '</option>').join('') + '</select>';
+  } else if (f.type === 'textarea') {
+    ctl = '<textarea ' + cls + ' ' + id + ' rows="2"></textarea>';
+  } else {
+    ctl = '<input ' + cls + ' ' + id + ' type="' + (f.type || 'text') + '"' +
+      (f.value ? ' value="' + escapeHtml(f.value) + '"' : '') +
+      (f.placeholder ? ' placeholder="' + escapeHtml(f.placeholder) + '"' : '') +
+      (f.type === 'number' ? ' min="0" step="0.01"' : '') + '>';
+  }
+  return '<div class="mf-field"' + (f.when ? ' data-when="' + f.when + '"' : '') + '>' +
+    '<label class="modal-label">' + escapeHtml(f.label) + (f.req ? ' *' : '') + '</label>' + ctl +
+    (f.hint ? '<div class="mf-hint">' + f.hint + '</div>' : '') + '</div>';
+}
+
+function moneyCatOptions(kind) {
+  const list = kind === 'income' ? (moneyState.streams || []) : (moneyState.expCats || []);
+  return [['', '\u2014 pick one \u2014']].concat(list.map(c => [c, c]))
+    .concat([['__new', '+ new' + (kind === 'income' ? ' stream' : ' category') + '\u2026']]);
+}
+function moneyActorOptions(label) {
+  return [['', label]].concat((moneyState.actors || []).map(a => [a.id, a.display_name]));
+}
+
+function moneyFormDefs(kind) {
+  const evDate = (moneyState.event && moneyState.event.event_date) || TODAY();
+  const stOpts = (tbl) => MONEY_STATES[tbl].map(([v, l, h], i) => [v, l, h, i === 0]);
+  if (kind === 'ticket') return { title: 'Add a ticket tier', save: 'Add tier', fields: [
+    { f: 'type', label: 'Tier name', value: 'General', req: true },
+    { f: 'qty', label: 'Quantity sold', type: 'number', req: true },
+    { f: 'price', label: 'Price each ($)', type: 'number' },
+  ] };
+  if (kind === 'income') return { title: 'Record revenue', save: 'Record it', fields: [
+    { f: 'amount', label: 'Amount ($)', type: 'number', req: true },
+    { f: 'category', label: 'Revenue stream', type: 'select', options: moneyCatOptions('income'), req: true },
+    { f: 'actor', label: 'Payer', type: 'select', options: moneyActorOptions('\u2014 nobody in particular \u2014'),
+      hint: 'Links the money to who paid it.' },
+    { f: 'status', label: 'Has the money arrived?', type: 'select', options: stOpts('income') },
+    { f: 'date', label: 'Income date', type: 'date', value: evDate,
+      hint: 'Sets the <b>P&amp;L month</b>. Defaults to the event date, not today.' },
+  ] };
+  if (kind === 'expense') return { title: 'Add a cost', save: 'Add the cost', fields: [
+    { f: 'amount', label: 'Amount ($)', type: 'number', req: true },
+    { f: 'category', label: 'Category', type: 'select', options: moneyCatOptions('expense'), req: true },
+    { f: 'vendor_actor', label: 'Payee', type: 'select', options: moneyActorOptions('\u2014 not on file \u2014'),
+      hint: 'Linking the payee is what lets payments to them total correctly for a 1099.' },
+    { f: 'vendor', label: '\u2026or type a payee name', placeholder: 'only if they are not on the list' },
+    { f: 'status', label: 'Has it been paid?', type: 'select', options: stOpts('expenses') },
+    { f: 'date', label: 'Cost date', type: 'date', value: evDate,
+      hint: 'The month this cost lands in on the <b>P&amp;L</b> \u2014 the event date by default, <b>not</b> the day you commit to it.' },
+    { f: 'due', label: 'Due date', type: 'date', when: 'unpaid',
+      hint: 'When you owe it. Only used while it is unpaid; drives the overdue flag.' },
+    { f: 'cash_source', label: 'Paid from', type: 'select', when: 'paid', options: [
+        ['', '\u2014 not said \u2014'], ['bank', 'Bank (Bluevine)'], ['paypal', 'PayPal (business)'],
+        ['personal', 'Personal card'], ['other', 'Other']],
+      hint: 'Only bank and PayPal draw down the float. Leave it blank and this row sits outside the cash reserve.' },
+  ] };
+  if (kind === 'donation') return { title: 'Add a donation', save: 'Add donation', fields: [
+    { f: 'amount', label: 'Amount ($)', type: 'number', req: true },
+    { f: 'donor', label: 'Donor', placeholder: 'optional' },
+  ] };
+  return { title: 'Add a sponsorship', save: 'Add sponsorship', fields: [
+    { f: 'sponsor_id', label: 'Sponsor', type: 'select', options: [['', '\u2014 pick a sponsor \u2014']]
+        .concat(((moneyState.sponsorList) || []).map(a => [a.id, a.display_name])), req: true },
+    { f: 'cash', label: 'Cash ($)', type: 'number' },
+    { f: 'inkind', label: 'In-kind value ($)', type: 'number' },
+  ] };
+}
+
+function moneyFormHTML(kind) {
+  if (moneyForm.kind !== kind) return '';
+  const d = moneyFormDefs(kind);
+  const settledFirst = kind === 'expense' || kind === 'income';
+  return '<div class="money-form" data-money-form-kind="' + kind + '"' +
+      (settledFirst ? ' data-status="paid"' : '') + '>' +
+    '<div class="mf-head">' + escapeHtml(d.title) + '</div>' +
+    '<div class="mf-grid">' + d.fields.map(moneyFieldHTML).join('') + '</div>' +
+    '<div class="mf-foot">' +
+      '<button type="button" class="hub-btn" data-money-add="' + kind + '">' + escapeHtml(d.save) + '</button>' +
+      '<button type="button" class="hub-mini" data-money-formclose>Cancel</button>' +
+    '</div></div>';
+}
+
+// ---- The link drawer ---------------------------------------------------------
 function moneyLinkListHTML() {
-  if (moneyLink.loading) return '<div class="money-empty" style="padding:8px;">Loading expenses…</div>';
+  if (moneyLink.loading) return '<div class="hub-empty">Loading expenses\u2026</div>';
   const all = moneyLink.rows || [];
   const q = moneyLink.q.trim().toLowerCase();
   const pool = all.filter(r => moneyLink.showOther || !r.event_id);
   const hits = !q ? pool : pool.filter(r =>
     [r.vendor, r.category, r.description, r.event_name, String(r.amount)].join(' ').toLowerCase().includes(q));
   if (!hits.length) {
-    return `<div class="money-empty" style="padding:8px;">${all.length
-      ? 'No expense matches — try a different search' + (moneyLink.showOther ? '.' : ', or tick "already on another event".')
-      : 'Every expense on file is already linked to this event.'}</div>`;
+    return '<div class="hub-empty">' + (all.length
+      ? 'No expense matches \u2014 try a different search' + (moneyLink.showOther ? '.' : ', or tick "already on another event".')
+      : 'Every expense on file is already linked to this event.') + '</div>';
   }
   const CAP = 60;
-  const shown = hits.slice(0, CAP);
-  const rows = shown.map(r => `<label class="money-link-row">
-    <input type="checkbox" data-money-linksel="${escapeHtml(r.id)}"${moneyLink.sel.has(r.id) ? ' checked' : ''}>
-    <span class="mlr-date">${escapeHtml(mShort(r.date))}</span>
-    <span class="mlr-main">${escapeHtml(r.vendor || r.category || r.description || 'expense')}${
-      r.vendor && r.category ? ' <span class="muted">· ' + escapeHtml(r.category) + '</span>' : ''}${
-      r.status && r.status !== 'paid' ? ' <span class="exp-tag own">' + escapeHtml(r.status) + '</span>' : ''}${
-      r.event_id ? ' <span class="exp-tag dupe" title="Linking moves it off that event">on ' + escapeHtml(r.event_name || 'another event') + '</span>' : ''}</span>
-    <span class="mlr-amt">${money(r.amount)}</span>
-  </label>`).join('');
-  // Never let a cap read as "that's all there is" (§18).
+  const rows = hits.slice(0, CAP).map(r => '<label class="hub-li money-link-row">' +
+    '<input type="checkbox" data-money-linksel="' + escapeHtml(r.id) + '"' + (moneyLink.sel.has(r.id) ? ' checked' : '') + '>' +
+    '<div class="li-main"><strong>' + escapeHtml(r.vendor || r.category || r.description || 'expense') + '</strong>' +
+      (r.status && r.status !== 'paid' ? ' <span class="role-chip owed" style="cursor:default;">' + escapeHtml(r.status) + '</span>' : '') +
+      (r.event_id ? ' <span class="role-chip late" style="cursor:default;" title="Linking moves it off that event">on ' +
+        escapeHtml(r.event_name || 'another event') + '</span>' : '') +
+      '<div class="li-sub">' + escapeHtml(mShort(r.date)) + (r.category ? ' \u00b7 ' + escapeHtml(r.category) : '') + '</div></div>' +
+    '<span class="li-amt">' + money(r.amount) + '</span></label>').join('');
+  // Never let a cap read as "that is all there is" (Sec 18).
   const more = hits.length > CAP
-    ? `<div class="money-empty" style="padding:6px 8px;">Showing the ${CAP} most recent of ${hits.length} matches — search to narrow it.</div>`
+    ? '<div class="hub-empty">Showing the ' + CAP + ' most recent of ' + hits.length + ' matches \u2014 search to narrow it.</div>'
     : '';
   return rows + more;
 }
 
 function moneyLinkHTML() {
   if (!moneyLink.open) return '';
-  const n = moneyLink.sel.size;
-  const selSum = (moneyLink.rows || []).filter(r => moneyLink.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
-  return `<div class="money-link">
-    <div class="money-link-top">
-      <input type="search" data-money-linkq placeholder="Search vendor / category / note / amount…" value="${escapeHtml(moneyLink.q)}">
-      <label><input type="checkbox" data-money-linkother${moneyLink.showOther ? ' checked' : ''}> already on another event</label>
-      <button type="button" class="money-tool" data-money-linkclose>close</button>
-    </div>
-    <div class="money-link-list" data-money-linklist>${moneyLinkListHTML()}</div>
-    <div class="money-link-foot" data-money-linkfoot>${moneyLinkFootHTML()}</div>
-  </div>`;
+  return '<div class="money-link">' +
+    '<div class="money-link-top">' +
+      '<input type="search" data-money-linkq placeholder="Search vendor / category / note / amount\u2026" value="' + escapeHtml(moneyLink.q) + '">' +
+      '<label><input type="checkbox" data-money-linkother' + (moneyLink.showOther ? ' checked' : '') + '> already on another event</label>' +
+      '<button type="button" class="hub-mini" data-money-linkclose>Close</button>' +
+    '</div>' +
+    '<div class="hub-list money-link-list" data-money-linklist>' + moneyLinkListHTML() + '</div>' +
+    '<div class="money-link-foot" data-money-linkfoot>' + moneyLinkFootHTML() + '</div>' +
+  '</div>';
 }
 function moneyLinkFootHTML() {
   const n = moneyLink.sel.size;
   const selSum = (moneyLink.rows || []).filter(r => moneyLink.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
-  return `<button type="button" class="money-add-btn" data-money-linkgo${n ? '' : ' disabled'}>Link ${n || ''} to this event</button>
-    <span>${n ? n + ' selected · ' + money(selSum) : 'Tick the charges that belong to this event.'}</span>`;
+  return '<button type="button" class="hub-btn" data-money-linkgo' + (n ? '' : ' disabled') + '>Link ' + (n || '') + ' to this event</button>' +
+    '<span class="li-sub">' + (n ? n + ' selected \u00b7 ' + money(selSum) : 'Tick the charges that belong to this event.') + '</span>';
 }
-// Repaint only the drawer — never the whole panel. Typing in the search box and
-// ticking a row must not cost a round trip or throw away the scroll position.
 function moneyLinkRepaint(container, listToo) {
   const root = container || document;
   const foot = root.querySelector('[data-money-linkfoot]');
   if (foot) foot.innerHTML = moneyLinkFootHTML();
   if (listToo) { const l = root.querySelector('[data-money-linklist]'); if (l) l.innerHTML = moneyLinkListHTML(); }
 }
-// Every expense on file that is NOT already on this event. Paged with sbAll —
-// PostgREST's 1000-row cap is silent, and the expense ledger is the table most
-// likely to cross it first.
 async function moneyLinkLoad(eventId) {
   moneyLink.loading = true;
   const { data, error } = await sbAll(() => sb.from('expenses')
@@ -7673,13 +7767,10 @@ async function moneyLinkLoad(eventId) {
   if (error) throw error;
   moneyLink.rows = (data || [])
     .filter(r => r.event_id !== eventId)
-    .map(r => ({ ...r, event_name: r.event?.name || null }))
+    .map(r => ({ ...r, event_name: r.event ? r.event.name : null }))
     .sort((a, b) => String(b.date).localeCompare(String(a.date)));
   moneyLink.sel = new Set();
 }
-// Attach existing charges. event_na is cleared because "this has no event" and
-// "this event" are contradictory, and the ledger is pulled to the event's own —
-// a Come With charge moved onto a Dance Infusion night belongs to DI's books.
 async function moneyLinkApply(eventId) {
   const ids = [...moneyLink.sel];
   if (!ids.length) return;
@@ -7690,20 +7781,21 @@ async function moneyLinkApply(eventId) {
   const total = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
   const NL = String.fromCharCode(10);
   let msg = 'Link ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' totalling ' + money(total) +
-    ' to "' + (moneyState.event?.name || 'this event') + '"?';
-  if (moving.length) msg += NL + NL + '⚠ ' + moving.length + ' of them ' + (moving.length > 1 ? 'are' : 'is') +
+    ' to "' + ((moneyState.event && moneyState.event.name) || 'this event') + '"?';
+  if (moving.length) msg += NL + NL + '\u26a0 ' + moving.length + ' of them ' + (moving.length > 1 ? 'are' : 'is') +
     ' currently on another event and will be MOVED off it: ' +
     [...new Set(moving.map(r => r.event_name || 'unnamed'))].join(', ') + '.';
-  if (switching.length) msg += NL + NL + '⚠ ' + switching.length + ' will move into the ' +
+  if (switching.length) msg += NL + NL + '\u26a0 ' + switching.length + ' will move into the ' +
     (ledger === 'dance_infusion' ? 'Dance Infusion' : 'Come With') + ' books.';
   if (!confirm(msg)) return;
   const { error } = await sb.from('expenses')
     .update({ event_id: eventId, event_na: false, ledger }).in('id', ids);
   if (error) throw error;
-  toast('Linked ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' · ' + money(total), 'ok');
+  toast('Linked ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' \u00b7 ' + money(total), 'ok');
   moneyLink.open = false; moneyLink.sel = new Set(); moneyLink.rows = null; moneyLink.q = '';
   await reconcileOnAssign(eventId, ids);
 }
+
 // Finalise an accrual: the agreed figure moves to expected_amount so the variance
 // is still legible after the fact instead of being overwritten by the final.
 async function moneySettleRow(tbl, id) {
@@ -7938,65 +8030,86 @@ async function showReconReport(items, eventId, evName) {
   });
 }
 
-
-// Shared markup for the 5 money sections (used by both the modal and the inline hub section).
+// ---- The panel ---------------------------------------------------------------
+// Control-center format: a section bar with its own actions, a hub-list of rows,
+// and one labelled form that opens under the bar it belongs to.
 function moneySectionsHTML(data) {
   const { tk, inc, exp, don, spo, sponsors } = data;
-  // Linking the payee to an ACTOR (not just typing a name) is what makes a row
-  // rulable for a 1099 later — 166 had to be rebuilt per-payee precisely because
-  // free-text vendor names cannot be totalled reliably. Offered here so the link
-  // happens at entry, when the person entering it knows who they mean.
-  const actorSel = (f, label) => `<select data-f="${f}" title="Links this row to an actor, so payments to them total correctly for a 1099"><option value="">${label}</option>${
-    (moneyState.actors || []).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
-  const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
-  const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
-  const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
+  moneyState.sponsorList = (sponsors.data || []).map(x => x.actor).filter(Boolean)
+    .sort((a, b) => a.display_name.localeCompare(b.display_name));
+
+  const del = (tbl, rid) => '<button type="button" class="hub-mini exp-del" data-money-del="' + tbl + ':' +
+    escapeHtml(rid) + '" title="Remove">\u2715</button>';
   const settle = (tbl, r) => moneyIsOwed(tbl, r)
-    ? `<button type="button" class="money-settle" data-money-settle="${tbl}:${escapeHtml(r.id)}" title="${
-        tbl === 'income' ? 'Mark received — you can adjust the final amount' : 'Mark paid — you can adjust the final amount'}">${
-        tbl === 'income' ? 'settle' : 'pay'}</button>` : '';
-  const stateSel = (tbl) => `<select data-f="status" title="Has this happened yet?">${
-    MONEY_STATES[tbl].map(([v, l, h]) => `<option value="${v}" title="${escapeHtml(h)}">${escapeHtml(l)}</option>`).join('')}</select>`;
+    ? '<button type="button" class="hub-mini primary" data-money-settle="' + tbl + ':' + escapeHtml(r.id) +
+      '" title="' + (tbl === 'income' ? 'Mark received' : 'Mark paid') +
+      ' \u2014 you can adjust the final amount">' + (tbl === 'income' ? 'Settle' : 'Pay') + '</button>'
+    : '';
+  const li = (main, subLine, amt, actions) => '<div class="hub-li"><div class="li-main">' + main +
+    '<div class="li-sub">' + subLine + '</div></div><span class="li-amt">' + amt + '</span>' +
+    '<span class="hub-li-actions">' + actions + '</span></div>';
+  const listOf = (arr, fn, empty) => '<div class="hub-list">' +
+    ((arr && arr.length) ? arr.map(fn).join('') : '<div class="hub-empty">' + empty + '</div>') + '</div>';
   const owedNote = (tbl, arr) => {
     const owed = (arr || []).filter(r => moneyIsOwed(tbl, r));
     if (!owed.length) return '';
-    const t = owed.reduce((s, r) => s + Number(r.amount || 0), 0);
-    return `<span class="money-sec-note">${money(t)} owed · ${owed.length} open</span>`;
+    const t = owed.reduce((x, r) => x + Number(r.amount || 0), 0);
+    return '<span class="li-sub">' + money(t) + ' owed \u00b7 ' + owed.length + ' open</span>';
   };
-  const sponsorOpts = (sponsors.data || []).map(s => s.actor).filter(Boolean).sort((a, b) => a.display_name.localeCompare(b.display_name)).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
-  return `
-    ${moneySummaryHTML(data)}
-    <div class="money-section">
-      <h4>Tickets</h4>
-      ${list(tk.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.ticket_type)} × ${fmtNum(r.quantity)}</span><span class="mr-amt">${money(r.amount_paid)}</span>${del('ticketing', r.id)}</div>`)}
-      <div class="money-add"><input data-f="type" placeholder="Tier"><input data-f="qty" type="number" min="1" step="1" placeholder="Qty"><input data-f="price" type="number" min="0" step="0.01" placeholder="Unit $">${addBtn('ticket')}</div>
-    </div>
-    <div class="money-section">
-      <div class="money-sec-head"><h4>Other income (bar / vendor / merch — not tickets)</h4>${owedNote('income', inc.data)}</div>
-      ${list(inc.data, r => `<div class="money-row${moneyIsOwed('income', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.category || '—')}${
-        r.description ? ' <span class="muted">· ' + escapeHtml(r.description) + '</span>' : ''}${moneyStatusHTML('income', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('income', r)}${del('income', r.id)}</div>`)}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${actorSel('actor', '— payer —')}${stateSel('income')}${addBtn('income')}</div>
-    </div>
-    <div class="money-section">
-      <div class="money-sec-head"><h4>Expenses</h4>${owedNote('expenses', exp.data)}
-        <span class="money-tools"><button type="button" class="money-tool${moneyLink.open ? ' on' : ''}" data-money-linkopen title="Attach a charge that is already in the books to this event">🔗 Link existing</button></span></div>
-      ${list(exp.data, r => `<div class="money-row${moneyIsOwed('expenses', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.vendor || r.category || '—')}${
-        r.vendor && r.category ? ' <span class="muted">· ' + escapeHtml(r.category) + '</span>' : ''}${moneyStatusHTML('expenses', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('expenses', r)}${del('expenses', r.id)}</div>`)}
-      ${moneyLinkHTML()}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${actorSel('vendor_actor', '— payee —')}<input data-f="vendor" placeholder="…or type a payee">${stateSel('expenses')}<input data-f="due" type="date" title="Due date — only used when it is not paid yet">${addBtn('expense')}</div>
-    </div>
-    <div class="money-section">
-      <h4>Donations</h4>
-      ${list(don.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.donor_name || 'donation')}</span><span class="mr-amt">${money(r.amount)}</span>${del('third_party_donations', r.id)}</div>`)}
-      <div class="money-add"><input data-f="donor" placeholder="Donor (optional)"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $">${addBtn('donation')}</div>
-    </div>
-    <div class="money-section">
-      <h4>Sponsorships</h4>
-      ${list(spo.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.actor?.display_name || '—')}${r.tier ? ` <span class="li-sub">${escapeHtml(r.tier)}</span>` : ''}</span><span class="mr-amt">${money(r.cash_amount)} cash · ${money(r.in_kind_value)} in-kind</span>${del('sponsorships', r.id)}</div>`)}
-      ${sponsorOpts
-        ? `<div class="money-add"><select data-f="sponsor_id"><option value="">— sponsor —</option>${sponsorOpts}</select><input data-f="cash" type="number" min="0" step="0.01" placeholder="Cash $"><input data-f="inkind" type="number" min="0" step="0.01" placeholder="In-kind $">${addBtn('sponsorship')}</div>`
-        : `<div class="money-empty">No sponsors on file — add one in the Sponsors tab first.</div>`}
-    </div>`;
+  const bar = (title, note, actions) => '<div class="hub-sec-bar"><h3>' + title + '</h3>' +
+    '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' + (note || '') + actions + '</span></div>';
+  const addBtn = (kind, label) => '<button class="hub-btn ghost" data-money-formopen="' + kind + '">' +
+    (moneyForm.kind === kind ? '\u2715 Close' : label) + '</button>';
+
+  return moneySummaryHTML(data) +
+  // ---- Tickets
+  '<div class="money-section">' +
+    bar('Tickets', '', addBtn('ticket', '\u2795 Add tier')) + moneyFormHTML('ticket') +
+    listOf(tk.data, r => li('<strong>' + escapeHtml(r.ticket_type) + '</strong>',
+      fmtNum(r.quantity) + ' sold', money(r.amount_paid), del('ticketing', r.id)),
+      'No ticket tiers recorded.') +
+  '</div>' +
+  // ---- Other income
+  '<div class="money-section">' +
+    bar('Other income', owedNote('income', inc.data), addBtn('income', '\u2795 Record revenue')) +
+    '<div class="section-sub">Bar, vendor, merch, service and performance fees \u2014 not ticket sales.</div>' +
+    moneyFormHTML('income') +
+    listOf(inc.data, r => li('<strong>' + escapeHtml(r.category || 'Income') + '</strong>' + moneyStatusHTML('income', r),
+      escapeHtml(mShort(r.date)) + (r.description ? ' \u00b7 ' + escapeHtml(r.description) : ''),
+      money(r.amount), settle('income', r) + del('income', r.id)),
+      'No other income recorded.') +
+  '</div>' +
+  // ---- Expenses
+  '<div class="money-section">' +
+    bar('Expenses', owedNote('expenses', exp.data),
+      '<button class="hub-btn ghost" data-money-linkopen title="Attach a charge that is already in the books to this event">' +
+      (moneyLink.open ? '\u2715 Close' : '\uD83D\uDD17 Link existing') + '</button>' + addBtn('expense', '\u2795 Add a cost')) +
+    '<div class="section-sub">Costs are counted in the P&amp;L from their <b>cost date</b>, whether or not they have been paid. Only paid ones move cash.</div>' +
+    moneyLinkHTML() + moneyFormHTML('expense') +
+    listOf(exp.data, r => li('<strong>' + escapeHtml(r.vendor || r.category || 'Cost') + '</strong>' + moneyStatusHTML('expenses', r),
+      escapeHtml(mShort(r.date)) + (r.vendor && r.category ? ' \u00b7 ' + escapeHtml(r.category) : '') +
+        (r.cash_source ? ' \u00b7 ' + escapeHtml(r.cash_source) : ''),
+      money(r.amount), settle('expenses', r) + del('expenses', r.id)),
+      'No costs recorded against this event.') +
+  '</div>' +
+  // ---- Donations
+  '<div class="money-section">' +
+    bar('Donations', '', addBtn('donation', '\u2795 Add donation')) + moneyFormHTML('donation') +
+    listOf(don.data, r => li('<strong>' + escapeHtml(r.donor_name || 'Donation') + '</strong>', '',
+      money(r.amount), del('third_party_donations', r.id)),
+      'No donations recorded.') +
+  '</div>' +
+  // ---- Sponsorships
+  '<div class="money-section">' +
+    bar('Sponsorships', '', moneyState.sponsorList.length ? addBtn('sponsorship', '\u2795 Add sponsorship') : '') +
+    (moneyState.sponsorList.length ? moneyFormHTML('sponsorship')
+      : '<div class="section-sub">No sponsors on file \u2014 add one in the Sponsors tab first.</div>') +
+    listOf(spo.data, r => li('<strong>' + escapeHtml((r.actor && r.actor.display_name) || 'Sponsor') + '</strong>' +
+      (r.tier ? ' <span class="role-chip" style="cursor:default;">' + escapeHtml(r.tier) + '</span>' : ''),
+      money(r.cash_amount) + ' cash \u00b7 ' + money(r.in_kind_value) + ' in-kind',
+      money(Number(r.cash_amount || 0) + Number(r.in_kind_value || 0)), del('sponsorships', r.id)),
+      'No sponsorships recorded.') +
+  '</div>';
 }
 
 // Modal (used from the Events tab).
@@ -8023,8 +8136,17 @@ async function moneyMutate(targetEl, eventId, container) {
     await moneySettleRow(tbl, rid);
     return;
   }
+  const formOpen = targetEl.closest('[data-money-formopen]');
+  if (formOpen) {
+    const k = formOpen.dataset.moneyFormopen;
+    moneyForm.kind = moneyForm.kind === k ? null : k;
+    if (moneyForm.kind) moneyLink.open = false;
+    return;
+  }
+  if (targetEl.closest('[data-money-formclose]')) { moneyForm.kind = null; return; }
   if (targetEl.closest('[data-money-linkopen]')) {
     moneyLink.open = !moneyLink.open;
+    if (moneyLink.open) moneyForm.kind = null;
     if (moneyLink.open && !moneyLink.rows) await moneyLinkLoad(eventId);
     return;
   }
@@ -8038,8 +8160,17 @@ async function moneyMutate(targetEl, eventId, container) {
     const { error } = await op; if (error) throw error;
     return;
   }
-  const sec = addEl.closest('.money-section');
+  const sec = addEl.closest('.money-form') || addEl.closest('.money-section');
   const v = (f) => { const el = sec.querySelector(`[data-f="${f}"]`); return el ? el.value.trim() : ''; };
+  // "+ new category" is a real answer, not a value. Ask for it here so the list
+  // stays controlled everywhere else.
+  const vcat = () => {
+    const raw = v('category');
+    if (raw !== '__new') return raw;
+    const name = (prompt('New ' + (kindOf(addEl) === 'income' ? 'revenue stream' : 'category') + ' name:') || '').trim();
+    if (!name) throw new Error('Name the new category, or pick one from the list');
+    return name;
+  };
   const kind = addEl.dataset.moneyAdd;
   const { data: { session } } = await sb.auth.getSession();
   const uid = session?.user?.id || null;
@@ -8052,11 +8183,14 @@ async function moneyMutate(targetEl, eventId, container) {
     const tbl = kind === 'income' ? 'income' : 'expenses';
     const st = v('status') || MONEY_SETTLED[tbl];
     const settled = st === MONEY_SETTLED[tbl];
-    // The event's own date, not today's, when there is one: a cost belongs to
-    // the month the event happened in, which is the whole basis of the P&L.
+    const cat = vcat();
+    if (!cat) throw new Error(tbl === 'income' ? 'Pick a revenue stream' : 'Pick a category');
+    // The date field is the COST/INCOME date - the month this lands in on the
+    // P&L. It defaults to the event date, NOT the day the commitment is made:
+    // a DJ playing a July event is a July cost even if agreed in May.
     const row = {
-      event_id: eventId, date: moneyState.event?.event_date || TODAY(),
-      amount: amt, category: v('category') || null, created_by: uid,
+      event_id: eventId, date: v('date') || moneyState.event?.event_date || TODAY(),
+      amount: amt, category: cat, created_by: uid,
       ledger: moneyLedger(), status: st, expected_amount: amt,
       settled_at: settled ? new Date().toISOString() : null,
     };
@@ -8076,6 +8210,10 @@ async function moneyMutate(targetEl, eventId, container) {
       if (v('vendor')) row.vendor = v('vendor');
       // A due date on an already-paid row is noise, so it is only kept while owed.
       if (!settled && v('due')) row.due_date = v('due');
+      if (settled && v('cash_source')) {
+        row.cash_source = v('cash_source');
+        if (v('cash_source') === 'personal') row.funded_by = 'owner';
+      }
       row.event_na = false;
     }
     op = sb.from(tbl).insert(row);
@@ -8087,14 +8225,18 @@ async function moneyMutate(targetEl, eventId, container) {
     op = sb.from('sponsorships').insert({ event_id: eventId, actor_id: sid, cash_amount: Number(v('cash')) || 0, in_kind_value: Number(v('inkind')) || 0, drink_tickets: 0, entry_tickets: 0, status: 'confirmed' });
   }
   const { error } = await op; if (error) throw error;
+  moneyForm.kind = null;
 }
+
+function kindOf(addEl) { return addEl.dataset.moneyAdd; }
 
 // Everything the link drawer does to ITSELF — ticking a row, flipping the
 // "already on another event" filter — is local state. Routing it through
 // moneyMutate would re-fetch the whole panel and lose the list's scroll on every
 // click, so it is intercepted first and repaints only what changed.
 const MONEY_SEL = '[data-money-del],[data-money-add],[data-money-settle],' +
-  '[data-money-linkopen],[data-money-linkclose],[data-money-linkgo]';
+  '[data-money-linkopen],[data-money-linkclose],[data-money-linkgo],' +
+  '[data-money-formopen],[data-money-formclose]';
 function moneyLinkLocalClick(e, container) {
   const cb = e.target.closest('[data-money-linksel]');
   if (cb) {
@@ -8106,6 +8248,18 @@ function moneyLinkLocalClick(e, container) {
   if (other) { moneyLink.showOther = other.checked; moneyLinkRepaint(container, true); return true; }
   return false;
 }
+// The status select decides WHICH date matters: a due date while it is owed, a
+// cash source once it is paid. Toggling an attribute beats re-rendering, which
+// would throw away everything already typed into the form.
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest('.money-form [data-f="status"]');
+  if (!sel) return;
+  const form = sel.closest('.money-form');
+  const kind = form.dataset.moneyFormKind;
+  const tbl = kind === 'income' ? 'income' : 'expenses';
+  form.dataset.status = sel.value === MONEY_SETTLED[tbl] ? 'paid' : 'unpaid';
+});
+
 // Search box: filter in place. Delegated on document so one listener serves both
 // the Events-tab modal and the inline hub section.
 document.addEventListener('input', (e) => {
