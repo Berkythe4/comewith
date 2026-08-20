@@ -750,6 +750,9 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .role-chip.late { color: #be3c3c; border-color: #eccaca; background: #fdf0f0; }
 /* the labelled add form */
 /* 178 - the grid: the company P&L's own table, scoped to one event */
+/* Inline editors on the events list (type / stage / status / public) */
+.ev-inline { font-size: 0.72rem; padding: 3px 4px; max-width: 128px; }
+.ev-inline:hover { border-color: var(--ink); }
 .money-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 12px 0 10px; }
 table.money-grid { font-size: 12px; }
 table.money-grid td.m-act, table.money-grid th.m-act { width: 1%; white-space: nowrap; text-align: right; padding-left: 6px; }
@@ -11518,11 +11521,35 @@ $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.close
 // EVENTS DASHBOARD — the command center. Aggregates + filters + per-event metrics
 // that adapt to the event type (parties / Dance Infusion / production / content).
 // ============================================================
+// The four editable fields on the list, each matching its CHECK constraint on
+// public.events exactly. Written out rather than derived so an option that would
+// be rejected by the database can never appear in the dropdown - a select that
+// offers an invalid value is worse than a text box, because it looks safe.
+const EV_TYPE_OPTS = [['party', 'Party'], ['dance_infusion', 'Dance Infusion'], ['production', 'Production'],
+                      ['showcase', 'Showcase'], ['gig', 'Booking / gig'], ['growth', 'Growth & networking']];
+const EV_STAGE_OPTS = [['idea', 'Blue sky'], ['planning', 'Planning'], ['confirmed', 'Confirmed'],
+                       ['live', 'Live'], ['wrapped', 'Wrapped'], ['reported', 'Reported']];
+const EV_STATUS_OPTS = [['planning', 'Planning'], ['announced', 'Announced'], ['on_sale', 'On sale'],
+                        ['sold_out', 'Sold out'], ['completed', 'Completed'], ['cancelled', 'Cancelled']];
+const EV_PUBLIC_OPTS = [['false', 'Hidden'], ['true', '\uD83C\uDF10 Live']];
+const EV_FIELD_LABEL = { type: 'Type', stage: 'Stage', status: 'Status', is_public: 'Public' };
+
+// Every series on file, not a hardcoded list. Growth & Networking existed in the
+// data and was missing from the snapshot's breakdown because that list was
+// written by hand - so it is derived now, and the next new series shows up
+// without anybody remembering to add it.
+const EV_SERIES_KNOWN = ['Come With Parties', 'Dance Infusion', 'Come With Production',
+                         'Content Creation', 'Bookings', 'Growth & Networking'];
+function evSeriesList() {
+  const present = [...new Set((eventsDash.rows || []).map(e => e.series).filter(Boolean))].sort();
+  return [...new Set(EV_SERIES_KNOWN.concat(present))];
+}
+
 const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false, tab: 'calendar', calMonth: null, selDate: null };
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
   const [ev, fin, mk, ig, radio] = await Promise.all([
-    sb.from('events').select('id, name, series, type, status, event_date, end_date, capacity, total_attendance, is_public').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('events').select('id, name, series, type, stage, status, event_date, end_date, capacity, total_attendance, is_public').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('v_kpi_event_financials').select('event_id, gross_revenue, net_pl, total_raised, ticket_revenue, tickets_sold, total_expenses'),
     sb.from('expenses').select('event_id, amount').is('deleted_at', null).ilike('category', '%marketing%'),
     sb.from('metric_snapshots').select('metric_key, value, source').like('source', 'event:%'),
@@ -11575,7 +11602,7 @@ function renderEventsSnapshot() {
   const stat = (icon, label, value, sub) => `<div style="flex:1 1 130px;background:var(--card,#20142a);border:1px solid var(--border);border-radius:12px;padding:9px 13px;">
     <div class="li-sub" style="font-size:.6rem;text-transform:uppercase;letter-spacing:.06em;">${icon} ${label}</div>
     <div style="font-weight:800;font-size:1.15rem;line-height:1.15;">${value}</div><div class="li-sub" style="font-size:.66rem;">${sub || '&nbsp;'}</div></div>`;
-  const seriesStr = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings']
+  const seriesStr = evSeriesList()
     .filter(k => s.bySeries[k]).map(k => `${k.split(' ').map(w => w[0]).join('')} ${s.bySeries[k]}`).join(' · ') || '—';
   return `<div style="display:flex;gap:9px;flex-wrap:wrap;margin-bottom:14px;">
     ${stat('🎫', 'Events', fmtNum(s.total), seriesStr)}
@@ -11586,8 +11613,8 @@ function renderEventsSnapshot() {
 function renderEventsDash() {
   const s = eventsDash;
   const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
-  const seriesOpts = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings', 'Growth & Networking'];
-  const statusOpts = ['planning', 'announced', 'on_sale', 'sold_out', 'completed', 'cancelled'];
+  const seriesOpts = evSeriesList();
+  const statusOpts = EV_STATUS_OPTS.map(o => o[0]);
   const tab = (k, l) => `<button class="hub-btn ghost" data-ev-tab="${k}" style="${s.tab === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
   const anyFilter = s.q || s.series || s.status || s.year || s.completedOnly;
   $('eventsBody').innerHTML = `
@@ -11906,21 +11933,31 @@ function renderEventsOverview() {
 }
 function renderEventsTable() {
   const list = eventsFiltered();
-  const typeChip = (e) => { const t = e.series || e.type || ''; return t ? `<span class="role-chip" style="cursor:default;">${escapeHtml(t)}</span>` : ''; };
+  // The chip under the name is the SERIES now that type has a column of its own -
+  // it used to fall back to type, so the two were impossible to tell apart.
+  const typeChip = (e) => (e.series ? `<span class="role-chip" style="cursor:default;">${escapeHtml(e.series)}</span>` : '');
+  // Editable in place. Four fields that were read-only badges, each writing
+  // straight to public.events on change.
+  const evSel = (e, field, opts) => {
+    const cur = field === 'is_public' ? String(!!e.is_public) : (e[field] || '');
+    return `<select class="hub-status-sel ev-inline" data-evfield="${field}" data-id="${escapeHtml(e.id)}" title="${EV_FIELD_LABEL[field]}">` +
+      (field === 'is_public' ? '' : `<option value=""${cur ? '' : ' selected'}>\u2014</option>`) +
+      opts.map(([v, l]) => `<option value="${v}"${cur === v ? ' selected' : ''}>${escapeHtml(l)}</option>`).join('') +
+      `</select>`;
+  };
   const rows = list.map(e => {
     const f = e.f, r = eventResult(e);
     const done = (e.status || '') === 'completed';
     // For a completed event a blank metric is a real zero (show 0 / $0); for an
     // event that hasn't happened yet it's "no data" (show —).
     const numCell = (v, fmt) => (v ? fmt(v) : (done ? fmt(0) : muted));
-    const pub = e.is_public
-      ? '<span class="badge badge-public">🌐 Live</span>'
-      : '<span class="badge badge-hidden">Hidden</span>';
     return `<tr>
       <td>${escapeHtml(fmtDate(e.event_date))}</td>
       <td><strong>${escapeHtml(e.name || '')}</strong><div class="li-sub">${typeChip(e)}</div></td>
-      <td><span class="badge badge-${escapeHtml((e.status || 'planning').toLowerCase())}">${escapeHtml((e.status || '').replace('_', ' '))}</span></td>
-      <td>${pub}</td>
+      <td>${evSel(e, 'type', EV_TYPE_OPTS)}</td>
+      <td>${evSel(e, 'stage', EV_STAGE_OPTS)}</td>
+      <td>${evSel(e, 'status', EV_STATUS_OPTS)}</td>
+      <td>${evSel(e, 'is_public', EV_PUBLIC_OPTS)}</td>
       <td class="num">${e.total_attendance != null ? fmtNum(e.total_attendance) : (done ? '0' : muted)}</td>
       <td class="num">${numCell(f.tickets_sold, fmtNum)}</td>
       <td class="num">${numCell(f.gross_revenue, money)}</td>
@@ -11933,11 +11970,33 @@ function renderEventsTable() {
         <button class="row-btn" data-event-delete="${escapeHtml(e.id)}">Delete</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="10" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
+  }).join('') || `<tr><td colspan="12" class="muted" style="padding:14px;">No events match these filters.</td></tr>`;
   $('eventsView').innerHTML = `<div style="overflow-x:auto;"><table class="data-table"><thead><tr>
-    <th>Date</th><th>Event</th><th>Status</th><th>Public</th><th class="num">Attendance</th><th class="num">Tickets</th>
+    <th>Date</th><th>Event</th><th>Type</th><th>Stage</th><th>Status</th><th>Public</th>
+    <th class="num">Attendance</th><th class="num">Tickets</th>
     <th class="num">Revenue</th><th class="num">Result</th><th class="num">Mktg $</th><th>Actions</th>
   </tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// One write path for all four. Saves, patches the row in memory and re-renders,
+// so a change that moves the row out of the current filter visibly does so
+// rather than sitting there looking unsaved.
+async function setEventField(id, field, raw) {
+  const row = eventsDash.rows.find(r => r.id === id);
+  if (!row) return;
+  const val = field === 'is_public' ? (raw === 'true') : (raw || null);
+  const { error } = await sb.from('events').update({ [field]: val }).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); renderEventsView(); return; }
+  row[field] = val;
+  const shown = field === 'is_public'
+    ? (val ? 'Live on the site' : 'Hidden')
+    : ((({ type: EV_TYPE_OPTS, stage: EV_STAGE_OPTS, status: EV_STATUS_OPTS })[field] || [])
+        .find(o => o[0] === val) || [, val || '\u2014'])[1];
+  toast(EV_FIELD_LABEL[field] + ': ' + shown, 'ok');
+  // Publishing changes what the public site shows, and stage feeds the pipeline
+  // views, so anything watching those needs to know.
+  refreshStratIfActive();
+  renderEventsDash();
 }
 $('panel-events').addEventListener('input', (e) => { const q = e.target.closest('[data-evq]'); if (q) { eventsDash.q = q.value; renderEventsView(); } });
 $('panel-events').addEventListener('change', (e) => {
@@ -11945,6 +12004,7 @@ $('panel-events').addEventListener('change', (e) => {
   const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsView(); return; }
   const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsView(); return; }
   const cp = e.target.closest('[data-evcompleted]'); if (cp) { eventsDash.completedOnly = cp.checked; renderEventsView(); return; }
+  const ef = e.target.closest('[data-evfield]'); if (ef) { setEventField(ef.dataset.id, ef.dataset.evfield, ef.value); return; }
 });
 $('panel-events').addEventListener('click', (e) => {
   const tb = e.target.closest('[data-ev-tab]'); if (tb) { eventsDash.tab = tb.dataset.evTab; renderEventsDash(); return; }
