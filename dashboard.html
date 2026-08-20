@@ -778,6 +778,10 @@ table.cc-table .li-sub { font-size: 0.68rem; margin-top: 2px; }
 tr:hover .cc-pencil, .cc-title:hover .cc-pencil { opacity: 1; }
 .cc-pencil:hover { color: var(--red); }
 .cc-rename { font-size: 0.78rem; padding: 2px 5px; min-width: 190px; }
+.cc-state { display: inline-block; font-size: 0.66rem; white-space: nowrap; padding: 1px 6px;
+  border: 1px solid var(--border-strong); border-radius: 9px; color: var(--mid); }
+tr.cc-done .cc-state   { color: var(--green); border-color: var(--green); }
+tr.cc-active .cc-state { color: var(--amber); border-color: var(--amber); }
 /* Same three bands as the events list: green done, blue active, amber not yet. */
 tr.cc-done > td   { background: rgba(155,214,74,0.045); }
 tr.cc-active > td { background: rgba(125,184,255,0.055); }
@@ -9936,10 +9940,18 @@ async function hubAssetPromote(id) {
   if (!a || !a.url) { toast('That asset has no link to send', 'err'); return; }
   const vids = hubRecapList();
   if (vids.some(v => v.url === a.url)) { toast('Already on the list', 'ok'); return; }
-  const item = { label: a.label || 'Watch the recap', url: a.url, is_public: false };
+  // on.soundcloud.com short links CANNOT be followed by the embed player, and
+  // this asset's URL is exactly that shape. Resolve before storing, or it goes
+  // on the list already broken.
+  const res = await resolveMediaUrls([a.url]);
+  const r = res && res[0];
+  const item = { label: a.label || 'Watch the recap', url: (r && r.ok && r.url) ? r.url : a.url, is_public: false };
   if (a.artist_id) item.artist_id = a.artist_id;
   if (!(await hubSaveRecap(vids.concat([item])))) return;
-  toast('Added to the site list as STAGED \u2014 switch it on when you are ready', 'ok');
+  toast(r && !r.ok
+    ? 'Added as STAGED \u2014 it will not play yet: ' + (r.reason || 'the link is not public')
+    : 'Added to the site list as STAGED \u2014 switch it on when you are ready',
+    r && !r.ok ? 'warn' : 'ok');
   hubSecPhotos();
 }
 async function hubAssetDelete(id) {
@@ -10037,12 +10049,19 @@ const ccSel = (attr, opts, cur, title) =>
 function hubAssetsHTML() {
   const rows = (hub.assets || []).filter(a => !a._legacy);
   const inRecap = new Set(hubRecapList().map(v => v.url));
+  const staged = new Set(hubRecapList().filter(v => !recapIsPublic(v)).map(v => v.url));
   const body = rows.map(a => {
     const onSite = inRecap.has(a.url);
-    return '<tr class="' + (onSite ? 'cc-done' : 'cc-todo') + '">' +
+    const isStaged = staged.has(a.url);
+    // Three states, said out loud. "How do I tell what is staged" was a fair
+    // question when the only clue was a dropdown on a different table.
+    const state = !onSite ? ['cc-todo', '\u2014 not sent', 'Only in the library. The public page does not know it exists.']
+      : (isStaged ? ['cc-active', '\u25CB Staged', 'On the event, deliberately kept off the site.']
+                  : ['cc-done', '\uD83C\uDF10 On the site', 'Live on the public page.']);
+    return '<tr class="' + state[0] + '">' +
       '<td>' + ccTitle('ca:' + a.id, a.label, a.url) +
-        '<div class="li-sub">' + escapeHtml(hubUrlHost(a.url) || 'no link') +
-        (onSite ? ' \u00b7 on the site list' : '') + '</div></td>' +
+        '<div class="li-sub">' + escapeHtml(hubUrlHost(a.url) || 'no link') + '</div></td>' +
+      '<td><span class="cc-state" title="' + escapeHtml(state[2]) + '">' + state[1] + '</span></td>' +
       '<td>' + ccSel('data-ca-field="kind" data-id="' + escapeHtml(a.id) + '"', CA_KIND, a.kind,
                      'Full length or a social cut-down') + '</td>' +
       '<td>' + ccSel('data-ca-field="media" data-id="' + escapeHtml(a.id) + '"', CA_MEDIA, a.media,
@@ -10058,7 +10077,7 @@ function hubAssetsHTML() {
           : '') +
         '<button class="hub-mini exp-del" data-ca-del="' + escapeHtml(a.id) + '" title="Remove from the library">\u2715</button>' +
       '</td></tr>';
-  }).join('') || '<tr><td colspan="6" class="muted" style="padding:12px;">Nothing in the library yet.</td></tr>';
+  }).join('') || '<tr><td colspan="7" class="muted" style="padding:12px;">Nothing in the library yet.</td></tr>';
   return '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">\uD83C\uDFAC Content library</h3>' +
     '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
     '<span class="li-sub">' + rows.length + ' asset' + (rows.length === 1 ? '' : 's') + '</span>' +
@@ -10066,7 +10085,7 @@ function hubAssetsHTML() {
     '<button class="hub-mini" data-hub-addasset="clip">\u2795 Clip</button></span></div>' +
     '<div class="section-sub">Masters, raw cuts and social clips. Internal \u2014 nothing here reaches the site until you send it to the list above.</div>' +
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-    '<th>Name</th><th>Type</th><th>Media</th><th>Length</th><th>Artist</th><th class="cc-act"></th>' +
+    '<th>Name</th><th>Where it is</th><th>Type</th><th>Media</th><th>Length</th><th>Artist</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
@@ -10112,7 +10131,9 @@ function hubContentCardsHTML() {
   return '<div class="hub-cards">' +
     card('On the site', String(live), live ? 'playing publicly' : 'nothing public yet', live ? 'pos' : '') +
     card('Staged', String(vids.length - live), 'saved, not public', (vids.length - live) ? 'neg' : '') +
-    card('Library', String(lib.length), lib.filter(a => a.kind === 'clip').length + ' clips') +
+    card('Library', String(lib.length),
+         lib.filter(a => a.kind !== 'clip').length + ' full \u00b7 ' +
+         lib.filter(a => a.kind === 'clip').length + ' clips') +
     card('Posts', String((hub.eventPosts || []).length), 'planned or published') +
     card('Photos', String(hub.photos.length), hub.photos.filter(x => x.is_public).length + ' public') +
     '</div>';
@@ -10130,8 +10151,11 @@ function hubRecapVideosHTML() {
   const staged = vids.length - live;
   const body = vids.map((v, i) => {
     const pub = recapIsPublic(v);
-    return '<tr class="' + (pub ? 'cc-done' : 'cc-todo') + '">' +
+    return '<tr class="' + (pub ? 'cc-done' : 'cc-active') + '">' +
       '<td>' + ccTitle('cv:' + i, v.label, v.url) +
+        ' <span class="cc-state" title="' + (pub ? 'Live on the public page.'
+          : 'Saved on the event and deliberately kept off the site.') + '">' +
+        (pub ? '\uD83C\uDF10 On the site' : '\u25CB Staged') + '</span>' +
         '<div class="li-sub">' + escapeHtml(hubUrlHost(v.url)) + '</div></td>' +
       '<td class="li-sub">' + escapeHtml(mediaKindLabel(v.url)) + '</td>' +
       '<td>' + hubActorSelect('data-cv-artist="' + i + '"', v.artist_id, 'no artist') + '</td>' +
@@ -10215,7 +10239,9 @@ async function hubSecPhotos() {
   }
   const pname = {}; hub._people.forEach(a => pname[a.id] = a.display_name);
   const uncredited = hub.photos.filter(x => !x.photographer_actor_id).length;
-  hub.counts.photos = hub.photos.length; renderHubSecNav();
+  // The badge is on a section called CONTENT, so it counts content - videos,
+  // library assets, posts and photos. Counting photos alone is why Frick Frack
+  // read 0 with a full-length mix sitting in it.
   const cards = hub.photos.map((p, i) => `
     <div class="hub-card" style="padding:10px;width:200px;">
       <img src="${PHOTO_BASE}${escapeHtml(p.thumb_path || p.storage_path)}" loading="lazy" alt=""
@@ -10250,6 +10276,12 @@ async function hubSecPhotos() {
   // legacy recap-video links so nothing is hidden.
   const { data: caRows } = await sb.from('content_assets').select('id,kind,media,url,label,is_public,duration_note').eq('event_id', hub.eventId).order('created_at', { ascending: false });
   hub.assets = caRows || [];
+  // Counted here, not earlier: assets and posts are loaded just above, and the
+  // badge is meant to say how much CONTENT this event has, not how many photos.
+  hub.counts.photos = hubRecapList().length +
+    (hub.assets || []).filter(a => !a._legacy).length +
+    (hub.eventPosts || []).length + hub.photos.length;
+  renderHubSecNav();
   const seenUrls = new Set(hub.assets.map(a => a.url));
   vids.forEach(v => { if (!seenUrls.has(v.url)) hub.assets.push({ url: v.url, label: v.label, kind: 'full', media: /soundcloud/.test(v.url) ? 'audio' : 'video', is_public: true, _legacy: true }); });
   $('hubSecBody').innerHTML = `

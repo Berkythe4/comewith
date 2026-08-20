@@ -83,8 +83,14 @@ if (!/KRNeY[\s\S]{0,40}selected|selected[^>]*>KRNeY/.test(rec.replace(/\n/g, '')
 }
 if (!/value="a1" selected/.test(rec)) fail('artist a1 should be selected on the first row');
 else pass('an existing artist tag comes back selected');
-if (!/class="cc-todo"/.test(rec)) fail('the staged row is not banded as not-yet-live');
-else pass('staged rows band amber, live rows green - the events-list vocabulary');
+if (!/class="cc-active"/.test(rec)) fail('the staged recap row is not banded');
+else if (!/class="cc-done"/.test(rec)) fail('the live recap row is not banded');
+else pass('recap: live green, staged blue');
+// The words matter more than the colour - "how do I tell what is staged" was a
+// fair question when the only clue was a dropdown value.
+if (!/On the site<\/span>/.test(rec) || !/Staged<\/span>/.test(rec)) {
+  fail('the recap row does not SAY whether it is staged, only shows a dropdown');
+} else pass('every recap row says on-the-site or staged in words');
 
 // ---- the library -------------------------------------------------------------
 const lib = render('content library', () => api.hubAssetsHTML());
@@ -133,6 +139,30 @@ if (/data-cv-label=|data-ca-field="label"|data-sp-field="title"/.test(rec + lib 
 } else pass('no name input boxes - renaming is behind the pencil');
 if (!/data-cc-rename="cv:0"/.test(rec)) fail('there is no way to rename a recap row');
 else pass('every row can still be renamed in place');
+
+
+// ---- the three states a library asset can be in ------------------------------
+// c1 is in the library only, c3 is on the public list and live.
+if (!/not sent/.test(lib)) fail('a library-only asset does not say it has not been sent');
+if (!/On the site/.test(lib)) fail('an asset that IS on the site does not say so');
+if (!/<th>Where it is<\/th>/.test(lib)) fail('the library has no "where it is" column');
+else pass('the library says where each asset stands, in words, in its own column');
+
+// The header badge counts CONTENT, not photos. Frick Frack read 0 with a
+// full-length mix in it because this counted hub.photos alone.
+const tally = mod.slice(mod.indexOf('hub.counts.photos ='), mod.indexOf('hub.counts.photos =') + 320);
+for (const part of ['hubRecapList()', 'hub.assets', 'hub.eventPosts', 'hub.photos.length']) {
+  if (!tally.includes(part)) fail('the Content badge does not count ' + part);
+}
+if (!/full \\u00b7 |full · /.test(mod.slice(mod.indexOf("card('Library'"), mod.indexOf("card('Library'") + 260))) {
+  fail('the Library card still describes everything as clips');
+} else pass('the Library card counts full and clips separately');
+
+// Promoting a short link has to resolve it first or the embed is dead on arrival.
+const promo = mod.slice(mod.indexOf('async function hubAssetPromote'), mod.indexOf('async function hubAssetPromote') + 900);
+if (!/resolveMediaUrls\(\[a\.url\]\)/.test(promo)) {
+  fail('sending an asset to the site does not resolve the link - on.soundcloud.com short links will not embed');
+} else pass('sending to the site resolves the link first');
 
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nAll checks passed.');
 process.exit(fails ? 1 : 0);
