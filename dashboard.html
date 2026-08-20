@@ -757,10 +757,36 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .recap-vid-row.staged .recap-vid-url { border-style: dashed; }
 .cv-row.staged .li-main { opacity: .72; }
 /* Content control center: a row of fields you edit where you read them. */
-.cc-fields { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
-.cc-in { font-size: 0.78rem; padding: 3px 6px; min-width: 0; }
-.cc-sel { font-size: 0.75rem; padding: 3px 5px; max-width: 150px; }
-.hub-li .cc-fields + .li-sub { margin-top: 4px; }
+/* Content control center: the events LIST table, with content columns. */
+table.cc-table { font-size: 12px; margin-bottom: 4px; }
+table.cc-table td { vertical-align: middle; }
+table.cc-table td.cc-act, table.cc-table th.cc-act { width: 1%; white-space: nowrap; text-align: right; }
+table.cc-table td.cc-act .hub-mini { padding: 2px 6px; font-size: 10px; }
+table.cc-table .li-sub { font-size: 0.68rem; margin-top: 2px; }
+.cc-sel { font-size: 0.72rem; padding: 3px 4px; max-width: 132px; }
+.cc-in { font-size: 0.72rem; padding: 3px 5px; }
+.cc-dur { width: 66px; } .cc-date { width: 128px; }
+/* The name: a link first, editable second. */
+.cc-title { display: inline-flex; align-items: center; gap: 4px; max-width: 340px; }
+.cc-title-link { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--border-strong);
+  font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cc-title-link:hover { color: var(--red); border-bottom-color: var(--red); }
+.cc-title-plain { font-weight: 700; }
+.cc-ext { font-size: .72em; opacity: .6; margin-left: 3px; }
+.cc-pencil { background: none; border: none; color: var(--mid); cursor: pointer; font-size: .78rem;
+  padding: 0 2px; opacity: 0; transition: opacity .12s; }
+tr:hover .cc-pencil, .cc-title:hover .cc-pencil { opacity: 1; }
+.cc-pencil:hover { color: var(--red); }
+.cc-rename { font-size: 0.78rem; padding: 2px 5px; min-width: 190px; }
+/* Same three bands as the events list: green done, blue active, amber not yet. */
+tr.cc-done > td   { background: rgba(155,214,74,0.045); }
+tr.cc-active > td { background: rgba(125,184,255,0.055); }
+tr.cc-todo > td   { background: rgba(233,185,73,0.05); }
+tr.cc-off > td    { background: rgba(171,159,176,0.06); color: var(--mid); }
+tr.cc-done > td:first-child   { border-left: 3px solid var(--green); }
+tr.cc-active > td:first-child { border-left: 3px solid var(--blue); }
+tr.cc-todo > td:first-child   { border-left: 3px solid var(--amber); }
+tr.cc-off > td:first-child    { border-left: 3px solid var(--mid); }
 .cv-live { color: var(--lime); } .cv-staged { color: var(--amber); }
 /* Multi-select filter chips */
 .ev-filters { margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; }
@@ -9886,7 +9912,6 @@ async function hubAssetPatch(id, field, raw) {
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
   const a = (hub.assets || []).find(x => x.id === id); if (a) a[field] = val;
   toast('Saved', 'ok');
-  if (field === 'kind') hubSecPhotos();   // it moves between groups
 }
 async function hubPostPatch(id, field, raw) {
   let val = raw.trim() === '' ? null : raw.trim();
@@ -9901,7 +9926,7 @@ async function hubPostPatch(id, field, raw) {
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
   const p = (hub.eventPosts || []).find(x => x.id === id); if (p) p[field] = val;
   toast('Saved', 'ok');
-  if (field === 'stage') hubSecPhotos();
+  if (field === 'stage') hubSecPhotos();   // the row band changes with it
 }
 // Library -> public list. Always STAGED, whatever the link checker says: sending
 // something to the site and publishing it are separate decisions, and this
@@ -9926,6 +9951,70 @@ async function hubAssetDelete(id) {
   toast('Removed', 'ok'); hubSecPhotos();
 }
 
+
+// The name is a LINK. A row you read is mostly a name and somewhere to click;
+// three input boxes fighting for width is what made this read as a form instead
+// of a list. Renaming lives behind the pencil and swaps this one element in
+// place, so nothing else on the tab flickers.
+function ccTitle(key, label, url) {
+  const text = escapeHtml(label || (url ? hubUrlHost(url) : 'Untitled'));
+  const inner = url
+    ? '<a class="cc-title-link" href="' + escapeHtml(url) + '" target="_blank" rel="noopener" ' +
+      'title="Open ' + escapeHtml(url) + '">' + text + '<span class="cc-ext">\u2197</span></a>'
+    : '<span class="cc-title-plain">' + text + '</span>';
+  return '<span class="cc-title" data-cc-title="' + key + '">' + inner +
+    '<button type="button" class="cc-pencil" data-cc-rename="' + key + '" title="Rename">\u270E</button></span>';
+}
+
+// Swap the title for an input, in place. Enter or blur saves, Escape puts it
+// back. No re-render on a rename.
+function ccStartRename(key, host) {
+  const wrap = (host || document).querySelector('[data-cc-title="' + key + '"]');
+  if (!wrap || wrap.querySelector('input')) return;
+  const link = wrap.querySelector('a, span.cc-title-plain');
+  const current = (link ? link.textContent : '').replace(/\u2197/g, '').trim();
+  const input = document.createElement('input');
+  input.className = 'modal-input cc-rename';
+  input.value = current;
+  let done = false;
+  const restore = () => { input.remove(); if (link) link.style.display = ''; };
+  const commit = () => {
+    if (done) return; done = true;
+    const val = input.value.trim();
+    restore();
+    if (val && val !== current) ccApplyRename(key, val);
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); commit(); }
+    else if (e.key === 'Escape') { done = true; restore(); }
+  });
+  input.addEventListener('blur', commit);
+  if (link) link.style.display = 'none';
+  wrap.insertBefore(input, wrap.firstChild);
+  input.focus(); input.select();
+}
+
+// One place that knows which list a renamed row belongs to.
+function ccApplyRename(key, value) {
+  const [kind, ref] = [key.slice(0, 2), key.slice(3)];
+  if (kind === 'cv') {
+    const vids = hubRecapList();
+    if (!vids[+ref]) return;
+    vids[+ref].label = value;
+    hubSaveRecap(vids).then(ok => { if (ok) { toast('Renamed', 'ok'); hubSecPhotos(); } });
+  } else if (kind === 'ca') {
+    hubAssetPatch(ref, 'label', value).then(() => hubSecPhotos());
+  } else if (kind === 'sp') {
+    hubPostPatch(ref, 'title', value).then(() => hubSecPhotos());
+  }
+}
+
+// Banding, same vocabulary as the events list: green is done/live, blue is
+// active, amber is not there yet. One glance tells you what is public.
+const ccPostBand = (p) => p.posted_at || p.stage === 'posted' ? 'cc-done'
+  : (p.stage === 'archived' ? 'cc-off'
+  : (['scheduled', 'planned'].indexOf(p.stage) >= 0 ? 'cc-active' : 'cc-todo'));
+
 // ---- Content control center: shared bits ------------------------------------
 const hubUrlHost = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch (_) { return ''; } };
 function hubActorSelect(attr, sel, blank) {
@@ -9943,69 +10032,74 @@ const ccSel = (attr, opts, cur, title) =>
   '</select>';
 
 // ---- The internal library ----------------------------------------------------
-// Every field that decides what an asset IS - what it is called, whether it is a
-// full cut or a clip, video or audio, how long, who it is about - reads and edits
-// here. Opening a modal to change a label is the thing this replaces.
+// Same table as the events list: data-table, ev-inline selects, banded rows. The
+// point of matching it is that you already know how to read this one.
 function hubAssetsHTML() {
   const rows = (hub.assets || []).filter(a => !a._legacy);
   const inRecap = new Set(hubRecapList().map(v => v.url));
-  const row = (a) => '<div class="hub-li">' +
-    '<div class="li-main"><div class="cc-fields">' +
-      '<input class="modal-input cc-in" data-ca-field="label" data-id="' + escapeHtml(a.id) + '" value="' +
-        escapeHtml(a.label || '') + '" placeholder="What is it?" style="flex:1 1 170px;">' +
-      ccSel('data-ca-field="kind" data-id="' + escapeHtml(a.id) + '"', CA_KIND, a.kind, 'Full length or a social cut-down') +
-      ccSel('data-ca-field="media" data-id="' + escapeHtml(a.id) + '"', CA_MEDIA, a.media, 'What sort of file it is') +
-      '<input class="modal-input cc-in" data-ca-field="duration_note" data-id="' + escapeHtml(a.id) +
-        '" value="' + escapeHtml(a.duration_note || '') + '" placeholder="0:30" title="How long it runs" style="flex:0 0 74px;">' +
-      hubActorSelect('data-ca-field="artist_id" data-id="' + escapeHtml(a.id) + '"', a.artist_id, '\u2014 no artist \u2014') +
-      '</div><div class="li-sub">' + escapeHtml(hubUrlHost(a.url) || 'no link') + '</div></div>' +
-    '<span class="hub-li-actions">' +
-      (a.url && !inRecap.has(a.url)
-        ? '<button class="hub-mini" data-ca-promote="' + escapeHtml(a.id) + '" title="Add it to the public recap list (staged, so nothing goes live until you say)">\u2191 To the site</button>'
-        : (a.url ? '<span class="li-sub">on the site list</span>' : '')) +
-      (a.url ? '<a class="hub-mini" href="' + escapeHtml(a.url) + '" target="_blank" rel="noopener">\u2197</a>' : '') +
-      '<button class="hub-mini exp-del" data-ca-del="' + escapeHtml(a.id) + '" title="Remove from the library">\u2715</button>' +
-    '</span></div>';
-  return '<div class="hub-sec-bar" style="margin-top:14px;"><h3 style="font-size:.82rem;">\uD83C\uDFAC Content library</h3>' +
+  const body = rows.map(a => {
+    const onSite = inRecap.has(a.url);
+    return '<tr class="' + (onSite ? 'cc-done' : 'cc-todo') + '">' +
+      '<td>' + ccTitle('ca:' + a.id, a.label, a.url) +
+        '<div class="li-sub">' + escapeHtml(hubUrlHost(a.url) || 'no link') +
+        (onSite ? ' \u00b7 on the site list' : '') + '</div></td>' +
+      '<td>' + ccSel('data-ca-field="kind" data-id="' + escapeHtml(a.id) + '"', CA_KIND, a.kind,
+                     'Full length or a social cut-down') + '</td>' +
+      '<td>' + ccSel('data-ca-field="media" data-id="' + escapeHtml(a.id) + '"', CA_MEDIA, a.media,
+                     'What sort of file it is') + '</td>' +
+      '<td><input class="modal-input ev-inline cc-dur" data-ca-field="duration_note" data-id="' +
+        escapeHtml(a.id) + '" value="' + escapeHtml(a.duration_note || '') +
+        '" placeholder="0:30" title="How long it runs"></td>' +
+      '<td>' + hubActorSelect('data-ca-field="artist_id" data-id="' + escapeHtml(a.id) + '"', a.artist_id, 'no artist') + '</td>' +
+      '<td class="cc-act">' +
+        (a.url && !onSite
+          ? '<button class="hub-mini" data-ca-promote="' + escapeHtml(a.id) +
+            '" title="Add it to the public list, staged \u2014 nothing goes live until you switch it on">\u2191 To the site</button>'
+          : '') +
+        '<button class="hub-mini exp-del" data-ca-del="' + escapeHtml(a.id) + '" title="Remove from the library">\u2715</button>' +
+      '</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted" style="padding:12px;">Nothing in the library yet.</td></tr>';
+  return '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">\uD83C\uDFAC Content library</h3>' +
     '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
     '<span class="li-sub">' + rows.length + ' asset' + (rows.length === 1 ? '' : 's') + '</span>' +
     '<button class="hub-mini" data-hub-addasset="full">\u2795 Full length</button>' +
     '<button class="hub-mini" data-hub-addasset="clip">\u2795 Clip</button></span></div>' +
     '<div class="section-sub">Masters, raw cuts and social clips. Internal \u2014 nothing here reaches the site until you send it to the list above.</div>' +
-    '<div class="hub-list" style="margin-bottom:10px;">' +
-      (rows.map(row).join('') || '<div class="hub-empty">Nothing in the library yet.</div>') + '</div>';
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+    '<th>Name</th><th>Type</th><th>Media</th><th>Length</th><th>Artist</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
 // ---- Social posts ------------------------------------------------------------
-// Stage and date are what actually move on a post day to day, so they are here.
-// The full brief (caption, channels, assets, CTA) still opens in the modal.
+// Stage and date are what move day to day, so they are here. The full brief -
+// caption, channels, assets, CTA - still opens in the modal.
 function hubPostsHTML() {
   const posts = hub.eventPosts || [];
-  const row = (p) => {
-    const when = p.posted_at ? 'posted ' + fmtDate(p.posted_at) : (p.scheduled_for ? fmtDateTime(p.scheduled_for) : 'no date');
-    return '<div class="hub-li">' +
-      '<div class="li-main"><div class="cc-fields">' +
-        '<input class="modal-input cc-in" data-sp-field="title" data-id="' + escapeHtml(p.id) + '" value="' +
-          escapeHtml(p.title || '') + '" placeholder="Post title" style="flex:1 1 180px;">' +
-        ccSel('data-sp-field="stage" data-id="' + escapeHtml(p.id) + '"',
-              SOCIAL_STAGES.map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage, 'Where the post has got to') +
-        '<input class="modal-input cc-in" type="date" data-sp-field="scheduled_for" data-id="' + escapeHtml(p.id) +
-          '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) + '" title="When it goes out" style="flex:0 0 132px;">' +
-        '</div><div class="li-sub">' + escapeHtml(when) +
-        ((p.channels || []).length ? ' \u00b7 ' + escapeHtml(p.channels.join(', ')) : '') +
-        (p.content_pillar ? ' \u00b7 ' + escapeHtml(p.content_pillar) : '') + '</div></div>' +
-      '<span class="hub-li-actions">' +
-        (p.link_url ? '<a class="hub-mini" href="' + escapeHtml(p.link_url) + '" target="_blank" rel="noopener">\u2197</a>' : '') +
-        '<button class="hub-mini" data-hub-postedit="' + escapeHtml(p.id) + '" title="Caption, channels, assets, CTA">Full brief \u2192</button>' +
-      '</span></div>';
-  };
-  return '<div class="hub-sec-bar" style="margin-top:14px;"><h3 style="font-size:.82rem;">\uD83D\uDCE3 Social posts</h3>' +
+  const body = posts.map(p => {
+    const when = p.posted_at ? 'posted ' + fmtDate(p.posted_at)
+      : (p.scheduled_for ? fmtDateTime(p.scheduled_for) : 'no date');
+    return '<tr class="' + ccPostBand(p) + '">' +
+      '<td>' + ccTitle('sp:' + p.id, p.title || 'Untitled', p.link_url) +
+        '<div class="li-sub">' + escapeHtml(when) +
+        (p.content_pillar ? ' \u00b7 ' + escapeHtml(p.content_pillar) : '') + '</div></td>' +
+      '<td>' + ccSel('data-sp-field="stage" data-id="' + escapeHtml(p.id) + '"',
+                     SOCIAL_STAGES.map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
+                     'Where the post has got to') + '</td>' +
+      '<td><input class="modal-input ev-inline cc-date" type="date" data-sp-field="scheduled_for" data-id="' +
+        escapeHtml(p.id) + '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) +
+        '" title="When it goes out"></td>' +
+      '<td class="li-sub">' + escapeHtml((p.channels || []).join(', ') || '\u2014') + '</td>' +
+      '<td class="cc-act"><button class="hub-mini" data-hub-postedit="' + escapeHtml(p.id) +
+        '" title="Caption, channels, assets, CTA">Brief \u2192</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" class="muted" style="padding:12px;">No posts for this event yet.</td></tr>';
+  return '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">\uD83D\uDCE3 Social posts</h3>' +
     '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
     '<span class="li-sub">' + posts.length + '</span>' +
     '<button class="hub-mini" data-hub-postnew>\u2795 Create</button>' +
     '<button class="hub-mini" data-hub-postlink>\uD83D\uDD17 Link existing</button></span></div>' +
-    '<div class="hub-list" style="margin-bottom:12px;">' +
-      (posts.map(row).join('') || '<div class="hub-empty">No posts for this event yet.</div>') + '</div>';
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Channels</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
 // The numbers people open this tab to check.
@@ -10031,43 +10125,34 @@ function hubContentCardsHTML() {
 // event edit modal.
 function hubRecapVideosHTML() {
   const ev = hub.event || {};
-  let vids = [];
-  try { vids = Array.isArray(ev.recap_videos) ? ev.recap_videos : JSON.parse(ev.recap_videos || '[]'); }
-  catch (_) { vids = []; }
-  vids = vids.filter(v => v && v.url);
+  const vids = hubRecapList();
   const live = vids.filter(recapIsPublic).length;
   const staged = vids.length - live;
-  const rows = vids.map((v, i) => {
+  const body = vids.map((v, i) => {
     const pub = recapIsPublic(v);
-    return '<div class="hub-li cv-row' + (pub ? '' : ' staged') + '">' +
-      '<div class="li-main"><div class="cc-fields">' +
-        '<input class="modal-input cc-in" data-cv-label="' + i + '" value="' + escapeHtml(v.label || '') +
-          '" placeholder="What is it called?" title="The label shown on the site" style="flex:1 1 190px;">' +
-        hubActorSelect('data-cv-artist="' + i + '"', v.artist_id, '\u2014 tag an artist \u2014') +
-        '</div>' +
-        '<div class="li-sub">' + escapeHtml(mediaKindLabel(v.url)) + ' \u00b7 ' +
-        (pub ? '<span class="cv-live">on the site</span>'
-             : '<span class="cv-staged">staged \u2014 not on the site</span>') +
-        ' \u00b7 <span class="muted">' + escapeHtml(hubUrlHost(v.url)) + '</span></div></div>' +
-      '<span class="hub-li-actions">' +
-        '<select class="hub-status-sel cc-sel" data-cv-pub="' + i + '" ' +
-          'title="Staged keeps it here and off the site \u2014 use it while the track is still private">' +
-          '<option value="1"' + (pub ? ' selected' : '') + '>\uD83C\uDF10 On the site</option>' +
-          '<option value="0"' + (pub ? '' : ' selected') + '>\u25CB Staged</option></select>' +
-        '<a class="hub-mini" href="' + escapeHtml(v.url) + '" target="_blank" rel="noopener" title="Open the link">\u2197</a>' +
-        '<button class="hub-mini exp-del" data-cv-del="' + i + '" title="Remove from this event">\u2715</button>' +
-      '</span></div>';
-  }).join('');
-  return '<div class="hub-sec-bar" style="margin-top:4px;"><h3 style="font-size:.82rem;">\uD83C\uDFA5 Recap videos &amp; audio</h3>' +
+    return '<tr class="' + (pub ? 'cc-done' : 'cc-todo') + '">' +
+      '<td>' + ccTitle('cv:' + i, v.label, v.url) +
+        '<div class="li-sub">' + escapeHtml(hubUrlHost(v.url)) + '</div></td>' +
+      '<td class="li-sub">' + escapeHtml(mediaKindLabel(v.url)) + '</td>' +
+      '<td>' + hubActorSelect('data-cv-artist="' + i + '"', v.artist_id, 'no artist') + '</td>' +
+      '<td><select class="hub-status-sel ev-inline" data-cv-pub="' + i + '" ' +
+        'title="Staged keeps it here and off the site \u2014 use it while the track is still private">' +
+        '<option value="1"' + (pub ? ' selected' : '') + '>\uD83C\uDF10 On the site</option>' +
+        '<option value="0"' + (pub ? '' : ' selected') + '>\u25CB Staged</option></select></td>' +
+      '<td class="cc-act"><button class="hub-mini exp-del" data-cv-del="' + i +
+        '" title="Remove from this event">\u2715</button></td></tr>';
+  }).join('') || '<tr><td colspan="5" class="muted" style="padding:12px;">No recap links yet.</td></tr>';
+  return '<div class="hub-sec-bar" style="margin-top:4px;"><h3 style="font-size:.82rem;">\uD83C\uDFA5 On the public page</h3>' +
     '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
     '<span class="li-sub">' + live + ' on the site' + (staged ? ' \u00b7 ' + staged + ' staged' : '') + '</span>' +
     '<button class="hub-mini" data-cv-add>\u2795 Add a link</button></span></div>' +
     '<div class="section-sub">The only list here the public page renders. <b>Staged</b> means saved on the event and never sent to the site \u2014 use it while a SoundCloud track or YouTube video is still private.' +
-    (hub.event && !hub.event.is_featured
+    (ev && !ev.is_featured
       ? ' <b>This event is not featured</b>, so none of its recap content is public yet either way.'
       : '') + '</div>' +
-    '<div class="hub-list" style="margin-bottom:10px;">' +
-      (rows || '<div class="hub-empty">No recap links yet.</div>') + '</div>';
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+    '<th>Name</th><th>Kind</th><th>Artist</th><th>On the site</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
 // One writer for the array. youtube_url is kept in step here too, because it
@@ -11135,6 +11220,8 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const moneyEl = e.target.closest(MONEY_SEL);
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
+  const ren = e.target.closest('[data-cc-rename]');
+  if (ren) { ccStartRename(ren.dataset.ccRename, $('hubSecBody')); return; }
   if (e.target.closest('[data-cv-add]')) { hubRecapAdd(); return; }
   const cap = e.target.closest('[data-ca-promote]'); if (cap) { hubAssetPromote(cap.dataset.caPromote); return; }
   const cad = e.target.closest('[data-ca-del]'); if (cad) { hubAssetDelete(cad.dataset.caDel); return; }
