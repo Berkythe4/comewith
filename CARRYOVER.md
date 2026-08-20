@@ -1,68 +1,64 @@
-# Carryover — 2026-08-20 (Payables, reconciliation, and a per-event P&L with a forecast · DESKTOP)
+# Carryover — 2026-08-20 (Payables → forecast → a full ecosystem audit · DESKTOP)
 
-**Deployed to master for Keith's review.** Migrations **177** and **178** applied to prod
-and verified. All financial views — including the new `v_payables` and `v_event_forecast` —
-return anon **401**. Latest LEARNINGS: **§35**.
+**Deployed to master. Migrations 177–183 applied to prod and verified.** Every financial
+view returns anon **401**, including the seven new ones. `post_apply.sql` is all PASS and
+has gained two checks. Latest LEARNINGS: **§36**.
 
-**The arc of the session:** costs can now be recorded before they are paid (177), a real
-charge arriving later gets merged with the commitment it settles instead of double-counted,
-and money that is only *planned* has somewhere to live that the P&L cannot see (178).
+## The session in one line
+Costs can be recorded before they are paid (177), a later charge merges with the
+commitment it settles instead of double-counting, money that is only *planned* has a home
+the P&L cannot see (178), and the whole ecosystem now audits its own links nightly and
+tells you what it did (179–183).
 
-## What shipped
+## Migrations
+| # | What |
+|---|---|
+| 177 | `expenses.status` accrued → invoiced → paid, `v_payables`; each view picks a basis |
+| 178 | Forecast lines on `budget_lines` scope `'event'`, `v_event_forecast` |
+| 179 | Link parity: donations join the actor graph, `income.event_na`, `expenses.payee_na`, `social_posts.subject_na`, 8 missing FKs, 16 event stages backfilled |
+| 180 | `v_data_health` (29 checks), `data_health_waivers`, `data_health_runs` |
+| 181 | `autolink_data()` + `snapshot_data_health()` + nightly cron 07:00 UTC |
+| 182 | Data Health registered in `module_registry` (master only) |
+| 183 | **Security fix** — guarded three SECURITY DEFINER functions that `authenticated` could call |
 
-**177 — payables.** `expenses.status` (`accrued` → `invoiced` → `paid`) plus
-`expected_amount`, `settled_at`, `due_date`; new `v_payables`. Each view picks a basis:
-`v_pl_monthly` counts all three (a cost is incurred when agreed); `v_cash_position`,
-`v_capital`, `v_contractor_1099` and `v_tax_year` count `paid` only, and the 1099 / tax
-year is now `coalesce(settled_at::date, date)` — a fee accrued in December and paid in
-January is next year's form. Every existing row backfilled to `paid` with `settled_at`
-null, proved byte-identical across 396 view keys.
+## 🩺 Data Health — the new screen (Team HQ, master only)
+Control-center format. Collapsible checks by category, each finding deep-links to the
+screen that fixes it, and anything correct-as-it-stands can be **waived with a reason**.
+Buttons: run audit · auto-link preview · auto-link now. Run history at the bottom is the
+validation record.
 
-**Reconciliation on assign.** Filing a charge against an event that has open commitments
-asks whether it settles one, ranks the candidates (same actor ≫ same name > amount), merges
-into the **accrual** (it holds the agreed figure), and shows a confirmation naming the
-double-counted cost removed and the event's new cost / net. All three assign paths: the row
-dropdown, the bulk bar, and Link existing. **`external_ref` moves to the survivor before
-the duplicate is retired** (the 169 lesson) — verified that a re-push is then blocked.
+**Current state: 569 open — 11 high, 23 medium, 535 low.** 502 of the low are photos with
+no photographer credited (DI #1 and #2, 251 each), which is bulk work, not a bug.
 
-**178 — forecast lines.** Money that is planned but not promised, on `budget_lines`
-(scope `'event'`) rather than as a fourth status. See LEARNINGS §35 for why that choice was
-load-bearing. `v_event_forecast` + forecast columns appended to `v_event_money`. Confidence
-weighting mirrors Blue Sky's. Committing a line turns it into a real accrued row and stamps
-the forecast rather than deleting it, so the estimate stays next to the outcome.
+**The 11 high are the ones worth your time:**
+- 7 costs with no payee → all are *categories* in the vendor field. Mark them **payee N/A**
+  and they are gone for good.
+- **2 upcoming public events have no ticket URL.** This one matters: ticket clicks are
+  matched by URL and **cannot be backfilled**, so every click before it is set is lost.
+- 1 cost with no category, 1 payee over $600 with no 1099 decision (Janelle, still).
 
-**The event Money tab is now a per-event P&L.** Same `pl-table` markup as the company P&L —
-section bands, carets, Expand all / Collapse all — with four columns: **Forecast · Booked ·
-Settled · vs plan**. Expanding a category gives inline editors for date, payee, **category**,
-status and amount on every row, plus `Pay` / `Settle` / `Commit`. Adds still go through the
-labelled popup forms (Keith liked those). `🔗 Link existing` and the reconcile flow are
-unchanged.
+## What was auto-fixed for you
+11 actor roles inferred from relationships that already existed · 1 guest linked by exact
+email · 8 donations linked by exact donor name · 16 blank event stages filled from status.
+Zero fuzzy matches — see LEARNINGS §36.
 
-*Earlier corrections in the same session, all from Keith:* category was free text and is now
-a select over the known set; the single unlabelled date field was the *due* date and is now
-two named fields (**Cost date**, which sets the P&L month and defaults to the **event** date
-— not the day you commit — and **Due date**, shown only while unpaid, replaced by **Paid
-from** once paid).
-
-## Verified on prod (every one rolled back)
-- Payable round trip: +$750 accrued left cash at $3,551.06; settling at $800 from the bank
-  moved cash to $2,751.06 and put $800 on the 2026 1099.
-- Reconcile: $750 commitment + $800 charge = $1,550 on the event → **$800**, one row,
-  variance preserved, re-import blocked by `uq_expenses_external_ref`.
-- Forecast: two lines in → **P&L byte-identical**; commit at $850 against a $900 plan →
-  forecast drops to zero, P&L picks up exactly $850, −$50 variance readable.
+## Tests
+- `node scripts/test_money_panel.mjs` — the event Money panel render path + rollup maths
+- `node scripts/test_data_health.mjs` — the Data Health render path
+Run both before touching either screen: there is no local console for `dashboard.html`.
 
 ## Parked / next
-- **Keith is reviewing this deploy.** Nothing outside the money surfaces was touched.
-- `scripts/test_money_panel.mjs` — run it before touching the Money panel. There is no
-  local console for `dashboard.html`, and `node --check` cannot catch a deleted function.
-- Forecast lines are **event-scoped only**. Company-level forecasting still runs through
-  `budget_lines` scope `'period'` on the P&L tab; the two do not talk to each other yet.
-- `v_pipeline.needs_revenue_estimate` still reads `events.expected_revenue`, so an event
-  with forecast *revenue lines* but no `expected_revenue` still shows as needing an
-  estimate. Worth reconciling.
-- Everything in the 2026-08-19 "Parked / next" below still stands — Janelle's W-9, §83(b),
-  the 8 upcoming events needing expected revenue, the WBH bulk-edit review.
+- **Keith to review.** Nothing outside money + the new audit screen was touched.
+- **Photo credits (502)** need a bulk "everything in this shoot was shot by X" pass.
+- **`ticketing`, `sponsorships`, `third_party_donations` still hard-delete** while income
+  and expenses soft-delete. Deliberate, and documented in 179: ~10 views sum those three
+  without a `deleted_at` filter, so adding the column without updating all of them leaves
+  ghost revenue. Do it as its own piece of work or not at all.
+- Forecast lines are **event-scoped only**; company-level forecasting is still
+  `budget_lines` scope `'period'` on the P&L tab. The two do not talk.
+- `v_pipeline.needs_revenue_estimate` reads `events.expected_revenue`, so an event with
+  forecast *revenue lines* still shows as needing an estimate.
+- Everything in the 2026-08-19 "Parked / next" below still stands.
 
 *The previous close (2026-08-19, FP&A) begins immediately below and is unchanged.*
 

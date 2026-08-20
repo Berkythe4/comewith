@@ -134,6 +134,62 @@ where grantee = 'anon'
 
 union all
 
+-- Added after the 2026-08-20 audit. A SECURITY DEFINER function runs as its
+-- OWNER, and Postgres grants EXECUTE to PUBLIC unless told not to - so a definer
+-- function that never establishes who the caller is, is reachable by every
+-- `authenticated` session, which on this project includes every radio listener
+-- who ever signed up. 181 shipped exactly that bug (autolink_data, which writes
+-- the actor graph) and 183 fixed it.
+--
+-- THREE NARROWINGS, each because the first draft cried wolf on a real run and a
+-- check that always FAILs is worse than no check (see the note at the top of
+-- this file):
+--   1. TRIGGER and EVENT_TRIGGER functions are excluded. They cannot be called
+--      directly in any useful way - handle_new_user, sc_tracks_block_closed and
+--      rls_auto_enable were all flagged, none is reachable.
+--   2. READ-ONLY functions are excluded. can_see_people and can_use_events_module
+--      are RLS predicates; being callable is the point, and they change nothing.
+--   3. Establishing the caller counts however it is done, not only via auth.uid().
+--      actor_set_task_status guards through current_actor_id(), which is the DJ
+--      scoped-link pattern and entirely legitimate.
+-- What is left is the real thing: it WRITES, anon or authenticated can call it,
+-- and it never asks who is calling.
+select
+  'definer_functions_unguarded',
+  case when count(*) = 0 then 'PASS' else 'FAIL' end,
+  coalesce(string_agg(proname, ', '), 'every writing definer function identifies its caller')
+from (
+  select p.proname
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.prosecdef
+    and pg_get_function_result(p.oid) not in ('trigger', 'event_trigger')
+    and pg_get_functiondef(p.oid) ~* '(insert into|update public[.]|delete from)'
+    and pg_get_functiondef(p.oid) !~* '(is_admin|is_master_admin|is_site_owner|auth[.]uid|current_actor_id|current_user_role)'
+    and exists (
+      select 1 from information_schema.role_routine_grants g
+      where g.routine_schema = 'public'
+        and g.routine_name = p.proname
+        and g.grantee in ('anon', 'authenticated')
+        and g.privilege_type = 'EXECUTE')
+) unguarded
+
+union all
+
+-- Added 2026-08-20. Every check in v_data_health is a link the system expects and
+-- does not have. This does not gate a migration - INFO - but a jump here after a
+-- schema change usually means a new column arrived with nothing filling it in.
+select
+  'data_health_open',
+  'INFO',
+  coalesce((select total::text || ' open findings, last swept ' || to_char(ran_at, 'YYYY-MM-DD HH24:MI')
+              from public.data_health_runs where kind = 'audit'
+             order by ran_at desc limit 1),
+           'never swept - run snapshot_data_health()')
+
+union all
+
 -- The 016/017 regression looked like a sudden jump in this number.
 select
   'anon_grant_inventory',

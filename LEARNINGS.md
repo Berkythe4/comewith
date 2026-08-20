@@ -790,3 +790,78 @@ rollup arithmetic. It exists because `node --check` proves the file parses and c
 you a function the renderer calls was deleted — which is exactly what happened while
 rebuilding this, twice.
 
+---
+
+## Section 36 — The audit, and the one pattern under most of it (2026-08-20)
+
+A full sweep of the ecosystem: 106 tables, 177 foreign keys, 56 views, 29
+security-definer functions, and a row-level census of every link the architecture
+implies. Most of it was in good shape — RLS is on everywhere with a real policy on
+every table, and no view is anon-readable that should not be. What it did find fell
+into three groups.
+
+### 1. "Needs a link" with no way to say "has none"
+
+`expenses.event_na` was the only place in the schema where an intentional blank could
+be *declared*. Everywhere else it looked exactly like an oversight:
+
+- 7 expenses had no payee actor because their "vendor" is **Food & Beverage**, **Gas /
+  Transportation**, **Presents** — categories, not businesses. There is no payee and
+  never will be.
+- 23 social posts had no event because they are Content Creation planning slots.
+- 123 guests had no actor, which is correct: an attendee is not a business contact.
+
+Every one of those would have been flagged forever. **A queue that can never reach
+zero is a queue people stop reading**, which costs you the real finding sitting in it.
+179 added `income.event_na`, `expenses.payee_na` and `social_posts.subject_na`; 180
+added a general `data_health_waivers` so a future check can be dismissed **with a
+reason** rather than needing a migration.
+
+The same instinct fixed three checks before they shipped. "Tickets not linked to a
+guest" flagged 9 rows that are deliberately **lump** rows holding reconciled Dance
+Infusion totals — narrowed to single-seat tickets, 9 → 0. "Guests not linked to an
+actor" became "guests whose *email already matches* an actor", 123 → 1. Getting a
+check to be quiet when things are fine is most of the work of writing one.
+
+### 2. SECURITY DEFINER + PUBLIC EXECUTE
+
+**A definer function runs as its owner, and Postgres grants EXECUTE to PUBLIC unless
+told otherwise.** On this project `authenticated` includes every radio listener who
+ever signed up. `autolink_data` — which writes `actor_roles`, `guests`, `expenses` and
+`income` — shipped in 181 reachable by all of them. Mine, one session old. So had
+`snapshot_kpis`, which writes the KPI history the strategy board reads and which has no
+other source.
+
+Every other definer function in `public` was already fine, by one of two routes:
+an internal guard, or EXECUTE granted only to `postgres` + `service_role`. 183 closed
+the three that were not, allowing a **null `auth.uid()`** so pg_cron and the service
+role still work — the same exemption 140's `protect_site_owner()` makes, for the same
+reason.
+
+`post_apply.sql` now checks for the whole class. Its first draft FAILed on six
+functions, all false positives, and had to be narrowed three times: trigger and
+event-trigger functions cannot be called directly; read-only RLS predicates are
+supposed to be callable; and establishing the caller counts **however it is done** —
+`actor_set_task_status` guards through `current_actor_id()`, which is the DJ
+scoped-link pattern and entirely legitimate. What survives is the real thing: *it
+writes, anon or authenticated can call it, and it never asks who is calling.*
+
+### 3. Automation that leaves a receipt
+
+`autolink_data()` is **dry by default** and only makes links already implied by data
+somebody entered on purpose — an actor who is the payee on two expenses **is** a
+vendor; a donor name that matches an actor's display name **exactly** is that actor.
+No fuzzy matching, ever: §31 exists because one bad merge collapsed unrelated payees
+into a single actor.
+
+Every run of either function writes a row to `data_health_runs` with a per-action
+summary, and the panel renders that history. **A nightly process that mutates the actor
+graph and leaves no receipt is not automation, it is drift with a schedule.** The
+preview and the apply are the same function with one flag, because a preview produced
+by different code than the apply is not a preview.
+
+What it actually did on first run: 11 actor roles inferred from relationships that
+already existed, 1 guest linked by exact email, 8 donations linked by exact name (in
+179), 16 blank event stages filled from the status each event already carried. Zero
+risky matches — the 7 category-shaped "vendors" were correctly left alone.
+

@@ -1703,6 +1703,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
+      <div class="panel" id="panel-data-health"><div id="dataHealthBody"></div></div>
       <div class="panel" id="panel-gearwatch"><div id="gearWatchBody"></div></div>
       <div class="panel" id="panel-pl"><div id="plBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
@@ -2123,6 +2124,7 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'meetings')) MODULES.push({ key: 'meetings', label: 'Meetings', nav_group: 'Pinned', sort_order: 2, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'marketing', 'full'] });
   // Content Center ahead of migration 120 propagating.
   if (!MODULES.some(m => m.key === 'content-center')) MODULES.push({ key: 'content-center', label: 'Content Center', nav_group: 'Marketing', sort_order: 5, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
+  if (!MODULES.some(m => m.key === 'data-health')) MODULES.push({ key: 'data-health', label: '\uD83E\uDE7A Data Health', nav_group: 'Team HQ', sort_order: 90, built: true, signed_off: true, master_only: true, default_roles: [] });
   if (!MODULES.some(m => m.key === 'scene-map')) MODULES.push({ key: 'scene-map', label: '🗺️ Scene Map', nav_group: 'Radio', sort_order: 30, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
@@ -4687,6 +4689,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
+  if (tab === 'data-health') { await loadDataHealth(); return; } // master-only (link audit + auto-link)
   if (tab === 'gearwatch') { await loadGearWatch(); return; } // master-only (stolen-gear resale scan)
   if (tab === 'pl') { await loadPL(); return; } // master-only (month-by-month P&L, actual vs budget)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
@@ -13590,6 +13593,241 @@ function srOpenAdd() {
       closeKpi(); toast('Added', 'ok'); loadSiteReview();
     }, 'Add item');
 }
+
+
+// ============================================================
+// DATA HEALTH — the link audit, as a control center. MASTER ONLY.
+//
+// Reads v_data_health (180): one row per finding, across finance / events /
+// people / content, with what is wrong and what fixes it. Three things it has to
+// do, in order of importance:
+//
+//   1. NEVER BE NOISE. A check that is usually wrong teaches people to scroll
+//      past the one time it is right. Anything can be waived WITH A REASON and
+//      disappears until somebody brings it back.
+//   2. TAKE YOU TO THE FIX. Every finding deep-links to the screen that can
+//      resolve it, because a list of problems you cannot act on is a worse
+//      version of not knowing.
+//   3. SHOW ITS WORKING. The nightly auto-link writes a summary to
+//      data_health_runs every time it runs, and this renders that history. An
+//      automated process nobody can inspect afterwards is drift with a schedule.
+// ============================================================
+const dhState = { rows: [], summary: [], runs: [], waivers: [], open: {}, busy: false, showWaived: false };
+
+// Which screen resolves a finding. A deep link is the difference between a
+// report and a tool.
+const DH_FIX_TAB = {
+  expenses: 'expenses', income: 'income', events: 'events', actors: 'actors',
+  subscribers: 'subscribers', event_photos: 'photos', social_posts: 'social-calendar',
+  tasks: 'calendar', guests: 'guests', sponsorships: 'sponsorships',
+  third_party_donations: 'events', budget_lines: 'events', ticketing: 'guests',
+  equipment_usage: 'equipment', event_participants: 'events',
+};
+const DH_CAT_LABEL = { finance: '\uD83D\uDCB0 Finance', events: '\uD83C\uDF9F Events',
+                       people: '\uD83D\uDC65 People', content: '\uD83D\uDCE3 Content & ops' };
+const DH_CAT_ORDER = ['finance', 'events', 'people', 'content'];
+const DH_SEV_ORDER = { high: 0, medium: 1, low: 2 };
+
+async function loadDataHealth() {
+  $('dataHealthBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Reading the audit\u2026</div>';
+  const [sum, rows, runs, wv] = await Promise.all([
+    sb.from('v_data_health_summary').select('*'),
+    sbAll(() => sb.from('v_data_health').select('*'), 'subject_id'),
+    sb.from('data_health_runs').select('*').order('ran_at', { ascending: false }).limit(12),
+    sb.from('data_health_waivers').select('*').order('waived_at', { ascending: false }),
+  ]);
+  if (sum.error) {
+    $('dataHealthBody').innerHTML = '<div class="panel-state info">Data Health is not installed yet \u2014 apply migrations <code>179</code>, <code>180</code> and <code>181</code> to prod, then reload.</div>';
+    return;
+  }
+  dhState.summary = sum.data || [];
+  dhState.rows = rows.data || [];
+  dhState.runs = runs.data || [];
+  dhState.waivers = wv.data || [];
+  renderDataHealth();
+}
+
+// "Down 11 since the last sweep" is the only number that says whether any of
+// this is working. Compare the two most recent AUDIT runs, never an autolink row.
+function dhTrendHTML() {
+  const audits = dhState.runs.filter(r => r.kind === 'audit');
+  if (audits.length < 2) return '<span class="li-sub">First sweep \u2014 no previous run to compare against yet.</span>';
+  const now = Number(audits[0].total || 0), was = Number(audits[1].total || 0);
+  const d = now - was;
+  if (d === 0) return '<span class="li-sub">Unchanged since the previous sweep (' + escapeHtml(fmtDT(audits[1].ran_at)) + ').</span>';
+  return '<span class="li-sub"><b class="' + (d < 0 ? 'pos' : 'neg') + '">' + (d < 0 ? '\u2193' : '\u2191') +
+    ' ' + Math.abs(d) + '</b> since the previous sweep (' + escapeHtml(fmtDT(audits[1].ran_at)) + ').</span>';
+}
+
+function renderDataHealth() {
+  const s = dhState;
+  const sev = (k) => s.rows.filter(r => r.severity === k).length;
+  const lastAudit = s.runs.find(r => r.kind === 'audit');
+  const lastLink = s.runs.find(r => r.kind === 'autolink');
+  const card = (l, v, sub, cls) => '<div class="hub-card"><div class="lbl">' + l + '</div><div class="val ' +
+    (cls || '') + '">' + v + '</div><div class="li-sub">' + sub + '</div></div>';
+
+  const cats = DH_CAT_ORDER.filter(c => s.summary.some(r => r.category === c)).map(cat => {
+    const checks = s.summary.filter(r => r.category === cat)
+      .sort((a, b) => DH_SEV_ORDER[a.severity] - DH_SEV_ORDER[b.severity] || b.open_count - a.open_count);
+    const total = checks.reduce((t, c) => t + Number(c.open_count || 0), 0);
+    return '<div class="hub-sec-bar" style="margin-top:16px;"><h3>' + DH_CAT_LABEL[cat] + '</h3>' +
+      '<span class="li-sub">' + total + ' open</span></div>' +
+      '<div class="hub-list">' + checks.map(dhCheckHTML).join('') + '</div>';
+  }).join('');
+
+  $('dataHealthBody').innerHTML =
+    '<div class="hub-sec-bar"><h3>\uD83E\uDE7A Data Health \u2014 Control Center</h3>' +
+      '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+      '<button class="hub-btn ghost" data-dh-run' + (s.busy ? ' disabled' : '') + ' title="Re-run every check now and record the result">\u21bb Run audit</button>' +
+      '<button class="hub-btn ghost" data-dh-link="dry"' + (s.busy ? ' disabled' : '') + ' title="Show what auto-linking would change. Changes nothing.">\uD83D\uDD0D Auto-link preview</button>' +
+      '<button class="hub-btn" data-dh-link="apply"' + (s.busy ? ' disabled' : '') + ' title="Apply only the provably safe links">\uD83D\uDD17 Auto-link now</button>' +
+      '</span></div>' +
+    '<div class="section-sub">Every link the system expects and does not have. Runs itself nightly at 07:00 UTC \u2014 auto-linking what is provably safe, then re-auditing \u2014 and writes a summary of both every time. ' +
+      'Anything correct as it stands can be waived with a reason, and comes back the moment the waiver is deleted.</div>' +
+    '<div class="hub-cards">' +
+      card('Needs attention', String(sev('high')), 'money, KPIs or reporting affected', sev('high') ? 'neg' : 'pos') +
+      card('Worth fixing', String(sev('medium')), 'incomplete, not wrong') +
+      card('Tidy-up', String(sev('low')), 'cosmetic or bulk work') +
+      card('Waived', String(s.waivers.length), 'checked and accepted') +
+      card('Last sweep', lastAudit ? escapeHtml(fmtDT(lastAudit.ran_at)) : '\u2014',
+           lastAudit ? escapeHtml(lastAudit.source) : 'never run') +
+      card('Last auto-link', lastLink ? escapeHtml(fmtDT(lastLink.ran_at)) : '\u2014',
+           lastLink ? (lastLink.total || 0) + ' link' + (Number(lastLink.total) === 1 ? '' : 's') + ' made' : 'never applied') +
+    '</div>' +
+    '<div style="margin:6px 0 4px;">' + dhTrendHTML() + '</div>' +
+    (s.rows.length ? cats : '<div class="hub-empty" style="margin-top:16px;">Nothing is unlinked. Every check passes.</div>') +
+    dhWaivedHTML() + dhRunsHTML();
+}
+
+function dhCheckHTML(c) {
+  const open = !!dhState.open[c.check_key];
+  const rows = dhState.rows.filter(r => r.check_key === c.check_key);
+  const chip = '<span class="role-chip ' + (c.severity === 'high' ? 'late' : (c.severity === 'medium' ? 'owed' : '')) +
+    '" style="cursor:default;">' + c.severity + '</span>';
+  const head = '<div class="hub-li" data-dh-check="' + escapeHtml(c.check_key) + '" style="cursor:pointer;">' +
+    '<div class="li-main"><strong><span class="pl-caret">' + (open ? '\u25be' : '\u25b8') + '</span> ' +
+      escapeHtml(c.label) + '</strong> ' + chip +
+      '<div class="li-sub">' + escapeHtml(c.detail || '') +
+      (Number(c.waived_count) ? ' \u00b7 ' + c.waived_count + ' waived' : '') + '</div></div>' +
+    '<span class="li-amt"><b>' + c.open_count + '</b></span></div>';
+  if (!open) return head;
+  const CAP = 40;
+  const shown = rows.slice(0, CAP);
+  const body = shown.map(r => {
+    const tab = DH_FIX_TAB[r.subject_table];
+    return '<div class="hub-li" style="padding-left:22px;">' +
+      '<div class="li-main"><span>' + escapeHtml(r.subject_label || r.subject_id) + '</span>' +
+      '<div class="li-sub">' + escapeHtml(r.fix_hint || '') + '</div></div>' +
+      '<span class="hub-li-actions">' +
+        (tab ? '<button class="hub-mini" data-dh-goto="' + tab + '" title="Open the screen that fixes this">Fix \u2192</button>' : '') +
+        '<button class="hub-mini" data-dh-waive="' + escapeHtml(r.check_key) + '|' + escapeHtml(r.subject_table) +
+          '|' + escapeHtml(r.subject_id) + '" title="This is correct as it stands">Waive</button>' +
+      '</span></div>';
+  }).join('');
+  // Never let a cap read as "that is all there is" (LEARNINGS §18).
+  const more = rows.length > CAP
+    ? '<div class="hub-li" style="padding-left:22px;"><span class="li-sub">Showing ' + CAP + ' of ' +
+      rows.length + ' \u2014 fix or waive these and the rest will appear.</span></div>' : '';
+  return head + body + more;
+}
+
+function dhWaivedHTML() {
+  if (!dhState.waivers.length) return '';
+  if (!dhState.showWaived) {
+    return '<div class="hub-sec-bar" style="margin-top:16px;"><h3>Waived</h3>' +
+      '<button class="hub-mini" data-dh-showwaived>Show ' + dhState.waivers.length + '</button></div>';
+  }
+  return '<div class="hub-sec-bar" style="margin-top:16px;"><h3>Waived</h3>' +
+    '<button class="hub-mini" data-dh-showwaived>Hide</button></div><div class="hub-list">' +
+    dhState.waivers.map(w => '<div class="hub-li"><div class="li-main"><strong>' + escapeHtml(w.check_key) +
+      '</strong><div class="li-sub">' + escapeHtml(w.reason) + ' \u00b7 ' + escapeHtml(fmtDT(w.waived_at)) + '</div></div>' +
+      '<span class="hub-li-actions"><button class="hub-mini" data-dh-unwaive="' + escapeHtml(w.id) +
+      '" title="Bring this finding back">Un-waive</button></span></div>').join('') + '</div>';
+}
+
+function dhRunsHTML() {
+  if (!dhState.runs.length) return '';
+  const KIND = { audit: '\uD83D\uDD0D audit', autolink: '\uD83D\uDD17 auto-link', autolink_dry: '\uD83D\uDD0D auto-link preview' };
+  return '<div class="hub-sec-bar" style="margin-top:16px;"><h3>Run history</h3>' +
+    '<span class="li-sub">every sweep and every link, with what it did</span></div><div class="hub-list">' +
+    dhState.runs.map(r => {
+      const sum = r.summary || {};
+      const detail = r.kind === 'audit'
+        ? Object.entries(sum).sort((a, b) => b[1] - a[1]).slice(0, 4).map(([k, v]) => k + ' ' + v).join(' \u00b7 ')
+        : Object.entries(sum).filter(([k, v]) => k !== 'total' && v).map(([k, v]) => k.replace(/_/g, ' ') + ' ' + v).join(' \u00b7 ');
+      return '<div class="hub-li"><div class="li-main"><strong>' + (KIND[r.kind] || r.kind) + '</strong> ' +
+        '<span class="role-chip" style="cursor:default;">' + escapeHtml(r.source) + '</span>' +
+        '<div class="li-sub">' + escapeHtml(detail || r.note || 'nothing to do') + '</div></div>' +
+        '<span class="li-amt">' + (r.total == null ? '' : r.total) + '</span>' +
+        '<span class="li-sub" style="min-width:118px;text-align:right;">' + escapeHtml(fmtDT(r.ran_at)) + '</span></div>';
+    }).join('') + '</div>';
+}
+
+async function dhRunAudit() {
+  dhState.busy = true; renderDataHealth();
+  const { data, error } = await sb.rpc('snapshot_data_health', { p_source: 'dashboard' });
+  dhState.busy = false;
+  if (error) { toast('Audit failed: ' + error.message, 'err'); renderDataHealth(); return; }
+  toast('Swept \u2014 ' + ((data && data.total) || 0) + ' open finding' + (Number(data && data.total) === 1 ? '' : 's'), 'ok');
+  loadDataHealth();
+}
+
+// Preview and apply are the SAME function with one flag, so what you were shown
+// is exactly what runs. A preview produced by different code than the apply is
+// not a preview.
+async function dhAutolink(apply) {
+  if (apply && !confirm('Apply auto-linking?' + String.fromCharCode(10, 10) +
+      'Only exact matches and links already implied by existing relationships are made. ' +
+      'Every change is recorded in the run history below.')) return;
+  dhState.busy = true; renderDataHealth();
+  const { data, error } = await sb.rpc('autolink_data', { p_apply: !!apply, p_source: 'dashboard' });
+  dhState.busy = false;
+  if (error) { toast('Auto-link failed: ' + error.message, 'err'); renderDataHealth(); return; }
+  const d = data || {};
+  const lines = Object.entries(d)
+    .filter(([k, v]) => k !== 'total' && k !== 'run_id' && k !== 'applied' && Number(v) > 0)
+    .map(([k, v]) => '\u2022 ' + k.replace(/_/g, ' ') + ': ' + v);
+  const NL = String.fromCharCode(10);
+  alert((apply ? 'Auto-link applied.' : 'Auto-link preview \u2014 NOTHING was changed.') + NL + NL +
+    (lines.length ? lines.join(NL) : 'Nothing to link \u2014 everything that can be matched safely already is.') +
+    NL + NL + 'Total: ' + (d.total || 0) + NL + 'Recorded in the run history.');
+  loadDataHealth();
+}
+
+async function dhWaive(key) {
+  const [check_key, subject_table, subject_id] = key.split('|');
+  const reason = prompt('Why is this correct as it stands?' + String.fromCharCode(10, 10) +
+    'A waiver needs a reason \u2014 "dismissed" with no argument is how a check quietly stops meaning anything.');
+  if (reason === null) return;
+  if (!reason.trim()) { toast('A reason is required', 'err'); return; }
+  const { data: { session } } = await sb.auth.getSession();
+  const { error } = await sb.from('data_health_waivers').insert({
+    check_key, subject_table, subject_id, reason: reason.trim(),
+    waived_by: (session && session.user && session.user.id) || null,
+  });
+  if (error) { toast('Could not waive: ' + error.message, 'err'); return; }
+  toast('Waived', 'ok');
+  loadDataHealth();
+}
+
+$('panel-data-health').addEventListener('click', async (e) => {
+  const chk = e.target.closest('[data-dh-check]');
+  if (chk) { const k = chk.dataset.dhCheck; dhState.open[k] = !dhState.open[k]; renderDataHealth(); return; }
+  if (e.target.closest('[data-dh-run]')) { dhRunAudit(); return; }
+  const lk = e.target.closest('[data-dh-link]');
+  if (lk) { dhAutolink(lk.dataset.dhLink === 'apply'); return; }
+  const go = e.target.closest('[data-dh-goto]'); if (go) { activateTab(go.dataset.dhGoto); return; }
+  const wv = e.target.closest('[data-dh-waive]'); if (wv) { dhWaive(wv.dataset.dhWaive); return; }
+  if (e.target.closest('[data-dh-showwaived]')) { dhState.showWaived = !dhState.showWaived; renderDataHealth(); return; }
+  const un = e.target.closest('[data-dh-unwaive]');
+  if (un) {
+    const { error } = await sb.from('data_health_waivers').delete().eq('id', un.dataset.dhUnwaive);
+    if (error) { toast('Could not un-waive: ' + error.message, 'err'); return; }
+    toast('Back on the list', 'ok'); loadDataHealth(); return;
+  }
+});
+
 $('panel-site-review').addEventListener('click', (e) => { if (e.target.closest('[data-sr-add]')) srOpenAdd(); });
 $('panel-site-review').addEventListener('change', (e) => {
   const s = e.target.closest('[data-sr-status]'); if (s) srSetStatus(s.dataset.srStatus, s.value);
