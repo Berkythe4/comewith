@@ -752,6 +752,42 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 /* 178 - the grid: the company P&L's own table, scoped to one event */
 /* Inline editors on the events list (type / stage / status / public) */
 .ev-inline { font-size: 0.72rem; padding: 3px 4px; max-width: 128px; }
+/* Multi-select filter chips */
+.ev-filters { margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; }
+.ev-filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ev-filter-lbl { font-size: 0.62rem; text-transform: uppercase; letter-spacing: .09em;
+  color: var(--mid); min-width: 52px; }
+.ev-chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.ev-chip { font-family: 'Inconsolata', monospace; font-size: 0.72rem; padding: 3px 9px;
+  border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink);
+  cursor: pointer; border-radius: 11px; line-height: 1.5; }
+.ev-chip:hover { border-color: var(--ink); }
+.ev-chip.on { background: var(--ink); color: var(--bg); border-color: var(--ink); font-weight: 700; }
+.ev-chip-n { opacity: .55; font-size: 0.66rem; margin-left: 3px; }
+.ev-chip.shortcut { border-style: dashed; }
+/* State chips carry the same colour as the rows they filter to, so the chip row
+   doubles as the legend and there is nothing extra to explain. */
+.ev-chip.bk-active    { border-color: var(--blue);  color: var(--blue); }
+.ev-chip.bk-potential { border-color: var(--amber); color: var(--amber); }
+.ev-chip.bk-completed { border-color: var(--green); color: var(--green); }
+.ev-chip.bk-cancelled { border-color: var(--red);   color: var(--red); }
+.ev-chip.bk-active.on    { background: var(--blue);  color: var(--bg); }
+.ev-chip.bk-potential.on { background: var(--amber); color: var(--bg); }
+.ev-chip.bk-completed.on { background: var(--green); color: var(--bg); }
+.ev-chip.bk-cancelled.on { background: var(--red);   color: var(--bg); }
+/* Row banding. A tint you can read a table through, plus a left edge that does
+   the actual grouping work - colour alone is not a signal everyone receives. */
+tr.ev-row > td:first-child { border-left: 3px solid transparent; }
+tr.ev-active    > td { background: rgba(125,184,255,0.055); }
+tr.ev-potential > td { background: rgba(233,185,73,0.05); }
+tr.ev-completed > td { background: rgba(155,214,74,0.045); }
+tr.ev-cancelled > td { background: rgba(232,74,134,0.045); color: var(--mid); }
+tr.ev-active    > td:first-child { border-left-color: var(--blue); }
+tr.ev-potential > td:first-child { border-left-color: var(--amber); }
+tr.ev-completed > td:first-child { border-left-color: var(--green); }
+tr.ev-cancelled > td:first-child { border-left-color: var(--red); }
+tr.ev-cancelled > td:nth-child(2) strong { text-decoration: line-through; }
+tr.ev-row:hover > td { background: var(--surface-2); }
 .ev-inline:hover { border-color: var(--ink); }
 .money-toolbar { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin: 12px 0 10px; }
 table.money-grid { font-size: 12px; }
@@ -11527,12 +11563,34 @@ $('panel-actors').addEventListener('keydown', (e) => { const td = e.target.close
 // offers an invalid value is worse than a text box, because it looks safe.
 const EV_TYPE_OPTS = [['party', 'Party'], ['dance_infusion', 'Dance Infusion'], ['production', 'Production'],
                       ['showcase', 'Showcase'], ['gig', 'Booking / gig'], ['growth', 'Growth & networking']];
-const EV_STAGE_OPTS = [['idea', 'Blue sky'], ['planning', 'Planning'], ['confirmed', 'Confirmed'],
+const EV_STAGE_OPTS = [['idea', 'Blue Sky'], ['planning', 'Planning'], ['confirmed', 'Confirmed'],
                        ['live', 'Live'], ['wrapped', 'Wrapped'], ['reported', 'Reported']];
 const EV_STATUS_OPTS = [['planning', 'Planning'], ['announced', 'Announced'], ['on_sale', 'On sale'],
                         ['sold_out', 'Sold out'], ['completed', 'Completed'], ['cancelled', 'Cancelled']];
 const EV_PUBLIC_OPTS = [['false', 'Hidden'], ['true', '\uD83C\uDF10 Live']];
 const EV_FIELD_LABEL = { type: 'Type', stage: 'Stage', status: 'Status', is_public: 'Public' };
+
+// Three states that matter at a glance, plus cancelled. status leads because it
+// is what people set; stage refines it, because an event can sit at status
+// 'planning' while its stage says 'confirmed' - that one is real work, not a
+// maybe. Date is deliberately NOT part of this: a confirmed show in November is
+// every bit as active as one this Friday, which is the whole point of asking for
+// "active including future dated".
+const EV_BUCKETS = [
+  ['active',    'Active',    'confirmed and going ahead, whenever it is'],
+  ['potential', 'Potential', 'might happen - planning, or Blue Sky'],
+  ['completed', 'Completed', 'happened and closed out'],
+  ['cancelled', 'Cancelled', 'called off'],
+];
+function eventBucket(e) {
+  const st = e.status || '', sg = e.stage || '';
+  if (st === 'cancelled') return 'cancelled';
+  if (st === 'completed' || sg === 'wrapped' || sg === 'reported') return 'completed';
+  if (sg === 'idea') return 'potential';
+  if (['announced', 'on_sale', 'sold_out'].indexOf(st) >= 0) return 'active';
+  if (['confirmed', 'live'].indexOf(sg) >= 0) return 'active';
+  return 'potential';
+}
 
 // Every series on file, not a hardcoded list. Growth & Networking existed in the
 // data and was missing from the snapshot's breakdown because that list was
@@ -11545,7 +11603,11 @@ function evSeriesList() {
   return [...new Set(EV_SERIES_KNOWN.concat(present))];
 }
 
-const eventsDash = { rows: [], q: '', series: '', status: '', year: '', completedOnly: false, tab: 'calendar', calMonth: null, selDate: null };
+// Every filter is a LIST now. One-of was fine until "show me the two festivals
+// and the three parties" - which is most real questions - needed three passes.
+const eventsDash = { rows: [], q: '', series: [], status: [], year: [], bucket: [],
+                     tab: 'calendar', calMonth: null, selDate: null };
+const evToggle = (arr, v) => (arr.indexOf(v) >= 0 ? arr.filter(x => x !== v) : arr.concat([v]));
 async function loadEventsDash() {
   $('eventsBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading events…</div>';
   const [ev, fin, mk, ig, radio] = await Promise.all([
@@ -11566,11 +11628,14 @@ async function loadEventsDash() {
 }
 function eventsFiltered() {
   const s = eventsDash, ql = s.q.toLowerCase();
+  // An empty list means "no filter", not "match nothing" - the distinction that
+  // makes multi-select feel like the old single-select until you want more.
+  const any = (arr, v) => !arr.length || arr.indexOf(v) >= 0;
   return s.rows.filter(e =>
-    (!s.completedOnly || (e.status || '') === 'completed') &&
-    (!s.series || (e.series || '') === s.series) &&
-    (!s.status || (e.status || '') === s.status) &&
-    (!s.year || (e.event_date || '').slice(0, 4) === s.year) &&
+    any(s.bucket, eventBucket(e)) &&
+    any(s.series, e.series || '') &&
+    any(s.status, e.status || '') &&
+    any(s.year, (e.event_date || '').slice(0, 4)) &&
     (!ql || (e.name || '').toLowerCase().includes(ql)));
 }
 // The adaptive headline metric per event type.
@@ -11614,21 +11679,38 @@ function renderEventsDash() {
   const s = eventsDash;
   const years = [...new Set(s.rows.map(e => (e.event_date || '').slice(0, 4)).filter(Boolean))].sort().reverse();
   const seriesOpts = evSeriesList();
-  const statusOpts = EV_STATUS_OPTS.map(o => o[0]);
   const tab = (k, l) => `<button class="hub-btn ghost" data-ev-tab="${k}" style="${s.tab === k ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${l}</button>`;
-  const anyFilter = s.q || s.series || s.status || s.year || s.completedOnly;
+  const anyFilter = s.q || s.series.length || s.status.length || s.year.length || s.bucket.length;
+  // Chips rather than <select multiple>, which is unusable with a mouse and
+  // invisible on a phone. Each chip carries its own count so an empty filter is
+  // obvious before you click it.
+  const chip = (group, val, label, cls, count, title) =>
+    `<button class="ev-chip${cls ? ' ' + cls : ''}${s[group].indexOf(val) >= 0 ? ' on' : ''}"` +
+    ` data-evchip="${group}" data-val="${escapeHtml(val)}"` +
+    (title ? ` title="${escapeHtml(title)}"` : '') + `>${escapeHtml(label)}` +
+    (count == null ? '' : ` <span class="ev-chip-n">${count}</span>`) + `</button>`;
+  const nBucket = (k) => s.rows.filter(e => eventBucket(e) === k).length;
+  const nSeries = (k) => s.rows.filter(e => (e.series || '') === k).length;
+  const nStatus = (k) => s.rows.filter(e => (e.status || '') === k).length;
+  const nYear = (k) => s.rows.filter(e => (e.event_date || '').slice(0, 4) === k).length;
+  const group = (label, html) =>
+    `<div class="ev-filter-row"><span class="ev-filter-lbl">${label}</span><span class="ev-chips">${html}</span></div>`;
   $('eventsBody').innerHTML = `
     <div class="hub-sec-bar"><h3>🎫 Events · control center</h3>
       <button class="hub-btn" data-ev-add>➕ Add event</button></div>
     ${renderEventsSnapshot()}
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;">${tab('calendar', '📅 Calendar')}${tab('list', '▤ List')}${tab('overview', '📊 Money')}</div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px;">
-      <input class="modal-input" data-evq placeholder="🔎 Search events…" style="max-width:220px;" value="${escapeHtml(s.q)}">
-      <select class="hub-status-sel" data-evseries><option value="">All series</option>${seriesOpts.map(o => `<option value="${o}"${s.series === o ? ' selected' : ''}>${o}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-evstatus><option value="">All statuses</option>${statusOpts.map(o => `<option value="${o}"${s.status === o ? ' selected' : ''}>${o.replace('_', ' ')}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-evyear><option value="">All years</option>${years.map(y => `<option value="${y}"${s.year === y ? ' selected' : ''}>${y}</option>`).join('')}</select>
-      <label class="li-sub" style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700;"><input type="checkbox" data-evcompleted${s.completedOnly ? ' checked' : ''} style="width:auto;margin:0;"> Completed only</label>
-      ${anyFilter ? '<button class="hub-mini" data-evclear>✕ clear</button>' : ''}
+    <div class="ev-filters">
+      <div class="ev-filter-row">
+        <input class="modal-input" data-evq placeholder="🔎 Search events…" style="max-width:220px;" value="${escapeHtml(s.q)}">
+        <button class="ev-chip shortcut" data-evnotdone title="Everything still live: active plus potential, hiding completed and cancelled">Not completed</button>
+        ${anyFilter ? '<button class="hub-mini" data-evclear>✕ clear all</button>' : ''}
+        <span class="li-sub" style="margin-left:auto;">${eventsFiltered().length} of ${s.rows.length}</span>
+      </div>
+      ${group('State', EV_BUCKETS.map(([k, l, t]) => chip('bucket', k, l, 'bk-' + k, nBucket(k), t)).join(''))}
+      ${group('Series', seriesOpts.filter(o => nSeries(o)).map(o => chip('series', o, o, '', nSeries(o))).join(''))}
+      ${group('Status', EV_STATUS_OPTS.filter(o => nStatus(o[0])).map(([v, l]) => chip('status', v, l, '', nStatus(v))).join(''))}
+      ${group('Year', years.map(y => chip('year', y, y, '', nYear(y))).join(''))}
     </div>
     <div id="eventsView"></div>`;
   renderEventsView();
@@ -11951,7 +12033,7 @@ function renderEventsTable() {
     // For a completed event a blank metric is a real zero (show 0 / $0); for an
     // event that hasn't happened yet it's "no data" (show —).
     const numCell = (v, fmt) => (v ? fmt(v) : (done ? fmt(0) : muted));
-    return `<tr>
+    return `<tr class="ev-row ev-${eventBucket(e)}">
       <td>${escapeHtml(fmtDate(e.event_date))}</td>
       <td><strong>${escapeHtml(e.name || '')}</strong><div class="li-sub">${typeChip(e)}</div></td>
       <td>${evSel(e, 'type', EV_TYPE_OPTS)}</td>
@@ -12000,10 +12082,6 @@ async function setEventField(id, field, raw) {
 }
 $('panel-events').addEventListener('input', (e) => { const q = e.target.closest('[data-evq]'); if (q) { eventsDash.q = q.value; renderEventsView(); } });
 $('panel-events').addEventListener('change', (e) => {
-  const se = e.target.closest('[data-evseries]'); if (se) { eventsDash.series = se.value; renderEventsView(); return; }
-  const st = e.target.closest('[data-evstatus]'); if (st) { eventsDash.status = st.value; renderEventsView(); return; }
-  const yr = e.target.closest('[data-evyear]'); if (yr) { eventsDash.year = yr.value; renderEventsView(); return; }
-  const cp = e.target.closest('[data-evcompleted]'); if (cp) { eventsDash.completedOnly = cp.checked; renderEventsView(); return; }
   const ef = e.target.closest('[data-evfield]'); if (ef) { setEventField(ef.dataset.id, ef.dataset.evfield, ef.value); return; }
 });
 $('panel-events').addEventListener('click', (e) => {
@@ -12014,7 +12092,24 @@ $('panel-events').addEventListener('click', (e) => {
   const mon = e.target.closest('[data-ev-mon]'); if (mon) { const [y, m] = eventsDash.calMonth.split('-').map(Number); const d = new Date(y, m - 1 + Number(mon.dataset.evMon), 1); eventsDash.calMonth = d.toISOString().slice(0, 7); eventsDash.selDate = null; renderEventsCalendar(); return; }
   if (e.target.closest('[data-ev-today]')) { eventsDash.calMonth = new Date().toISOString().slice(0, 7); eventsDash.selDate = new Date().toISOString().slice(0, 10); renderEventsCalendar(); return; }
   const day = e.target.closest('[data-ev-day]'); if (day && !e.target.closest('[data-event-open]')) { const ds = day.dataset.evDay; eventsDash.selDate = eventsDash.selDate === ds ? null : ds; renderEventsCalendar(); return; }
-  if (e.target.closest('[data-evclear]')) { eventsDash.q = eventsDash.series = eventsDash.status = eventsDash.year = ''; eventsDash.completedOnly = false; renderEventsDash(); }
+  const ch = e.target.closest('[data-evchip]');
+  if (ch) {
+    const g = ch.dataset.evchip;
+    eventsDash[g] = evToggle(eventsDash[g], ch.dataset.val);
+    renderEventsDash(); return;
+  }
+  if (e.target.closest('[data-evnotdone]')) {
+    // A shortcut, not a fifth bucket: it sets the state filter to the two that
+    // still need work. Pressing it again clears it, so it reads as a toggle.
+    const now = eventsDash.bucket.slice().sort().join(',');
+    eventsDash.bucket = now === 'active,potential' ? [] : ['active', 'potential'];
+    renderEventsDash(); return;
+  }
+  if (e.target.closest('[data-evclear]')) {
+    eventsDash.q = '';
+    eventsDash.series = []; eventsDash.status = []; eventsDash.year = []; eventsDash.bucket = [];
+    renderEventsDash();
+  }
 });
 
 // ============================================================
