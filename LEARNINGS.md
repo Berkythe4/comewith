@@ -689,3 +689,49 @@ backwards — past events carrying costs with no fee. An upcoming show with no m
 it stayed invisible until it became a past show with no money on it, which is too late
 to do anything about. `v_pipeline.needs_revenue_estimate` is the forward-looking
 version. It currently returns all 8 upcoming events.
+
+---
+
+## Section 34 — Cost is incurred when it is agreed; cash moves when it is paid (2026-08-20)
+
+161 gave income three states because most of what Come With earns is agreed long
+before it is paid. Costs had no equivalent, so a DJ booked in August and paid in
+October could only be recorded two ways, both wrong: leave it out (understating what
+the event cost) or enter it as a normal expense (understating cash by pretending the
+money had already gone). 177 gives `expenses` the mirror of income's states —
+`accrued` -> `invoiced` -> `paid`.
+
+**The split is only worth anything if each view picks a side.** Adding the column is
+the easy part; deciding what counts where is the decision:
+
+| view | basis | why |
+|---|---|---|
+| `v_pl_monthly` | all three | a cost is incurred when the obligation is |
+| `v_cash_position` | `paid` only | otherwise a payable silently drains the float |
+| `v_contractor_1099` | `paid` only, in the year **paid** | a 1099 is cash-basis |
+| `v_capital` | `paid` only | nobody personally carried a bill nobody has paid |
+| `v_tax_year` | `paid` only, `committed_unpaid` shown separately | filed on cash |
+
+The 1099 and tax-year change is the subtle one: the year is now
+`coalesce(settled_at::date, date)`, not `date`. A fee accrued in December and paid in
+January belongs on next year's form. Every existing row backfilled to `paid` with
+`settled_at` null, so the coalesce falls back to `date` and **every number this
+database reported the day before was byte-identical the day after** — proved by
+snapshotting 396 view keys, applying inside a transaction, diffing, and rolling back.
+Nothing moves until someone records a payable on purpose.
+
+Two smaller things fell out of it, both cases of a check that stopped making sense:
+
+- **"No cash source" must not fire on an unpaid bill.** A bill that has not been paid
+  has not left an account, so asking which account it left is nonsense — and the queue
+  would have grown every time someone planned ahead properly. `v_cash_position`'s
+  `unknown_src` and the Expenses tab chip both filter to `paid` now.
+- **The settle dialog asks which pot paid it.** Without a `cash_source` the payment
+  never draws down the float and the row lands straight back in the unknown-source
+  queue, so the one moment the answer is actually known is the moment to ask.
+
+The event Money panel gained the surface for all of it: a summary strip that separates
+earned from banked, per-row status with a `settle`/`pay` action, and **"Link existing"**
+— because 203 of 266 expenses were marked `event_na` and re-typing one to attach it to
+an event is how you end up with the charge recorded twice.
+

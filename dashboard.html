@@ -740,6 +740,41 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .money-add input { flex: 1; }
 .money-add .money-add-btn { background: var(--ink); color: var(--bg); border: none; cursor: pointer; padding: 6px 12px; font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; }
 .money-empty { font-size: 0.74rem; color: var(--mid); padding: 3px 0; }
+/* 177 — payables, accruals, and linking an expense that already exists */
+.money-add { flex-wrap: wrap; }
+.money-add input[type="date"] { flex: 0 0 auto; }
+.money-sec-head { display: flex; align-items: baseline; gap: 8px; border-top: 1px solid var(--border); padding-top: 10px; margin-bottom: 6px; }
+.money-sec-head h4 { border-top: none; padding-top: 0; margin-bottom: 0; flex: 1; }
+.money-sec-head .money-sec-note { font-size: 0.72rem; color: var(--mid); font-variant-numeric: tabular-nums; }
+.money-row.owed { background: #fdfaf3; }
+.money-row .mr-when { font-size: 0.72rem; color: var(--mid); font-variant-numeric: tabular-nums; min-width: 52px; }
+.money-settle { background: var(--ink); color: var(--bg); border: none; cursor: pointer; font-size: 0.68rem;
+  text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; }
+.money-settle:hover { opacity: .85; }
+.money-tools { display: flex; gap: 6px; }
+.money-tool { background: none; border: 1px solid var(--border-strong); color: var(--ink); cursor: pointer;
+  font-size: 0.68rem; text-transform: uppercase; letter-spacing: .05em; padding: 3px 8px; }
+.money-tool:hover { border-color: var(--ink); }
+.money-tool.on { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.money-sum { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.money-sum .ms { border: 1px solid var(--border); padding: 7px 10px; min-width: 118px; }
+.money-sum .ms .lbl { font-size: 0.64rem; text-transform: uppercase; letter-spacing: .07em; color: var(--mid); }
+.money-sum .ms .val { font-size: 1rem; font-variant-numeric: tabular-nums; }
+.money-sum .ms .sub { font-size: 0.68rem; color: var(--mid); font-variant-numeric: tabular-nums; }
+.money-sum .ms .val.pos { color: #1f7a4d; } .money-sum .ms .val.neg { color: #be3c3c; }
+.money-link { border: 1px solid var(--border-strong); background: var(--surface); padding: 8px; margin-top: 8px; }
+.money-link-top { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 6px; }
+.money-link-top input[type="search"] { flex: 1; min-width: 160px; font-family: 'Inconsolata', monospace;
+  font-size: 0.78rem; padding: 6px 8px; border: 1px solid var(--border-strong); background: var(--bg); }
+.money-link-top label { font-size: 0.72rem; color: var(--mid); display: flex; align-items: center; gap: 4px; }
+.money-link-list { max-height: 260px; overflow-y: auto; border: 1px solid var(--border); background: var(--bg); }
+.money-link-row { display: flex; align-items: center; gap: 8px; font-size: 0.76rem; padding: 4px 7px;
+  border-bottom: 1px solid var(--border); cursor: pointer; }
+.money-link-row:hover { background: var(--surface); }
+.money-link-row .mlr-date { color: var(--mid); font-variant-numeric: tabular-nums; min-width: 56px; }
+.money-link-row .mlr-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.money-link-row .mlr-amt { font-variant-numeric: tabular-nums; }
+.money-link-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 0.74rem; color: var(--mid); }
 .placeholder {
   background: var(--surface); border: 1px dashed var(--border-strong);
   padding: 36px 28px; text-align: center;
@@ -7459,42 +7494,273 @@ document.querySelector('main.main').addEventListener('click', async (e) => {
 });
 
 // ---- Per-event Money panel (Phase 13 — step 5: list + delete + add, no in-place edit) ----
-const moneyState = { eventId: null };
+const moneyState = { eventId: null, event: null };
+// The "link an expense that already exists" drawer. Lives outside the render
+// because moneySectionsHTML is rebuilt wholesale on every write — the open
+// state, the search box and the ticked rows have to survive that.
+const moneyLink = { open: false, q: '', showOther: false, sel: new Set(), rows: null, loading: false };
+
+// The three states money can be in on each side. Income and expenses are
+// deliberately the same shape (161 / 177) so one mental model covers both.
+const MONEY_STATES = {
+  income:   [['received', 'Received', 'money is in the account'],
+             ['invoiced', 'Invoiced', 'billed, waiting on payment'],
+             ['accrued',  'Accrued',  'agreed, not yet invoiced']],
+  expenses: [['paid',     'Paid',     'money has left'],
+             ['invoiced', 'Invoiced', 'bill received, not paid'],
+             ['accrued',  'Committed', 'agreed to pay, no bill yet']],
+};
+const MONEY_SETTLED = { income: 'received', expenses: 'paid' };
 
 // Fetch every money child for an event (single source the panel AND the hub render from).
 async function loadMoneyData(id) {
-  const [tk, inc, exp, don, spo, sponsors] = await Promise.all([
+  // The drawer's rows are filtered to "not on THIS event", so they are only ever
+  // valid for the event they were loaded for. Switching events must drop them.
+  if (moneyLink.eventId !== id) {
+    Object.assign(moneyLink, { eventId: id, open: false, q: '', showOther: false, sel: new Set(), rows: null });
+  }
+  const [ev, tk, inc, exp, don, spo, sponsors] = await Promise.all([
+    sb.from('events').select('id, name, series, event_date').eq('id', id).single(),
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
-    sb.from('income').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
-    sb.from('expenses').select('id, amount, category').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
+    sb.from('income').select('id, amount, category, description, date, status, expected_amount, settled_at').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
+    sb.from('expenses').select('id, amount, category, description, date, vendor, status, expected_amount, settled_at, due_date, cash_source').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
     sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, actor:actors(display_name)').eq('event_id', id),
     sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor'),
   ]);
-  return { tk, inc, exp, don, spo, sponsors };
+  moneyState.event = ev.data || null;
+  return { ev, tk, inc, exp, don, spo, sponsors };
+}
+
+// Which set of books this event's rows belong to. Same rule the DB views use.
+const moneyLedger = () => /dance infusion/i.test(moneyState.event?.series || '') ? 'dance_infusion' : 'come_with';
+const moneyIsOwed = (tbl, r) => !!r.status && r.status !== MONEY_SETTLED[tbl];
+const mShort = (d) => (d ? fmtDate(d) : '');
+
+// A row's accrual state, as a chip. Only ever drawn when the row is NOT settled —
+// "paid"/"received" is the resting state and labelling it adds noise to the 95%
+// case. Variance (agreed vs settled) is a separate chip because it survives
+// settlement and is the thing worth noticing afterwards.
+function moneyStatusHTML(tbl, r) {
+  const out = [];
+  if (moneyIsOwed(tbl, r)) {
+    const label = (MONEY_STATES[tbl].find(s => s[0] === r.status) || [, r.status])[1];
+    const overdue = tbl === 'expenses' && r.due_date && r.due_date < TODAY();
+    out.push(`<span class="exp-tag ${overdue ? 'dupe' : 'own'}" title="${escapeHtml(
+      (MONEY_STATES[tbl].find(s => s[0] === r.status) || [, , ''])[2])}">${escapeHtml(String(label).toLowerCase())}</span>`);
+    if (r.due_date) out.push(`<span class="exp-tag ${overdue ? 'dupe' : ''}" title="${overdue ? 'Past due' : 'Due'} ${escapeHtml(fmtDate(r.due_date))}">${overdue ? 'overdue ' : 'due '}${escapeHtml(fmtDate(r.due_date))}</span>`);
+  }
+  if (r.expected_amount != null && Number(r.expected_amount) !== Number(r.amount)) {
+    out.push(`<span class="exp-tag dupe" title="Agreed ${money(r.expected_amount)}, settled ${money(r.amount)}">vs ${money(r.expected_amount)}</span>`);
+  }
+  return out.length ? ' ' + out.join(' ') : '';
+}
+
+// The one number people open this panel for. Revenue and cost are shown on the
+// ACCRUAL basis (what the event earned and cost), with the cash split underneath
+// — because "we made $2,400" and "$2,400 is in the bank" are different sentences
+// and this panel used to only be able to say the second one.
+function moneySummaryHTML({ tk, inc, exp, don, spo }) {
+  const sum = (arr, f) => (arr || []).reduce((t, r) => t + Number(f(r) || 0), 0);
+  const tickets = sum(tk.data, r => r.amount_paid);
+  const dons = sum(don.data, r => r.amount);
+  const spons = sum((spo.data || []).filter(r => r.status !== 'cancelled'), r => r.cash_amount);
+  const incAll = sum(inc.data, r => r.amount);
+  const incOwed = sum((inc.data || []).filter(r => moneyIsOwed('income', r)), r => r.amount);
+  const expAll = sum(exp.data, r => r.amount);
+  const expOwed = sum((exp.data || []).filter(r => moneyIsOwed('expenses', r)), r => r.amount);
+  const revenue = tickets + dons + spons + incAll;
+  const net = revenue - expAll;
+  const card = (lbl, val, sub, cls) =>
+    `<div class="ms"><div class="lbl">${lbl}</div><div class="val ${cls || ''}">${val}</div>` +
+    `<div class="sub">${sub}</div></div>`;
+  return `<div class="money-sum">
+    ${card('Revenue', money(revenue), incOwed > 0 ? money(incOwed) + ' still owed to us' : 'all banked')}
+    ${card('Costs', money(expAll), expOwed > 0 ? money(expOwed) + ' still owed by us' : 'all paid')}
+    ${card('Net', money(net), 'revenue − costs', net > 0 ? 'pos' : (net < 0 ? 'neg' : ''))}
+    ${card('Cash so far', money(revenue - incOwed - (expAll - expOwed)), 'received − paid')}
+  </div>`;
+}
+
+// The link drawer's list, rendered on its own so typing in the search box
+// repaints the rows without destroying the input that has focus.
+function moneyLinkListHTML() {
+  if (moneyLink.loading) return '<div class="money-empty" style="padding:8px;">Loading expenses…</div>';
+  const all = moneyLink.rows || [];
+  const q = moneyLink.q.trim().toLowerCase();
+  const pool = all.filter(r => moneyLink.showOther || !r.event_id);
+  const hits = !q ? pool : pool.filter(r =>
+    [r.vendor, r.category, r.description, r.event_name, String(r.amount)].join(' ').toLowerCase().includes(q));
+  if (!hits.length) {
+    return `<div class="money-empty" style="padding:8px;">${all.length
+      ? 'No expense matches — try a different search' + (moneyLink.showOther ? '.' : ', or tick "already on another event".')
+      : 'Every expense on file is already linked to this event.'}</div>`;
+  }
+  const CAP = 60;
+  const shown = hits.slice(0, CAP);
+  const rows = shown.map(r => `<label class="money-link-row">
+    <input type="checkbox" data-money-linksel="${escapeHtml(r.id)}"${moneyLink.sel.has(r.id) ? ' checked' : ''}>
+    <span class="mlr-date">${escapeHtml(mShort(r.date))}</span>
+    <span class="mlr-main">${escapeHtml(r.vendor || r.category || r.description || 'expense')}${
+      r.vendor && r.category ? ' <span class="muted">· ' + escapeHtml(r.category) + '</span>' : ''}${
+      r.status && r.status !== 'paid' ? ' <span class="exp-tag own">' + escapeHtml(r.status) + '</span>' : ''}${
+      r.event_id ? ' <span class="exp-tag dupe" title="Linking moves it off that event">on ' + escapeHtml(r.event_name || 'another event') + '</span>' : ''}</span>
+    <span class="mlr-amt">${money(r.amount)}</span>
+  </label>`).join('');
+  // Never let a cap read as "that's all there is" (§18).
+  const more = hits.length > CAP
+    ? `<div class="money-empty" style="padding:6px 8px;">Showing the ${CAP} most recent of ${hits.length} matches — search to narrow it.</div>`
+    : '';
+  return rows + more;
+}
+
+function moneyLinkHTML() {
+  if (!moneyLink.open) return '';
+  const n = moneyLink.sel.size;
+  const selSum = (moneyLink.rows || []).filter(r => moneyLink.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
+  return `<div class="money-link">
+    <div class="money-link-top">
+      <input type="search" data-money-linkq placeholder="Search vendor / category / note / amount…" value="${escapeHtml(moneyLink.q)}">
+      <label><input type="checkbox" data-money-linkother${moneyLink.showOther ? ' checked' : ''}> already on another event</label>
+      <button type="button" class="money-tool" data-money-linkclose>close</button>
+    </div>
+    <div class="money-link-list" data-money-linklist>${moneyLinkListHTML()}</div>
+    <div class="money-link-foot" data-money-linkfoot>${moneyLinkFootHTML()}</div>
+  </div>`;
+}
+function moneyLinkFootHTML() {
+  const n = moneyLink.sel.size;
+  const selSum = (moneyLink.rows || []).filter(r => moneyLink.sel.has(r.id)).reduce((t, r) => t + Number(r.amount || 0), 0);
+  return `<button type="button" class="money-add-btn" data-money-linkgo${n ? '' : ' disabled'}>Link ${n || ''} to this event</button>
+    <span>${n ? n + ' selected · ' + money(selSum) : 'Tick the charges that belong to this event.'}</span>`;
+}
+// Repaint only the drawer — never the whole panel. Typing in the search box and
+// ticking a row must not cost a round trip or throw away the scroll position.
+function moneyLinkRepaint(container, listToo) {
+  const root = container || document;
+  const foot = root.querySelector('[data-money-linkfoot]');
+  if (foot) foot.innerHTML = moneyLinkFootHTML();
+  if (listToo) { const l = root.querySelector('[data-money-linklist]'); if (l) l.innerHTML = moneyLinkListHTML(); }
+}
+// Every expense on file that is NOT already on this event. Paged with sbAll —
+// PostgREST's 1000-row cap is silent, and the expense ledger is the table most
+// likely to cross it first.
+async function moneyLinkLoad(eventId) {
+  moneyLink.loading = true;
+  const { data, error } = await sbAll(() => sb.from('expenses')
+    .select('id, date, amount, category, vendor, description, status, event_id, event_na, ledger, event:events(name)')
+    .is('deleted_at', null), 'id');
+  moneyLink.loading = false;
+  if (error) throw error;
+  moneyLink.rows = (data || [])
+    .filter(r => r.event_id !== eventId)
+    .map(r => ({ ...r, event_name: r.event?.name || null }))
+    .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+  moneyLink.sel = new Set();
+}
+// Attach existing charges. event_na is cleared because "this has no event" and
+// "this event" are contradictory, and the ledger is pulled to the event's own —
+// a Come With charge moved onto a Dance Infusion night belongs to DI's books.
+async function moneyLinkApply(eventId) {
+  const ids = [...moneyLink.sel];
+  if (!ids.length) return;
+  const rows = (moneyLink.rows || []).filter(r => moneyLink.sel.has(r.id));
+  const ledger = moneyLedger();
+  const moving = rows.filter(r => r.event_id);
+  const switching = rows.filter(r => (r.ledger || 'come_with') !== ledger);
+  const total = rows.reduce((t, r) => t + Number(r.amount || 0), 0);
+  const NL = String.fromCharCode(10);
+  let msg = 'Link ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' totalling ' + money(total) +
+    ' to "' + (moneyState.event?.name || 'this event') + '"?';
+  if (moving.length) msg += NL + NL + '⚠ ' + moving.length + ' of them ' + (moving.length > 1 ? 'are' : 'is') +
+    ' currently on another event and will be MOVED off it: ' +
+    [...new Set(moving.map(r => r.event_name || 'unnamed'))].join(', ') + '.';
+  if (switching.length) msg += NL + NL + '⚠ ' + switching.length + ' will move into the ' +
+    (ledger === 'dance_infusion' ? 'Dance Infusion' : 'Come With') + ' books.';
+  if (!confirm(msg)) return;
+  const { error } = await sb.from('expenses')
+    .update({ event_id: eventId, event_na: false, ledger }).in('id', ids);
+  if (error) throw error;
+  toast('Linked ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' · ' + money(total), 'ok');
+  moneyLink.open = false; moneyLink.sel = new Set(); moneyLink.rows = null; moneyLink.q = '';
+}
+// Finalise an accrual: the agreed figure moves to expected_amount so the variance
+// is still legible after the fact instead of being overwritten by the final.
+async function moneySettleRow(tbl, id) {
+  const { data: r, error: ge } = await sb.from(tbl)
+    .select('amount, expected_amount, description, category' + (tbl === 'expenses' ? ', vendor' : ''))
+    .eq('id', id).single();
+  if (ge) throw ge;
+  const NL = String.fromCharCode(10);
+  const who = (tbl === 'expenses' ? r.vendor : null) || r.description || r.category || 'this';
+  const agreed = r.expected_amount != null ? r.expected_amount : r.amount;
+  const raw = prompt('Final amount ' + (tbl === 'income' ? 'received for' : 'paid to') + ' "' + who + '":' +
+    NL + NL + 'Agreed: ' + money(agreed), String(r.amount));
+  if (raw === null) return false;
+  const amt = Number(String(raw).replace(/[^0-9.\-]/g, ''));
+  if (!Number.isFinite(amt) || amt === 0) throw new Error('Bad amount');
+  const patch = { amount: amt, status: MONEY_SETTLED[tbl],
+                  settled_at: new Date().toISOString(), expected_amount: agreed };
+  if (tbl === 'expenses') {
+    // Without a cash source the payment never draws down the float and the row
+    // lands straight in the "no source" queue — so ask once, here, not later.
+    const src = await pickFrom('Paid from which pot?', [
+      { label: 'Bank', id: 'bank', hint: 'business account' },
+      { label: 'PayPal', id: 'paypal', hint: 'business PayPal' },
+      { label: 'Personal', id: 'personal', hint: "Keith's own card — capital, not business cash" },
+      { label: 'Other', id: 'other', hint: 'somewhere else' },
+    ], { placeholder: 'bank / paypal / personal / other' });
+    if (!src) return false;
+    patch.cash_source = src.id;
+    if (src.id === 'personal') patch.funded_by = 'owner';
+  }
+  const { error } = await sb.from(tbl).update(patch).eq('id', id);
+  if (error) throw error;
+  const diff = amt - Number(agreed);
+  toast((tbl === 'income' ? 'Received ' : 'Paid ') + money(amt) +
+    (Math.abs(diff) > 0.005 ? ' (' + (diff > 0 ? '+' : '') + money(diff) + ' vs agreed)' : ''), 'ok');
+  return true;
 }
 
 // Shared markup for the 5 money sections (used by both the modal and the inline hub section).
-function moneySectionsHTML({ tk, inc, exp, don, spo, sponsors }) {
+function moneySectionsHTML(data) {
+  const { tk, inc, exp, don, spo, sponsors } = data;
   const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
   const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
   const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
+  const settle = (tbl, r) => moneyIsOwed(tbl, r)
+    ? `<button type="button" class="money-settle" data-money-settle="${tbl}:${escapeHtml(r.id)}" title="${
+        tbl === 'income' ? 'Mark received — you can adjust the final amount' : 'Mark paid — you can adjust the final amount'}">${
+        tbl === 'income' ? 'settle' : 'pay'}</button>` : '';
+  const stateSel = (tbl) => `<select data-f="status" title="Has this happened yet?">${
+    MONEY_STATES[tbl].map(([v, l, h]) => `<option value="${v}" title="${escapeHtml(h)}">${escapeHtml(l)}</option>`).join('')}</select>`;
+  const owedNote = (tbl, arr) => {
+    const owed = (arr || []).filter(r => moneyIsOwed(tbl, r));
+    if (!owed.length) return '';
+    const t = owed.reduce((s, r) => s + Number(r.amount || 0), 0);
+    return `<span class="money-sec-note">${money(t)} owed · ${owed.length} open</span>`;
+  };
   const sponsorOpts = (sponsors.data || []).map(s => s.actor).filter(Boolean).sort((a, b) => a.display_name.localeCompare(b.display_name)).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
   return `
+    ${moneySummaryHTML(data)}
     <div class="money-section">
       <h4>Tickets</h4>
       ${list(tk.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.ticket_type)} × ${fmtNum(r.quantity)}</span><span class="mr-amt">${money(r.amount_paid)}</span>${del('ticketing', r.id)}</div>`)}
       <div class="money-add"><input data-f="type" placeholder="Tier"><input data-f="qty" type="number" min="1" step="1" placeholder="Qty"><input data-f="price" type="number" min="0" step="0.01" placeholder="Unit $">${addBtn('ticket')}</div>
     </div>
     <div class="money-section">
-      <h4>Other income (bar / vendor / merch — not tickets)</h4>
-      ${list(inc.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.category || '—')}</span><span class="mr-amt">${money(r.amount)}</span>${del('income', r.id)}</div>`)}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${addBtn('income')}</div>
+      <div class="money-sec-head"><h4>Other income (bar / vendor / merch — not tickets)</h4>${owedNote('income', inc.data)}</div>
+      ${list(inc.data, r => `<div class="money-row${moneyIsOwed('income', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.category || '—')}${
+        r.description ? ' <span class="muted">· ' + escapeHtml(r.description) + '</span>' : ''}${moneyStatusHTML('income', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('income', r)}${del('income', r.id)}</div>`)}
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${stateSel('income')}${addBtn('income')}</div>
     </div>
     <div class="money-section">
-      <h4>Expenses</h4>
-      ${list(exp.data, r => `<div class="money-row"><span class="mr-main">${escapeHtml(r.category || '—')}</span><span class="mr-amt">${money(r.amount)}</span>${del('expenses', r.id)}</div>`)}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${addBtn('expense')}</div>
+      <div class="money-sec-head"><h4>Expenses</h4>${owedNote('expenses', exp.data)}
+        <span class="money-tools"><button type="button" class="money-tool${moneyLink.open ? ' on' : ''}" data-money-linkopen title="Attach a charge that is already in the books to this event">🔗 Link existing</button></span></div>
+      ${list(exp.data, r => `<div class="money-row${moneyIsOwed('expenses', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.vendor || r.category || '—')}${
+        r.vendor && r.category ? ' <span class="muted">· ' + escapeHtml(r.category) + '</span>' : ''}${moneyStatusHTML('expenses', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('expenses', r)}${del('expenses', r.id)}</div>`)}
+      ${moneyLinkHTML()}
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category"><input data-f="vendor" placeholder="Payee / vendor">${stateSel('expenses')}<input data-f="due" type="date" title="Due date — only used when it is not paid yet">${addBtn('expense')}</div>
     </div>
     <div class="money-section">
       <h4>Donations</h4>
@@ -7517,10 +7783,8 @@ async function openMoneyPanel(eventId) {
   await renderMoneyPanel();
 }
 async function renderMoneyPanel() {
-  const id = moneyState.eventId;
-  const ev = await sb.from('events').select('name').eq('id', id).single();
-  const data = await loadMoneyData(id);
-  $('kpiModalTitle').textContent = 'Money — ' + (ev.data?.name || 'event');
+  const data = await loadMoneyData(moneyState.eventId);
+  $('kpiModalTitle').textContent = 'Money — ' + (data.ev.data?.name || 'event');
   $('kpiModalBody').innerHTML = moneySectionsHTML(data);
 }
 
@@ -7529,6 +7793,20 @@ async function renderMoneyPanel() {
 async function moneyMutate(targetEl, eventId, container) {
   const delEl = targetEl.closest('[data-money-del]');
   const addEl = targetEl.closest('[data-money-add]');
+  // --- accrual + linking actions (177) ---
+  const setEl = targetEl.closest('[data-money-settle]');
+  if (setEl) {
+    const [tbl, rid] = setEl.dataset.moneySettle.split(':');
+    await moneySettleRow(tbl, rid);
+    return;
+  }
+  if (targetEl.closest('[data-money-linkopen]')) {
+    moneyLink.open = !moneyLink.open;
+    if (moneyLink.open && !moneyLink.rows) await moneyLinkLoad(eventId);
+    return;
+  }
+  if (targetEl.closest('[data-money-linkclose]')) { moneyLink.open = false; return; }
+  if (targetEl.closest('[data-money-linkgo]')) { await moneyLinkApply(eventId); return; }
   if (delEl) {
     const [tbl, rid] = delEl.dataset.moneyDel.split(':');
     const op = (tbl === 'income' || tbl === 'expenses')
@@ -7548,7 +7826,24 @@ async function moneyMutate(targetEl, eventId, container) {
     op = sb.from('ticketing').insert({ event_id: eventId, ticket_type: v('type') || 'General', quantity: Math.round(qty), amount_paid: +(qty * (Number(v('price')) || 0)).toFixed(2) });
   } else if (kind === 'income' || kind === 'expense') {
     const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
-    op = sb.from(kind === 'income' ? 'income' : 'expenses').insert({ event_id: eventId, date: TODAY(), amount: amt, category: v('category') || null, created_by: uid });
+    const tbl = kind === 'income' ? 'income' : 'expenses';
+    const st = v('status') || MONEY_SETTLED[tbl];
+    const settled = st === MONEY_SETTLED[tbl];
+    // The event's own date, not today's, when there is one: a cost belongs to
+    // the month the event happened in, which is the whole basis of the P&L.
+    const row = {
+      event_id: eventId, date: moneyState.event?.event_date || TODAY(),
+      amount: amt, category: v('category') || null, created_by: uid,
+      ledger: moneyLedger(), status: st, expected_amount: amt,
+      settled_at: settled ? new Date().toISOString() : null,
+    };
+    if (tbl === 'expenses') {
+      if (v('vendor')) row.vendor = v('vendor');
+      // A due date on an already-paid row is noise, so it is only kept while owed.
+      if (!settled && v('due')) row.due_date = v('due');
+      row.event_na = false;
+    }
+    op = sb.from(tbl).insert(row);
   } else if (kind === 'donation') {
     const amt = Number(v('amount')); if (!(amt > 0)) throw new Error('Amount required');
     op = sb.from('third_party_donations').insert({ event_id: eventId, date: TODAY(), amount: amt, donor_name: v('donor') || null });
@@ -7559,10 +7854,37 @@ async function moneyMutate(targetEl, eventId, container) {
   const { error } = await op; if (error) throw error;
 }
 
+// Everything the link drawer does to ITSELF — ticking a row, flipping the
+// "already on another event" filter — is local state. Routing it through
+// moneyMutate would re-fetch the whole panel and lose the list's scroll on every
+// click, so it is intercepted first and repaints only what changed.
+const MONEY_SEL = '[data-money-del],[data-money-add],[data-money-settle],' +
+  '[data-money-linkopen],[data-money-linkclose],[data-money-linkgo]';
+function moneyLinkLocalClick(e, container) {
+  const cb = e.target.closest('[data-money-linksel]');
+  if (cb) {
+    if (cb.checked) moneyLink.sel.add(cb.dataset.moneyLinksel); else moneyLink.sel.delete(cb.dataset.moneyLinksel);
+    moneyLinkRepaint(container, false);
+    return true;
+  }
+  const other = e.target.closest('[data-money-linkother]');
+  if (other) { moneyLink.showOther = other.checked; moneyLinkRepaint(container, true); return true; }
+  return false;
+}
+// Search box: filter in place. Delegated on document so one listener serves both
+// the Events-tab modal and the inline hub section.
+document.addEventListener('input', (e) => {
+  const q = e.target.closest('[data-money-linkq]');
+  if (!q) return;
+  moneyLink.q = q.value;
+  moneyLinkRepaint(q.closest('.money-link'), true);
+});
+
 // Modal money clicks.
 $('kpiModalBody').addEventListener('click', async (e) => {
   if (!moneyState.eventId) return;
-  const target = e.target.closest('[data-money-del],[data-money-add]');
+  if (moneyLinkLocalClick(e, $('kpiModalBody'))) return;
+  const target = e.target.closest(MONEY_SEL);
   if (!target) return;
   e.preventDefault();
   try {
@@ -9764,7 +10086,8 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
   const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
   // Inline Money section uses the shared money add/delete markup.
-  const moneyEl = e.target.closest('[data-money-add],[data-money-del]');
+  if (hub.section === 'money' && moneyLinkLocalClick(e, $('hubSecBody'))) return;
+  const moneyEl = e.target.closest(MONEY_SEL);
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
   const ep = e.target.closest('[data-hub-email-person]'); if (ep) { hubEmailPeople(ep.dataset.hubEmailPerson); return; }
@@ -10937,7 +11260,7 @@ document.addEventListener('click', (e) => { expShiftHeld = e.shiftKey; }, true);
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
   const [ex, ev, ac] = await Promise.all([
-    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger, updated_at').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
+    sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger, updated_at, status, due_date, expected_amount, settled_at').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
@@ -10972,7 +11295,9 @@ function expFiltered() {
     s.flag === 'nocat' ? !x.category :
     s.flag === 'noreceipt' ? (!x.receipt_path && Number(x.amount) >= 100) :
     s.flag === 'dupe' ? expIsDupe(x) :
-    s.flag === 'nosource' ? !x.cash_source :
+    s.flag === 'nosource' ? (!x.cash_source && x.status === 'paid') :
+    s.flag === 'owed' ? (x.status && x.status !== 'paid') :
+    s.flag === 'overdue' ? (x.status && x.status !== 'paid' && x.due_date && x.due_date < TODAY()) :
     s.flag === 'recent' ? (x.updated_at && (Date.now() - Date.parse(x.updated_at)) < 864e5) : true;
   const matchFunded = (x) =>
     s.funded === '' ? true :
@@ -11034,7 +11359,9 @@ function expChips() {
     { k: 'nocat', label: 'No category', n: r.filter(x => !x.category).length },
     { k: 'noreceipt', label: 'No receipt ≥$100', n: r.filter(x => !x.receipt_path && Number(x.amount) >= 100).length },
     { k: 'dupe', label: 'Possible duplicate', n: r.filter(expIsDupe).length },
-    { k: 'nosource', label: 'No cash source', n: r.filter(x => !x.cash_source).length },
+    { k: 'nosource', label: 'No cash source', n: r.filter(x => !x.cash_source && x.status === 'paid').length },
+    { k: 'owed', label: 'Owed by us', n: r.filter(x => x.status && x.status !== 'paid').length },
+    { k: 'overdue', label: 'Overdue', n: r.filter(x => x.status && x.status !== 'paid' && x.due_date && x.due_date < TODAY()).length },
     { k: 'recent', label: 'Changed in last 24h', n: r.filter(x => x.updated_at && (Date.now() - Date.parse(x.updated_at)) < 864e5).length },
   ];
 }
@@ -11114,11 +11441,25 @@ function renderExpensesBody() {
                   paypal:   ['', 'Come With PayPal — draws down the $5,000 float'],
                   bank:     ['', 'Bluevine business account — draws down the $5,000 float'],
                   other:    ['', 'Paid some other way'] };
-    if (x.cash_source) {
+    // 177: an unpaid bill is not a cash movement yet, so it carries neither a
+    // source nor a complaint about missing one. It carries what it is instead.
+    const unpaid = x.status && x.status !== 'paid';
+    if (unpaid) {
+      const overdue = x.due_date && x.due_date < TODAY();
+      f.push('<span class="exp-tag ' + (overdue ? 'dupe' : 'own') + '" title="' +
+        (x.status === 'invoiced' ? 'Bill received, not paid' : 'Agreed to pay, no bill yet') +
+        ' — counted in the P&L, not in cash">' + escapeHtml(x.status) + '</span>');
+      if (x.due_date) f.push('<span class="exp-tag ' + (overdue ? 'dupe' : '') + '">' +
+        (overdue ? 'overdue ' : 'due ') + escapeHtml(fmtDate(x.due_date)) + '</span>');
+    } else if (x.cash_source) {
       const m = SRC[x.cash_source] || ['', 'Which account the money left'];
       f.push('<span class="exp-tag ' + m[0] + '" title="' + escapeHtml(m[1]) + '">' + escapeHtml(x.cash_source) + '</span>');
     } else {
       f.push('<span class="exp-tag dupe" title="Nobody has said which account paid this, so it is left out of the cash reserve">no source</span>');
+    }
+    if (x.expected_amount != null && Number(x.expected_amount) !== Number(x.amount)) {
+      f.push('<span class="exp-tag dupe" title="Agreed ' + money(x.expected_amount) + ', paid ' + money(x.amount) +
+        '">vs ' + money(x.expected_amount) + '</span>');
     }
     return f.join(' ');
   };
@@ -11133,7 +11474,9 @@ function renderExpensesBody() {
     <td>${evSel(x)}</td>
     <td>${receipt(x)}</td>
     <td class="exp-flags">${flags(x)}</td>
-    <td class="exp-check"><button class="hub-mini exp-del" data-expdel="${escapeHtml(x.id)}" title="Delete this expense">✕</button></td>
+    <td class="exp-check">${x.status && x.status !== 'paid'
+      ? '<button class="hub-mini" data-exppay="' + escapeHtml(x.id) + '" title="Mark paid — you can adjust the final amount">pay</button>'
+      : ''}<button class="hub-mini exp-del" data-expdel="${escapeHtml(x.id)}" title="Delete this expense">✕</button></td>
   </tr>`).join('') || `<tr><td colspan="12" class="muted" style="padding:14px;">No expenses match these filters.</td></tr>`;
   $('expTable').innerHTML = `<table class="data-table"><thead><tr>
     <th class="exp-check"><input type="checkbox" data-expselall${allShown ? ' checked' : ''} title="Select everything matching the current filters"></th>
@@ -11304,6 +11647,8 @@ $('panel-expenses').addEventListener('click', (e) => {
     Object.assign(expDash, { q: '', event: '', cat: '', flag: '', funded: '' }); renderExpenses(); return;
   }
   const fl = e.target.closest('[data-expflag]'); if (fl) { expDash.flag = fl.dataset.expflag; renderExpenses(); return; }
+  const pay = e.target.closest('[data-exppay]');
+  if (pay) { moneySettleRow('expenses', pay.dataset.exppay).then(ok => { if (ok) loadExpenses(); }).catch(err => toast(err.message || String(err), 'err')); return; }
   const vf = e.target.closest('[data-expverify]'); if (vf) {
     const row = expDash.rows.find(r => r.id === vf.dataset.expverify);
     setExpenseVerified([vf.dataset.expverify], !(row && row.verified_at)); return;
@@ -12748,11 +13093,25 @@ function renderPL() {
     card('Cash reserve', money(cash.cash_reserve),
          money(cash.capital_in) + ' float + ' + money(cash.revenue_in) + ' in − ' + money(cash.spent_from_float) + ' out',
          plNum(cash.cash_reserve) < 0 ? 'neg' : 'pos',
-         'The $5,000 float. Moves only when money enters or leaves PayPal or the business bank - anything paid on the personal card is capital, not business cash.'),
+         'The $5,000 float. Moves only when money enters or leaves PayPal or the business bank - anything paid on the personal card is capital, not business cash. Bills that are agreed but unpaid are NOT deducted here; they are in "Owed by us".'),
     card('Invested', money(cap.invested_net), money(cap.contributed) + ' founding + ' + money(cap.personally_paid) + ' personal', 'accent',
          'Capital you have put in, less anything reimbursed to you'),
     card('Reimbursable', money(cap.outstanding_reimbursable), 'personally paid, not yet repaid', '',
          'You can reimburse these individually from the Expenses tab'),
+    // 177: what has been committed but has not moved. These sit in the P&L
+    // (the cost is real the moment it is agreed) and deliberately NOT in cash.
+    // Drawn only when non-zero - a permanent "$0.00 owed" card is noise, and a
+    // blank is not the same claim as a measured zero.
+    plNum(cash.owed_by_us) > 0
+      ? card('Owed by us', money(cash.owed_by_us),
+             plNum(cash.owing_count) + ' unpaid bill' + (plNum(cash.owing_count) === 1 ? '' : 's'), 'neg',
+             'Expenses recorded as accrued or invoiced. Counted as cost in the P&L, not yet taken out of cash. Settle them from the Expenses tab or the event’s Money panel.')
+      : '',
+    plNum(cash.owed_to_us) > 0
+      ? card('Owed to us', money(cash.owed_to_us),
+             plNum(cash.owed_count) + ' unpaid invoice' + (plNum(cash.owed_count) === 1 ? '' : 's'), 'accent',
+             'Revenue earned and recorded, not yet received. Counted in the P&L, not yet in cash.')
+      : '',
     unreviewed
       ? card('Source unknown', String(unreviewed), money(cash.unknown_source_amount) + ' - where did it come from?', 'warn',
              'These rows have no payment source, so they are not counted against the float. Set it in the Expenses tab to make cash reserve exact.')
