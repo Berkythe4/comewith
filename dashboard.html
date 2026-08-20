@@ -774,6 +774,23 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 .money-link-row .mlr-date { color: var(--mid); font-variant-numeric: tabular-nums; min-width: 56px; }
 .money-link-row .mlr-main { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .money-link-row .mlr-amt { font-variant-numeric: tabular-nums; }
+.recon-box { max-width: 560px; width: 92vw; }
+.recon-body { padding: 10px 14px; max-height: 62vh; overflow-y: auto; }
+.recon-sub { font-size: 0.74rem; color: var(--mid); text-transform: uppercase; letter-spacing: .07em; margin-bottom: 10px; }
+.recon-item { border: 1px solid var(--border); padding: 9px 11px; margin-bottom: 10px; }
+.recon-payee { font-family: 'Bebas Neue', sans-serif; font-size: 0.98rem; letter-spacing: .05em; margin-bottom: 5px; }
+.recon-line { display: flex; align-items: baseline; gap: 8px; font-size: 0.79rem; padding: 2px 0; }
+.recon-line > span:first-child { min-width: 78px; color: var(--mid); font-size: 0.72rem;
+  text-transform: uppercase; letter-spacing: .05em; }
+.recon-line b { font-variant-numeric: tabular-nums; min-width: 84px; }
+.recon-line.result { border-top: 1px solid var(--border); margin-top: 3px; padding-top: 5px; }
+.recon-note { font-size: 0.71rem; color: var(--mid); margin-top: 6px; line-height: 1.4; }
+.recon-total { border-top: 2px solid var(--ink); padding-top: 8px; }
+.recon-total > div { display: flex; align-items: baseline; gap: 8px; font-size: 0.82rem; padding: 3px 0; }
+.recon-total > div > span:first-child { flex: 1; color: var(--mid); }
+.recon-total b { font-variant-numeric: tabular-nums; }
+.recon-total b.pos { color: #1f7a4d; } .recon-total b.neg { color: #be3c3c; }
+.recon-foot { display: flex; justify-content: flex-end; padding: 10px 14px; border-top: 1px solid var(--border); }
 .money-link-foot { display: flex; align-items: center; gap: 10px; margin-top: 6px; font-size: 0.74rem; color: var(--mid); }
 .placeholder {
   background: var(--surface); border: 1px dashed var(--border-strong);
@@ -7519,7 +7536,7 @@ async function loadMoneyData(id) {
   if (moneyLink.eventId !== id) {
     Object.assign(moneyLink, { eventId: id, open: false, q: '', showOther: false, sel: new Set(), rows: null });
   }
-  const [ev, tk, inc, exp, don, spo, sponsors] = await Promise.all([
+  const [ev, tk, inc, exp, don, spo, sponsors, actors] = await Promise.all([
     sb.from('events').select('id, name, series, event_date').eq('id', id).single(),
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
     sb.from('income').select('id, amount, category, description, date, status, expected_amount, settled_at').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
@@ -7527,9 +7544,11 @@ async function loadMoneyData(id) {
     sb.from('third_party_donations').select('id, amount, donor_name').eq('event_id', id).order('amount', { ascending: false }),
     sb.from('sponsorships').select('id, cash_amount, in_kind_value, tier, status, actor:actors(display_name)').eq('event_id', id),
     sb.from('actor_roles').select('actor:actors(id, display_name)').eq('role', 'sponsor'),
+    sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
   ]);
   moneyState.event = ev.data || null;
-  return { ev, tk, inc, exp, don, spo, sponsors };
+  moneyState.actors = actors.data || [];
+  return { ev, tk, inc, exp, don, spo, sponsors, actors };
 }
 
 // Which set of books this event's rows belong to. Same rule the DB views use.
@@ -7683,6 +7702,7 @@ async function moneyLinkApply(eventId) {
   if (error) throw error;
   toast('Linked ' + ids.length + ' expense' + (ids.length > 1 ? 's' : '') + ' · ' + money(total), 'ok');
   moneyLink.open = false; moneyLink.sel = new Set(); moneyLink.rows = null; moneyLink.q = '';
+  await reconcileOnAssign(eventId, ids);
 }
 // Finalise an accrual: the agreed figure moves to expected_amount so the variance
 // is still legible after the fact instead of being overwritten by the final.
@@ -7722,9 +7742,212 @@ async function moneySettleRow(tbl, id) {
   return true;
 }
 
+// ============================================================
+// RECONCILIATION (177) - a real charge settling a commitment already on file.
+//
+// The double-count this prevents: a DJ fee is accrued at $750 when the booking
+// is made, then the actual $800 card charge arrives in the next Simplifi push as
+// its own row. Assign that row to the event and the event now carries BOTH -
+// $1,550 of cost for one DJ. Nothing in the data says they are the same thing,
+// so the moment to ask is the moment the second one is filed against the event.
+//
+// The ACCRUAL survives the merge, not the incoming row. It holds the agreed
+// figure (the whole reason for recording an accrual), and the cost line of the
+// event has been pointing at it. The bank facts on the incoming row - amount,
+// date, cash source, receipt - are copied onto it, and critically so is
+// external_ref: 169 established that the reference has to move to the survivor
+// FIRST, or the next push re-creates the duplicate that was just removed.
+// ============================================================
+const RECON_NO = '__recon_none__', RECON_STOP = '__recon_stop__';
+
+// How likely is it that this charge is that commitment? Same actor is near
+// proof; same name is strong; the amount matching is only corroborating, because
+// a settled figure differing from the agreed one is the normal case.
+function reconScore(inc, acc) {
+  let sc = 0;
+  if (inc.vendor_actor_id && acc.vendor_actor_id && inc.vendor_actor_id === acc.vendor_actor_id) sc += 100;
+  const iv = (inc.vendor || '').trim().toLowerCase(), av = (acc.vendor || '').trim().toLowerCase();
+  if (iv && av) {
+    if (iv === av) sc += 60;
+    else if (iv.includes(av) || av.includes(iv)) sc += 30;
+  }
+  if (inc.category && acc.category && inc.category === acc.category) sc += 20;
+  const a = Number(inc.amount || 0);
+  const b = Number(acc.expected_amount != null ? acc.expected_amount : acc.amount || 0);
+  if (b > 0) {
+    const d = Math.abs(a - b) / b;
+    if (d < 0.005) sc += 50; else if (d <= 0.10) sc += 25; else if (d <= 0.25) sc += 10;
+  }
+  return sc;
+}
+
+async function reconOpenPayables(eventId, excludeIds) {
+  const { data, error } = await sb.from('expenses')
+    .select('id, date, due_date, amount, expected_amount, category, vendor, vendor_actor_id, description, status, cash_source')
+    .eq('event_id', eventId).is('deleted_at', null).neq('status', 'paid');
+  if (error) throw error;
+  return (data || []).filter(r => excludeIds.indexOf(r.id) < 0);
+}
+
+// Fold the incoming charge into the accrual. Two statements, in this order,
+// because external_ref carries a partial UNIQUE index that soft-deleted rows do
+// not escape - it must be released before it can be claimed.
+async function reconMerge(inc, acc) {
+  const agreed = acc.expected_amount != null ? acc.expected_amount : acc.amount;
+  const { error: de } = await sb.from('expenses')
+    .update({ external_ref: null, deleted_at: new Date().toISOString() }).eq('id', inc.id);
+  if (de) throw de;
+  const patch = {
+    amount: inc.amount, date: inc.date, status: 'paid',
+    settled_at: new Date().toISOString(), expected_amount: agreed,
+    cash_source: inc.cash_source || acc.cash_source || null,
+  };
+  if (inc.external_ref) patch.external_ref = inc.external_ref;
+  if (inc.funded_by) patch.funded_by = inc.funded_by;
+  if (inc.receipt_path) patch.receipt_path = inc.receipt_path;
+  if (!acc.vendor_actor_id && inc.vendor_actor_id) patch.vendor_actor_id = inc.vendor_actor_id;
+  if (!acc.vendor && inc.vendor) patch.vendor = inc.vendor;
+  if (!acc.description && inc.description) patch.description = inc.description;
+  const { error: ue } = await sb.from('expenses').update(patch).eq('id', acc.id);
+  if (ue) {
+    // Put the incoming row back rather than leaving the charge deleted and the
+    // commitment unsettled - that state is worse than either starting point.
+    await sb.from('expenses').update({ deleted_at: null, external_ref: inc.external_ref || null }).eq('id', inc.id);
+    throw ue;
+  }
+  return {
+    payee: acc.vendor || inc.vendor || acc.category || 'this cost',
+    category: acc.category || inc.category || null,
+    wasStatus: acc.status,
+    dueDate: acc.due_date,
+    agreed: Number(agreed), charged: Number(inc.amount),
+    chargedDate: inc.date, source: patch.cash_source,
+    removed: Number(acc.amount || 0),
+    refCarried: !!inc.external_ref,
+    linkedActor: !acc.vendor_actor_id && !!inc.vendor_actor_id,
+    stillUnlinked: !(acc.vendor_actor_id || inc.vendor_actor_id),
+  };
+}
+
+// Ask, then reconcile, then show what happened. Called from every path that can
+// put an expense onto an event: the row dropdown, the bulk bar, and Link
+// existing on the Money tab.
+async function reconcileOnAssign(eventId, incomingIds) {
+  if (!eventId || eventId === '__na' || !incomingIds || !incomingIds.length) return [];
+  let open;
+  try { open = await reconOpenPayables(eventId, incomingIds); }
+  catch (err) { toast('Could not check for commitments: ' + (err.message || err), 'err'); return []; }
+  if (!open.length) return [];
+
+  const { data: incs, error } = await sb.from('expenses')
+    .select('id, date, amount, category, vendor, vendor_actor_id, description, status, cash_source, funded_by, receipt_path, external_ref')
+    .in('id', incomingIds).is('deleted_at', null);
+  if (error) { toast('Could not read the new charges: ' + error.message, 'err'); return []; }
+
+  // Only a real, paid charge can settle a commitment. An accrual cannot settle
+  // another accrual, and offering that would just create a way to lose one.
+  const candidates = (incs || []).filter(x => x.status === 'paid');
+  if (!candidates.length) return [];
+
+  const evName = ((expDash.events || []).find(e => e.id === eventId) || {}).name ||
+                 ((moneyState.event && moneyState.event.id === eventId) ? moneyState.event.name : '') ||
+                 'this event';
+  const done = []; let stop = false;
+  for (const inc of candidates) {
+    if (stop || !open.length) break;
+    const ranked = open.map(a => ({ a, sc: reconScore(inc, a) })).sort((x, y) => y.sc - x.sc);
+    const items = ranked.map(({ a, sc }, i) => ({
+      id: a.id,
+      label: (a.vendor || a.category || 'commitment') + ' - agreed ' +
+             money(a.expected_amount != null ? a.expected_amount : a.amount),
+      hint: [a.status, a.category, a.due_date ? 'due ' + fmtDate(a.due_date) : null,
+             (i === 0 && sc >= 60) ? '\u00b7 likely match' : null].filter(Boolean).join(' \u00b7 '),
+    }));
+    items.push({ id: RECON_NO, label: 'No match - this is a separate cost', hint: 'leaves both rows alone' });
+    if (candidates.length > 1) items.push({ id: RECON_STOP, label: 'No match - and stop asking', hint: 'skips the rest of this batch' });
+    const pick = await pickFrom(
+      money(inc.amount) + ' ' + (inc.vendor || inc.category || 'charge') +
+      ' \u2014 does this settle a commitment on ' + evName + '?',
+      items, { placeholder: 'pick the commitment it pays, or say it is separate' });
+    if (!pick || pick.id === RECON_NO) continue;
+    if (pick.id === RECON_STOP) { stop = true; continue; }
+    const acc = open.find(a => a.id === pick.id);
+    if (!acc) continue;
+    try {
+      done.push(await reconMerge(inc, acc));
+      open = open.filter(a => a.id !== acc.id);
+    } catch (err) {
+      toast('Reconcile failed: ' + (err.message || err), 'err');
+    }
+  }
+  if (done.length) await showReconReport(done, eventId, evName);
+  return done;
+}
+
+// The final confirmation. Shows both figures and the result for every match, and
+// names the double-counted cost that is no longer there - the number that proves
+// the merge actually did something.
+async function showReconReport(items, eventId, evName) {
+  const { data: after } = await sb.from('v_event_money')
+    .select('expenses, expenses_paid, expenses_owed, revenue, net').eq('event_id', eventId).single();
+  const removed = items.reduce((t, i) => t + i.removed, 0);
+  const rows = items.map(i => {
+    const diff = i.charged - i.agreed;
+    const vary = Math.abs(diff) < 0.005 ? 'exactly as agreed'
+      : money(Math.abs(diff)) + (diff > 0 ? ' over' : ' under') + ' the agreed figure';
+    return '<div class="recon-item">' +
+      '<div class="recon-payee">' + escapeHtml(i.payee) +
+        (i.category ? ' <span class="muted">\u00b7 ' + escapeHtml(i.category) + '</span>' : '') + '</div>' +
+      '<div class="recon-line"><span>committed</span><b>' + money(i.agreed) + '</b><span class="muted">' +
+        escapeHtml(i.wasStatus) + (i.dueDate ? ' \u00b7 due ' + escapeHtml(fmtDate(i.dueDate)) : '') + '</span></div>' +
+      '<div class="recon-line"><span>charged</span><b>' + money(i.charged) + '</b><span class="muted">' +
+        escapeHtml(fmtDate(i.chargedDate)) + (i.source ? ' \u00b7 ' + escapeHtml(i.source) : '') + '</span></div>' +
+      '<div class="recon-line result"><span>result</span><b>paid ' + money(i.charged) + '</b><span class="muted">' +
+        escapeHtml(vary) + '</span></div>' +
+      '<div class="recon-note">Duplicate charge row removed' +
+        (i.refCarried ? '; its bank reference moved to the surviving row so a re-import cannot bring it back' : '') +
+        (i.linkedActor ? '; payee actor link carried across' : '') + '.' +
+        (i.stillUnlinked ? ' <b>No actor linked</b> \u2014 link the payee on the Expenses tab if they may need a 1099.' : '') +
+      '</div></div>';
+  }).join('');
+  const totals = '<div class="recon-total">' +
+    '<div><span>Double-counted cost removed</span><b>' + money(removed) + '</b></div>' +
+    (after ? '<div><span>Event cost now</span><b>' + money(after.expenses) + '</b><span class="muted">' +
+        money(after.expenses_paid) + ' paid' +
+        (Number(after.expenses_owed) > 0 ? ' \u00b7 ' + money(after.expenses_owed) + ' still owed' : '') +
+      '</span></div>' +
+      '<div><span>Event net</span><b class="' + (Number(after.net) < 0 ? 'neg' : 'pos') + '">' +
+        money(after.net) + '</b></div>' : '') +
+    '</div>';
+  const ov = document.createElement('div');
+  ov.className = 'pick-ov';
+  ov.innerHTML = '<div class="pick-box recon-box">' +
+    '<div class="pick-head">Reconciled \u2014 ' + items.length + ' commitment' + (items.length > 1 ? 's' : '') +
+      ' settled<span class="pick-x" title="Close">&times;</span></div>' +
+    '<div class="recon-body"><div class="recon-sub">' + escapeHtml(evName) + '</div>' + rows + totals + '</div>' +
+    '<div class="recon-foot"><button type="button" class="money-add-btn" data-recon-done>Done</button></div>' +
+    '</div>';
+  document.body.appendChild(ov);
+  await new Promise((resolve) => {
+    const close = () => { ov.remove(); document.removeEventListener('keydown', onKey, true); resolve(); };
+    const onKey = (e) => { if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); close(); } };
+    ov.addEventListener('click', (e) => {
+      if (e.target === ov || e.target.classList.contains('pick-x') || e.target.closest('[data-recon-done]')) close();
+    });
+    document.addEventListener('keydown', onKey, true);
+  });
+}
+
+
 // Shared markup for the 5 money sections (used by both the modal and the inline hub section).
 function moneySectionsHTML(data) {
   const { tk, inc, exp, don, spo, sponsors } = data;
+  // Linking the payee to an ACTOR (not just typing a name) is what makes a row
+  // rulable for a 1099 later — 166 had to be rebuilt per-payee precisely because
+  // free-text vendor names cannot be totalled reliably. Offered here so the link
+  // happens at entry, when the person entering it knows who they mean.
+  const actorSel = (f, label) => `<select data-f="${f}" title="Links this row to an actor, so payments to them total correctly for a 1099"><option value="">${label}</option>${
+    (moneyState.actors || []).map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('')}</select>`;
   const list = (arr, fn) => (arr && arr.length ? arr.map(fn).join('') : '<div class="money-empty">none</div>');
   const del = (tbl, rid) => `<button type="button" class="money-del" data-money-del="${tbl}:${escapeHtml(rid)}" title="Remove">✕</button>`;
   const addBtn = (k) => `<button type="button" class="money-add-btn" data-money-add="${k}">Add</button>`;
@@ -7752,7 +7975,7 @@ function moneySectionsHTML(data) {
       <div class="money-sec-head"><h4>Other income (bar / vendor / merch — not tickets)</h4>${owedNote('income', inc.data)}</div>
       ${list(inc.data, r => `<div class="money-row${moneyIsOwed('income', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.category || '—')}${
         r.description ? ' <span class="muted">· ' + escapeHtml(r.description) + '</span>' : ''}${moneyStatusHTML('income', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('income', r)}${del('income', r.id)}</div>`)}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${stateSel('income')}${addBtn('income')}</div>
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${actorSel('actor', '— payer —')}${stateSel('income')}${addBtn('income')}</div>
     </div>
     <div class="money-section">
       <div class="money-sec-head"><h4>Expenses</h4>${owedNote('expenses', exp.data)}
@@ -7760,7 +7983,7 @@ function moneySectionsHTML(data) {
       ${list(exp.data, r => `<div class="money-row${moneyIsOwed('expenses', r) ? ' owed' : ''}"><span class="mr-when">${escapeHtml(mShort(r.date))}</span><span class="mr-main">${escapeHtml(r.vendor || r.category || '—')}${
         r.vendor && r.category ? ' <span class="muted">· ' + escapeHtml(r.category) + '</span>' : ''}${moneyStatusHTML('expenses', r)}</span><span class="mr-amt">${money(r.amount)}</span>${settle('expenses', r)}${del('expenses', r.id)}</div>`)}
       ${moneyLinkHTML()}
-      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category"><input data-f="vendor" placeholder="Payee / vendor">${stateSel('expenses')}<input data-f="due" type="date" title="Due date — only used when it is not paid yet">${addBtn('expense')}</div>
+      <div class="money-add"><input data-f="amount" type="number" min="0" step="0.01" placeholder="Amount $"><input data-f="category" placeholder="Category">${actorSel('vendor_actor', '— payee —')}<input data-f="vendor" placeholder="…or type a payee">${stateSel('expenses')}<input data-f="due" type="date" title="Due date — only used when it is not paid yet">${addBtn('expense')}</div>
     </div>
     <div class="money-section">
       <h4>Donations</h4>
@@ -7837,7 +8060,19 @@ async function moneyMutate(targetEl, eventId, container) {
       ledger: moneyLedger(), status: st, expected_amount: amt,
       settled_at: settled ? new Date().toISOString() : null,
     };
+    if (tbl === 'income' && v('actor')) row.actor_id = v('actor');
     if (tbl === 'expenses') {
+      const pickedActor = (moneyState.actors || []).find(a => a.id === v('vendor_actor'));
+      if (pickedActor) {
+        row.vendor_actor_id = pickedActor.id;
+        row.vendor = v('vendor') || pickedActor.display_name;
+      } else if (v('vendor')) {
+        // Typed a name that IS already an actor? Link it rather than leaving a
+        // second, unlinked spelling of the same payee in the books.
+        const hit = (moneyState.actors || []).find(a =>
+          a.display_name.toLowerCase() === v('vendor').toLowerCase());
+        if (hit) row.vendor_actor_id = hit.id;
+      }
       if (v('vendor')) row.vendor = v('vendor');
       // A due date on an already-paid row is noise, so it is only kept while owed.
       if (!settled && v('due')) row.due_date = v('due');
@@ -11535,6 +11770,12 @@ async function setExpenseEvent(id, val) {
   const x = expDash.rows.find(r => r.id === id); if (x) { x.event_id = patch.event_id; x.event_na = patch.event_na; }
   toast(val === '__na' ? 'Marked N/A' : val ? 'Assigned to event' : 'Needs an event', 'ok');
   renderExpensesBody();
+  // Filing a charge against an event is the only moment we can tell whether it
+  // pays something already promised. Ask now, or double-count forever.
+  if (val && val !== '__na') {
+    const settled = await reconcileOnAssign(val, [id]);
+    if (settled.length) loadExpenses();
+  }
 }
 $('panel-expenses').addEventListener('input', (e) => { const q = e.target.closest('[data-expq]'); if (q) { expDash.q = q.value; renderExpensesBody(); } });
 $('panel-expenses').addEventListener('change', (e) => {
@@ -11574,7 +11815,11 @@ $('panel-expenses').addEventListener('change', (e) => {
     const v = be.value;
     const patch = v === '__na' ? { event_id: null, event_na: true } : { event_id: v, event_na: false };
     const label = v === '__na' ? 'to overhead (N/A)' : 'to ' + ((expDash.events.find(x => x.id === v) || {}).name || 'event');
-    bulkExpense(patch, label); be.value = ''; return;
+    bulkExpense(patch, label).then((ids) => {
+      if (!ids || v === '__na') return;
+      return reconcileOnAssign(v, ids).then((settled) => { if (settled.length) loadExpenses(); });
+    });
+    be.value = ''; return;
   }
   const bv = e.target.closest('[data-bulkva]'); if (bv && bv.value) {
     const name = (expDash.actors.find(a => a.id === bv.value) || {}).display_name || 'actor';
@@ -11609,6 +11854,7 @@ async function bulkExpense(patch, label) {
   expDash._dupe = null;
   toast('Updated ' + ids.length + ' expense' + (ids.length > 1 ? 's' : ''), 'ok');
   renderExpensesBody();
+  return ids;
 }
 
 async function setExpenseVerified(ids, on) {

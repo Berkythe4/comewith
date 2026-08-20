@@ -1,3 +1,59 @@
+# Carryover — 2026-08-20 (Payables, accruals on both sides, and reconciliation · DESKTOP)
+
+**Deployed to master for Keith's review.** Migration **177** applied to prod and verified;
+highest applied is now `177_payables.sql`. All financial views (including the new
+`v_payables`) return anon **401**. Latest LEARNINGS: **§34**.
+
+**What changed, in one line:** costs can now be recorded as *committed* before they are
+*paid*, and when the real charge shows up later the two get merged instead of double-counted.
+
+*Shipped*
+- **`expenses.status`** (`accrued` → `invoiced` → `paid`) plus `expected_amount`,
+  `settled_at`, `due_date` — the mirror of what 161 did for income. New `v_payables`.
+- **Each view picks a basis, and that is the actual decision:** `v_pl_monthly` counts all
+  three (cost is incurred when agreed); `v_cash_position`, `v_capital`, `v_contractor_1099`
+  and `v_tax_year` count `paid` only. The 1099 / tax year is now
+  `coalesce(settled_at::date, date)` — a fee accrued in December and paid in January is next
+  year's form.
+- **Nothing moved.** Every existing row backfilled to `paid` with `settled_at` null, so the
+  coalesce falls back to `date`. Proved by snapshotting 396 view keys, applying inside a
+  transaction, diffing, and rolling back before applying for real.
+- **Event Money tab rebuilt:** summary strip separating earned from banked · per-row
+  `settle` / `pay` (asks the final amount, keeps the agreed one as variance, and asks which
+  pot paid it) · **🔗 Link existing** searchable drawer, because 203 of 266 expenses were
+  `event_na` and retyping one to attach it is how a charge gets recorded twice · **actor
+  link on the add form** for both payer (income) and payee (expenses), with auto-match when
+  a typed name is already an actor.
+- **Reconciliation on assign.** Filing a charge against an event that has open commitments
+  now asks whether it settles one, ranks the candidates (same actor ≫ same name > amount),
+  merges into the **accrual** (it holds the agreed figure), and shows a confirmation naming
+  the double-counted cost removed and the event's new cost / net. Wired into all three
+  assign paths: the row dropdown, the bulk bar, and Link existing.
+  **`external_ref` moves to the survivor before the duplicate is retired** — the 169 lesson;
+  verified on prod that a re-push is then blocked by `uq_expenses_external_ref`.
+- Expenses tab: `Owed by us` / `Overdue` chips, status + due tags, `pay` button. "No cash
+  source" no longer fires on unpaid bills — a bill that has not been paid has not left an
+  account. P&L gained `Owed by us` / `Owed to us` cards, drawn only when non-zero.
+
+*Verified on prod, both rolled back*
+- Payable round trip: +$750 accrued left cash at $3,551.06 and raised commitments; settling
+  at $800 from the bank moved cash to $2,751.06 (exactly −$800), cleared the payable, and
+  put $800 on the 2026 1099.
+- Reconcile: $750 commitment + $800 charge = $1,550 on the event → **$800**, one row, agreed
+  $750 / actual $800 preserved, payable cleared, re-import blocked.
+
+*Parked / next*
+- **Keith is reviewing this deploy.** Nothing else was touched.
+- Payables created from the Money tab carry a `vendor` string; if no actor is picked they
+  read `no vendor` on `v_contractor_1099`. The reconcile report now says so explicitly when
+  a merged row still has no actor.
+- Everything in the 2026-08-19 "Parked / next" below still stands — Janelle's W-9, the §83(b)
+  question, the 8 upcoming events needing expected revenue, and the WBH bulk-edit review.
+
+*The previous close (2026-08-19, FP&A) begins immediately below and is unchanged.*
+
+---
+
 # Carryover — 2026-08-19 (FP&A close-out: 1099s, gear, photo library, Blue Sky · DESKTOP)
 
 **State summary**
