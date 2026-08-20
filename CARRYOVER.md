@@ -45,15 +45,27 @@ filters staged ones out server-side, so all three public pages are covered at on
 - The homepage card thumbnail comes from the first **public** YouTube link, so a staged
   video cannot leave a broken image on the front page.
 
-**Event Hub > Content** is control-center now: a "Recap videos & audio" list that says
-plainly it is the only list the public page renders, with label, live/staged and remove
-editable inline. It also warns when the event is not featured (nothing is public either
-way). `content_assets` stays below as the internal clip library - its "on site" chip was
-removed, because nothing public reads that table.
+**Event Hub > Content is a real control center.** Three lists, every one of them
+editable where you read it - no modal to change a label or a stage:
+
+- **On the public page** (`recap_videos`) - label, artist tag, live/staged, open, remove.
+  Says plainly it is the only list the site renders, and warns when the event is not
+  featured (nothing is public either way).
+- **Content library** (`content_assets`) - label, full/clip, video/audio, duration, artist.
+  Internal; nothing here reaches the site until you hit **^ To the site**, which adds it to
+  the list above **staged**, never live. That button only appears where it would do
+  something. Its old "on site" chip was removed - nothing public reads that table.
+- **Social posts** - title, stage and date inline; **Full brief ->** still opens the modal
+  for caption, channels, assets and CTA.
+
+Summary cards on top: on the site / staged / library / posts / photos.
+Editing a post's date keeps the time already on it rather than moving everything to
+midnight.
 
 ## Tests
 `node scripts/test_money_panel.mjs` - `test_data_health.mjs` - `test_events_list.mjs` -
 `test_recap_publish.mjs` (asserts the staged rule in the SQL and the JS agree) -
+`test_content_center.mjs` -
 `python scripts/check_anon_exposure.py`
 
 ## Parked / next
