@@ -752,6 +752,11 @@ table.rbx-tbl tbody tr.rbx-drop-into td { border-top: 2px solid var(--lime, #a7e
 /* 178 - the grid: the company P&L's own table, scoped to one event */
 /* Inline editors on the events list (type / stage / status / public) */
 .ev-inline { font-size: 0.72rem; padding: 3px 4px; max-width: 128px; }
+/* A staged recap video is saved but never sent to the site. */
+.recap-vid-row.staged { opacity: .72; }
+.recap-vid-row.staged .recap-vid-url { border-style: dashed; }
+.cv-row.staged .li-main { opacity: .72; }
+.cv-live { color: var(--lime); } .cv-staged { color: var(--amber); }
 /* Multi-select filter chips */
 .ev-filters { margin: 0 0 14px; display: flex; flex-direction: column; gap: 6px; }
 .ev-filter-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
@@ -7185,23 +7190,36 @@ function recapArtistSelect(sel) {
     .concat(RECAP_ARTISTS.map(a => `<option value="${escapeHtml(a.id)}"${a.id === sel ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`));
   return `<select class="hub-status-sel recap-vid-artist" style="flex:0 0 auto;max-width:150px;">${opts.join('')}</select>`;
 }
-function recapVidRow(label, url, artistId) {
-  return `<div class="recap-vid-row" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
-    <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 28%;min-width:140px;">
-    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;min-width:180px;">
+// A MISSING FLAG MEANS PUBLIC, matching v_public_recap exactly. Every video on
+// the site today has no flag and must keep rendering; only an explicit false
+// stages one. Read it through this one helper so the two sides cannot drift.
+const recapIsPublic = (v) => !v || v.is_public !== false;
+
+function recapVidRow(label, url, artistId, isPublic) {
+  const pub = isPublic !== false;
+  return `<div class="recap-vid-row${pub ? '' : ' staged'}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
+    <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 24%;min-width:130px;">
+    <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;min-width:170px;">
     ${recapArtistSelect(artistId || '')}
+    <select class="hub-status-sel recap-vid-pub" style="flex:0 0 auto;max-width:126px;"
+      title="Staged means it is saved here but never sent to the site — use it while the track is still private">
+      <option value="1"${pub ? ' selected' : ''}>\uD83C\uDF10 On the site</option>
+      <option value="0"${pub ? '' : ' selected'}>\u25CB Staged</option>
+    </select>
     <button type="button" class="hub-btn ghost" data-del-recap-vid title="Remove" style="flex:0 0 auto;padding:6px 11px;">✕</button>
   </div>`;
 }
 function recapVidRows(list) {
   let arr = [];
   try { arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []); } catch (_) { arr = []; }
-  return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id)).join('');
+  return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id, recapIsPublic(v))).join('');
 }
 // Add / remove rows + on-demand link check (delegated, attached once).
 document.addEventListener('click', (e) => {
   if (e.target.closest('[data-add-recap-vid]')) {
-    const list = $('recapVidList'); if (list) list.insertAdjacentHTML('beforeend', recapVidRow('Watch the recap', ''));
+    // New rows start STAGED. Pasting a link and publishing it are different
+    // decisions, and event_photos.is_public made the same call in 175.
+    const list = $('recapVidList'); if (list) list.insertAdjacentHTML('beforeend', recapVidRow('Watch the recap', '', '', false));
     return;
   }
   const del = e.target.closest('[data-del-recap-vid]');
@@ -7400,6 +7418,7 @@ async function submitEditEvent(id) {
     const o = {
       label: (r.querySelector('.recap-vid-label')?.value || '').trim() || 'Watch the recap',
       url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
+      is_public: (r.querySelector('.recap-vid-pub')?.value || '1') === '1',
     };
     const aid = (r.querySelector('.recap-vid-artist')?.value || '').trim();
     if (aid) o.artist_id = aid;   // tags this content to an artist's profile
@@ -7412,22 +7431,32 @@ async function submitEditEvent(id) {
   if (recapVideos.length) {
     const results = await resolveMediaUrls(recapVideos.map(v => v.url));
     if (results) {
-      const bad = [];
+      const staged = [];
       recapVideos.forEach((v, i) => {
         const r = results[i];
-        if (r && r.ok && r.url) v.url = r.url;
-        else if (r && !r.ok) bad.push(`• "${v.label || 'recap'}": ${r.reason}`);
+        if (r && r.ok && r.url) { v.url = r.url; return; }
+        if (r && !r.ok && v.is_public) {
+          // The old confirm here PROMISED these would "stay hidden on the site"
+          // and nothing enforced it - they were stored and rendered as dead
+          // players. Now the promise is kept by actually staging them.
+          v.is_public = false;
+          staged.push(`• "${v.label || 'recap'}" — ${r.reason}`);
+        }
       });
-      if (bad.length && !confirm(`These recap links won't play on the website:\n\n${bad.join('\n\n')}\n\nSave anyway? They'll be stored but stay hidden on the site until fixed.`)) {
-        const b = $('kpiModalSubmit'); if (b) { b.disabled = false; b.textContent = 'Save changes'; }
-        return;
+      if (staged.length) {
+        alert('Saved as STAGED, so nothing broken reaches the site:' +
+          String.fromCharCode(10, 10) + staged.join(String.fromCharCode(10, 10)) +
+          String.fromCharCode(10, 10) +
+          'They are on the event and only on the event. Switch each one to "On the site" once the track is public.');
       }
     }
   }
   patch.recap_videos = recapVideos;
   // Back-compat: youtube_url holds the first YOUTUBE link (SoundCloud links live
   // only in recap_videos). Used for the card thumbnail.
-  patch.youtube_url = (recapVideos.find(v => /youtu\.?be/i.test(v.url)) || {}).url || null;
+  // A staged video must not leave a broken thumbnail on the homepage card, so
+  // this mirrors what v_public_recap computes rather than taking the first link.
+  patch.youtube_url = (recapVideos.find(v => v.is_public !== false && /youtu\.?be/i.test(v.url)) || {}).url || null;
   // Hero photo: upload a new one, OR remove the existing one, OR leave it.
   const heroInput = $('evHeroFile');
   let heroFile = heroInput?.files?.[0];
@@ -9841,6 +9870,87 @@ window.addEventListener('drop', (e) => {
 // client-side (downscaleImage): ~1600px full + ~480px grid thumb — the public
 // gallery serves thumbs so egress stays inside the Supabase Free plan.
 const PHOTO_BASE = SUPABASE_URL + '/storage/v1/object/public/event-photos/';
+
+// ---- Recap videos, editable where you read them ------------------------------
+// This is the ONLY list on this page that the public site renders, so it says so
+// and it is editable in place. Everything important about a recap video - what it
+// is called, and whether it is live - is one click away instead of behind the
+// event edit modal.
+function hubRecapVideosHTML() {
+  const ev = hub.event || {};
+  let vids = [];
+  try { vids = Array.isArray(ev.recap_videos) ? ev.recap_videos : JSON.parse(ev.recap_videos || '[]'); }
+  catch (_) { vids = []; }
+  vids = vids.filter(v => v && v.url);
+  const live = vids.filter(recapIsPublic).length;
+  const staged = vids.length - live;
+  const rows = vids.map((v, i) => {
+    const pub = recapIsPublic(v);
+    return '<div class="hub-li cv-row' + (pub ? '' : ' staged') + '">' +
+      '<div class="li-main"><input class="modal-input" data-cv-label="' + i + '" value="' +
+        escapeHtml(v.label || '') + '" placeholder="What is it called?" style="max-width:230px;font-size:.82em;">' +
+        '<div class="li-sub">' + escapeHtml(mediaKindLabel(v.url)) + ' \u00b7 ' +
+        (pub ? '<span class="cv-live">on the site</span>'
+             : '<span class="cv-staged">staged \u2014 not on the site</span>') + '</div></div>' +
+      '<span class="hub-li-actions">' +
+        '<select class="hub-status-sel" data-cv-pub="' + i + '" style="max-width:132px;font-size:.78em;" ' +
+          'title="Staged keeps it here and off the site \u2014 use it while the track is still private">' +
+          '<option value="1"' + (pub ? ' selected' : '') + '>\uD83C\uDF10 On the site</option>' +
+          '<option value="0"' + (pub ? '' : ' selected') + '>\u25CB Staged</option></select>' +
+        '<a class="hub-mini" href="' + escapeHtml(v.url) + '" target="_blank" rel="noopener" title="Open the link">\u2197</a>' +
+        '<button class="hub-mini exp-del" data-cv-del="' + i + '" title="Remove from this event">\u2715</button>' +
+      '</span></div>';
+  }).join('');
+  return '<div class="hub-sec-bar" style="margin-top:4px;"><h3 style="font-size:.82rem;">\uD83C\uDFA5 Recap videos &amp; audio</h3>' +
+    '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
+    '<span class="li-sub">' + live + ' on the site' + (staged ? ' \u00b7 ' + staged + ' staged' : '') + '</span>' +
+    '<button class="hub-mini" data-cv-add>\u2795 Add a link</button></span></div>' +
+    '<div class="section-sub">The only list here the public page renders. <b>Staged</b> means saved on the event and never sent to the site \u2014 use it while a SoundCloud track or YouTube video is still private.' +
+    (hub.event && !hub.event.is_featured
+      ? ' <b>This event is not featured</b>, so none of its recap content is public yet either way.'
+      : '') + '</div>' +
+    '<div class="hub-list" style="margin-bottom:10px;">' +
+      (rows || '<div class="hub-empty">No recap links yet.</div>') + '</div>';
+}
+
+// One writer for the array. youtube_url is kept in step here too, because it
+// drives the homepage card thumbnail and a staged video must not leave a broken
+// image there - the same rule v_public_recap computes server-side.
+async function hubSaveRecap(vids) {
+  const patch = {
+    recap_videos: vids,
+    youtube_url: (vids.find(v => recapIsPublic(v) && /youtu\.?be/i.test(v.url || '')) || {}).url || null,
+  };
+  const { error } = await sb.from('events').update(patch).eq('id', hub.eventId);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return false; }
+  hub.event.recap_videos = vids;
+  hub.event.youtube_url = patch.youtube_url;
+  return true;
+}
+function hubRecapList() {
+  let v = [];
+  try { v = Array.isArray(hub.event.recap_videos) ? hub.event.recap_videos : JSON.parse(hub.event.recap_videos || '[]'); }
+  catch (_) { v = []; }
+  return v.filter(x => x && x.url);
+}
+
+// Adding one validates first, and a link that will not embed is added STAGED
+// rather than refused - staging a private track is the entire point.
+async function hubRecapAdd() {
+  const url = (prompt('Paste a YouTube or SoundCloud link:') || '').trim();
+  if (!url) return;
+  const label = (prompt('What should it be called on the site?', 'Watch the recap') || '').trim() || 'Watch the recap';
+  const res = await resolveMediaUrls([url]);
+  const r = res && res[0];
+  const item = { label, url: (r && r.ok && r.url) ? r.url : url, is_public: !!(r && r.ok) };
+  const vids = hubRecapList().concat([item]);
+  if (!(await hubSaveRecap(vids))) return;
+  toast(item.is_public
+    ? 'Added and live on the site'
+    : 'Added as STAGED \u2014 ' + ((r && r.reason) || 'it will not embed yet'), item.is_public ? 'ok' : 'warn');
+  hubSecPhotos();
+}
+
 async function hubSecPhotos() {
   const { data, error } = await sb.from('event_photos')
     .select('id, storage_path, thumb_path, caption, sort_order, is_public, photographer_actor_id, credit_line, shot_on')
@@ -9893,8 +10003,8 @@ async function hubSecPhotos() {
   vids.forEach(v => { if (!seenUrls.has(v.url)) hub.assets.push({ url: v.url, label: v.label, kind: 'full', media: /soundcloud/.test(v.url) ? 'audio' : 'video', is_public: true, _legacy: true }); });
   const assetRow = (a) => `<div class="hub-li" style="padding:5px 0;">
       <div class="li-main"><a href="${escapeHtml(a.url)}" target="_blank" rel="noopener">${escapeHtml(a.label || mediaKindLabel(a.url))}</a>
-        <div class="li-sub">${escapeHtml(mediaKindLabel(a.url))} · ${a.kind === 'clip' ? '✂️ clip' : '🎬 full'}${a.duration_note ? ' · ' + escapeHtml(a.duration_note) : ''}${a.is_public ? ' · 🌐 on site' : ''}</div></div></div>`;
-  const fullRows = hub.assets.filter(a => a.kind !== 'clip').map(assetRow).join('');
+        <div class="li-sub">${escapeHtml(mediaKindLabel(a.url))} · ${a.kind === 'clip' ? '✂️ clip' : '🎬 full'}${a.duration_note ? ' · ' + escapeHtml(a.duration_note) : ''}</div></div></div>`;
+  const fullRows = hub.assets.filter(a => a.kind !== 'clip' && !a._legacy).map(assetRow).join('');
   const clipRows = hub.assets.filter(a => a.kind === 'clip').map(assetRow).join('');
   const postRows = (hub.eventPosts).map(p => {
     const when = p.posted_at ? '✅ posted ' + fmtDate(p.posted_at) : (p.scheduled_for ? '📅 ' + fmtDateTime(p.scheduled_for) : 'unscheduled');
@@ -9910,7 +10020,9 @@ async function hubSecPhotos() {
         <button class="hub-btn ghost" data-hub-postlink>🔗 Link existing post</button>
       </span></div>
     <div class="kpi-hint" style="margin-bottom:8px;">Everything published or planned for this event — recap videos, and the social posts, in one place. Create a post with the full brief (caption, channels, schedule, assets, CTA) so it's ready to publish; link an existing one to attach it here.</div>
-    <div class="hub-sec-bar" style="margin-top:4px;"><h3 style="font-size:.82rem;">🎬 Full-length content</h3><button class="hub-mini" data-hub-addasset="full">➕ Link full-length</button></div>
+    ${hubRecapVideosHTML()}
+    <div class="hub-sec-bar" style="margin-top:4px;"><h3 style="font-size:.82rem;">🎬 Other full-length assets</h3><button class="hub-mini" data-hub-addasset="full">➕ Link full-length</button></div>
+    <div class="section-sub">An internal library — masters, raw cuts, anything not on the public page.</div>
     <div class="hub-list" style="margin-bottom:10px;">${fullRows || '<div class="li-sub">None linked yet.</div>'}</div>
     <div class="hub-sec-bar"><h3 style="font-size:.82rem;">✂️ Social-ready clips</h3><button class="hub-mini" data-hub-addasset="clip">➕ Add clip</button></div>
     <div class="hub-list" style="margin-bottom:12px;">${clipRows || '<div class="li-sub">No clips yet — add the social cut-downs here so they\'re ready to post.</div>'}</div>
@@ -10829,7 +10941,28 @@ const HUB_ACTIONS = {
 $('hubBack').addEventListener('click', () => { $('sidebarNav').querySelector('button[data-tab="events"]').click(); });
 
 $('panel-eventhub').addEventListener('change', (e) => {
-  const cb = e.target.closest('[data-eq-load]'); if (cb) hubToggleLoaded(cb.dataset.eqLoad, cb.checked, cb);
+  const cb = e.target.closest('[data-eq-load]'); if (cb) { hubToggleLoaded(cb.dataset.eqLoad, cb.checked, cb); return; }
+  const cvp = e.target.closest('[data-cv-pub]');
+  if (cvp) {
+    const vids = hubRecapList();
+    const i = +cvp.dataset.cvPub;
+    if (!vids[i]) return;
+    vids[i].is_public = cvp.value === '1';
+    hubSaveRecap(vids).then(ok => {
+      if (!ok) return;
+      toast(vids[i].is_public ? 'Live on the site' : 'Staged — off the site', 'ok');
+      hubSecPhotos();
+    });
+    return;
+  }
+  const cvl = e.target.closest('[data-cv-label]');
+  if (cvl) {
+    const vids = hubRecapList();
+    const i = +cvl.dataset.cvLabel;
+    if (!vids[i]) return;
+    vids[i].label = cvl.value.trim() || 'Watch the recap';
+    hubSaveRecap(vids).then(ok => { if (ok) toast('Saved', 'ok'); });
+  }
 });
 $('panel-eventhub').addEventListener('click', (e) => {
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
@@ -10840,6 +10973,16 @@ $('panel-eventhub').addEventListener('click', (e) => {
   const moneyEl = e.target.closest(MONEY_SEL);
   if (moneyEl && hub.section === 'money') { hubMoneyMutate(moneyEl); return; }
   const fin = e.target.closest('[data-fin-toggle]'); if (fin) { fin.dataset.finToggle === 'audited' ? hubSetAudited() : hubToggleRelease(); return; }
+  if (e.target.closest('[data-cv-add]')) { hubRecapAdd(); return; }
+  const cvd = e.target.closest('[data-cv-del]');
+  if (cvd) {
+    const vids = hubRecapList();
+    const v = vids[+cvd.dataset.cvDel];
+    if (!v || !confirm('Remove "' + (v.label || v.url) + '" from this event?')) return;
+    vids.splice(+cvd.dataset.cvDel, 1);
+    hubSaveRecap(vids).then(ok => { if (ok) { toast('Removed', 'ok'); hubSecPhotos(); } });
+    return;
+  }
   const ep = e.target.closest('[data-hub-email-person]'); if (ep) { hubEmailPeople(ep.dataset.hubEmailPerson); return; }
   if (e.target.closest('[data-hub-email-people]')) { hubEmailPeople(); return; }
   if (e.target.closest('[data-hub-copy-emails]')) { hubCopyPeopleEmails(); return; }

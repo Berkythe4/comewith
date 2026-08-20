@@ -1,3 +1,71 @@
+# Carryover - 2026-08-20 (SECURITY: the ledger was public - DESKTOP)
+
+## READ THIS FIRST
+
+**Anonymous callers could read the money.** 29 expense rows with payee names and
+amounts, 59 ticketing rows, 16 donations with donor names, 12 sponsorships, 9 income
+rows. **Closed in migration 185**, verified against prod before and after. Nothing
+needs doing - this is a record, not a task.
+
+`can_see_event_financials()` (from 043) checked *what* had been released and never
+*who* was asking, and RLS policies apply to role `public`, which includes `anon`. One
+missing `is_admin()`. See **LEARNINGS SS37** - the more important half of that section
+is *why every check said it was fine*.
+
+**Two checks were lying, and one of them was mine:**
+- A grant check cannot see an RLS leak. The financial *views* were correctly revoked;
+  the *tables* were not, and that is a different mechanism.
+- **Every anon REST check in this session was run with an empty API key.** There is no
+  `SUPABASE_ANON_KEY` in `.env` - it is `SUPABASE_PROD_PUBLISHABLE_KEY`. An empty key
+  answers 401 for everything, so the check printed exactly what a pass looks like. The
+  anon verifications reported after 177, 178 and 180 were worthless. The invariant did
+  hold for the views, but nobody had shown it.
+
+**Use `python scripts/check_anon_exposure.py` from now on.** It proves the key works
+before trusting a single 401, and reads the **body** - on a table `200 []` is correct
+and `200` with rows is a breach. CLAUDE.md now says so too.
+
+Also revoked (186): `v_equipment_roi`, `v_mailing_list_health`, `v_metric_prior` -
+internal, nothing public read them. `v_kpi_targets_current` deliberately left public:
+`tools/visualizer.html` reads it with **no sign-in**, so revoking would break a working
+tool silently. Your call whether the tool gets auth or the view stays public.
+
+## Also shipped: staged recap videos (184)
+
+**You can now paste a private SoundCloud or YouTube link and it will not reach the
+site.** Each entry in `events.recap_videos` carries `is_public`; `v_public_recap`
+filters staged ones out server-side, so all three public pages are covered at once.
+
+- **A missing flag means public**, so every video live today keeps rendering - no
+  backfill, nothing goes dark.
+- **New rows start staged.** Pasting a link and publishing it are different decisions.
+- **A link that will not embed is saved staged automatically.** The old confirm claimed
+  private links would "stay hidden on the site" and nothing enforced it - they rendered
+  as dead players. That promise is now kept.
+- The homepage card thumbnail comes from the first **public** YouTube link, so a staged
+  video cannot leave a broken image on the front page.
+
+**Event Hub > Content** is control-center now: a "Recap videos & audio" list that says
+plainly it is the only list the public page renders, with label, live/staged and remove
+editable inline. It also warns when the event is not featured (nothing is public either
+way). `content_assets` stays below as the internal clip library - its "on site" chip was
+removed, because nothing public reads that table.
+
+## Tests
+`node scripts/test_money_panel.mjs` - `test_data_health.mjs` - `test_events_list.mjs` -
+`test_recap_publish.mjs` (asserts the staged rule in the SQL and the JS agree) -
+`python scripts/check_anon_exposure.py`
+
+## Parked / next
+- **Decide on `tools/visualizer.html`** - it is served publicly and has no auth.
+- 502 photos still need a bulk photographer credit.
+- Everything in the earlier 2026-08-20 close below still stands (177-183: payables,
+  forecast, per-event P&L, the data-health audit and its nightly job).
+
+*The previous close begins immediately below.*
+
+---
+
 # Carryover — 2026-08-20 (Payables → forecast → a full ecosystem audit · DESKTOP)
 
 **Deployed to master. Migrations 177–183 applied to prod and verified.** Every financial

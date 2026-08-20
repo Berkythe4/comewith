@@ -865,3 +865,70 @@ already existed, 1 guest linked by exact email, 8 donations linked by exact name
 179), 16 blank event stages filled from the status each event already carried. Zero
 risky matches — the 7 category-shaped "vendors" were correctly left alone.
 
+---
+
+## Section 37 — The ledger was public, and every check said it was fine (2026-08-20)
+
+Found while answering a question about private SoundCloud links. Anonymous callers
+could read **29 expense rows with payee names and amounts, 59 ticketing rows, 16
+donations with donor names, 12 sponsorships and 9 income rows**. Closed in 185.
+
+### The bug
+
+043 put this on all five money tables:
+
+```sql
+for select using (can_see_event_financials(event_id))
+```
+
+and defined the helper as:
+
+```sql
+select public.is_master_admin()
+    or (p_event_id is not null
+        and exists (select 1 from events e
+                     where e.id = p_event_id and e.financials_released));
+```
+
+**The second branch asks what has been released and never who is asking.** RLS
+policies apply to role `public`, which includes `anon`, so the moment an event had
+`financials_released = true` its money became world-readable. The intent — *staff
+see an event's money only once it is released* — was half-expressed: the release
+condition was written down, the staff condition was assumed. 185 adds
+`public.is_admin()` to that branch and nothing else changes.
+
+### The part worth remembering: two checks that couldn't see it
+
+**1. A grant check cannot see an RLS leak.** `post_apply.sql` verifies the five
+financial VIEWS are anon-revoked, and they are — that check has been passing
+honestly for months. But the leak was on the underlying TABLES, which carry an anon
+grant from 013's default privileges and rely on RLS alone. Different mechanism,
+invisible to a grants query.
+
+**2. Every REST spot-check in this repo was run with an empty API key.** `.env` has
+no `SUPABASE_ANON_KEY` — the variable is `SUPABASE_PROD_PUBLISHABLE_KEY`. An empty
+apikey returns **401 for everything**, public or not. So the check printed a column
+of `401`s, which is exactly what a passing run looks like. Every anon verification I
+reported this session — after 177, 178, 180 — was vacuous. The invariant happened to
+hold for the views; nobody had established that, we had just been told it in a
+convincing font.
+
+Both are the same failure: **checking a proxy for the invariant instead of the
+invariant.** The same shape as the two checks in `post_apply.sql` that cried wolf on
+their first run, and the same shape as the Bandcamp endpoint that answered HTTP 200
+with `{"error":true}` and made every track read as "not available".
+
+`scripts/check_anon_exposure.py` is the fix. It reads a known-public view first and
+**refuses to run** unless the key actually works, then reads the **body** of every
+sensitive table — because on a table `200 []` is correct and `200` with rows is a
+breach, and the status alone cannot tell you which one you have.
+
+### And a smaller one, same sweep
+
+`v_equipment_roi` (purchase prices, revenue per item), `v_mailing_list_health`
+(list size) and `v_metric_prior` (the KPI scoreboard) were anon-readable with
+nothing public reading them. Revoked in 186. `v_kpi_targets_current` was left alone
+and flagged instead: `tools/visualizer.html` reads it with **no sign-in at all**, so
+revoking would have broken a working tool silently — which is the thing this whole
+section is about.
+

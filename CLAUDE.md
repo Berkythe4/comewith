@@ -112,8 +112,20 @@ Four Come-With-specific rules on top of whichever variant you run:
   `supabase/checks/`: `pre_apply.sql` (edit its `targets` list, run before writing
   the migration) and `post_apply.sql` (run after; every row must read PASS). Two
   approvals per migration instead of one per check. `post_apply.sql` covers the
-  anon grants behind the financial views, but still run the anon REST GET → 401
-  as well — that exercises PostgREST end to end, which a grants query can't.
+  anon grants behind the financial views, but still run the anon REST sweep as
+  well — that exercises PostgREST end to end, which a grants query can't.
+- **The anon sweep is `python scripts/check_anon_exposure.py`. Do not hand-roll it.**
+  Two ways it was got wrong before, both of which reported a clean bill of health
+  over a live leak (2026-08-20, LEARNINGS §37):
+  - **There is no `SUPABASE_ANON_KEY` in `.env`.** The variable is
+    `SUPABASE_PROD_PUBLISHABLE_KEY`. An empty apikey answers **401 for everything**,
+    public or not, so a hand-rolled curl loop shows every object "blocked" and
+    proves nothing. The script reads a known-public view FIRST and refuses to
+    continue unless the key actually works.
+  - **401 is the wrong thing to look for on a TABLE.** Views are anon-revoked and
+    do answer 401. Tables carry an anon grant from 013 and rely on RLS, so they
+    answer **200 with a body** — `[]` is correct, rows are a leak. Read the body,
+    never the status.
 - **`INSERT..RETURNING` enforces the SELECT policy mid-statement.** A security-definer
   helper that re-queries the table cannot see the not-yet-visible new row, so
   `.insert().select()` fails RLS even for the creator (bit us on 097 chat DMs).
