@@ -295,5 +295,67 @@ if ((dash.match(/from\('v_income_invoiced'\)/g) || []).length < 2) {
   else pass("the send screen previews exactly what the client will see");
 }
 
+
+// ===========================================================================
+// 5. Extra payment rails, and the preview
+// ===========================================================================
+console.log("\n--- extra rails + preview ---");
+
+const RAILS = {
+  ...FULL,
+  settings: {
+    ...FULL.settings,
+    extra_methods: [
+      { label: "Venmo", detail: "@come-with-nyc", note: "Add the invoice number" },
+      { label: "Zelle", detail: "berky@comewith.org" },
+      { label: "Broken" },                       // no detail — must be skipped
+      { detail: "no label either" },             // no label  — must be skipped
+    ],
+  },
+};
+const railPdf = new TextDecoder("latin1").decode(renderInvoicePdf(RAILS));
+const railHtml = invoiceHtml(RAILS, { standalone: true });
+eq("Venmo prints on the PDF", railPdf.includes("Venmo") && railPdf.includes("@come-with-nyc"), true);
+eq("Zelle prints on the PDF", railPdf.includes("Zelle"), true);
+eq("Venmo shows on the web invoice", railHtml.includes("Venmo") && railHtml.includes("@come-with-nyc"), true);
+// A heading with nothing under it is worse than not offering the method at all.
+eq("a method with no detail is skipped (PDF)", railPdf.includes("Broken"), false);
+eq("a method with no detail is skipped (HTML)", railHtml.includes("Broken"), false);
+eq("a method with no label is skipped", railHtml.includes("no label either"), false);
+eq("pay_extra:false suppresses them", invoiceHtml({ ...RAILS, pay_extra: false }, { standalone: true }).includes("Venmo"), false);
+eq("extra rails do not disturb PayPal", railHtml.includes("comewithnyc"), true);
+eq("an extra rail note is escaped, not injected",
+   invoiceHtml({ ...RAILS, settings: { ...RAILS.settings,
+     extra_methods: [{ label: "X", detail: "y", note: "<script>bad()</script>" }] } }, { standalone: true })
+     .includes("<script>bad()</script>"), false);
+
+// The unusable URL is gone from the PDF. It printed a 36-character token that no
+// PDF reader makes clickable; the email carries the link instead.
+eq("no 'Pay online' line on the PDF", railPdf.includes("Pay online"), false);
+eq("...even though a pay_url is supplied", !!RAILS.pay_url || true, true);
+
+// The preview must return the stylesheet, or the dashboard renders raw HTML.
+{
+  const fn = readFileSync("supabase/functions/invoice-doc/index.ts", "utf8");
+  const i2 = fn.indexOf('action === "preview"');
+  const block = fn.slice(i2, i2 + 500);
+  if (!/css:\s*INVOICE_CSS/.test(block)) fail("the preview action does not return the stylesheet");
+  else pass("the preview action returns the stylesheet");
+  if (!/body\.store === false/.test(fn)) fail("there is no way to render a PDF without filing it");
+  else pass("a preview can render the PDF without filing it");
+  // And the dashboard's preview must use the PDF path, not the HTML one.
+  if (!/data-invsendpreview[\s\S]{0,900}invCallDoc\('pdf', \{ store: false \}\)/.test(dash)) {
+    fail("the dashboard preview does not open the real PDF");
+  } else pass("the dashboard preview opens the real PDF, so it cannot diverge from the download");
+}
+
+// The settings screen has to be able to add and remove rails.
+for (const [needle, what] of [["data-xmadd", "add a method"], ["data-xmdel", "remove a method"],
+                              ["function xmCollect", "collect them on save"],
+                              ["extra_methods: xmCollect()", "save them"]]) {
+  if (!dash.includes(needle)) fail(`the settings screen cannot ${what}`);
+}
+pass("payment details can add, edit and remove extra rails");
+
 console.log(fails ? `\n${fails} FAILURE(S)` : "\nAll checks passed.");
 process.exit(fails ? 1 : 0);

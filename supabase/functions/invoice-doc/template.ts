@@ -65,6 +65,9 @@ export type Settings = {
   wire_swift?: string | null;
   wire_bank_address?: string | null;
   wire_note?: string | null;
+  // Anything else you take money by - Venmo, Zelle, Cash App, Wise. Order is
+  // display order; presence is what enables it.
+  extra_methods?: Array<{ label?: string; detail?: string; note?: string }> | null;
   footer_note?: string | null;
 };
 export type InvoiceDoc = {
@@ -87,6 +90,7 @@ export type InvoiceDoc = {
   terms_text?: string | null;
   pay_paypal?: boolean;
   pay_wire?: boolean;
+  pay_extra?: boolean;
   lines: Line[];
   payments?: Payment[];
   settings: Settings;
@@ -359,6 +363,14 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
     if (s.paypal_note) pp.push(s.paypal_note);
     payMethods.push(pp);
   }
+  if (doc.pay_extra !== false) {
+    for (const m of s.extra_methods || []) {
+      if (!m || !m.label || !m.detail) continue;   // half a method is not a method
+      const block = [String(m.label), String(m.detail)];
+      if (m.note) block.push(String(m.note));
+      payMethods.push(block);
+    }
+  }
   if (doc.pay_wire !== false && s.wire_enabled && (s.wire_account || s.wire_routing)) {
     const w = ["Bank transfer (ACH / wire)"];
     if (s.wire_beneficiary) w.push(`Beneficiary: ${s.wire_beneficiary}`);
@@ -395,10 +407,10 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
       maxY = Math.max(maxY, py);
     });
     y = maxY + 10;
-    if (doc.pay_url) {
-      page.text(M, y, `Pay online: ${doc.pay_url}`, { size: 8.5, color: RED });
-      y += 16;
-    }
+    // No "Pay online: <url>" line. A PDF cannot make it clickable without link
+    // annotations, so it printed a 36-character token for somebody to retype,
+    // which is not an option at all. The email carries the link as a button,
+    // and that is the only place it is actually usable.
   } else if (t.balance <= 0 && t.paid > 0) {
     page.text(M, y, "PAID IN FULL — thank you.", { size: 10, bold: true, color: GREEN, spacing: 1 });
     y += 20;
@@ -492,6 +504,16 @@ export function invoiceHtml(doc: InvoiceDoc, opts: { standalone?: boolean; payUr
            <p class="fine">or send to <strong>${esc(handle)}</strong></p>`}
       ${s.paypal_note ? `<p class="fine">${nl2br(String(s.paypal_note))}</p>` : ""}
     </div>`);
+  }
+  if (doc.pay_extra !== false) {
+    for (const m of s.extra_methods || []) {
+      if (!m || !m.label || !m.detail) continue;
+      payBlocks.push(`<div class="pay">
+        <h4>${esc(m.label)}</h4>
+        <p><strong>${esc(m.detail)}</strong></p>
+        ${m.note ? `<p class="fine">${nl2br(String(m.note))}</p>` : ""}
+      </div>`);
+    }
   }
   if (doc.pay_wire !== false && s.wire_enabled && (s.wire_account || s.wire_routing)) {
     const rows: [string, unknown][] = [

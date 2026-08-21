@@ -1083,6 +1083,8 @@ table.money-grid td.num .m-num { width: 88px; }
   border: 1px solid var(--border); border-left: 3px solid var(--red); }
 .inv-strip-rows { display: flex; gap: 6px; flex-wrap: wrap; }
 .inv-strip-item { text-align: left; }
+.xm-row { display: grid; grid-template-columns: 1fr 1.3fr 1.6fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
+@media (max-width: 700px) { .xm-row { grid-template-columns: 1fr; } }
 /* The widened space belongs to the description. The numeric columns were never
    the cramped ones, so they are pinned and the line column takes the rest. */
 table.inv-lines { table-layout: fixed; width: 100%; }
@@ -23216,6 +23218,12 @@ async function openInvoiceSettings() {
       f('wire_note', 'Note under it', s.wire_note, 'Reference the invoice number.') + '</div>' +
     '<div class="modal-form-row"><label class="modal-label">Bank address</label><textarea class="modal-input" name="wire_bank_address" rows="2">' + escapeHtml(s.wire_bank_address || '') + '</textarea></div>' +
 
+    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Anything else</h3>' +
+      '<button type="button" class="hub-mini" data-xmadd>➕ Add a method</button></div>' +
+    '<div class="section-sub">Venmo, Zelle, Cash App, Wise — whatever else you take. Each one prints on the ' +
+      'invoice exactly as you type it here. Delete one to stop offering it.</div>' +
+    '<div id="xmList"></div>' +
+
     '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Defaults</h3></div>' +
     '<div class="modal-grid2">' + f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number') +
       f('number_prefix', 'Invoice number prefix', s.number_prefix, 'CW') + '</div>' +
@@ -23224,6 +23232,7 @@ async function openInvoiceSettings() {
     async () => {
       const chk = (n) => { const el = $('kpiModalBody').querySelector('[name="' + n + '"]'); return !!(el && el.checked); };
       const patch = {
+        extra_methods: xmCollect(),
         biz_name: kpiVal('biz_name') || 'Come With', biz_legal_name: kpiVal('biz_legal_name') || null,
         biz_address: kpiVal('biz_address') || null, biz_email: kpiVal('biz_email') || null,
         biz_phone: kpiVal('biz_phone') || null, biz_website: kpiVal('biz_website') || null,
@@ -23248,6 +23257,11 @@ async function openInvoiceSettings() {
       closeKpi(); toast('Payment details saved', 'ok');
       await loadInvoices();
     }, 'Save details');
+  // Seed the repeatable list from what is stored, then draw it. Has to happen
+  // AFTER openKpi, because that is what puts #xmList in the document.
+  xmRows = Array.isArray(s.extra_methods) ? s.extra_methods.slice() : [];
+  xmRender();
+  kpiWide(true);
 }
 
 // ---- wiring ------------------------------------------------------------------
@@ -23301,16 +23315,24 @@ $('kpiModalOverlay').addEventListener('click', async (e) => {
     await invSyncPaid(); await invReload(); return;
   }
   if (e.target.closest('[data-invpayadd]')) { invRecordPayment(); return; }
-  if (e.target.closest('[data-invsendpreview]') || e.target.closest('[data-invpreview]')) {
+  const pv = e.target.closest('[data-invsendpreview]') || e.target.closest('[data-invpreview]');
+  if (pv) {
+    // Preview opens the REAL PDF, not a web rendering of it. They are two
+    // renderers of the same data and will always look a little different; the
+    // PDF is the thing the client actually receives, so that is what you check.
+    // store:false means nothing is uploaded or filed - a preview is a look, not
+    // an issue.
+    const was = pv.textContent; pv.disabled = true; pv.textContent = 'Building…';
     try {
-      const d = await invCallDoc('preview');
-      const w = window.open('', '_blank');
-      if (!w) { toast('Allow pop-ups to preview', 'err'); return; }
-      w.document.write('<!doctype html><meta charset="utf-8"><title>Preview</title>' +
-        '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@400;700&family=Inconsolata:wght@400;600&display=swap" rel="stylesheet">' +
-        '<style>' + (d.css || '') + '</style>' + d.html);
-      w.document.close();
+      const d = await invCallDoc('pdf', { store: false });
+      const bin = atob(d.pdf_base64);
+      const bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+      const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+      if (!window.open(url, '_blank')) toast('Allow pop-ups to preview', 'err');
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
     } catch (err) { toast(err.message, 'err'); }
+    finally { pv.disabled = false; pv.textContent = was; }
     return;
   }
   const dl2 = e.target.closest('[data-invpdf2]');
@@ -23607,6 +23629,48 @@ function invCreatePreviewHTML(rows) {
     '</tbody></table></div>' +
     '<div class="li-sub" style="margin-top:6px;">Every line is editable once the draft opens — description, quantity, rate, discount and tax.</div>';
 }
+
+
+// ---- extra payment methods (Venmo, Zelle, whatever) --------------------------
+// Held in the DOM while the settings modal is open and collected on save, so a
+// half-typed method is never written and cancelling loses nothing. `detail` is
+// the handle or account; `label` is what prints as the heading.
+let xmRows = [];
+function xmRender() {
+  const el = $('xmList');
+  if (!el) return;
+  el.innerHTML = xmRows.length
+    ? xmRows.map((m, i) =>
+        '<div class="xm-row" data-xm="' + i + '">' +
+          '<input class="modal-input" data-xmf="label" data-i="' + i + '" placeholder="Venmo" value="' + escapeHtml(m.label || '') + '">' +
+          '<input class="modal-input" data-xmf="detail" data-i="' + i + '" placeholder="@come-with-nyc" value="' + escapeHtml(m.detail || '') + '">' +
+          '<input class="modal-input" data-xmf="note" data-i="' + i + '" placeholder="note under it (optional)" value="' + escapeHtml(m.note || '') + '">' +
+          '<button type="button" class="hub-mini exp-del" data-xmdel="' + i + '" title="Remove">✕</button>' +
+        '</div>').join('')
+    : '<div class="li-sub" style="padding:4px 0;">Nothing else set up. PayPal and bank transfer are configured above.</div>';
+}
+// Read from the DOM, not from xmRows: the inputs are the truth while the modal
+// is open, and a keystroke that has not fired a change event is still real.
+function xmCollect() {
+  const out = [];
+  ($('kpiModalBody').querySelectorAll('.xm-row') || []).forEach(row => {
+    const get = (f) => { const el = row.querySelector('[data-xmf="' + f + '"]'); return el ? el.value.trim() : ''; };
+    const label = get('label'), detail = get('detail');
+    // Half a method is not a method - it would print a heading with nothing
+    // under it, which is worse than not offering it at all.
+    if (!label || !detail) return;
+    const m = { label, detail };
+    const note = get('note'); if (note) m.note = note;
+    out.push(m);
+  });
+  return out;
+}
+$('kpiModalOverlay').addEventListener('click', (e) => {
+  if (!$('xmList')) return;
+  if (e.target.closest('[data-xmadd]')) { xmRows = xmCollect(); xmRows.push({}); xmRender(); return; }
+  const d = e.target.closest('[data-xmdel]');
+  if (d) { xmRows = xmCollect().filter((_, i) => i !== Number(d.dataset.xmdel)); xmRender(); }
+});
 
 </script>
 

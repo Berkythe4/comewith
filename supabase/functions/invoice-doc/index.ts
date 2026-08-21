@@ -129,6 +129,7 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
     terms_text: inv.terms_text,
     pay_paypal: inv.pay_paypal,
     pay_wire: inv.pay_wire,
+    pay_extra: inv.pay_extra !== false,
     lines: (lines || []).map((l: Record<string, unknown>) => ({
       description: l.description as string,
       detail: l.detail as string | null,
@@ -257,10 +258,18 @@ Deno.serve(async (req) => {
   const a = admin();
 
   if (action === "preview") {
-    return ok({ html: invoiceHtml(doc, { standalone: false }), totals: t });
+    // The CSS has to come with it. Without this the dashboard opened the markup
+    // with an empty <style> block and rendered raw unstyled HTML - which is what
+    // "the preview looks gross" was.
+    return ok({ html: invoiceHtml(doc, { standalone: false }), css: INVOICE_CSS, totals: t });
   }
 
   if (action === "pdf") {
+    // A preview must not file anything: it is a look, not an issue. store:false
+    // renders the identical bytes and skips the upload and the files row.
+    if (body.store === false) {
+      return ok({ filename: fileName(doc), pdf_base64: b64(renderInvoicePdf(doc)), totals: t });
+    }
     const { bytes, path } = await storePdf(row.id as string, doc, (row.event_id as string) || null);
     return ok({ filename: fileName(doc), pdf_base64: b64(bytes), path, totals: t });
   }
