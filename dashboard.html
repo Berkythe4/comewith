@@ -23168,8 +23168,19 @@ function invDownload(d) {
 // ---- payment details (master only) ------------------------------------------
 async function openInvoiceSettings() {
   const { data: s, error } = await sb.from('invoice_settings').select('*').eq('id', true).maybeSingle();
-  if (error || !s) {
-    toast('Payment details are master-admin only.', 'err');
+  // Say which of the three things went wrong. Reporting every failure as
+  // "master-admin only" is what sent Keith to check his own role when the real
+  // problem was a missing table GRANT (fixed in 191) - grants are checked before
+  // RLS, so a revoked grant looks exactly like a permission problem with the
+  // caller rather than with the table.
+  if (error) {
+    toast(error.message.match(/permission denied/i)
+      ? 'Payment details are master-admin only — your account cannot open them.'
+      : 'Could not load payment details: ' + error.message, 'err');
+    return;
+  }
+  if (!s) {
+    toast('No payment-details row exists yet. Migration 188 seeds it — tell whoever runs migrations.', 'err');
     return;
   }
   const f = (name, label, val, ph, type) =>
