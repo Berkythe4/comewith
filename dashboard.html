@@ -1071,6 +1071,22 @@ table.money-grid td.num .m-num { width: 88px; }
   display: flex; align-items: center; justify-content: center;
 }
 .modal-x:hover { color: var(--red); }
+/* The invoice editor is a 7-column table of line items, not a form of two
+   fields, and 500px squeezed every description into three wrapped lines. Opt-in
+   so every other modal keeps the narrower, easier-to-read measure. */
+.modal.wide { max-width: 1040px; }
+/* The widened space belongs to the description. The numeric columns were never
+   the cramped ones, so they are pinned and the line column takes the rest. */
+table.inv-lines { table-layout: fixed; width: 100%; }
+table.inv-lines td, table.inv-lines th { overflow-wrap: anywhere; }
+table.inv-lines .c-line { width: auto; }
+table.inv-lines .c-qty  { width: 68px; }
+table.inv-lines .c-rate { width: 96px; }
+table.inv-lines .c-disc { width: 132px; }
+table.inv-lines .c-tax  { width: 54px; }
+table.inv-lines .c-amt  { width: 100px; }
+table.inv-lines .c-act  { width: 42px; }
+@media (max-width: 1100px) { .modal.wide { max-width: 100%; } }
 @keyframes modalIn { from { transform: translateY(8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 .modal-title {
   font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem;
@@ -6569,6 +6585,10 @@ let kpiSubmit = null;
 let tierIdx = 0;
 
 function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
+  // Narrow is the default for every modal. The invoice editor re-asserts wide
+  // straight after; without this reset, the small forms it opens on top of
+  // itself (Record a payment, Send) would inherit its width.
+  kpiWide(false);
   $('kpiModalTitle').textContent = title;
   $('kpiModalSub').textContent = sub || '';
   $('kpiModalBody').innerHTML = bodyHtml;
@@ -6579,10 +6599,13 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
   setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
-function closeKpi() { $('kpiModalOverlay').classList.remove('show'); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
+function closeKpi() { $('kpiModalOverlay').classList.remove('show'); kpiWide(false); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
 // Keep the floating brief reader in sync if the brief is edited while it's open.
 document.addEventListener('input', (e) => { if (e.target.matches('#kpiModalBody [name="brief"]')) { const b = document.getElementById('briefPopBody'); if (b) b.textContent = (e.target.value || '').trim() || '(No brief written yet — type it in the form.)'; } });
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
+// Widen the shared modal for one screen. Always cleared by closeKpi(), or the
+// next modal to open inherits a width it was never designed for.
+const kpiWide = (on) => { const m = $('kpiModalOverlay').querySelector('.modal'); if (m) m.classList.toggle('wide', !!on); };
 const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
 
 $('kpiModalCancel').addEventListener('click', closeKpi);
@@ -22969,9 +22992,10 @@ function renderInvoiceModal() {
       (f.sent_at ? '<span class="li-sub">sent ' + escapeHtml(fmtDate(f.sent_at)) + '</span>' : '') +
       (f.viewed_at ? '<span class="li-sub">👁 viewed ' + escapeHtml(fmtDate(f.viewed_at)) + '</span>' : '') +
     '</div>' +
-    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-      '<th>Line</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Discount</th>' +
-      '<th class="num"></th><th class="num">Amount</th><th class="cc-act"></th>' +
+    '<div style="overflow-x:auto;"><table class="data-table cc-table inv-lines"><thead><tr>' +
+      '<th class="c-line">Line</th><th class="num c-qty">Qty</th><th class="num c-rate">Rate</th>' +
+      '<th class="num c-disc">Discount</th><th class="num c-tax"></th>' +
+      '<th class="num c-amt">Amount</th><th class="cc-act c-act"></th>' +
     '</tr></thead><tbody>' + (o.lines.map(lineRow).join('') ||
       '<tr><td colspan="7" class="muted" style="padding:10px;">No lines yet.</td></tr>') +
     totals + '</tbody></table></div>' +
@@ -23024,6 +23048,7 @@ function renderInvoiceModal() {
 
   openKpi('Invoice ' + r.invoice_no, editable ? 'Draft — edit freely, nothing has been sent.'
     : 'Issued. Lines are locked; payments and sending stay open.', body, null, '');
+  kpiWide(true);
   $('kpiModalSubmit').style.display = 'none';
 }
 

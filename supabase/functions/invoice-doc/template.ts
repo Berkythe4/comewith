@@ -567,7 +567,7 @@ export const INVOICE_CSS = `
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{--ink:${INK};--bg:${CREAM};--red:${RED};--mid:${MID};--rule:${RULE};--green:${GREEN}}
 body{background:var(--bg);color:var(--ink);font-family:'Libre Baskerville',Georgia,serif;line-height:1.6;padding:28px 16px 64px}
-.inv{max-width:820px;margin:0 auto;background:#fff;border:1px solid var(--rule);box-shadow:0 1px 3px rgba(26,20,16,.06)}
+.inv{max-width:960px;margin:0 auto;background:#fff;border:1px solid var(--rule);box-shadow:0 1px 3px rgba(26,20,16,.06)}
 .mast{background:var(--ink);color:var(--bg);padding:26px 34px;display:flex;justify-content:space-between;align-items:flex-start;gap:16px;border-bottom:3px solid var(--red)}
 .brand{font-family:'Bebas Neue',Impact,sans-serif;font-size:2.1rem;letter-spacing:.07em;line-height:1}
 .brand-sub{font-family:'Inconsolata',monospace;font-size:.62rem;letter-spacing:.16em;text-transform:uppercase;color:#B9AE9E;margin-top:7px}
