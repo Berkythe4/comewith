@@ -1634,6 +1634,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div id="kpiModalBody"></div>
       <div class="modal-actions">
         <button type="button" class="modal-btn-cancel" id="kpiModalCancel">Cancel</button>
+        <button type="button" class="modal-btn-cancel" id="kpiModalAlt" hidden></button>
         <button type="submit" class="modal-btn-submit" id="kpiModalSubmit">Save</button>
       </div>
     </form>
@@ -6594,7 +6595,27 @@ const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
 let kpiSubmit = null;
 let tierIdx = 0;
 
+// The optional middle button. Every modal gets it hidden; a screen that wants
+// one calls kpiAlt() after openKpi. Reset on open AND on close, so it can never
+// be left over on a screen that did not ask for it.
+let kpiAltFn = null;
+function kpiAlt(label, fn) {
+  const b = $('kpiModalAlt');
+  kpiAltFn = fn || null;
+  b.textContent = label || '';
+  b.hidden = !fn;
+}
+$('kpiModalAlt').addEventListener('click', async () => {
+  if (!kpiAltFn) return;
+  const b = $('kpiModalAlt'), was = b.textContent;
+  b.disabled = true; b.textContent = 'Saving…';
+  try { await kpiAltFn(); }
+  catch (err) { toast(err.message || String(err), 'err'); }
+  finally { b.disabled = false; b.textContent = was; }
+});
+
 function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
+  kpiAlt(null, null);
   // Narrow is the default for every modal. The invoice editor re-asserts wide
   // straight after; without this reset, the small forms it opens on top of
   // itself (Record a payment, Send) would inherit its width.
@@ -6604,12 +6625,18 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   $('kpiModalBody').innerHTML = bodyHtml;
   $('kpiModalSubmit').textContent = submitLabel;
   $('kpiModalSubmit').disabled = false;
+  // Restore it. The invoice editor hides this button because it has no single
+  // save action, and an inline display:none set by one screen was surviving into
+  // the NEXT one — so after opening any invoice, Send, Record a payment and
+  // Payment details all rendered with no submit button at all. Same shape as the
+  // modal-width leak: openKpi has to reset every property a screen can set.
+  $('kpiModalSubmit').style.display = '';
   kpiSubmit = submitFn;
   $('kpiModalOverlay').classList.add('show');
   // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
   setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
-function closeKpi() { $('kpiModalOverlay').classList.remove('show'); kpiWide(false); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
+function closeKpi() { $('kpiModalOverlay').classList.remove('show'); kpiWide(false); kpiAlt(null, null); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
 // Keep the floating brief reader in sync if the brief is edited while it's open.
 document.addEventListener('input', (e) => { if (e.target.matches('#kpiModalBody [name="brief"]')) { const b = document.getElementById('briefPopBody'); if (b) b.textContent = (e.target.value || '').trim() || '(No brief written yet — type it in the form.)'; } });
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
@@ -23224,6 +23251,14 @@ async function openInvoiceSettings() {
       'invoice exactly as you type it here. Delete one to stop offering it.</div>' +
     '<div id="xmList"></div>' +
 
+    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Email defaults</h3></div>' +
+    '<div class="section-sub">What every new invoice email starts with. Each one is still editable per invoice ' +
+      'before you send, and leaving subject or message blank uses the standard wording.</div>' +
+    '<div class="modal-grid2">' + f('default_cc', 'Always cc', s.default_cc, 'bookkeeper@…', 'email') +
+      f('default_subject', 'Default subject', s.default_subject, 'blank = Invoice CW-2026-0001 from Come With') + '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Default message</label><textarea class="modal-input" name="default_message" rows="3" placeholder="blank = the standard wording">' +
+      escapeHtml(s.default_message || '') + '</textarea></div>' +
+
     '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Defaults</h3></div>' +
     '<div class="modal-grid2">' + f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number') +
       f('number_prefix', 'Invoice number prefix', s.number_prefix, 'CW') + '</div>' +
@@ -23233,6 +23268,9 @@ async function openInvoiceSettings() {
       const chk = (n) => { const el = $('kpiModalBody').querySelector('[name="' + n + '"]'); return !!(el && el.checked); };
       const patch = {
         extra_methods: xmCollect(),
+        default_cc: kpiVal('default_cc') || null,
+        default_subject: kpiVal('default_subject') || null,
+        default_message: kpiVal('default_message') || null,
         biz_name: kpiVal('biz_name') || 'Come With', biz_legal_name: kpiVal('biz_legal_name') || null,
         biz_address: kpiVal('biz_address') || null, biz_email: kpiVal('biz_email') || null,
         biz_phone: kpiVal('biz_phone') || null, biz_website: kpiVal('biz_website') || null,
@@ -23488,12 +23526,19 @@ function invSend() {
     '<div style="display:flex;gap:8px;margin-bottom:12px;"><button type="button" class="hub-mini" data-invsendpreview>👁 Preview exactly what they will see</button></div>' +
     '<div class="modal-form-row"><label class="modal-label">To *</label><input class="modal-input" name="to" type="email" value="' +
       escapeHtml(r.bill_to_email || '') + '"></div>' +
-    '<div class="modal-form-row"><label class="modal-label">Cc</label><input class="modal-input" name="cc" type="email"></div>' +
-    '<div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" name="subject" placeholder="leave blank for the default"></div>' +
-    '<div class="modal-form-row"><label class="modal-label">Message</label><textarea class="modal-input" name="note" rows="3" placeholder="Leave blank for the standard wording."></textarea></div>',
+    '<div class="modal-form-row"><label class="modal-label">Cc</label><input class="modal-input" name="cc" type="email" value="' +
+      escapeHtml(f.send_cc || s.default_cc || '') + '" placeholder="bookkeeper@…"></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" name="subject" value="' +
+      escapeHtml(f.send_subject || s.default_subject || '') + '" placeholder="leave blank for the default"></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Message</label><textarea class="modal-input" name="note" rows="4" placeholder="Leave blank for the standard wording.">' +
+      escapeHtml(f.send_note || s.default_message || '') + '</textarea></div>' +
+    '<div class="li-sub" style="margin-top:6px;">Cc, subject and message are saved on this invoice — ' +
+      '<b>Save &amp; go back</b> keeps them without sending. Set the wording you use every time under ' +
+      '<b>⚙ Payment details → Email defaults</b>.</div>',
     async () => {
       const to = kpiVal('to');
       if (!to) throw new Error('Who is it going to?');
+      await invSaveSendDraft();      // what was sent is what stays on the row
       const d = await invCallDoc('send', {
         to, cc: kpiVal('cc') || null,
         subject: kpiVal('subject') || null, note: kpiVal('note') || null,
@@ -23503,6 +23548,11 @@ function invSend() {
       await openInvoice(r.id);
       await loadInvoices();
     }, 'Send it');
+  kpiAlt('💾 Save & go back', async () => {
+    await invSaveSendDraft();
+    toast('Saved on this invoice', 'ok');
+    await openInvoice(r.id);       // back to the invoice, nothing sent
+  });
   kpiWide(true);
 }
 
@@ -23671,6 +23721,23 @@ $('kpiModalOverlay').addEventListener('click', (e) => {
   const d = e.target.closest('[data-xmdel]');
   if (d) { xmRows = xmCollect().filter((_, i) => i !== Number(d.dataset.xmdel)); xmRender(); }
 });
+
+
+// Save the covering email onto the invoice. Used by both "Save & go back" and
+// Send, so a sent invoice records the wording that actually went out rather than
+// leaving it to be reconstructed from the Resend dashboard later.
+async function invSaveSendDraft() {
+  const id = invDash.open && invDash.open.row.id;
+  if (!id) return;
+  const patch = {
+    send_cc: kpiVal('cc') || null,
+    send_subject: kpiVal('subject') || null,
+    send_note: kpiVal('note') || null,
+  };
+  const { error } = await sb.from('invoices').update(patch).eq('id', id);
+  if (error) throw new Error('Could not save: ' + error.message);
+  if (invDash.open && invDash.open.full) Object.assign(invDash.open.full, patch);
+}
 
 </script>
 

@@ -357,5 +357,80 @@ for (const [needle, what] of [["data-xmadd", "add a method"], ["data-xmdel", "re
 }
 pass("payment details can add, edit and remove extra rails");
 
+
+// ===========================================================================
+// 6. The shared modal must not leak state between screens
+//
+// This has now bitten twice. The invoice editor is the only screen that changes
+// the shared modal chrome — it goes wide, and it hides the submit button because
+// it has no single save action. Both leaked into whatever opened next:
+//   * width  -> Record a payment and Send opened at 1040px
+//   * submit -> Send, Record a payment and Payment details rendered with NO
+//               send/save button at all, which is what "there is no send button"
+//               was.
+// openKpi therefore has to reset EVERY property any screen can set on it.
+// ===========================================================================
+console.log("\n--- modal chrome ---");
+{
+  const i2 = dash.indexOf("function openKpi(");
+  const open = dash.slice(i2, i2 + 1400);
+  for (const [re, what] of [
+    [/kpiWide\(false\)/, "the width"],
+    [/kpiModalSubmit'\)\.style\.display = ''/, "the submit button's visibility"],
+    [/kpiAlt\(null, null\)/, "the optional third button"],
+  ]) {
+    if (!re.test(open)) fail(`openKpi does not reset ${what} — it leaks into the next screen`);
+  }
+  pass("openKpi resets width, submit visibility and the third button");
+
+  const i3 = dash.indexOf("function closeKpi(");
+  const close = dash.slice(i3, i3 + 400);
+  if (!/kpiWide\(false\)/.test(close) || !/kpiAlt\(null, null\)/.test(close)) {
+    fail("closeKpi does not reset the chrome");
+  } else pass("closeKpi resets it too");
+
+  // The editor is allowed to hide the button — it just must not be the last word.
+  if (!/kpiModalSubmit'\)\.style\.display = 'none'/.test(dash)) {
+    fail("the invoice editor no longer hides the submit button — did the reset get reverted the wrong way?");
+  } else pass("the invoice editor still hides its own submit button");
+}
+
+// ===========================================================================
+// 7. The covering email is kept
+// ===========================================================================
+console.log("\n--- saved cc / subject / message ---");
+{
+  if (!dash.includes("async function invSaveSendDraft")) fail("nothing saves the covering email");
+  else pass("there is a save path for cc, subject and message");
+
+  const i4 = dash.indexOf("async function invSaveSendDraft");
+  const saver = dash.slice(i4, i4 + 700);
+  for (const col of ["send_cc", "send_subject", "send_note"]) {
+    if (!saver.includes(col)) fail(`invSaveSendDraft does not write ${col}`);
+  }
+  pass("it writes all three columns");
+
+  const i5 = dash.indexOf("function invSend()");
+  const send = dash.slice(i5, i5 + 6000);
+  // Prefill order matters: this invoice's own wording beats the house default.
+  for (const [pair, what] of [["f.send_cc || s.default_cc", "cc"],
+                              ["f.send_subject || s.default_subject", "subject"],
+                              ["f.send_note || s.default_message", "message"]]) {
+    if (!send.includes(pair)) fail(`the ${what} field does not prefer this invoice over the default`);
+  }
+  pass("each field prefers this invoice's wording, then the house default");
+
+  if (!/kpiAlt\('💾 Save & go back'/.test(send)) fail("there is no Save & go back button on the send screen");
+  else pass("Save & go back sits beside Cancel");
+  if (!/await invSaveSendDraft\(\);\s*\/\/ what was sent/.test(send)) {
+    fail("sending does not record the wording that went out");
+  } else pass("sending records what actually went out");
+
+  for (const col of ["default_cc", "default_subject", "default_message"]) {
+    if (!dash.includes(`kpiVal('${col}')`)) fail(`Payment details does not save ${col}`);
+  }
+  pass("Payment details saves the email defaults");
+}
+
 console.log(fails ? `\n${fails} FAILURE(S)` : "\nAll checks passed.");
 process.exit(fails ? 1 : 0);
