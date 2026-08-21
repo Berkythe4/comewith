@@ -1012,3 +1012,138 @@ with a comment saying why. A known exception that is written down where the swee
 will show it is survivable; the same exception held only in someone's head is not.
 It has now moved to `MUST_BE_EMPTY`, and **nothing in `public` is anon-readable
 except the public site feed.**
+
+## Section 40 — An invoice is not revenue (2026-08-21)
+
+Invoicing shipped across 188–194. Every design decision in it follows from one
+rule, written into 188's header because it is the thing that will be forgotten
+first:
+
+**The income row is the revenue. An invoice is the document that asks for it.**
+
+Nothing in the invoicing schema sums into the P&L. If an invoice also booked
+revenue, every invoiced job would count twice — once as the accrual and once as
+the bill — and the error would look like growth.
+
+```
+income row (accrued)   the money we are owed          <- the P&L counts this
+invoice + lines        the document asking for it     <- counts nothing
+invoice_payments       cash arriving against the doc  <- still not revenue
+income row (received)  settled, when the invoice is    <- the cash date
+                       paid IN FULL
+```
+
+161 gave income three states — `accrued -> invoiced -> received` — and the
+middle one had been unreachable for months because nothing could produce an
+invoice. Every income row on prod was `accrued` or `received`. Sending an
+invoice is now what moves rows to `invoiced`, and paying it in full is what
+moves them to `received`, carrying the payment's date and method as the cash
+date and source.
+
+**Partial payments live on the INVOICE, not the income row.** An income row has
+one `amount` and one `settled_at` and cannot be half settled. A deposit is
+recorded against the invoice; the rows behind it flip only when the balance
+reaches zero. That is why `invoice_payments` exists at all rather than a
+`paid_amount` column.
+
+### Totals are computed, never stored
+
+`subtotal / discount / tax / total / paid / balance` live in views over the
+lines and payments. A stored total is a number that can disagree with the rows
+underneath it, and on an invoice that disagreement is the difference between
+what you charged and what you can prove you charged.
+
+The consequence is that the arithmetic exists in **two** places — `v_invoice_totals`
+for the dashboard, `computeTotals()` in `template.ts` for the PDF and the
+client's web page — and they must agree forever. So:
+
+- both were checked against prod inside `BEGIN..ROLLBACK` on the case designed
+  to pull them apart (a per-line discount **and** an invoice-level discount, a
+  non-taxable line, tax on top of a discount): subtotal 2270, discount 227,
+  taxable base 1935, tax 171.73, total 2214.73 — identical to the cent;
+- `scripts/check_invoice_sql.sql` and `scripts/test_invoice.mjs` hold the two
+  halves, so changing one without the other fails a test rather than a client's
+  arithmetic.
+
+The invoice-level discount is **apportioned across the taxable base in
+proportion**, so turning tax on can never charge tax on money the client is not
+paying. Rounding happens once per line and once on the tax, so the printed lines
+add up to the printed total.
+
+### Two smaller rules from the same build
+
+**Tax off and tax at 0% are different claims.** The row only prints when
+somebody has asserted it. Same family as §23 — never render a blank as zero.
+
+**Snapshot what the document says; look up what the document needs.** The
+bill-to name and email are copied onto the invoice at creation, because a
+document that silently rewrites itself when a contact is renamed is not a record
+of anything. The payment block is read fresh each render, because if you change
+banks you want the current details, not last year's.
+
+## Section 41 — Grants are checked before RLS (2026-08-21)
+
+188 tried to make `invoice_settings` master-admin-only and did it twice:
+
+```sql
+create policy invoice_settings_master on public.invoice_settings
+  for all using (public.is_master_admin());          -- correct
+revoke all on public.invoice_settings from anon, authenticated;   -- fatal
+```
+
+The revoke made the Payment details screen unopenable **by everyone, including
+the owner**. The screen is ordinary dashboard code reading the table as the
+signed-in user; with no grant, PostgREST refuses before RLS is ever consulted.
+
+Two things worth keeping:
+
+1. **Revoking a grant does not make a table "admin only". It makes it
+   nobody-only.** RLS is what decides *who among the grantees*; the grant is what
+   decides *whether the role can reach the table at all*. They are not two
+   strengths of the same dial.
+2. **The failure presents as a problem with the CALLER.** The error is
+   `permission denied`, so the dashboard reported "Payment details are
+   master-admin only" and Keith went and checked a role that was correct all
+   along (`berky@comewith.org`, master_admin, `is_owner`). A permission error
+   should name what was refused, not guess why.
+
+Fixed in 191: `grant select, update to authenticated`, policy unchanged. Proved
+on prod inside `BEGIN..ROLLBACK` by impersonating real accounts — berky 1 row,
+henry 1 row, janelle (sub_admin) 0 rows — and the anon sweep still reports the
+table blocked.
+
+The shape generalises past this table: **if a screen cannot read something, check
+the grant before you check the policy**, because the grant failure is the one
+that lies about whose fault it is.
+
+## Section 42 — A screen that changes shared chrome must have it reset by the opener (2026-08-21)
+
+`openKpi()` is one modal reused by every screen in the dashboard. The invoice
+editor is the only caller that changes its *chrome* rather than just its body: it
+widens the modal, and it hides the submit button because it has no single save
+action.
+
+Both leaked into whatever opened next, and both were reported as separate bugs
+by Keith days apart:
+
+- **width** — Record a payment and Send opened at 1040px, laid out for a form of
+  two fields;
+- **submit** — `$('kpiModalSubmit').style.display = 'none'` survived, so after
+  opening *any* invoice, Send, Record a payment and Payment details all rendered
+  **with no submit button at all**. "There is no send button" was this.
+
+The fix is not "remember to put it back". It is that **`openKpi` resets every
+property any screen is allowed to set** — width, submit visibility, and the new
+optional third button — and `closeKpi` does the same. A caller may change the
+chrome; a caller may not be trusted to restore it, because the caller does not
+know what opens next.
+
+The test asserts all three resets and was mutation-checked: re-introducing
+either leak fails the suite. This is a guard rather than a fix precisely because
+it bit twice.
+
+Worth noting what did *not* catch it: `node --check` passed happily both times.
+The file parses perfectly with a leaked inline style. Only running the screens in
+order, or asserting on the reset, shows it — the same lesson as §38's note that
+the money panel's own test caught a helper defined outside its region while the
+syntax check saw nothing wrong.

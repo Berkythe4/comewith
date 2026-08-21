@@ -1218,7 +1218,7 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
 
 ## 2026-08-20 — FP&A completed, and the ecosystem audited
 
-**Done.** Migrations 177–187.
+**Done.** Migrations 177–194.
 
 - **Payables** — `expenses.status` (accrued → invoiced → paid), `v_payables`. Each view
   picks a basis: P&L counts all three; cash, capital and the 1099 count only `paid`, and
@@ -1254,7 +1254,36 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
   the grant. **Nothing in `public` is anon-readable now except the public site feed.**
   LEARNINGS §39.
 
+### 2026-08-21 (part two) — invoicing, end to end
+
+- **Invoices (188–194).** Raise one from the Income list or an event's Money tab;
+  it bills income rows that already exist and never creates revenue. Sending moves
+  them `accrued → invoiced`; paying in full moves them to `received`. The client
+  gets a real PDF attached plus a tokenised link to a branded page with Pay
+  buttons. Per-line and whole-invoice discounts, optional tax, deposits and
+  partial payments, and a History block carrying sends, opens, payments, notes and
+  the Resend delivery status of each send. LEARNINGS §40.
+- **A dependency-free PDF writer** (`invoice-doc/pdf.ts`, standard-14 Helvetica),
+  unit-tested from Node and validated by an independent parser. The repo had no
+  PDF path before this.
+- **Payment rails are configurable** — PayPal and the Bluevine wire have their own
+  structured fields; anything else (Venmo, Zelle, Cash App) is a row in
+  `invoice_settings.extra_methods`.
+- **Two bugs worth remembering rather than just fixing:** `invoice_settings` had
+  its grant revoked, which made the screen unopenable by everyone including the
+  owner (§41 — grants are checked before RLS); and the invoice editor leaked its
+  modal chrome into the next screen twice, once as width and once as a missing
+  submit button (§42).
+
 **Parked (design-first).**
+- **Bluevine reconciliation.** Recording a payment settles the income behind an
+  invoice, but nothing matches an imported bank deposit to an open invoice.
+  `invoice_payments.income_id` / `auto_matched` exist for it. Wants a suggested-
+  match queue confirmed by a human, not an unattended matcher.
+- **Card / ACH pay-now.** Bluevine's invoicing is Stripe underneath with no public
+  API, so it cannot be driven from here. The path is Keith's own Stripe account
+  plus a "Pay by card" method — a settings row, not a rebuild. Wait for a client
+  to ask.
 - Company-level forecasting: event-scoped forecast lines and period budgets do not talk.
 - Soft-delete parity for `ticketing` / `sponsorships` / `third_party_donations` — needs
   ~10 views updated in the same change or it leaves ghost revenue.

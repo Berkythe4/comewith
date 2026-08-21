@@ -1,78 +1,81 @@
-# Carryover - 2026-08-21 (the content list, and the last public view - DESKTOP)
+# Carryover - 2026-08-21 (invoicing, end to end - DESKTOP)
 
 ## >> START HERE NEXT SESSION
 
-**Both items from the 2026-08-20 close are done.** Nothing is blocking. Pick from
-"Parked / next" below - the two standing candidates are:
+**1. Keith has to enter the payment details before an invoice can be paid.**
+Invoices -> **⚙ Payment details**. Both rails ship OFF and the wire block is
+empty, deliberately: the e2e test wrote a placeholder routing number and leaving
+that in place would let a real invoice go out with a fake bank account on it.
+Until it is filled in, an invoice prints with no way to pay it (the send screen
+warns, in red). **`CW-2026-0001` has already been SENT** with `wire_enabled=true`
+but no account or routing number filled in - worth checking what that client
+actually received.
 
-**1. The 502 photos with no photographer credit.** Data Health has carried them as
-low-severity findings since 180. They need a bulk credit, not 502 edits: the Photos
-tab already has multi-select, so the missing piece is one "set photographer on the
-selected" action. Read `pruneSelection()` first - a bulk edit that writes to rows the
-current filter is hiding is exactly LEARNINGS SS28.
-
-**2. Company-level forecasting.** Forecast lines are still event-scoped only
-(`budget_lines` scope `'event'`, from 178); company-level planning lives separately at
-scope `'period'` on the P&L tab, and **the two do not talk**. Deciding whether they
-should is a design question, not a coding one - worth Keith's input before building.
+**2. Then: the Bluevine reconciliation loop is still manual.** Recording a
+payment settles the income rows behind an invoice, but nothing matches an
+imported bank deposit to an open invoice. `invoice_payments.income_id` and
+`auto_matched` exist for it and are unused. The honest next step is a SUGGESTED
+match queue - exact amount + payer + date window, confirmed by a human - not an
+unattended matcher, which would silently guess between two same-amount invoices.
 
 ---
 
 ## State summary
 
-- **Migrations 177-187 applied, no drift.** Highest: `187_revoke_kpi_targets_current.sql`.
-  Prod `applied_migrations` max = 187, repo max = 187, verified this close.
-- **All 5 financial views return anon 401**, re-verified with a key proven to work
-  first (`v_public_events` -> 200 with a body; the same call with an empty key -> 401).
-- **Nothing in `public` is anon-readable any more except the public site feed.**
-  `v_kpi_targets_current` was the last knowingly-public internal view. Closed in 187.
-- **Latest LEARNINGS: SS39.** Two added this session (SS38, SS39).
+- **Migrations 177-194 applied, no drift.** Highest: `194_invoice_events.sql`.
+  Prod `applied_migrations` max = 194, repo max = 194, verified this close.
+- **All 5 financial views return anon 401**, re-verified with a key proven to
+  work first (`v_public_events` -> 200 with a body).
+- **Nothing in `public` is anon-readable except the public site feed.** All ten
+  invoicing objects are in `check_anon_exposure.py` and report blocked.
+- **Latest LEARNINGS: SS42.** Five added today (SS38-SS42).
 - Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
 - Git: everything committed and pushed to master, Netlify deployed.
 - Ran on the **desktop**. No parked branches.
+- Edge functions deployed this session: **`invoice-doc` v7** (`--no-verify-jwt`),
+  **`resend-webhook` v22**.
 
 ## This session shipped
 
+Two pieces of work. The content list closed out the 2026-08-20 carryover; then
+invoicing was built from nothing.
+
 | # | What |
 |---|---|
-| - | **Content module: the timeline view is now a LIST view**, built to the events-list spec |
-| 187 | **Security** - revoked the last anon-readable internal view, `v_kpi_targets_current` |
+| 187 | **Security** - revoked `v_kpi_targets_current`, the last anon-readable internal view |
+| 188 | **Invoices** - invoices / lines / payments / settings, computed totals, gapless numbering |
+| 189 | Private `invoices` storage bucket + the `invoice` document type |
+| 190 | Registered the Invoices module (nav group **Finance**, not a new "Money" group) |
+| 191 | **Fix** - `invoice_settings` had no grant, so Payment details was unopenable by anyone |
+| 192 | Extra payment rails (Venmo, Zelle, whatever) as `invoice_settings.extra_methods` |
+| 193 | The covering email is kept - `invoices.send_*` plus `invoice_settings.default_*` |
+| 194 | `invoice_events` - the append-only history, with delivery status from Resend |
 
-### The content list
+**Also:** the Social Calendar timeline view became a LIST view to the events-list
+spec (that was item 1 of the previous carryover; LEARNINGS SS38).
 
-`social.view === 'timeline'` is gone. The Social Calendar cycles **Calendar -> List ->
-Board**. The new list replaced *both* the timeline and the old read-only list table -
-keeping both would have left two views called "List", and the new one strictly
-supersedes the old.
+### Invoicing, in one paragraph
 
-It is the same table as the events list on purpose: `data-table cc-table`, a real
-`<thead>`, `ccPostBand()` banding (posted green, scheduled/planned blue,
-idea/drafted/review amber, archived muted), names as `cc-title-link` with rename behind
-the pencil, and multi-select chip filters with per-chip counts, a search box, a
-"Not posted" shortcut and "clear all".
+Raise an invoice from the **Income list** (select rows -> Invoice) or from an
+event's **Money** tab. It bills income rows that already exist - it never creates
+revenue - and sending moves them `accrued -> invoiced`, paying in full moves them
+to `received`. The client gets a **real PDF attached** plus a tokenised link to a
+branded page with the Pay buttons. Discounts work per line and on the whole
+invoice; tax is optional and off by default; deposits and partial payments live
+on the invoice. Every invoice carries a **History** block: sends, opens,
+payments, notes, and the Resend delivery status of each send.
 
-Four fields write straight through on change via `socialPatch()` - **stage, scheduled
-date, channels, pillar**. Two of them needed a non-obvious control, and the reasoning
-is LEARNINGS SS38: `channels` is an **array** (chips remove, a separate `+` select adds,
-so a two-channel post cannot be flattened to one) and `content_pillar` is **free text**
-(options are derived from what is on file, so an off-list value survives an edit).
+### The PDF is ours
 
-The two single-value dropdowns are gone from the toolbar; filters live in their own
-`#socialFilters` element so that typing in the search box does not tear down the input
-you are typing into. `socialFilterDesc()` is now the one place that describes the
-current filter, so the snapshot export and the email can no longer disagree.
+`supabase/functions/invoice-doc/pdf.ts` is a ~280-line dependency-free PDF
+writer (standard-14 Helvetica, no compression). The repo had no PDF path -
+agreements and the social snapshot both lean on the browser's Save-as-PDF, which
+is right for something you look at and wrong for something you send. It is
+unit-tested from Node (the `scoring.ts` pattern) and its output was parsed back
+with an independent reader (`pypdf`) to prove it opens.
 
-### 187, and the premise that was wrong
-
-186 left `v_kpi_targets_current` granted to anon on a stated premise - "tools/
-visualizer.html reads it ANONYMOUSLY - it has no sign-in at all". **That was wrong on
-every clause.** The visualizer loads `/staging/guard.js` (line 7) and imports its
-client from it (line 60), and its other two sources answer `200 []` and `401` to anon
-anyway, so it never worked signed-out. The grant was publishing every KPI target we
-have set. Full account in LEARNINGS SS39.
-
-`check_anon_exposure.py` moved it from `PUBLIC_OK` to `MUST_BE_EMPTY`, so the sweep now
-enforces the new state rather than documenting the old exception.
+**If you change the layout, re-check the page count.** Three separate bugs came
+from height estimates that did not measure what they were about to draw.
 
 ## Tests (run before touching any of these screens)
 ```
@@ -80,29 +83,33 @@ node scripts/test_money_panel.mjs
 node scripts/test_data_health.mjs
 node scripts/test_events_list.mjs
 node scripts/test_recap_publish.mjs
-node scripts/test_content_center.mjs      # +26 checks this session, 47 total
+node scripts/test_content_center.mjs
+node scripts/test_invoice.mjs                       # 100+ checks
 python scripts/check_anon_exposure.py
+SBP_REF=yaytdosxfhcqatmhctzk python db.py scripts/check_invoice_sql.sql
 ```
-`test_content_center.mjs` now covers the content list as well as the event hub - it
-extracts a second region from `dashboard.html` between `function socialFmtDate(d)` and
-`// The filter strip lives in its own element`. **If you move that code, move the
-markers.**
+That last one is the half of the invoice arithmetic that lives in SQL. The JS
+half is in `test_invoice.mjs` with the same numbers written out by hand, so
+changing one implementation without the other fails a test. **Run both.**
 
-Three of the new checks were **mutation-tested** (break the pillar editor, break the
-banding, break the caption search - each fails the suite as it should), because a
-regex assertion that passes against a mutant is documentation, not a test.
+`test_invoice.mjs` imports the edge function's `.ts` modules directly - Node 24
+strips types natively. Avoid TypeScript parameter properties in those files
+(`constructor(public x: T)`); strip-only mode rejects them.
 
 ## Parked / next
-- The two candidates at the top of this file.
-- `ticketing` / `sponsorships` / `third_party_donations` still hard-delete while income
-  and expenses soft-delete. **Deliberate** - ~10 views sum those three without a
-  `deleted_at` filter, so adding the column alone leaves ghost revenue. Documented in 179.
-- `v_pipeline.needs_revenue_estimate` reads `events.expected_revenue`, so an event with
-  forecast *revenue lines* still shows as needing an estimate.
-- **Data Health: 569 open findings** at last sweep - 11 high, 23 medium, 535 low (502 of
-  the low are the photo credits above). Nightly sweep at 07:00 UTC.
-- Everything in the 2026-08-19 close still stands - Janelle's W-9, SS83(b), the WBH
-  bulk-edit review.
+- The two items at the top of this file.
+- Card / ACH pay-now. Bluevine's own invoicing is **Stripe underneath** and has
+  no public API, so it cannot be driven from here - adopting it would mean
+  double entry and losing the link to the income row. The upgrade path is a
+  Stripe account of Keith's own (Bluevine settles into it) plus a "Pay by card"
+  method; the payment-methods model was built so that is a settings row, not a
+  rebuild. Wait until a client actually asks.
+- 502 photos still need a bulk photographer credit (Data Health, low severity).
+- Company-level forecasting still does not talk to event-scoped forecast lines.
+- `ticketing` / `sponsorships` / `third_party_donations` still hard-delete.
+  Deliberate - ~10 views sum them without a `deleted_at` filter.
+- A stale `keith.berkman@gmail.com` profile sits at role `customer`. Harmless,
+  not the account Keith signs in with (that is `berky@comewith.org`), left alone.
 
 *Narrative: `reviews/session_2026-08-21.md`. Previous close begins below.*
 
