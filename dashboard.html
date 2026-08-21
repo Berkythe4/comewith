@@ -8431,6 +8431,39 @@ function moneyRollup(lines) {
 
 const M_STATE_LABEL = { forecast: 'forecast', committed: 'committed', settled: 'settled' };
 
+// Invoices raised against this event. Lives here rather than with the Invoices
+// module because it is part of the money panel - and because the money panel is
+// extracted wholesale by scripts/test_money_panel.mjs, which cannot see a helper
+// defined outside its region. That test is what caught this.
+function moneyInvChip(incomeId) {
+  const iv = (moneyState.invBy || {})[incomeId];
+  if (!iv) return '';
+  return ' <button class="exp-tag ' + invStateChipCls(iv.state) + ' inv-chip" data-invopenany="' +
+    escapeHtml(iv.invoice_id) + '" title="On invoice ' + escapeHtml(iv.invoice_no) +
+    '. Click to open it.">🧾 ' + escapeHtml(iv.invoice_no) + '</button>';
+}
+
+// The event's own invoices, listed on the Money screen above the grid. Hidden
+// entirely when there are none - an empty box on every event would be noise on
+// the many events that are never invoiced at all.
+function moneyInvoicesHTML() {
+  const list = moneyState.invoices || [];
+  if (!list.length) return '';
+  const owed = list.filter(i => Number(i.balance) > 0).reduce((t, i) => t + Number(i.balance || 0), 0);
+  const rows = list.map(i =>
+    '<button class="hub-mini inv-strip-item" data-invopenany="' + escapeHtml(i.id) + '" title="Open this invoice">' +
+      '<b>' + escapeHtml(i.invoice_no) + '</b> · ' + escapeHtml(i.bill_to || 'no client') +
+      ' · ' + money(i.total) +
+      (Number(i.balance) > 0
+        ? ' · <span class="' + (i.state === 'overdue' ? 'neg' : '') + '">' + money(i.balance) + ' due</span>'
+        : ' · <span class="pos">paid</span>') +
+    '</button>').join('');
+  return '<div class="inv-strip"><span class="ev-filter-lbl">🧾 Invoices for this event</span>' +
+    '<span class="inv-strip-rows">' + rows + '</span>' +
+    (owed ? '<span class="li-sub" style="margin-left:auto;">' + money(owed) + ' outstanding</span>' : '') +
+    '</div>';
+}
+
 function moneyToolbarHTML() {
   const b = (attr, label, title) => '<button class="hub-mini" ' + attr + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' + label + '</button>';
   const add = (kind, label) => '<button class="hub-btn ghost" data-money-formopen="' + kind + '">' +
@@ -23537,34 +23570,6 @@ function incInvChip(x) {
     escapeHtml(iv.invoice_id) + '" title="On invoice ' + escapeHtml(iv.invoice_no) + ' — ' +
     escapeHtml(iv.state || '') + (Number(iv.balance) ? ', ' + money(iv.balance) + ' outstanding' : '') +
     '. Click to open it.">🧾 ' + escapeHtml(iv.invoice_no) + '</button> ';
-}
-function moneyInvChip(incomeId) {
-  const iv = (moneyState.invBy || {})[incomeId];
-  if (!iv) return '';
-  return ' <button class="exp-tag ' + invStateChipCls(iv.state) + ' inv-chip" data-invopenany="' +
-    escapeHtml(iv.invoice_id) + '" title="On invoice ' + escapeHtml(iv.invoice_no) +
-    '. Click to open it.">🧾 ' + escapeHtml(iv.invoice_no) + '</button>';
-}
-
-// The event's own invoices, listed on the Money screen above the grid. Hidden
-// entirely when there are none - an empty box on every event would be noise on
-// the many events that are never invoiced at all.
-function moneyInvoicesHTML() {
-  const list = moneyState.invoices || [];
-  if (!list.length) return '';
-  const owed = list.filter(i => Number(i.balance) > 0).reduce((t, i) => t + Number(i.balance || 0), 0);
-  const rows = list.map(i =>
-    '<button class="hub-mini inv-strip-item" data-invopenany="' + escapeHtml(i.id) + '" title="Open this invoice">' +
-      '<b>' + escapeHtml(i.invoice_no) + '</b> · ' + escapeHtml(i.bill_to || 'no client') +
-      ' · ' + money(i.total) +
-      (Number(i.balance) > 0
-        ? ' · <span class="' + (i.state === 'overdue' ? 'neg' : '') + '">' + money(i.balance) + ' due</span>'
-        : ' · <span class="pos">paid</span>') +
-    '</button>').join('');
-  return '<div class="inv-strip"><span class="ev-filter-lbl">🧾 Invoices for this event</span>' +
-    '<span class="inv-strip-rows">' + rows + '</span>' +
-    (owed ? '<span class="li-sub" style="margin-left:auto;">' + money(owed) + ' outstanding</span>' : '') +
-    '</div>';
 }
 
 /** Open an invoice from any screen — the module's data may not be loaded yet. */
