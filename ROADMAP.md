@@ -1213,3 +1213,39 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
   wired, so social posts are reminders.
 - Beatport metadata write-back for stations generally; 2 EP 2 tracks have no release
   date (a DJ edit and a Bandcamp-only remix — genuinely absent).
+
+---
+
+## 2026-08-20 — FP&A completed, and the ecosystem audited
+
+**Done.** Migrations 177–186.
+
+- **Payables** — `expenses.status` (accrued → invoiced → paid), `v_payables`. Each view
+  picks a basis: P&L counts all three; cash, capital and the 1099 count only `paid`, and
+  the 1099 year is now the year it was **paid**.
+- **Reconciliation on assign** — a real charge merges into the commitment it settles,
+  `external_ref` moving to the survivor first so a re-push cannot resurrect the duplicate.
+- **Forecast lines** — money that is planned but not promised, on `budget_lines` scope
+  `'event'`. Structurally invisible to the P&L. LEARNINGS §35.
+- **Per-event P&L** — the company P&L's own table, scoped to one event, with Forecast /
+  Booked / Settled / vs-plan columns and inline editing.
+- **Data Health** — 29 checks, waivers with a reason, a nightly auto-link + audit at
+  07:00 UTC that writes a summary every run. New master-only module.
+- **Events list** — type / stage / status / public inline, state banding, multi-select
+  filters, a "not completed" shortcut.
+- **Staged recap videos** — a private SoundCloud or YouTube link can be saved on an event
+  and kept off the site until its track is public.
+- **Security** — 183 guarded three SECURITY DEFINER functions reachable by any signed-in
+  listener; **185 closed a live leak of the financial ledger to anonymous callers**; 186
+  revoked three internal views. LEARNINGS §37.
+
+**Parked (design-first).**
+- Timeline view → list view, to the events-list spec. **Next session, item one.**
+- `tools/visualizer.html` is publicly served with no auth.
+- Company-level forecasting: event-scoped forecast lines and period budgets do not talk.
+- Soft-delete parity for `ticketing` / `sponsorships` / `third_party_donations` — needs
+  ~10 views updated in the same change or it leaves ghost revenue.
+
+**Backlog.** Bulk photographer credit for 502 photos; `v_pipeline` reading forecast
+revenue lines as well as `expected_revenue`.
+

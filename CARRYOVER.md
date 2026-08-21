@@ -1,146 +1,115 @@
-# Carryover - 2026-08-20 (SECURITY: the ledger was public - DESKTOP)
+# Carryover - 2026-08-20 (payables -> forecast -> audit -> a live leak - DESKTOP)
 
-## READ THIS FIRST
+## >> START HERE NEXT SESSION
 
-**Anonymous callers could read the money.** 29 expense rows with payee names and
-amounts, 59 ticketing rows, 16 donations with donor names, 12 sponsorships, 9 income
-rows. **Closed in migration 185**, verified against prod before and after. Nothing
-needs doing - this is a record, not a task.
+**1. Redo the TIMELINE view as a LIST view, to the same spec as the events list.**
+Keith's call, first item. The timeline is the Social Calendar / Content module's
+`timeline` view - `dashboard.html`, `social.view === 'timeline'` (~line 2821), rendering
+`.timeline > .tl-group > .tl-node/.tl-items` via `timelineCardHtml()`. `SOCIAL_VIEWS` and
+`SOCIAL_CYCLE` list the four views.
 
-`can_see_event_financials()` (from 043) checked *what* had been released and never
-*who* was asking, and RLS policies apply to role `public`, which includes `anon`. One
-missing `is_admin()`. See **LEARNINGS SS37** - the more important half of that section
-is *why every check said it was fine*.
+Match the events list exactly, the way the Content tab now does:
+- `<table class="data-table">` with a real `<thead>`, not cards
+- inline `hub-status-sel ev-inline` selects for the fields that actually move
+  (stage, scheduled date, channels, pillar), writing straight through on change
+- the name as a **clickable link** (`cc-title-link`) with rename behind the pencil,
+  never a full-width input box
+- three-colour row banding on the same vocabulary: green posted, blue scheduled or
+  planned, amber idea/drafted/review, muted archived (`ccPostBand()` already computes
+  exactly this - reuse it)
+- multi-select chip filters like the events list got, not single-value dropdowns
+Working examples to copy: `hubPostsHTML()` (the same data, already done) and
+`renderEventsTable()`. Test to extend: `scripts/test_content_center.mjs`.
 
-**Two checks were lying, and one of them was mine:**
-- A grant check cannot see an RLS leak. The financial *views* were correctly revoked;
-  the *tables* were not, and that is a different mechanism.
-- **Every anon REST check in this session was run with an empty API key.** There is no
-  `SUPABASE_ANON_KEY` in `.env` - it is `SUPABASE_PROD_PUBLISHABLE_KEY`. An empty key
-  answers 401 for everything, so the check printed exactly what a pass looks like. The
-  anon verifications reported after 177, 178 and 180 were worthless. The invariant did
-  hold for the views, but nobody had shown it.
-
-**Use `python scripts/check_anon_exposure.py` from now on.** It proves the key works
-before trusting a single 401, and reads the **body** - on a table `200 []` is correct
-and `200` with rows is a breach. CLAUDE.md now says so too.
-
-Also revoked (186): `v_equipment_roi`, `v_mailing_list_health`, `v_metric_prior` -
-internal, nothing public read them. `v_kpi_targets_current` deliberately left public:
-`tools/visualizer.html` reads it with **no sign-in**, so revoking would break a working
-tool silently. Your call whether the tool gets auth or the view stays public.
-
-## Also shipped: staged recap videos (184)
-
-**You can now paste a private SoundCloud or YouTube link and it will not reach the
-site.** Each entry in `events.recap_videos` carries `is_public`; `v_public_recap`
-filters staged ones out server-side, so all three public pages are covered at once.
-
-- **A missing flag means public**, so every video live today keeps rendering - no
-  backfill, nothing goes dark.
-- **New rows start staged.** Pasting a link and publishing it are different decisions.
-- **A link that will not embed is saved staged automatically.** The old confirm claimed
-  private links would "stay hidden on the site" and nothing enforced it - they rendered
-  as dead players. That promise is now kept.
-- The homepage card thumbnail comes from the first **public** YouTube link, so a staged
-  video cannot leave a broken image on the front page.
-
-**Event Hub > Content is a real control center.** Three lists, every one of them
-editable where you read it - no modal to change a label or a stage:
-
-- **On the public page** (`recap_videos`) - label, artist tag, live/staged, open, remove.
-  Says plainly it is the only list the site renders, and warns when the event is not
-  featured (nothing is public either way).
-- **Content library** (`content_assets`) - label, full/clip, video/audio, duration, artist.
-  Internal; nothing here reaches the site until you hit **^ To the site**, which adds it to
-  the list above **staged**, never live. That button only appears where it would do
-  something. Its old "on site" chip was removed - nothing public reads that table.
-- **Social posts** - title, stage and date inline; **Full brief ->** still opens the modal
-  for caption, channels, assets and CTA.
-
-Summary cards on top: on the site / staged / library / posts / photos.
-Editing a post's date keeps the time already on it rather than moving everything to
-midnight.
-
-## Tests
-`node scripts/test_money_panel.mjs` - `test_data_health.mjs` - `test_events_list.mjs` -
-`test_recap_publish.mjs` (asserts the staged rule in the SQL and the JS agree) -
-`test_content_center.mjs` -
-`python scripts/check_anon_exposure.py`
-
-## Parked / next
-- **Decide on `tools/visualizer.html`** - it is served publicly and has no auth.
-- 502 photos still need a bulk photographer credit.
-- Everything in the earlier 2026-08-20 close below still stands (177-183: payables,
-  forecast, per-event P&L, the data-health audit and its nightly job).
-
-*The previous close begins immediately below.*
+**2. Then:** `tools/visualizer.html` is served publicly with **no sign-in** and reads
+`v_kpi_targets_current`. Either it gets auth or that view stays public deliberately -
+your call, it is the only thing left knowingly readable.
 
 ---
 
-# Carryover — 2026-08-20 (Payables → forecast → a full ecosystem audit · DESKTOP)
+## State summary
 
-**Deployed to master. Migrations 177–183 applied to prod and verified.** Every financial
-view returns anon **401**, including the seven new ones. `post_apply.sql` is all PASS and
-has gained two checks. Latest LEARNINGS: **§36**.
+- **Migrations 177-186 applied, no drift.** Highest: `186_revoke_internal_views.sql`.
+- **All 5 financial views return anon 401**, re-verified with a key that actually works
+  (see the security note below - the earlier checks did not).
+- **Latest LEARNINGS: SS37.** Four added this session (SS34-SS37).
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: everything committed and pushed to master (`0baa8fb`), Netlify deployed.
+- Ran on the **desktop**. No parked branches.
+- **Data Health: 569 open findings** - 11 high, 23 medium, 535 low (502 of the low are
+  photo credits). Nightly sweep at 07:00 UTC.
 
-## The session in one line
-Costs can be recorded before they are paid (177), a later charge merges with the
-commitment it settles instead of double-counting, money that is only *planned* has a home
-the P&L cannot see (178), and the whole ecosystem now audits its own links nightly and
-tells you what it did (179–183).
+## SECURITY - what happened, so nobody has to re-derive it
 
-## Migrations
+**The ledger was publicly readable.** 29 expense rows with payee names and amounts, 59
+ticketing rows, 16 donations with donor names, 12 sponsorships, 9 income rows. **Closed in
+185.** `can_see_event_financials()` (from 043) asked *what* had been released and never
+*who* was asking; RLS policies apply to role `public`, which includes `anon`.
+
+**Two checks said it was fine for months:**
+- A grant check cannot see an RLS leak. The financial *views* are revoked and pass
+  honestly; the leak was on the *tables*.
+- **Every anon REST check in this repo ran with an empty API key.** There is no
+  `SUPABASE_ANON_KEY` in `.env` - it is `SUPABASE_PROD_PUBLISHABLE_KEY`. An empty key
+  answers 401 for everything, so the check printed exactly what a pass looks like.
+
+**Use `python scripts/check_anon_exposure.py`.** It proves the key works before trusting a
+single 401, and reads the **body** - on a table `200 []` is correct and `200` with rows is
+a breach. CLAUDE.md now carries this rule. LEARNINGS SS37 has the full account.
+
+186 also revoked `v_equipment_roi`, `v_mailing_list_health`, `v_metric_prior`.
+
+## This session shipped
+
 | # | What |
 |---|---|
-| 177 | `expenses.status` accrued → invoiced → paid, `v_payables`; each view picks a basis |
+| 177 | Payables - `expenses.status` accrued/invoiced/paid, `v_payables`; each view picks a basis |
 | 178 | Forecast lines on `budget_lines` scope `'event'`, `v_event_forecast` |
-| 179 | Link parity: donations join the actor graph, `income.event_na`, `expenses.payee_na`, `social_posts.subject_na`, 8 missing FKs, 16 event stages backfilled |
-| 180 | `v_data_health` (29 checks), `data_health_waivers`, `data_health_runs` |
-| 181 | `autolink_data()` + `snapshot_data_health()` + nightly cron 07:00 UTC |
-| 182 | Data Health registered in `module_registry` (master only) |
-| 183 | **Security fix** — guarded three SECURITY DEFINER functions that `authenticated` could call |
+| 179 | Link parity - donations join the actor graph, `income.event_na`, `expenses.payee_na`, `social_posts.subject_na`, 8 FKs, 16 stages backfilled |
+| 180 | `v_data_health` (29 checks), waivers, run log |
+| 181 | `autolink_data()` + `snapshot_data_health()` + nightly cron |
+| 182 | Data Health registered in the nav (master only) |
+| 183 | **Security** - guarded 3 definer functions `authenticated` could call |
+| 184 | Recap videos can be **staged** - private links never reach the site |
+| 185 | **Security** - closed the financial leak |
+| 186 | Revoked 3 internal views from anon |
 
-## 🩺 Data Health — the new screen (Team HQ, master only)
-Control-center format. Collapsible checks by category, each finding deep-links to the
-screen that fixes it, and anything correct-as-it-stands can be **waived with a reason**.
-Buttons: run audit · auto-link preview · auto-link now. Run history at the bottom is the
-validation record.
+**UI:** per-event P&L (Forecast / Booked / Settled / vs plan, collapsible, inline-editable)
+- reconciliation on assign with a confirmation report - Data Health control center - events
+list with type/stage/status/public inline, state banding and multi-select filters - Event
+Content rebuilt twice, ending as the events-list table with clickable names, staged/live
+chips and a "where it is" column.
 
-**Current state: 569 open — 11 high, 23 medium, 535 low.** 502 of the low are photos with
-no photographer credited (DI #1 and #2, 251 each), which is bulk work, not a bug.
+**Auto-fixed for Keith:** 11 actor roles inferred, 1 guest linked, 8 donations linked, 16
+event stages filled, 8 missing FKs added.
 
-**The 11 high are the ones worth your time:**
-- 7 costs with no payee → all are *categories* in the vendor field. Mark them **payee N/A**
-  and they are gone for good.
-- **2 upcoming public events have no ticket URL.** This one matters: ticket clicks are
-  matched by URL and **cannot be backfilled**, so every click before it is set is lost.
-- 1 cost with no category, 1 payee over $600 with no 1099 decision (Janelle, still).
-
-## What was auto-fixed for you
-11 actor roles inferred from relationships that already existed · 1 guest linked by exact
-email · 8 donations linked by exact donor name · 16 blank event stages filled from status.
-Zero fuzzy matches — see LEARNINGS §36.
-
-## Tests
-- `node scripts/test_money_panel.mjs` — the event Money panel render path + rollup maths
-- `node scripts/test_data_health.mjs` — the Data Health render path
-Run both before touching either screen: there is no local console for `dashboard.html`.
+## Tests (run before touching any of these screens)
+```
+node scripts/test_money_panel.mjs
+node scripts/test_data_health.mjs
+node scripts/test_events_list.mjs
+node scripts/test_recap_publish.mjs
+node scripts/test_content_center.mjs
+python scripts/check_anon_exposure.py
+```
+There is no local console for `dashboard.html`; `node --check` proves it parses, not that
+it works. Both money-panel bugs and both content-centre bugs this session were caught by
+these, not by reading the code.
 
 ## Parked / next
-- **Keith to review.** Nothing outside money + the new audit screen was touched.
-- **Photo credits (502)** need a bulk "everything in this shoot was shot by X" pass.
-- **`ticketing`, `sponsorships`, `third_party_donations` still hard-delete** while income
-  and expenses soft-delete. Deliberate, and documented in 179: ~10 views sum those three
-  without a `deleted_at` filter, so adding the column without updating all of them leaves
-  ghost revenue. Do it as its own piece of work or not at all.
+- The two items at the top of this file.
+- **502 photos** need a bulk photographer credit (Data Health, low severity).
+- `ticketing` / `sponsorships` / `third_party_donations` still hard-delete while income and
+  expenses soft-delete. **Deliberate** - ~10 views sum those three without a `deleted_at`
+  filter, so adding the column alone leaves ghost revenue. Documented in 179.
 - Forecast lines are **event-scoped only**; company-level forecasting is still
   `budget_lines` scope `'period'` on the P&L tab. The two do not talk.
 - `v_pipeline.needs_revenue_estimate` reads `events.expected_revenue`, so an event with
   forecast *revenue lines* still shows as needing an estimate.
-- Everything in the 2026-08-19 "Parked / next" below still stands.
+- Everything in the 2026-08-19 close below still stands - Janelle's W-9, SS83(b), the WBH
+  bulk-edit review.
 
-*The previous close (2026-08-19, FP&A) begins immediately below and is unchanged.*
+*Narrative: `reviews/session_2026-08-20.md`. Previous close begins below.*
 
 ---
 
