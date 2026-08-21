@@ -1083,6 +1083,16 @@ table.money-grid td.num .m-num { width: 88px; }
   border: 1px solid var(--border); border-left: 3px solid var(--red); }
 .inv-strip-rows { display: flex; gap: 6px; flex-wrap: wrap; }
 .inv-strip-item { text-align: left; }
+.inv-timeline { border-left: 2px solid var(--border); margin: 4px 0 0 6px; }
+.inv-ev { display: flex; gap: 10px; align-items: flex-start; padding: 7px 0 7px 14px;
+  position: relative; border-bottom: 1px solid var(--border); }
+.inv-ev:last-child { border-bottom: none; }
+.inv-ev::before { content: ''; position: absolute; left: -5px; top: 13px; width: 8px; height: 8px;
+  border-radius: 50%; background: var(--red); }
+.inv-ev-i { font-size: .9rem; line-height: 1.3; }
+.inv-ev-b { flex: 1; font-size: .8rem; }
+.inv-ev-t { font-size: .68rem; color: var(--mid); white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .inv-ev { flex-wrap: wrap; } .inv-ev-t { width: 100%; } }
 .xm-row { display: grid; grid-template-columns: 1fr 1.3fr 1.6fr auto; gap: 6px; margin-bottom: 6px; align-items: center; }
 @media (max-width: 700px) { .xm-row { grid-template-columns: 1fr; } }
 /* The widened space belongs to the description. The numeric columns were never
@@ -22995,6 +23005,12 @@ async function invCreateFrom(opts) {
         const { error: lErr } = await sb.from('invoice_lines').insert(lines);
         if (lErr) throw new Error('Invoice made, but the lines failed: ' + lErr.message);
       }
+      const { data: { session: sess2 } } = await sb.auth.getSession();
+      await sb.from('invoice_events').insert({
+        invoice_id: inv.id, kind: 'created',
+        by_profile: (sess2 && sess2.user && sess2.user.id) || null,
+        detail: { lines: incomeRows.length, from: incomeRows.length ? 'income rows' : 'blank' },
+      });
       closeKpi();
       toast('Draft ' + inv.invoice_no + ' created', 'ok');
       if (typeof incomeDash !== 'undefined' && incomeDash.sel) incomeDash.sel.clear();
@@ -23008,14 +23024,17 @@ async function invCreateFrom(opts) {
 
 // ---- the invoice itself -----------------------------------------------------
 async function openInvoice(id) {
-  const [inv, lines, pays] = await Promise.all([
+  const [inv, lines, pays, evs] = await Promise.all([
     sb.from('v_invoices_list').select('*').eq('id', id).maybeSingle(),
     sb.from('v_invoice_line_calc').select('*').eq('invoice_id', id).order('position'),
     sb.from('invoice_payments').select('*').eq('invoice_id', id).order('paid_on'),
+    sb.from('invoice_events').select('*, who:profiles!by_profile(full_name,email)')
+      .eq('invoice_id', id).order('at', { ascending: false }),
   ]);
   if (inv.error || !inv.data) { toast('Could not open that invoice', 'err'); return; }
   const { data: full } = await sb.from('invoices').select('*').eq('id', id).single();
-  invDash.open = { row: inv.data, full, lines: lines.data || [], pays: pays.data || [] };
+  invDash.open = { row: inv.data, full, lines: lines.data || [], pays: pays.data || [],
+                   events: (evs && evs.data) || [] };
   renderInvoiceModal();
 }
 
@@ -23132,7 +23151,8 @@ function renderInvoiceModal() {
       (f.status !== 'void' ? '<button class="hub-mini danger" data-invvoid style="margin-left:auto;">Void</button>' : '') +
     '</div>' +
     (r.public_token ? '<div class="li-sub" style="margin-top:8px;">Client link: <code>' +
-      escapeHtml(location.origin + '/invoice.html?t=' + r.public_token) + '</code></div>' : '');
+      escapeHtml(location.origin + '/invoice.html?t=' + r.public_token) + '</code></div>' : '') +
+    invTimelineHTML();
 
   openKpi('Invoice ' + r.invoice_no, editable ? 'Draft — edit freely, nothing has been sent.'
     : 'Issued. Lines are locked; payments and sending stay open.', body, null, '');
@@ -23349,10 +23369,22 @@ $('kpiModalOverlay').addEventListener('click', async (e) => {
   }
   const pdel = e.target.closest('[data-invpaydel]');
   if (pdel) {
+    // Read it BEFORE deleting — afterwards there is nothing left to describe.
+    const gone = (invDash.open.pays || []).find(p => p.id === pdel.dataset.invpaydel);
     await sb.from('invoice_payments').delete().eq('id', pdel.dataset.invpaydel);
+    if (gone) await invLog('payment_removed', { amount: gone.amount, method: gone.method, reference: gone.reference });
     await invSyncPaid(); await invReload(); return;
   }
   if (e.target.closest('[data-invpayadd]')) { invRecordPayment(); return; }
+  if (e.target.closest('[data-invnote]')) {
+    // A chase by phone, a promise to pay, a dispute — the things that happen to
+    // an invoice off-system and are otherwise lost.
+    const txt = prompt('Add a note to this invoice\u2019s history:');
+    if (txt && txt.trim()) {
+      invLog('note', { text: txt.trim() }).then(() => invReload());
+    }
+    return;
+  }
   const pv = e.target.closest('[data-invsendpreview]') || e.target.closest('[data-invpreview]');
   if (pv) {
     // Preview opens the REAL PDF, not a web rendering of it. They are two
@@ -23385,6 +23417,7 @@ $('kpiModalOverlay').addEventListener('click', async (e) => {
   if (e.target.closest('[data-invvoid]')) {
     if (!confirm('Void this invoice? It stays on file and keeps its number, but it is withdrawn and the client link stops working.')) return;
     await sb.from('invoices').update({ status: 'void', voided_at: new Date().toISOString() }).eq('id', invDash.open.row.id);
+    await invLog('voided', { balance_at_void: invDash.open.row.balance });
     toast('Voided', 'ok'); await invReload(); return;
   }
 });
@@ -23421,10 +23454,12 @@ async function invSyncPaid() {
 
   if (nowPaid && full.status !== 'paid') {
     await sb.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id);
+    await invLog('paid', { total: t.total, paid: t.paid });
   } else if (!nowPaid && full.status === 'paid') {
     // A payment was removed or reduced. The invoice is owed again, and the rows
     // behind it must go back to being owed too.
     await sb.from('invoices').update({ status: 'sent', paid_at: null }).eq('id', id);
+    await invLog('reopened', { balance: t.balance });
   }
 
   const { data: ls } = await sb.from('invoice_lines').select('income_id').eq('invoice_id', id).not('income_id', 'is', null);
@@ -23470,6 +23505,10 @@ function invRecordPayment() {
         created_by: (session && session.user && session.user.id) || null,
       });
       if (error) throw new Error(error.message);
+      await invLog('payment', {
+        amount: amt, method: kpiVal('method') || null,
+        reference: kpiVal('reference') || null, paid_on: kpiVal('paid_on') || TODAY(),
+      });
       await invSyncPaid();
       closeKpi();
       toast('Payment recorded', 'ok');
@@ -23737,6 +23776,94 @@ async function invSaveSendDraft() {
   const { error } = await sb.from('invoices').update(patch).eq('id', id);
   if (error) throw new Error('Could not save: ' + error.message);
   if (invDash.open && invDash.open.full) Object.assign(invDash.open.full, patch);
+}
+
+
+// ---- the history of one invoice ---------------------------------------------
+// Communications and transactions in one ordered list, newest first, because the
+// question is nearly always "where does this stand now" rather than "how did it
+// begin". Read from invoice_events, which is append-only: sent_at and viewed_at
+// can each hold only the LATEST value, so before 194 a reminder silently erased
+// the record of the first send.
+const INV_EV = {
+  created:         ['📝', 'Draft raised'],
+  sent:            ['✉️', 'Sent to the client'],
+  viewed:          ['👁', 'Client opened it'],
+  payment:         ['💰', 'Payment received'],
+  payment_removed: ['↩️', 'Payment removed'],
+  paid:            ['✅', 'Paid in full'],
+  reopened:        ['⚠️', 'No longer paid in full'],
+  voided:          ['🚫', 'Voided'],
+  note:            ['🗒', 'Note'],
+};
+// Delivery is the half of "sent" the send call cannot know. A tick on something
+// that bounced is worse than no tick at all.
+const INV_DELIVERY = {
+  delivered:        ['ok', 'delivered'],
+  opened:           ['ok', 'opened'],
+  clicked:          ['ok', 'clicked'],
+  bounced:          ['dupe', 'BOUNCED — they did not receive it'],
+  complained:       ['dupe', 'marked as spam'],
+  delivery_delayed: ['', 'delayed, still trying'],
+};
+
+function invEventLine(e) {
+  const d = e.detail || {};
+  const bits = [];
+  if (e.kind === 'sent') {
+    if (d.to) bits.push('to ' + d.to);
+    if (d.cc) bits.push('cc ' + d.cc);
+    if (d.subject) bits.push('“' + d.subject + '”');
+    if (d.resend_of) bits.push('a reminder — first sent ' + fmtDate(d.resend_of));
+  } else if (e.kind === 'payment' || e.kind === 'payment_removed') {
+    if (d.amount != null) bits.push(money(d.amount));
+    if (d.method) bits.push((INV_METHODS.find(m => m[0] === d.method) || [, d.method])[1]);
+    if (d.reference) bits.push('ref ' + d.reference);
+  } else if (e.kind === 'viewed') {
+    if (d.first === false) bits.push('again');
+  } else if (e.kind === 'note') {
+    if (d.text) bits.push(d.text);
+  }
+  if (d.backfilled) bits.push('recorded before the timeline existed');
+  return bits.join(' · ');
+}
+
+function invTimelineHTML() {
+  const evs = (invDash.open && invDash.open.events) || [];
+  const rows = evs.map(e => {
+    const meta = INV_EV[e.kind] || ['•', e.kind];
+    const who = e.who ? escapeHtml(e.who.full_name || e.who.email) : '';
+    const dl = e.delivery_status ? (INV_DELIVERY[e.delivery_status] || ['', e.delivery_status]) : null;
+    const line = invEventLine(e);
+    return '<div class="inv-ev">' +
+      '<span class="inv-ev-i">' + meta[0] + '</span>' +
+      '<div class="inv-ev-b"><b>' + escapeHtml(meta[1]) + '</b>' +
+        (dl ? ' <span class="exp-tag ' + dl[0] + '">' + escapeHtml(dl[1]) + '</span>' : '') +
+        (line ? '<div class="li-sub">' + escapeHtml(line) + '</div>' : '') +
+      '</div>' +
+      '<span class="inv-ev-t">' + escapeHtml(fmtDateTime(e.at)) + (who ? ' · ' + who : '') + '</span>' +
+    '</div>';
+  }).join('') || '<div class="li-sub" style="padding:8px 0;">Nothing has happened to this invoice yet.</div>';
+
+  return '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">🕘 History</h3>' +
+    '<button class="hub-mini" data-invnote>➕ Add a note</button></div>' +
+    '<div class="section-sub">Every send, open, payment and change, newest first. ' +
+      'A send shows its delivery status once Resend reports back.</div>' +
+    '<div class="inv-timeline">' + rows + '</div>';
+}
+
+// One place that writes to the log from the dashboard side.
+async function invLog(kind, detail) {
+  const id = invDash.open && invDash.open.row.id;
+  if (!id) return;
+  const { data: { session } } = await sb.auth.getSession();
+  // A failed log line must never break the thing it was describing.
+  try {
+    await sb.from('invoice_events').insert({
+      invoice_id: id, kind, detail: detail || {},
+      by_profile: (session && session.user && session.user.id) || null,
+    });
+  } catch (_) { /* the log is not the point */ }
 }
 
 </script>

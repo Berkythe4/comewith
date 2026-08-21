@@ -432,5 +432,62 @@ console.log("\n--- saved cc / subject / message ---");
   pass("Payment details saves the email defaults");
 }
 
+
+// ===========================================================================
+// 8. The invoice's history
+// ===========================================================================
+console.log("\n--- history ---");
+{
+  const fn = readFileSync("supabase/functions/invoice-doc/index.ts", "utf8");
+  const wh = readFileSync("supabase/functions/resend-webhook/index.ts", "utf8");
+
+  // Every act that happens TO an invoice has to reach the log, or the timeline
+  // is a list of the things somebody remembered to instrument.
+  for (const [needle, what] of [
+    ["kind: 'created'", "creating a draft"],
+    ["invLog('payment'", "recording a payment"],
+    ["invLog('payment_removed'", "removing a payment"],
+    ["invLog('voided'", "voiding"],
+    ["invLog('paid'", "reaching paid in full"],
+    ["invLog('reopened'", "falling back out of paid"],
+    ["invLog('note'", "adding a note by hand"],
+  ]) {
+    if (!dash.includes(needle)) fail(`nothing logs ${what}`);
+  }
+  pass("every dashboard action reaches the timeline");
+
+  if (!/logEvent\(row\.id as string, "sent"/.test(fn)) fail("sending is not logged");
+  else pass("sending is logged, from the function that actually sends");
+  if (!/logEvent\(row\.id as string, "viewed"/.test(fn)) fail("the client opening it is not logged");
+  else pass("the client opening the link is logged");
+
+  // sent_at holds one timestamp; the log is what makes a reminder visible.
+  if (!/resend_of/.test(fn)) fail("a reminder is indistinguishable from a first send");
+  else pass("a reminder records what it is a reminder of");
+  if (!/first: !row\.viewed_at/.test(fn)) fail("a second open is indistinguishable from the first");
+  else pass("a repeat open is marked as a repeat");
+
+  // Delivery status is the half of "sent" the send call cannot know.
+  if (!/from\("invoice_events"\)[\s\S]{0,120}delivery_status/.test(wh)) {
+    fail("the Resend webhook does not feed delivery status back to the invoice");
+  } else pass("a bounced invoice email shows as bounced on the invoice");
+  if (!/sent\.data\?\.id\)/.test(fn)) fail("the send does not store its resend id, so nothing can correlate");
+  else pass("the send stores its resend id for correlation");
+
+  // Logging must never take down the thing it describes.
+  if (!/catch \(_\) \{ \/\* the log is not the point/.test(fn)) {
+    fail("a failed log write could fail the send in the edge function");
+  } else pass("a failed log line cannot break the send");
+  if (!/catch \(_\) \{ \/\* the log is not the point \*\/ \}/.test(dash)) {
+    fail("a failed log write could break the dashboard action");
+  } else pass("...nor the dashboard action");
+
+  if (!dash.includes("function invTimelineHTML")) fail("there is no timeline to read");
+  else pass("the invoice screen renders the history");
+  if (!/const gone = \(invDash\.open\.pays/.test(dash)) {
+    fail("a removed payment is read after deletion, so it cannot be described");
+  } else pass("a removed payment is described from before it was deleted");
+}
+
 console.log(fails ? `\n${fails} FAILURE(S)` : "\nAll checks passed.");
 process.exit(fails ? 1 : 0);

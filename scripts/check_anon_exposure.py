@@ -78,6 +78,7 @@ MUST_BE_EMPTY = [
     ("v_invoice_totals", "invoice totals and balances"),
     ("v_invoice_line_calc", "invoice line detail"),
     ("v_income_invoiced", "which income is billed"),
+    ("invoice_events", "who was chased, when, and what they paid"),
 ]
 
 

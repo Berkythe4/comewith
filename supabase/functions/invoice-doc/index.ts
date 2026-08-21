@@ -151,6 +151,19 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
   return { doc, row: inv };
 }
 
+/** Append to the invoice's narrative. Never throws into the caller: failing to
+ *  write a log line must not fail the send that the client already received. */
+async function logEvent(
+  invoiceId: string, kind: string,
+  detail: Record<string, unknown> = {}, resendId?: string | null,
+) {
+  try {
+    await admin().from("invoice_events").insert({
+      invoice_id: invoiceId, kind, detail, resend_id: resendId || null,
+    });
+  } catch (_) { /* the log is not the point of the request */ }
+}
+
 const fileName = (doc: InvoiceDoc) =>
   `Invoice ${doc.invoice_no}${doc.bill_to_name ? " - " + doc.bill_to_name.replace(/[\\/:*?"<>|]/g, "") : ""}.pdf`;
 
@@ -233,6 +246,13 @@ Deno.serve(async (req) => {
     if (!row.viewed_at) {
       await admin().from("invoices").update({ viewed_at: new Date().toISOString() }).eq("id", row.id);
     }
+    // Logged on EVERY open, not just the first. viewed_at answers "have they
+    // seen it"; the log answers "have they looked at it again since I chased",
+    // which is the one you actually act on.
+    await logEvent(row.id as string, "viewed", {
+      first: !row.viewed_at,
+      ua: (req.headers.get("user-agent") || "").slice(0, 120),
+    });
     // The CSS travels with the markup so invoice.html never keeps its own copy
     // of it. Two stylesheets for one document is how the emailed PDF and the
     // web page start looking like different invoices.
@@ -316,6 +336,17 @@ Deno.serve(async (req) => {
       await a.from("income").update({ status: "invoiced" })
         .in("id", incomeIds).eq("status", "accrued");
     }
+    await logEvent(row.id as string, "sent", {
+      to,
+      cc: body.cc || null,
+      subject,
+      resend: !!sent.data?.id,
+      // A re-send is a different act from the first send and reads differently
+      // on the timeline.
+      resend_of: row.sent_at ? row.sent_at : null,
+      amount_due: t.balance,
+    }, sent.data?.id);
+
     return ok({ sent: true, to, resend_id: sent.data?.id, path, invoiced: incomeIds.length });
   }
 

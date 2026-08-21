@@ -106,6 +106,14 @@ Deno.serve(async (req) => {
         .eq("id", originalSent.subscriber_id);
     }
 
+    // --- Correlate to an INVOICE send (resend_id == email_id), so a bounced
+    //     invoice shows as bounced on the invoice's own timeline instead of
+    //     looking delivered because the send call succeeded. ---
+    await admin
+      .from("invoice_events")
+      .update({ delivery_status: eventType })
+      .eq("resend_id", resendEmailId);
+
     // --- Also correlate to a Conversation message (resend_id == email_id) so
     //     delivery + bounce status shows in the thread for the whole team. ---
     const { data: cmsg } = await admin
