@@ -18,6 +18,7 @@
 // a change that produces a file no reader can open fails here rather than in a
 // client's inbox.
 
+import { readFileSync } from "node:fs";
 import { Pdf, measure, wrap, toWinAnsi } from "../supabase/functions/invoice-doc/pdf.ts";
 import {
   computeTotals, lineAmounts, discountNote, money, invoiceHtml, renderInvoicePdf,
@@ -229,6 +230,69 @@ pass("the HTML carries the same client, payment block and balance");
   eq("tax off prints no tax row", /NY sales tax/.test(noTax), false);
   const withTax = invoiceHtml({ ...FULL, tax_enabled: true, tax_rate: 0 }, { standalone: true });
   eq("tax ON at 0% still prints the row, because it was asserted", /NY sales tax/.test(withTax), true);
+}
+
+
+// ===========================================================================
+// 4. Discoverability — the dashboard's cross-links to an invoice
+//
+// String-level checks against dashboard.html rather than executed code: these
+// functions read module-scope state (incomeDash, moneyState) that only exists
+// inside the page. What matters is that each surface exists AND is wired to a
+// handler, because the failure mode is silent — a chip that renders and does
+// nothing when clicked looks perfectly fine in a screenshot.
+// ===========================================================================
+console.log("\n--- where you find an invoice ---");
+
+const dash = readFileSync("dashboard.html", "utf8");
+const wired = (chip, handler, where) => {
+  if (!dash.includes(chip)) fail(`${where}: no chip (${chip})`);
+  else if (!dash.includes(handler)) fail(`${where}: chip renders but nothing handles it (${handler})`);
+  else pass(`${where}: chip renders and opens the invoice`);
+};
+wired("data-incinvopen=", "[data-incinvopen]", "Income list");
+wired("data-invopenany=", "[data-invopenany]", "Event money");
+
+if (!dash.includes('id="panel-invoices"')) fail("no Invoices control-center panel");
+else if (!/key: 'invoices'/.test(dash)) fail("the Invoices module is not registered in the nav");
+else pass("Invoices control center exists and is in the nav");
+
+if (!dash.includes("function moneyInvoicesHTML")) fail("the money screen does not list the event's invoices");
+else if (!dash.includes("moneyToolbarHTML() + moneyInvoicesHTML()")) fail("moneyInvoicesHTML is never rendered");
+else pass("the event Money screen lists that event's invoices");
+
+// Both surfaces must LOAD the lookup, or their chips can never draw.
+if ((dash.match(/from\('v_income_invoiced'\)/g) || []).length < 2) {
+  fail("fewer than two surfaces load v_income_invoiced - the other's chips can never draw");
+} else pass("both the Income list and the Money screen load the invoiced-or-not lookup");
+
+// Width: the three invoice screens are wide, everything else stays narrow.
+{
+  const n = (dash.match(/kpiWide\(true\)/g) || []).length;
+  if (n < 3) fail(`only ${n} screen(s) open wide - create, editor and send should all be wide`);
+  else pass("create, editor and send all open wide");
+  // The window has to clear openKpi's own explanatory comment, not just its
+  // signature — 240 chars stopped inside the comment and reported a false miss.
+  if (!/function openKpi[\s\S]{0,500}kpiWide\(false\)/.test(dash)) {
+    fail("openKpi does not reset the width - a small form opened from the invoice screen inherits it");
+  } else pass("every other modal stays narrow");
+}
+
+// The send confirmation must restate what is about to leave the building.
+{
+  const i = dash.indexOf("function invSend()");
+  const send = dash.slice(i, i + 4600);
+  const before = fails;
+  for (const [key, what] of [["Invoice", "the invoice number"], ["Client", "the client"],
+                             ["Email", "the email address"], ["Due", "the due date"],
+                             ["Amount due", "the amount due"], ["They can pay by", "how they can pay"]]) {
+    if (!send.includes(`row2('${key}'`)) fail(`the send confirmation does not show ${what}`);
+  }
+  if (fails === before) pass("send confirmation restates number, client, email, due date, amount and payment methods");
+  if (!/No payment method will print/.test(send)) fail("sending an unpayable invoice is not warned about");
+  else pass("sending with no payment method set up is warned about, in red");
+  if (!/data-invsendpreview/.test(send)) fail("the send screen has no preview");
+  else pass("the send screen previews exactly what the client will see");
 }
 
 console.log(fails ? `\n${fails} FAILURE(S)` : "\nAll checks passed.");
