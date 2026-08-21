@@ -1773,6 +1773,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
       <div class="panel" id="panel-data-health"><div id="dataHealthBody"></div></div>
+      <div class="panel" id="panel-invoices"><div id="invoicesBody"></div></div>
       <div class="panel" id="panel-gearwatch"><div id="gearWatchBody"></div></div>
       <div class="panel" id="panel-pl"><div id="plBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
@@ -2187,6 +2188,9 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'content-center')) MODULES.push({ key: 'content-center', label: 'Content Center', nav_group: 'Marketing', sort_order: 5, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
   if (!MODULES.some(m => m.key === 'data-health')) MODULES.push({ key: 'data-health', label: '\uD83E\uDE7A Data Health', nav_group: 'Team HQ', sort_order: 90, built: true, signed_off: true, master_only: true, default_roles: [] });
   if (!MODULES.some(m => m.key === 'scene-map')) MODULES.push({ key: 'scene-map', label: '🗺️ Scene Map', nav_group: 'Radio', sort_order: 30, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
+  // Invoices sits with the money modules. Registered client-side the same way as
+  // the others so the nav does not depend on migration 188 having propagated.
+  if (!MODULES.some(m => m.key === 'invoices')) MODULES.push({ key: 'invoices', label: '🧾 Invoices', nav_group: 'Money', sort_order: 15, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'full'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -4912,6 +4916,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'data-health') { await loadDataHealth(); return; } // master-only (link audit + auto-link)
+  if (tab === 'invoices') { await loadInvoices(); return; } // custom (billing the accrued revenue)
   if (tab === 'gearwatch') { await loadGearWatch(); return; } // master-only (stolen-gear resale scan)
   if (tab === 'pl') { await loadPL(); return; } // master-only (month-by-month P&L, actual vs budget)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
@@ -7807,7 +7812,7 @@ async function loadMoneyData(id) {
     moneyForm.kind = null;
   }
   const [ev, tk, inc, exp, don, spo, sponsors, actors, cats, streams, fc] = await Promise.all([
-    sb.from('events').select('id, name, series, event_date').eq('id', id).single(),
+    sb.from('events').select('id, name, series, event_date, owner_actor_id').eq('id', id).single(),
     sb.from('ticketing').select('id, ticket_type, quantity, amount_paid').eq('event_id', id).order('ticket_type'),
     sb.from('income').select('id, amount, category, description, date, status, expected_amount, settled_at').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
     sb.from('expenses').select('id, amount, category, description, date, vendor, status, expected_amount, settled_at, due_date, cash_source').eq('event_id', id).is('deleted_at', null).order('amount', { ascending: false }),
@@ -8401,6 +8406,7 @@ function moneyToolbarHTML() {
       (moneyLink.open ? '\u2715 Close' : '\uD83D\uDD17 Link existing') + '</button>' +
     add('forecast', '\uD83D\uDCC8 Forecast a line') +
     add('income', '\u2795 Revenue') +
+    (moneyState.eventId ? '<button class="hub-btn ghost" data-money-invoice title="Bill this event\u2019s unbilled revenue on one invoice">\uD83E\uDDFE Invoice</button>' : '') +
     add('expense', '\u2795 Cost') +
     add('ticket', '\uD83C\uDF9F Tickets') +
     add('donation', '\u2764 Donation') +
@@ -8743,12 +8749,14 @@ function kindOf(addEl) { return addEl.dataset.moneyAdd; }
 const MONEY_SEL = '[data-money-del],[data-money-add],[data-money-settle],' +
   '[data-money-linkgo],[data-mcommit]';
 const MONEY_UI_SEL = '[data-mcat],[data-mexpand],[data-mcollapse],' +
-  '[data-money-formopen],[data-money-formclose],[data-money-linkopen],[data-money-linkclose]';
+  '[data-money-formopen],[data-money-formclose],[data-money-linkopen],[data-money-linkclose],' +
+  '[data-money-invoice]';
 
 // Pure-UI clicks: expanding a category, opening a form, opening the drawer.
 // None of them change data, so none of them should cost the six queries a
 // reload costs - they repaint from moneyState.data. Returns true if handled.
 async function moneyUiClick(e, container) {
+  if (e.target.closest('[data-money-invoice]')) { moneyInvoiceEvent(); return true; }
   const cat = e.target.closest('[data-mcat]');
   if (cat) { const k = cat.dataset.mcat; moneyGrid.open[k] = !moneyGrid.open[k]; moneyRepaint(container); return true; }
   if (e.target.closest('[data-mexpand]')) {
@@ -13595,6 +13603,8 @@ function renderIncBulk() {
     '<span class="exp-bulk-sep"></span>' +
     '<button class="hub-mini" data-incbulkverify="1">✓ Verify</button>' +
     '<button class="hub-mini" data-incbulkverify="0">○ Un-verify</button>' +
+    '<span class="exp-bulk-sep"></span>' +
+    '<button class="hub-mini primary" data-incinvoice title="Bill these rows on one invoice">🧾 Invoice ' + ids.length + '</button>' +
     '<button class="hub-mini danger" data-incbulkdel>Delete ' + ids.length + '</button>' +
     '<button class="hub-mini bulk-deselect" data-incbulkclear title="Or press Esc">\u2715 Deselect all ' + ids.length + '</button>' +
     '<button class="hub-mini" data-incbulkclear>clear</button></div>';
@@ -13792,6 +13802,11 @@ $('panel-income').addEventListener('change', (e) => {
 $('panel-income').addEventListener('focusout', (e) => { const td = e.target.closest('[data-incedit]'); if (td) saveIncomeField(td); });
 $('panel-income').addEventListener('keydown', (e) => { const td = e.target.closest('[data-incedit]'); if (td && e.key === 'Enter') { e.preventDefault(); td.blur(); } });
 $('panel-income').addEventListener('click', async (e) => {
+  if (e.target.closest('[data-incinvoice]')) {
+    const rows = incomeDash.rows.filter(r => incomeDash.sel.has(r.id));
+    await invoiceFromIncomeRows(rows);
+    return;
+  }
   if (e.target.closest('[data-incclear]')) {
     Object.assign(incomeDash, { q: '', event: '', category: '', flag: '', ledger: '' }); renderIncome(); return;
   }
@@ -22670,6 +22685,744 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 });
+
+// ===========================================================================
+// INVOICES — billing revenue that is already on the books.
+//
+// The rule this whole module obeys, from migration 188: AN INVOICE IS NOT
+// REVENUE. Income rows are the revenue; an invoice is the document that asks
+// for them. Nothing here writes to the P&L. The only thing it changes about an
+// income row is its `status` (accrued -> invoiced on send, -> received when the
+// invoice is paid in full), which is exactly the lifecycle 161 defined.
+//
+// Money is computed by `v_invoice_totals` on the server and by `computeTotals`
+// in the edge function's template.ts. This file never does invoice arithmetic
+// of its own - it renders what the view returns - so there is no third
+// implementation to drift.
+// ===========================================================================
+const INV_STATES = [
+  ['draft',   'Draft',    'not issued yet'],
+  ['sent',    'Sent',     'issued, nothing paid'],
+  ['partial', 'Part-paid','a deposit has landed'],
+  ['overdue', 'Overdue',  'past its due date, unpaid'],
+  ['paid',    'Paid',     'settled in full'],
+  ['void',    'Void',     'withdrawn'],
+];
+const INV_STATE_CLS = { draft: 'cc-todo', sent: 'cc-active', partial: 'cc-active',
+                        overdue: 'cc-todo', paid: 'cc-done', void: 'cc-off' };
+const INV_METHODS = [['wire', 'Bank / wire'], ['paypal', 'PayPal'], ['cash', 'Cash'],
+                     ['check', 'Check'], ['other', 'Other']];
+
+const invDash = { rows: [], q: '', state: [], actors: [], events: [], settings: null, open: null };
+
+async function loadInvoices() {
+  $('invoicesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading invoices…</div>';
+  const [list, ac, ev, st] = await Promise.all([
+    sb.from('v_invoices_list').select('*').order('issue_date', { ascending: false }).order('invoice_no', { ascending: false }),
+    sb.from('actors').select('id, display_name, legal_name, email').is('deleted_at', null).order('display_name'),
+    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('invoice_settings').select('*').eq('id', true).maybeSingle(),
+  ]);
+  if (list.error) { $('invoicesBody').innerHTML = '<div class="panel-state err">' + escapeHtml(list.error.message) + '</div>'; return; }
+  invDash.rows = list.data || [];
+  invDash.actors = ac.data || [];
+  invDash.events = ev.data || [];
+  // Settings are master-only by policy, so a sub_admin legitimately reads null
+  // here. That is not an error and must not be reported as one - it only means
+  // the payment details are not this person's to see.
+  invDash.settings = (st && st.data) || null;
+  renderInvoices();
+}
+
+function invFiltered() {
+  const s = invDash, ql = s.q.toLowerCase();
+  const any = (arr, v) => !arr.length || arr.indexOf(v) >= 0;
+  return s.rows.filter(r =>
+    any(s.state, r.state || '') &&
+    (!ql || [r.invoice_no, r.bill_to, r.event_name].join(' ').toLowerCase().includes(ql)));
+}
+
+function renderInvoices() {
+  const s = invDash, list = invFiltered();
+  const sum = (arr, f) => arr.reduce((t, r) => t + (Number(f(r)) || 0), 0);
+  const outstanding = s.rows.filter(r => ['sent', 'partial', 'overdue'].indexOf(r.state) >= 0);
+  const overdue = s.rows.filter(r => r.state === 'overdue');
+  const card = (l, v, sub2, cls) => '<div class="hub-card"><div class="lbl">' + l + '</div><div class="val ' +
+    (cls || '') + '">' + v + '</div><div class="li-sub">' + (sub2 || '&nbsp;') + '</div></div>';
+  const nState = (k) => s.rows.filter(r => (r.state || '') === k).length;
+  const chip = (k, label, n, title) =>
+    '<button class="ev-chip' + (s.state.indexOf(k) >= 0 ? ' on' : '') + '" data-invchip="' + k + '"' +
+    (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' + escapeHtml(label) +
+    ' <span class="ev-chip-n">' + n + '</span></button>';
+
+  const rows = list.map(r => {
+    const st = r.state || 'draft';
+    return '<tr class="' + (INV_STATE_CLS[st] || '') + '">' +
+      '<td><a class="cc-title-link" href="#" data-invopen="' + escapeHtml(r.id) + '">' +
+        escapeHtml(r.invoice_no) + '</a>' +
+        '<div class="li-sub">' + escapeHtml(fmtDate(r.issue_date)) +
+        (r.event_name ? ' · ' + escapeHtml(r.event_name) : '') + '</div></td>' +
+      '<td>' + escapeHtml(r.bill_to || '—') +
+        (r.bill_to_email ? '<div class="li-sub">' + escapeHtml(r.bill_to_email) + '</div>' : '') + '</td>' +
+      '<td><span class="cc-state">' + escapeHtml((INV_STATES.find(x => x[0] === st) || [, st])[1]) + '</span>' +
+        (r.viewed_at ? '<div class="li-sub" title="The client opened the link">👁 viewed</div>' : '') + '</td>' +
+      '<td>' + escapeHtml(r.due_date ? fmtDate(r.due_date) : 'on receipt') + '</td>' +
+      '<td class="num">' + money(r.total) + '</td>' +
+      '<td class="num">' + (Number(r.paid) ? money(r.paid) : '<span class="muted">·</span>') + '</td>' +
+      '<td class="num"><b class="' + (Number(r.balance) > 0 ? (st === 'overdue' ? 'neg' : '') : 'pos') + '">' +
+        money(r.balance) + '</b></td>' +
+      '<td class="cc-act">' +
+        '<button class="hub-mini" data-invopen="' + escapeHtml(r.id) + '">Open</button>' +
+        '<button class="hub-mini" data-invpdf="' + escapeHtml(r.id) + '" title="Download the PDF">↓ PDF</button>' +
+      '</td></tr>';
+  }).join('') || '<tr><td colspan="8" class="muted" style="padding:14px;">No invoices match these filters.</td></tr>';
+
+  $('invoicesBody').innerHTML =
+    '<div class="hub-sec-bar"><h3>🧾 Invoices</h3><span style="display:flex;gap:8px;">' +
+      '<button class="hub-btn ghost" data-invsettings>⚙ Payment details</button>' +
+      '<button class="hub-btn" data-invnew>➕ New invoice</button></span></div>' +
+    '<div class="section-sub">An invoice bills income that is already on the books. Creating one never adds revenue — ' +
+      'it moves the rows it bills from <b>accrued</b> to <b>invoiced</b>, and to <b>received</b> when it is paid in full.</div>' +
+    '<div class="hub-cards">' +
+      card('Outstanding', money(sum(outstanding, r => r.balance)), outstanding.length + ' unpaid', outstanding.length ? 'neg' : '') +
+      card('Overdue', money(sum(overdue, r => r.balance)), overdue.length + ' past due', overdue.length ? 'neg' : '') +
+      card('Paid this year', money(sum(s.rows.filter(r => r.state === 'paid' &&
+        String(r.issue_date || '').slice(0, 4) === String(new Date().getFullYear())), r => r.total)), 'settled', 'pos') +
+      card('Drafts', String(nState('draft')), 'not issued') +
+    '</div>' +
+    '<div class="ev-filters"><div class="ev-filter-row">' +
+      '<input class="modal-input" data-invq placeholder="🔎 Search number, client, event…" style="max-width:250px;" value="' + escapeHtml(s.q) + '">' +
+      (s.q || s.state.length ? '<button class="hub-mini" data-invclear>✕ clear</button>' : '') +
+      '<span class="li-sub" style="margin-left:auto;">' + list.length + ' of ' + s.rows.length + '</span>' +
+    '</div><div class="ev-filter-row"><span class="ev-filter-lbl">State</span><span class="ev-chips">' +
+      INV_STATES.filter(x => nState(x[0])).map(x => chip(x[0], x[1], nState(x[0]), x[2])).join('') +
+    '</span></div></div>' +
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+      '<th>Invoice</th><th>Client</th><th>State</th><th>Due</th>' +
+      '<th class="num">Total</th><th class="num">Paid</th><th class="num">Balance</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// ---- creating one -----------------------------------------------------------
+// Both entry points (Income bulk bar, event Money toolbar) land here, so an
+// invoice built from a selection and one built from an event are the same object
+// made the same way.
+async function invCreateFrom(opts) {
+  const incomeRows = opts.incomeRows || [];
+  const evId = opts.eventId || (incomeRows.find(r => r.event_id) || {}).event_id || null;
+  const actorGuess = opts.actorId || (incomeRows.find(r => r.actor_id) || {}).actor_id || null;
+  const ev = invDash.events.find(e => e.id === evId) || (opts.event || null);
+
+  const actorOpts = ['<option value="">— pick a client —</option>'].concat(
+    invDash.actors.map(a => '<option value="' + escapeHtml(a.id) + '"' +
+      (a.id === actorGuess ? ' selected' : '') + '>' + escapeHtml(a.display_name) + '</option>')).join('');
+  const evOpts = ['<option value="">— none —</option>'].concat(
+    invDash.events.map(e => '<option value="' + escapeHtml(e.id) + '"' +
+      (e.id === evId ? ' selected' : '') + '>' + escapeHtml(e.name) + '</option>')).join('');
+  const terms = (invDash.settings && invDash.settings.default_terms_days) || 14;
+  const preview = incomeRows.length
+    ? '<div class="kpi-hint" style="margin-bottom:10px;">Billing <b>' + incomeRows.length + '</b> income row' +
+      (incomeRows.length === 1 ? '' : 's') + ' — ' +
+      money(incomeRows.reduce((t, r) => t + Number(r.expected_amount || r.amount || 0), 0)) +
+      '. Each becomes one line you can edit before sending.</div>'
+    : '<div class="kpi-hint" style="margin-bottom:10px;">Starting an empty invoice — add lines once it opens.</div>';
+
+  openKpi('New invoice', 'It opens as a draft. Nothing is sent until you send it.',
+    preview +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">Bill to *</label><select class="modal-input" name="actor">' + actorOpts + '</select></div>' +
+      '<div><label class="modal-label">Event</label><select class="modal-input" name="event">' + evOpts + '</select></div>' +
+    '</div>' +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">Issue date</label><input class="modal-input" type="date" name="issue" value="' + TODAY() + '"></div>' +
+      '<div><label class="modal-label">Payment terms</label><select class="modal-input" name="terms">' +
+        [[0, 'Due on receipt'], [7, 'Net 7'], [14, 'Net 14'], [30, 'Net 30'], [45, 'Net 45'], [60, 'Net 60']]
+          .map(t => '<option value="' + t[0] + '"' + (t[0] === terms ? ' selected' : '') + '>' + t[1] + '</option>').join('') +
+      '</select></div>' +
+    '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Notes on the invoice</label>' +
+      '<textarea class="modal-input" name="notes" rows="2" placeholder="Thanks — anything the client should read.">' +
+      escapeHtml((invDash.settings && invDash.settings.default_notes) || '') + '</textarea></div>',
+    async () => {
+      const actorId = kpiVal('actor');
+      if (!actorId) throw new Error('Pick who is being billed.');
+      const actor = invDash.actors.find(a => a.id === actorId);
+      const issue = kpiVal('issue') || TODAY();
+      const days = Number(kpiVal('terms') || 0);
+      const due = days > 0 ? new Date(new Date(issue + 'T00:00:00Z').getTime() + days * 86400000).toISOString().slice(0, 10) : null;
+
+      const { data: noRow, error: noErr } = await sb.rpc('next_invoice_no');
+      if (noErr) throw new Error('Could not get an invoice number: ' + noErr.message);
+
+      const { data: { session } } = await sb.auth.getSession();
+      const chosenEv = kpiVal('event') || null;
+      const { data: inv, error } = await sb.from('invoices').insert({
+        invoice_no: noRow,
+        bill_to_actor_id: actorId,
+        // Snapshot the name and email NOW. The document must not silently
+        // rewrite itself if the contact is renamed later.
+        bill_to_name: (actor && (actor.legal_name || actor.display_name)) || null,
+        bill_to_email: (actor && actor.email) || null,
+        event_id: chosenEv,
+        issue_date: issue, due_date: due, terms_days: days || null,
+        notes: kpiVal('notes') || null,
+        ledger: (incomeRows.find(r => r.ledger) || {}).ledger || 'come_with',
+        created_by: (session && session.user && session.user.id) || null,
+      }).select('id, invoice_no').single();
+      if (error) throw new Error(error.message);
+
+      if (incomeRows.length) {
+        const lines = incomeRows.map((r, i) => ({
+          invoice_id: inv.id, position: i,
+          description: r.description || r.category || 'Services',
+          detail: r.category && r.description ? r.category : null,
+          qty: 1,
+          // The AGREED figure is what to bill. `amount` on an accrued row is
+          // what has settled, which for an unpaid row is often 0 - billing that
+          // would send a client an invoice for nothing.
+          unit_price: Number(r.expected_amount != null ? r.expected_amount : r.amount) || 0,
+          income_id: r.id,
+        }));
+        const { error: lErr } = await sb.from('invoice_lines').insert(lines);
+        if (lErr) throw new Error('Invoice made, but the lines failed: ' + lErr.message);
+      }
+      closeKpi();
+      toast('Draft ' + inv.invoice_no + ' created', 'ok');
+      if (typeof incomeDash !== 'undefined' && incomeDash.sel) incomeDash.sel.clear();
+      await loadInvoices();
+      activateTab('invoices');
+      openInvoice(inv.id);
+    }, 'Create draft');
+}
+
+// ---- the invoice itself -----------------------------------------------------
+async function openInvoice(id) {
+  const [inv, lines, pays] = await Promise.all([
+    sb.from('v_invoices_list').select('*').eq('id', id).maybeSingle(),
+    sb.from('v_invoice_line_calc').select('*').eq('invoice_id', id).order('position'),
+    sb.from('invoice_payments').select('*').eq('invoice_id', id).order('paid_on'),
+  ]);
+  if (inv.error || !inv.data) { toast('Could not open that invoice', 'err'); return; }
+  const { data: full } = await sb.from('invoices').select('*').eq('id', id).single();
+  invDash.open = { row: inv.data, full, lines: lines.data || [], pays: pays.data || [] };
+  renderInvoiceModal();
+}
+
+function renderInvoiceModal() {
+  const o = invDash.open, r = o.row, f = o.full;
+  const editable = f.status === 'draft';
+  const cur = r.currency || 'USD';
+  const lineRow = (l, i) => '<tr>' +
+    '<td>' + (editable
+      ? '<input class="modal-input ev-inline" style="max-width:none;width:100%;" data-invline="description" data-id="' +
+        escapeHtml(l.id) + '" value="' + escapeHtml(l.description) + '">' +
+        '<input class="modal-input ev-inline" style="max-width:none;width:100%;margin-top:3px;font-size:.68rem;" data-invline="detail" data-id="' +
+        escapeHtml(l.id) + '" value="' + escapeHtml(l.detail || '') + '" placeholder="breakdown — what this line is made of">'
+      : '<b>' + escapeHtml(l.description) + '</b>' + (l.detail ? '<div class="li-sub">' + escapeHtml(l.detail) + '</div>' : '')) +
+      (l.income_id ? '<div class="li-sub" title="This line bills a row already on the books">🔗 linked to income</div>' : '') + '</td>' +
+    '<td class="num">' + (editable ? '<input class="modal-input ev-inline num" style="width:56px;" type="number" step="0.01" data-invline="qty" data-id="' + escapeHtml(l.id) + '" value="' + escapeHtml(l.qty) + '">' : escapeHtml(l.qty)) + '</td>' +
+    '<td class="num">' + (editable ? '<input class="modal-input ev-inline num" style="width:84px;" type="number" step="0.01" data-invline="unit_price" data-id="' + escapeHtml(l.id) + '" value="' + escapeHtml(l.unit_price) + '">' : money(l.unit_price)) + '</td>' +
+    '<td class="num">' + (editable
+      ? '<select class="hub-status-sel cc-sel" style="width:62px;" data-invline="discount_kind" data-id="' + escapeHtml(l.id) + '">' +
+        ['', 'amount', 'percent'].map(k => '<option value="' + k + '"' + ((l.discount_kind || '') === k ? ' selected' : '') + '>' +
+          (k === '' ? '—' : k === 'amount' ? '$' : '%') + '</option>').join('') + '</select>' +
+        '<input class="modal-input ev-inline num" style="width:56px;margin-left:3px;" type="number" step="0.01" data-invline="discount_value" data-id="' +
+        escapeHtml(l.id) + '" value="' + escapeHtml(l.discount_value) + '">'
+      : (Number(l.line_discount) ? money(-l.line_discount) : '<span class="muted">·</span>')) + '</td>' +
+    '<td class="num"><label style="font-size:.66rem;color:var(--mid);cursor:pointer;"><input type="checkbox" data-invline="taxable" data-id="' +
+      escapeHtml(l.id) + '"' + (l.taxable ? ' checked' : '') + (editable ? '' : ' disabled') + ' style="width:auto;margin:0 3px 0 0;">tax</label></td>' +
+    '<td class="num"><b>' + money(l.amount) + '</b></td>' +
+    '<td class="cc-act">' + (editable ? '<button class="hub-mini exp-del" data-invlinedel="' + escapeHtml(l.id) + '">✕</button>' : '') + '</td></tr>';
+
+  const totalRow = (lbl, val, cls) => '<tr class="' + (cls || '') + '"><td colspan="4"></td>' +
+    '<td class="num" style="color:var(--mid);">' + escapeHtml(lbl) + '</td><td class="num">' + val + '</td><td></td></tr>';
+
+  let totals = totalRow('Subtotal', money(r.subtotal));
+  if (Number(r.line_discount)) totals += totalRow('Line discounts', money(-r.line_discount));
+  if (Number(r.invoice_discount)) totals += totalRow('Invoice discount', '<span class="neg">' + money(-r.invoice_discount) + '</span>');
+  if (f.tax_enabled) totals += totalRow((f.tax_label || 'Tax') + ' (' + Number(f.tax_rate) + '%)', money(r.tax));
+  totals += totalRow('TOTAL', '<b>' + money(r.total) + '</b>');
+  if (Number(r.paid)) {
+    totals += totalRow('Paid', '<span class="pos">' + money(-r.paid) + '</span>');
+    totals += totalRow('BALANCE', '<b class="' + (Number(r.balance) > 0 ? 'neg' : 'pos') + '">' + money(r.balance) + '</b>');
+  }
+
+  const payRows = o.pays.map(p => '<tr><td>' + escapeHtml(fmtDate(p.paid_on)) + '</td>' +
+    '<td>' + escapeHtml((INV_METHODS.find(m => m[0] === p.method) || [, p.method || '—'])[1]) + '</td>' +
+    '<td>' + escapeHtml(p.reference || '') + (p.auto_matched ? ' <span class="exp-tag">auto</span>' : '') + '</td>' +
+    '<td class="num">' + money(p.amount) + '</td>' +
+    '<td class="cc-act"><button class="hub-mini exp-del" data-invpaydel="' + escapeHtml(p.id) + '">✕</button></td></tr>').join('')
+    || '<tr><td colspan="5" class="muted" style="padding:8px;">Nothing received yet.</td></tr>';
+
+  const noPay = !invDash.settings ? ''
+    : (!(invDash.settings.paypal_enabled && invDash.settings.paypal_handle) &&
+       !(invDash.settings.wire_enabled && (invDash.settings.wire_account || invDash.settings.wire_routing)))
+      ? '<div class="kpi-hint" style="border-color:var(--amber);margin-bottom:10px;">⚠ No payment method is set up yet, so this invoice will print with no way to pay it. ' +
+        'Open <b>⚙ Payment details</b> and add PayPal or the Bluevine wire details first.</div>'
+      : '';
+
+  const body = noPay +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">' +
+      '<span class="cc-state">' + escapeHtml((INV_STATES.find(x => x[0] === r.state) || [, r.state])[1]) + '</span>' +
+      '<span class="li-sub">' + escapeHtml(r.bill_to || 'no client') + (r.bill_to_email ? ' · ' + escapeHtml(r.bill_to_email) : '') + '</span>' +
+      '<span style="flex:1"></span>' +
+      (f.sent_at ? '<span class="li-sub">sent ' + escapeHtml(fmtDate(f.sent_at)) + '</span>' : '') +
+      (f.viewed_at ? '<span class="li-sub">👁 viewed ' + escapeHtml(fmtDate(f.viewed_at)) + '</span>' : '') +
+    '</div>' +
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+      '<th>Line</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Discount</th>' +
+      '<th class="num"></th><th class="num">Amount</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + (o.lines.map(lineRow).join('') ||
+      '<tr><td colspan="7" class="muted" style="padding:10px;">No lines yet.</td></tr>') +
+    totals + '</tbody></table></div>' +
+    (editable ? '<button class="hub-mini" data-invlineadd style="margin-top:8px;">➕ Add line</button>' : '') +
+
+    '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Invoice-wide</h3></div>' +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">Discount on the whole invoice</label>' +
+        '<div style="display:flex;gap:6px;">' +
+        '<select class="hub-status-sel" data-invfield="discount_kind"' + (editable ? '' : ' disabled') + '>' +
+          ['', 'amount', 'percent'].map(k => '<option value="' + k + '"' + ((f.discount_kind || '') === k ? ' selected' : '') + '>' +
+            (k === '' ? '— none' : k === 'amount' ? '$ amount' : '% percent') + '</option>').join('') + '</select>' +
+        '<input class="modal-input" type="number" step="0.01" data-invfield="discount_value" value="' +
+          escapeHtml(f.discount_value) + '"' + (editable ? '' : ' disabled') + ' style="max-width:100px;"></div></div>' +
+      '<div><label class="modal-label">Tax</label><div style="display:flex;gap:6px;align-items:center;">' +
+        '<label style="font-size:.72rem;cursor:pointer;white-space:nowrap;"><input type="checkbox" data-invfield="tax_enabled"' +
+          (f.tax_enabled ? ' checked' : '') + (editable ? '' : ' disabled') + ' style="width:auto;margin:0 4px 0 0;">charge tax</label>' +
+        '<input class="modal-input" type="number" step="0.001" data-invfield="tax_rate" value="' + escapeHtml(f.tax_rate) +
+          '" placeholder="8.875"' + (editable ? '' : ' disabled') + ' style="max-width:90px;">' +
+        '<input class="modal-input" data-invfield="tax_label" value="' + escapeHtml(f.tax_label || '') +
+          '" placeholder="NY sales tax"' + (editable ? '' : ' disabled') + '></div></div>' +
+    '</div>' +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">Due date</label><input class="modal-input" type="date" data-invfield="due_date" value="' +
+        escapeHtml((f.due_date || '').slice(0, 10)) + '"' + (editable ? '' : ' disabled') + '></div>' +
+      '<div><label class="modal-label">Show payment methods</label><div style="display:flex;gap:12px;padding-top:6px;">' +
+        '<label style="font-size:.72rem;cursor:pointer;"><input type="checkbox" data-invfield="pay_paypal"' + (f.pay_paypal ? ' checked' : '') +
+          ' style="width:auto;margin:0 4px 0 0;">PayPal</label>' +
+        '<label style="font-size:.72rem;cursor:pointer;"><input type="checkbox" data-invfield="pay_wire"' + (f.pay_wire ? ' checked' : '') +
+          ' style="width:auto;margin:0 4px 0 0;">Wire</label></div></div>' +
+    '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-input" data-invfield="notes" rows="2">' +
+      escapeHtml(f.notes || '') + '</textarea></div>' +
+
+    '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Payments received</h3>' +
+      '<button class="hub-mini" data-invpayadd>➕ Record a payment</button></div>' +
+    '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+      '<th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + payRows + '</tbody></table></div>' +
+
+    '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Send &amp; file</h3></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+      '<button class="hub-btn ghost" data-invpreview>👁 Preview</button>' +
+      '<button class="hub-btn ghost" data-invpdf2>↓ Download PDF</button>' +
+      '<button class="hub-btn" data-invsend>✉ ' + (f.sent_at ? 'Re-send' : 'Send') + ' to client</button>' +
+      (f.status !== 'void' ? '<button class="hub-mini danger" data-invvoid style="margin-left:auto;">Void</button>' : '') +
+    '</div>' +
+    (r.public_token ? '<div class="li-sub" style="margin-top:8px;">Client link: <code>' +
+      escapeHtml(location.origin + '/invoice.html?t=' + r.public_token) + '</code></div>' : '');
+
+  openKpi('Invoice ' + r.invoice_no, editable ? 'Draft — edit freely, nothing has been sent.'
+    : 'Issued. Lines are locked; payments and sending stay open.', body, null, '');
+  $('kpiModalSubmit').style.display = 'none';
+}
+
+async function invReload() {
+  const id = invDash.open && invDash.open.row.id;
+  if (!id) return;
+  await openInvoice(id);
+  await loadInvoices();
+}
+
+async function invPatch(field, value) {
+  const id = invDash.open.row.id;
+  const { error } = await sb.from('invoices').update({ [field]: value }).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  invDash.open.full[field] = value;
+  toast('Saved', 'ok');
+  await invReload();
+}
+
+async function invLinePatch(lineId, field, raw) {
+  let val = raw;
+  if (['qty', 'unit_price', 'discount_value'].indexOf(field) >= 0) {
+    val = Number(raw);
+    if (!Number.isFinite(val)) { toast('Bad number', 'err'); return; }
+  } else if (field === 'discount_kind') val = raw || null;
+  else if (field === 'taxable') val = !!raw;
+  else val = (raw || '').trim() || (field === 'description' ? 'Services' : null);
+  const { error } = await sb.from('invoice_lines').update({ [field]: val }).eq('id', lineId);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  await invReload();
+}
+
+async function invCallDoc(action, extra) {
+  const { data, error } = await sb.functions.invoke('invoice-doc',
+    { body: Object.assign({ action, invoice_id: invDash.open.row.id }, extra || {}) });
+  if (error) {
+    // The function returns a JSON body with a real reason; surfacing "non-2xx"
+    // alone would send someone hunting for a network problem that is not there.
+    let msg = error.message;
+    try { const b = await error.context.json(); if (b.error) msg = b.error; } catch (_) {}
+    throw new Error(msg);
+  }
+  if (data && data.error) throw new Error(data.error);
+  return data;
+}
+
+function invDownload(d) {
+  const bin = atob(d.pdf_base64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = d.filename || 'invoice.pdf';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+}
+
+// ---- payment details (master only) ------------------------------------------
+async function openInvoiceSettings() {
+  const { data: s, error } = await sb.from('invoice_settings').select('*').eq('id', true).maybeSingle();
+  if (error || !s) {
+    toast('Payment details are master-admin only.', 'err');
+    return;
+  }
+  const f = (name, label, val, ph, type) =>
+    '<div><label class="modal-label">' + label + '</label><input class="modal-input" name="' + name +
+    '" type="' + (type || 'text') + '" value="' + escapeHtml(val == null ? '' : val) + '"' +
+    (ph ? ' placeholder="' + escapeHtml(ph) + '"' : '') + '></div>';
+  openKpi('Payment details', 'What prints on every invoice. Stored master-admin only — never in site_content.',
+    '<div class="kpi-hint" style="margin-bottom:12px;">These details are printed on the invoice PDF and shown on the ' +
+      'client link, which is how a client pays you. They are readable only by a master admin and are never exposed to the public site.</div>' +
+    '<div class="hub-sec-bar"><h3 style="font-size:.82rem;">Your business</h3></div>' +
+    '<div class="modal-grid2">' + f('biz_name', 'Trading name', s.biz_name, 'Come With') +
+      f('biz_legal_name', 'Legal name', s.biz_legal_name, 'Come With NYC LLC') + '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Address</label><textarea class="modal-input" name="biz_address" rows="2" placeholder="Street&#10;City, ST ZIP">' + escapeHtml(s.biz_address || '') + '</textarea></div>' +
+    '<div class="modal-grid2">' + f('biz_email', 'Billing email', s.biz_email, 'berky@comewith.org', 'email') +
+      f('biz_phone', 'Phone', s.biz_phone, '') + '</div>' +
+    '<div class="modal-grid2">' + f('biz_website', 'Website', s.biz_website, 'comewith.org') +
+      f('tax_id', 'Tax ID / EIN', s.tax_id, 'optional') + '</div>' +
+
+    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">PayPal</h3></div>' +
+    '<label style="font-size:.74rem;cursor:pointer;display:block;margin-bottom:8px;"><input type="checkbox" name="paypal_enabled"' +
+      (s.paypal_enabled ? ' checked' : '') + ' style="width:auto;margin-right:5px;">Offer PayPal on invoices</label>' +
+    '<div class="modal-grid2">' + f('paypal_handle', 'PayPal.Me handle or account email', s.paypal_handle, 'comewithnyc') +
+      f('paypal_note', 'Note under it', s.paypal_note, 'Please send as Goods & Services.') + '</div>' +
+
+    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Bank transfer — Bluevine</h3></div>' +
+    '<label style="font-size:.74rem;cursor:pointer;display:block;margin-bottom:8px;"><input type="checkbox" name="wire_enabled"' +
+      (s.wire_enabled ? ' checked' : '') + ' style="width:auto;margin-right:5px;">Offer bank transfer on invoices</label>' +
+    '<div class="modal-grid2">' + f('wire_beneficiary', 'Beneficiary (account name)', s.wire_beneficiary, 'Come With NYC LLC') +
+      f('wire_bank_name', 'Bank', s.wire_bank_name, 'Coastal Community Bank (Bluevine)') + '</div>' +
+    '<div class="modal-grid2">' + f('wire_routing', 'Routing / ABA', s.wire_routing, '') +
+      f('wire_account', 'Account number', s.wire_account, '') + '</div>' +
+    '<div class="modal-grid2">' + f('wire_swift', 'SWIFT (international only)', s.wire_swift, 'optional') +
+      f('wire_note', 'Note under it', s.wire_note, 'Reference the invoice number.') + '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Bank address</label><textarea class="modal-input" name="wire_bank_address" rows="2">' + escapeHtml(s.wire_bank_address || '') + '</textarea></div>' +
+
+    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Defaults</h3></div>' +
+    '<div class="modal-grid2">' + f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number') +
+      f('number_prefix', 'Invoice number prefix', s.number_prefix, 'CW') + '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Default note on new invoices</label><textarea class="modal-input" name="default_notes" rows="2">' + escapeHtml(s.default_notes || '') + '</textarea></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Footer line</label><input class="modal-input" name="footer_note" value="' + escapeHtml(s.footer_note || '') + '"></div>',
+    async () => {
+      const chk = (n) => { const el = $('kpiModalBody').querySelector('[name="' + n + '"]'); return !!(el && el.checked); };
+      const patch = {
+        biz_name: kpiVal('biz_name') || 'Come With', biz_legal_name: kpiVal('biz_legal_name') || null,
+        biz_address: kpiVal('biz_address') || null, biz_email: kpiVal('biz_email') || null,
+        biz_phone: kpiVal('biz_phone') || null, biz_website: kpiVal('biz_website') || null,
+        tax_id: kpiVal('tax_id') || null,
+        paypal_enabled: chk('paypal_enabled'), paypal_handle: kpiVal('paypal_handle') || null,
+        paypal_note: kpiVal('paypal_note') || null,
+        wire_enabled: chk('wire_enabled'), wire_beneficiary: kpiVal('wire_beneficiary') || null,
+        wire_bank_name: kpiVal('wire_bank_name') || null, wire_routing: kpiVal('wire_routing') || null,
+        wire_account: kpiVal('wire_account') || null, wire_swift: kpiVal('wire_swift') || null,
+        wire_note: kpiVal('wire_note') || null, wire_bank_address: kpiVal('wire_bank_address') || null,
+        default_terms_days: Number(kpiVal('default_terms_days')) || 14,
+        number_prefix: kpiVal('number_prefix') || 'CW',
+        default_notes: kpiVal('default_notes') || null, footer_note: kpiVal('footer_note') || null,
+        updated_at: new Date().toISOString(),
+      };
+      // Turning a method on without the details behind it would print a heading
+      // with nothing under it - worse than not offering it at all.
+      if (patch.paypal_enabled && !patch.paypal_handle) throw new Error('PayPal is on but has no handle or email.');
+      if (patch.wire_enabled && !patch.wire_account && !patch.wire_routing) throw new Error('Bank transfer is on but has no account or routing number.');
+      const { error } = await sb.from('invoice_settings').update(patch).eq('id', true);
+      if (error) throw new Error(error.message);
+      closeKpi(); toast('Payment details saved', 'ok');
+      await loadInvoices();
+    }, 'Save details');
+}
+
+// ---- wiring ------------------------------------------------------------------
+$('panel-invoices').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-invq]'); if (q) { invDash.q = q.value; renderInvoices(); }
+});
+$('panel-invoices').addEventListener('click', async (e) => {
+  const ch = e.target.closest('[data-invchip]');
+  if (ch) { invDash.state = evToggle(invDash.state, ch.dataset.invchip); renderInvoices(); return; }
+  if (e.target.closest('[data-invclear]')) { invDash.q = ''; invDash.state = []; renderInvoices(); return; }
+  if (e.target.closest('[data-invsettings]')) { openInvoiceSettings(); return; }
+  if (e.target.closest('[data-invnew]')) { invCreateFrom({}); return; }
+  const op = e.target.closest('[data-invopen]');
+  if (op) { e.preventDefault(); openInvoice(op.dataset.invopen); return; }
+  const pd = e.target.closest('[data-invpdf]');
+  if (pd) {
+    const was = pd.textContent; pd.disabled = true; pd.textContent = '…';
+    try { invDash.open = { row: { id: pd.dataset.invpdf } }; invDownload(await invCallDoc('pdf')); }
+    catch (err) { toast(err.message, 'err'); }
+    finally { pd.disabled = false; pd.textContent = was; }
+  }
+});
+
+// Invoice modal controls. Scoped to the overlay, and every handler returns early
+// when the invoice modal is not the thing on screen.
+$('kpiModalOverlay').addEventListener('click', async (e) => {
+  if (!invDash.open) return;
+  const del = e.target.closest('[data-invlinedel]');
+  if (del) {
+    await sb.from('invoice_lines').delete().eq('id', del.dataset.invlinedel);
+    await invReload(); return;
+  }
+  if (e.target.closest('[data-invlineadd]')) {
+    await sb.from('invoice_lines').insert({
+      invoice_id: invDash.open.row.id, position: invDash.open.lines.length,
+      description: 'New line', qty: 1, unit_price: 0,
+    });
+    await invReload(); return;
+  }
+  const pdel = e.target.closest('[data-invpaydel]');
+  if (pdel) {
+    await sb.from('invoice_payments').delete().eq('id', pdel.dataset.invpaydel);
+    await invSyncPaid(); await invReload(); return;
+  }
+  if (e.target.closest('[data-invpayadd]')) { invRecordPayment(); return; }
+  if (e.target.closest('[data-invpreview]')) {
+    try {
+      const d = await invCallDoc('preview');
+      const w = window.open('', '_blank');
+      if (!w) { toast('Allow pop-ups to preview', 'err'); return; }
+      w.document.write('<!doctype html><meta charset="utf-8"><title>Preview</title>' +
+        '<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@400;700&family=Inconsolata:wght@400;600&display=swap" rel="stylesheet">' +
+        '<style>' + (d.css || '') + '</style>' + d.html);
+      w.document.close();
+    } catch (err) { toast(err.message, 'err'); }
+    return;
+  }
+  const dl2 = e.target.closest('[data-invpdf2]');
+  if (dl2) {
+    const was = dl2.textContent; dl2.disabled = true; dl2.textContent = 'Building…';
+    try { invDownload(await invCallDoc('pdf')); toast('PDF downloaded and filed', 'ok'); }
+    catch (err) { toast(err.message, 'err'); }
+    finally { dl2.disabled = false; dl2.textContent = was; }
+    return;
+  }
+  if (e.target.closest('[data-invsend]')) { invSend(); return; }
+  if (e.target.closest('[data-invvoid]')) {
+    if (!confirm('Void this invoice? It stays on file and keeps its number, but it is withdrawn and the client link stops working.')) return;
+    await sb.from('invoices').update({ status: 'void', voided_at: new Date().toISOString() }).eq('id', invDash.open.row.id);
+    toast('Voided', 'ok'); await invReload(); return;
+  }
+});
+$('kpiModalOverlay').addEventListener('change', async (e) => {
+  if (!invDash.open) return;
+  const ln = e.target.closest('[data-invline]');
+  if (ln) {
+    const field = ln.dataset.invline;
+    await invLinePatch(ln.dataset.id, field, field === 'taxable' ? ln.checked : ln.value);
+    return;
+  }
+  const fl = e.target.closest('[data-invfield]');
+  if (fl) {
+    const field = fl.dataset.invfield;
+    let val;
+    if (fl.type === 'checkbox') val = fl.checked;
+    else if (['discount_value', 'tax_rate'].indexOf(field) >= 0) val = Number(fl.value) || 0;
+    else val = fl.value || null;
+    await invPatch(field, val);
+  }
+});
+
+// A payment landing is the moment an invoice can become fully paid, which is the
+// moment the income rows behind it become RECEIVED. That link is the one thing
+// that keeps the ledger honest, so it happens here rather than being left to
+// somebody remembering to settle the rows by hand.
+async function invSyncPaid() {
+  const id = invDash.open.row.id;
+  const { data: t } = await sb.from('v_invoice_totals').select('*').eq('invoice_id', id).maybeSingle();
+  if (!t) return;
+  const nowPaid = Number(t.balance) <= 0 && Number(t.paid) > 0;
+  const { data: full } = await sb.from('invoices').select('status, paid_at').eq('id', id).single();
+  if (full.status === 'void') return;
+
+  if (nowPaid && full.status !== 'paid') {
+    await sb.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString() }).eq('id', id);
+  } else if (!nowPaid && full.status === 'paid') {
+    // A payment was removed or reduced. The invoice is owed again, and the rows
+    // behind it must go back to being owed too.
+    await sb.from('invoices').update({ status: 'sent', paid_at: null }).eq('id', id);
+  }
+
+  const { data: ls } = await sb.from('invoice_lines').select('income_id').eq('invoice_id', id).not('income_id', 'is', null);
+  const ids = (ls || []).map(l => l.income_id);
+  if (!ids.length) return;
+  if (nowPaid) {
+    const { data: pays } = await sb.from('invoice_payments').select('paid_on, method').eq('invoice_id', id).order('paid_on', { ascending: false }).limit(1);
+    const last = (pays && pays[0]) || {};
+    await sb.from('income').update({
+      status: 'received',
+      settled_at: (last.paid_on ? last.paid_on + 'T12:00:00Z' : new Date().toISOString()),
+      cash_source: last.method === 'paypal' ? 'paypal' : (last.method === 'wire' ? 'bank' : null),
+    }).in('id', ids).neq('status', 'received');
+  } else {
+    await sb.from('income').update({ status: 'invoiced', settled_at: null }).in('id', ids).eq('status', 'received');
+  }
+}
+
+function invRecordPayment() {
+  const r = invDash.open.row;
+  const bal = Number(r.balance) || 0;
+  openKpi('Record a payment', 'Invoice ' + r.invoice_no + ' — balance ' + money(bal),
+    '<div class="kpi-hint" style="margin-bottom:10px;">A deposit is just a payment smaller than the balance. ' +
+      'When the balance reaches zero the invoice is marked paid and the income rows behind it become <b>received</b>.</div>' +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">Amount *</label><input class="modal-input" type="number" step="0.01" name="amount" value="' + bal.toFixed(2) + '"></div>' +
+      '<div><label class="modal-label">Received on</label><input class="modal-input" type="date" name="paid_on" value="' + TODAY() + '"></div>' +
+    '</div>' +
+    '<div class="modal-grid2">' +
+      '<div><label class="modal-label">How</label><select class="modal-input" name="method">' +
+        INV_METHODS.map(m => '<option value="' + m[0] + '">' + m[1] + '</option>').join('') + '</select></div>' +
+      '<div><label class="modal-label">Reference</label><input class="modal-input" name="reference" placeholder="wire ref / PayPal txn"></div>' +
+    '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Note</label><input class="modal-input" name="note"></div>',
+    async () => {
+      const amt = Number(kpiVal('amount'));
+      if (!Number.isFinite(amt) || amt === 0) throw new Error('Enter an amount.');
+      const { data: { session } } = await sb.auth.getSession();
+      const { error } = await sb.from('invoice_payments').insert({
+        invoice_id: r.id, amount: amt, paid_on: kpiVal('paid_on') || TODAY(),
+        method: kpiVal('method') || null, reference: kpiVal('reference') || null,
+        note: kpiVal('note') || null,
+        created_by: (session && session.user && session.user.id) || null,
+      });
+      if (error) throw new Error(error.message);
+      await invSyncPaid();
+      closeKpi();
+      toast('Payment recorded', 'ok');
+      await openInvoice(r.id);
+      await loadInvoices();
+    }, 'Record it');
+}
+
+function invSend() {
+  const r = invDash.open.row, f = invDash.open.full;
+  if (!Number(r.n_lines)) { toast('Add at least one line before sending.', 'err'); return; }
+  openKpi(f.sent_at ? 'Re-send invoice' : 'Send invoice',
+    r.invoice_no + ' — ' + money(r.balance) + ' due',
+    '<div class="kpi-hint" style="margin-bottom:10px;">The client gets the PDF attached <b>and</b> a link to view and pay it online. ' +
+      'Sending locks the lines and moves the income rows behind it to <b>invoiced</b>.</div>' +
+    '<div class="modal-form-row"><label class="modal-label">To *</label><input class="modal-input" name="to" type="email" value="' +
+      escapeHtml(r.bill_to_email || '') + '"></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Cc</label><input class="modal-input" name="cc" type="email"></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Subject</label><input class="modal-input" name="subject" placeholder="leave blank for the default"></div>' +
+    '<div class="modal-form-row"><label class="modal-label">Message</label><textarea class="modal-input" name="note" rows="3" placeholder="Leave blank for the standard wording."></textarea></div>',
+    async () => {
+      const to = kpiVal('to');
+      if (!to) throw new Error('Who is it going to?');
+      const d = await invCallDoc('send', {
+        to, cc: kpiVal('cc') || null,
+        subject: kpiVal('subject') || null, note: kpiVal('note') || null,
+      });
+      closeKpi();
+      toast('Sent to ' + d.to + (d.invoiced ? ' · ' + d.invoiced + ' income row(s) marked invoiced' : ''), 'ok');
+      await openInvoice(r.id);
+      await loadInvoices();
+    }, 'Send it');
+}
+
+
+// ---- the two entry points ----------------------------------------------------
+// Both funnel into invCreateFrom so an invoice raised from the Income tab and one
+// raised from an event's Money tab are the same object, made the same way.
+
+/** Invoices module data has to be loaded before the create modal can offer a
+ *  client list - the modal is reachable from screens that never opened it. */
+async function invEnsureLoaded() {
+  if (invDash.actors.length && invDash.events.length) return;
+  const [ac, ev, st] = await Promise.all([
+    sb.from('actors').select('id, display_name, legal_name, email').is('deleted_at', null).order('display_name'),
+    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('invoice_settings').select('*').eq('id', true).maybeSingle(),
+  ]);
+  invDash.actors = ac.data || [];
+  invDash.events = ev.data || [];
+  invDash.settings = (st && st.data) || null;
+}
+
+/** Shared guard: refuse rows that are already on a live invoice, and say which. */
+async function invCheckAlreadyBilled(rows) {
+  const ids = rows.map(r => r.id);
+  if (!ids.length) return { fresh: [], billed: [] };
+  const { data } = await sb.from('v_income_invoiced').select('income_id, invoice_no').in('income_id', ids);
+  const byId = {};
+  (data || []).forEach(x => { byId[x.income_id] = x.invoice_no; });
+  return {
+    fresh: rows.filter(r => !byId[r.id]),
+    billed: rows.filter(r => byId[r.id]).map(r => ({ row: r, no: byId[r.id] })),
+  };
+}
+
+async function invoiceFromIncomeRows(rows) {
+  if (!rows.length) { toast('Select some income rows first', 'err'); return; }
+  await invEnsureLoaded();
+  const { fresh, billed } = await invCheckAlreadyBilled(rows);
+  if (billed.length) {
+    // A partial-unique index would reject these anyway; catching it here means a
+    // sentence instead of a constraint violation.
+    toast(billed.length + ' row' + (billed.length === 1 ? ' is' : 's are') +
+      ' already on ' + [...new Set(billed.map(b => b.no))].join(', ') + ' — skipped', 'err');
+  }
+  if (!fresh.length) { toast('Nothing left to bill in that selection', 'err'); return; }
+  // Billing one client at a time: an invoice has one bill-to, and silently
+  // merging two payers onto one document is a mistake you only find later.
+  const payers = [...new Set(fresh.map(r => r.actor_id || '').filter(Boolean))];
+  if (payers.length > 1) {
+    toast('Those rows name ' + payers.length + ' different payers. Invoice one payer at a time.', 'err');
+    return;
+  }
+  invCreateFrom({ incomeRows: fresh });
+}
+
+/** From the event Money tab: bill this event's unbilled, unpaid revenue. */
+async function moneyInvoiceEvent() {
+  const evId = moneyState.eventId;
+  if (!evId) return;
+  await invEnsureLoaded();
+  const { data: rows, error } = await sb.from('income')
+    .select('id, date, amount, expected_amount, category, description, event_id, actor_id, ledger, status')
+    .eq('event_id', evId).is('deleted_at', null).neq('status', 'received');
+  if (error) { toast(error.message, 'err'); return; }
+  if (!rows || !rows.length) {
+    toast('No unpaid revenue on this event to bill. Add a revenue line first.', 'err');
+    return;
+  }
+  const { fresh, billed } = await invCheckAlreadyBilled(rows);
+  if (!fresh.length) {
+    toast('Every revenue line here is already on ' + [...new Set(billed.map(b => b.no))].join(', '), 'err');
+    return;
+  }
+  const ev = (moneyState.event || {});
+  invCreateFrom({
+    incomeRows: fresh,
+    eventId: evId,
+    // The host who booked us is the default payer for a booking or production
+    // job — that is exactly what events.owner_actor_id records.
+    actorId: ev.owner_actor_id || null,
+    event: ev,
+  });
+}
+
 </script>
 
 <style>

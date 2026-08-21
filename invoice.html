@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Invoice · Come With</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Libre+Baskerville:wght@400;700&family=Inconsolata:wght@400;600&display=swap" rel="stylesheet" />
+<style>
+  /* Only the chrome lives here. The invoice's own stylesheet arrives with the
+     invoice, from the same module that renders the PDF — see INVOICE_CSS in
+     supabase/functions/invoice-doc/template.ts. Keeping a second copy on this
+     page is how the emailed PDF and the web page drift apart. */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #F2EDE6; color: #1A1410; font-family: 'Libre Baskerville', Georgia, serif; }
+  .bar {
+    position: sticky; top: 0; z-index: 10; background: #1A1410; color: #F2EDE6;
+    padding: 11px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap;
+  }
+  .bar .who { font-family: 'Inconsolata', monospace; font-size: .68rem; letter-spacing: .14em;
+    text-transform: uppercase; opacity: .72; }
+  .bar button {
+    font: inherit; font-size: .8rem; font-family: 'Inconsolata', monospace; letter-spacing: .06em;
+    background: none; color: #F2EDE6; border: 1px solid rgba(242,237,230,.42);
+    padding: 6px 14px; border-radius: 2px; cursor: pointer;
+  }
+  .bar button:hover { border-color: #F2EDE6; }
+  .bar button.primary { background: #C13B2A; border-color: #C13B2A; font-weight: 700; }
+  .bar button.primary:hover { background: #8C2A1C; border-color: #8C2A1C; }
+  .bar .sp { flex: 1; }
+  .state { max-width: 620px; margin: 16vh auto; padding: 0 24px; text-align: center; }
+  .state h1 { font-family: 'Bebas Neue', Impact, sans-serif; font-size: 2.4rem;
+    letter-spacing: .05em; font-weight: 400; margin-bottom: 8px; }
+  .state p { color: #8A7F72; line-height: 1.6; }
+  .spin { display: inline-block; width: 15px; height: 15px; border: 2px solid rgba(26,20,16,.18);
+    border-top-color: #C13B2A; border-radius: 50%; animation: sp .7s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  @media print { .bar { display: none !important; } body { background: #fff; } }
+</style>
+</head>
+<body>
+
+<div class="bar" id="bar" hidden>
+  <span class="who" id="who">Invoice</span>
+  <span class="sp"></span>
+  <button id="dl">↓ Download PDF</button>
+  <button id="pr">🖨 Print</button>
+</div>
+
+<div id="mount">
+  <div class="state"><p><span class="spin"></span></p></div>
+</div>
+
+<script>
+// The token is the credential. It is never sent anywhere but our own function,
+// and the page is noindex so a link pasted into a chat cannot end up in a search
+// result. Everything else about this invoice lives behind the service role.
+const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
+const PUBLISHABLE_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const FN = SUPABASE_URL + '/functions/v1/invoice-doc';
+
+const token = new URLSearchParams(location.search).get('t') || '';
+const mount = document.getElementById('mount');
+let docName = 'invoice';
+
+function fail(title, msg) {
+  mount.innerHTML = '<div class="state"><h1>' + title + '</h1><p>' + msg + '</p></div>';
+}
+
+async function call(action, extra) {
+  const res = await fetch(FN, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', apikey: PUBLISHABLE_KEY,
+               Authorization: 'Bearer ' + PUBLISHABLE_KEY },
+    body: JSON.stringify(Object.assign({ action, token }, extra || {})),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(body.error || ('HTTP ' + res.status));
+  return body;
+}
+
+async function load() {
+  if (!/^[0-9a-f-]{36}$/i.test(token)) {
+    fail('Invoice not found', 'This link is missing its code. Check the link in your email, or reply to it and we will resend.');
+    return;
+  }
+  try {
+    const d = await call('view');
+    // The stylesheet travels with the markup so this page and the PDF can never
+    // disagree about how the document looks.
+    const style = document.createElement('style');
+    style.textContent = d.css;
+    document.head.appendChild(style);
+    mount.innerHTML = d.html;
+    docName = 'Invoice ' + d.invoice_no;
+    document.title = docName + ' · ' + (d.biz_name || 'Come With');
+    document.getElementById('who').textContent = docName;
+    document.getElementById('bar').hidden = false;
+  } catch (e) {
+    // A wrong, withdrawn or not-yet-issued token all answer the same way. Which
+    // one it was is not the reader's business, and saying would confirm that
+    // some other token exists.
+    fail('Invoice not found', 'This invoice is not available. If you were expecting it, reply to the email you received and we will sort it out.');
+  }
+}
+
+document.getElementById('pr').addEventListener('click', () => window.print());
+
+document.getElementById('dl').addEventListener('click', async (e) => {
+  const btn = e.currentTarget;
+  const was = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Preparing…';
+  try {
+    const d = await call('pdf_public');
+    const bin = atob(d.pdf_base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+    const a = document.createElement('a');
+    a.href = url; a.download = d.filename || (docName + '.pdf');
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch (err) {
+    alert('Could not build the PDF just now. Use Print instead, or reply to the email.');
+  } finally { btn.disabled = false; btn.textContent = was; }
+});
+
+load();
+</script>
+</body>
+</html>

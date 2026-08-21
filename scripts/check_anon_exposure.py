@@ -64,6 +64,20 @@ MUST_BE_EMPTY = [
     # with an admin session, and its other two sources answer [] / 401 to anon
     # anyway, so the tool never worked signed-out.
     ("v_kpi_targets_current", "every KPI target we have set"),
+    # Invoicing (188/189). invoice_settings is the sharpest of these: it holds
+    # the Bluevine routing and account numbers, which is exactly why they are
+    # NOT in site_content. The client-facing invoice page reads through the
+    # invoice-doc edge function on the service role, matched on public_token, so
+    # none of these needs an anon grant for the feature to work.
+    ("invoices", "who was billed what"),
+    ("invoice_lines", "what each client was charged for"),
+    ("invoice_payments", "what has been paid and how"),
+    ("invoice_settings", "the PayPal handle and the Bluevine account number"),
+    ("invoice_counters", "how many invoices have been raised"),
+    ("v_invoices_list", "the whole receivables book"),
+    ("v_invoice_totals", "invoice totals and balances"),
+    ("v_invoice_line_calc", "invoice line detail"),
+    ("v_income_invoiced", "which income is billed"),
 ]
 
 
