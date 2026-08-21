@@ -2214,7 +2214,7 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'scene-map')) MODULES.push({ key: 'scene-map', label: '🗺️ Scene Map', nav_group: 'Radio', sort_order: 30, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full', 'partners'] });
   // Invoices sits with the money modules. Registered client-side the same way as
   // the others so the nav does not depend on migration 188 having propagated.
-  if (!MODULES.some(m => m.key === 'invoices')) MODULES.push({ key: 'invoices', label: '🧾 Invoices', nav_group: 'Money', sort_order: 15, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'full'] });
+  if (!MODULES.some(m => m.key === 'invoices')) MODULES.push({ key: 'invoices', label: '🧾 Invoices', nav_group: 'Finance', sort_order: 12, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'full'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
