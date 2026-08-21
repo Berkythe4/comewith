@@ -1,6 +1,6 @@
 ---
 name: project_social_calendar
-description: Social content calendar module — migration 044 applied to prod 2026-06-23; board/list UI + threaded notes; invite-user fn authored not deployed
+description: Social content calendar module — migration 044 applied to prod 2026-06-23; Calendar/List/Board + threaded notes (timeline REMOVED 2026-08-21); invite-user fn authored not deployed
 metadata: 
   node_type: memory
   type: project
@@ -22,10 +22,15 @@ merged to master + deployed to comewith.org via Netlify (merge commit 8fa2a62).
 - Flipped module_registry `social-calendar` to built=true, signed_off=true so
   marketing (Janelle) sees it. See [[project_staff_access_model]].
 
-**dashboard.html (LIVE on branch):** `loadSocialCalendar()` renders 3 views
-(default **Timeline** = chronological vertical spine grouped by scheduled date,
-stage shown as a colored pill; plus Board by stage, and List), filterable by
-stage/series. Post modal (reuses `openKpi`) does full CRUD + a threaded notes
+**dashboard.html:** `loadSocialCalendar()` renders 3 views. **CORRECTED 2026-08-21:**
+the Timeline view (a chronological vertical spine, `timelineCardHtml`/`.tl-*`) was
+**deleted** and the List view rebuilt to the events-list spec — `data-table cc-table`,
+`ccPostBand()` banding, `ccTitle()` names with rename behind the pencil, and stage /
+scheduled date / channels / pillar editable in place via `socialPatch()`. The two
+single-value filter dropdowns were replaced by multi-select chips in `#socialFilters`
+(`social.fStage` / `fSeries` / `fChan` / `q`, all arrays). Cycle is Calendar → List →
+Board. `channels` is an array and `content_pillar` is free text, so neither takes a
+plain select — see LEARNINGS §38. Post modal (reuses `openKpi`) does full CRUD + a threaded notes
 panel (`loadPostNotes`/`addPostNote`) that timestamps each note. Team tab gained
 an "＋ Add person" button. Stage colors: `SOCIAL_STAGE_COLOR`.
 

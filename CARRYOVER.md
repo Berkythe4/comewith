@@ -1,3 +1,113 @@
+# Carryover - 2026-08-21 (the content list, and the last public view - DESKTOP)
+
+## >> START HERE NEXT SESSION
+
+**Both items from the 2026-08-20 close are done.** Nothing is blocking. Pick from
+"Parked / next" below - the two standing candidates are:
+
+**1. The 502 photos with no photographer credit.** Data Health has carried them as
+low-severity findings since 180. They need a bulk credit, not 502 edits: the Photos
+tab already has multi-select, so the missing piece is one "set photographer on the
+selected" action. Read `pruneSelection()` first - a bulk edit that writes to rows the
+current filter is hiding is exactly LEARNINGS SS28.
+
+**2. Company-level forecasting.** Forecast lines are still event-scoped only
+(`budget_lines` scope `'event'`, from 178); company-level planning lives separately at
+scope `'period'` on the P&L tab, and **the two do not talk**. Deciding whether they
+should is a design question, not a coding one - worth Keith's input before building.
+
+---
+
+## State summary
+
+- **Migrations 177-187 applied, no drift.** Highest: `187_revoke_kpi_targets_current.sql`.
+  Prod `applied_migrations` max = 187, repo max = 187, verified this close.
+- **All 5 financial views return anon 401**, re-verified with a key proven to work
+  first (`v_public_events` -> 200 with a body; the same call with an empty key -> 401).
+- **Nothing in `public` is anon-readable any more except the public site feed.**
+  `v_kpi_targets_current` was the last knowingly-public internal view. Closed in 187.
+- **Latest LEARNINGS: SS39.** Two added this session (SS38, SS39).
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: everything committed and pushed to master, Netlify deployed.
+- Ran on the **desktop**. No parked branches.
+
+## This session shipped
+
+| # | What |
+|---|---|
+| - | **Content module: the timeline view is now a LIST view**, built to the events-list spec |
+| 187 | **Security** - revoked the last anon-readable internal view, `v_kpi_targets_current` |
+
+### The content list
+
+`social.view === 'timeline'` is gone. The Social Calendar cycles **Calendar -> List ->
+Board**. The new list replaced *both* the timeline and the old read-only list table -
+keeping both would have left two views called "List", and the new one strictly
+supersedes the old.
+
+It is the same table as the events list on purpose: `data-table cc-table`, a real
+`<thead>`, `ccPostBand()` banding (posted green, scheduled/planned blue,
+idea/drafted/review amber, archived muted), names as `cc-title-link` with rename behind
+the pencil, and multi-select chip filters with per-chip counts, a search box, a
+"Not posted" shortcut and "clear all".
+
+Four fields write straight through on change via `socialPatch()` - **stage, scheduled
+date, channels, pillar**. Two of them needed a non-obvious control, and the reasoning
+is LEARNINGS SS38: `channels` is an **array** (chips remove, a separate `+` select adds,
+so a two-channel post cannot be flattened to one) and `content_pillar` is **free text**
+(options are derived from what is on file, so an off-list value survives an edit).
+
+The two single-value dropdowns are gone from the toolbar; filters live in their own
+`#socialFilters` element so that typing in the search box does not tear down the input
+you are typing into. `socialFilterDesc()` is now the one place that describes the
+current filter, so the snapshot export and the email can no longer disagree.
+
+### 187, and the premise that was wrong
+
+186 left `v_kpi_targets_current` granted to anon on a stated premise - "tools/
+visualizer.html reads it ANONYMOUSLY - it has no sign-in at all". **That was wrong on
+every clause.** The visualizer loads `/staging/guard.js` (line 7) and imports its
+client from it (line 60), and its other two sources answer `200 []` and `401` to anon
+anyway, so it never worked signed-out. The grant was publishing every KPI target we
+have set. Full account in LEARNINGS SS39.
+
+`check_anon_exposure.py` moved it from `PUBLIC_OK` to `MUST_BE_EMPTY`, so the sweep now
+enforces the new state rather than documenting the old exception.
+
+## Tests (run before touching any of these screens)
+```
+node scripts/test_money_panel.mjs
+node scripts/test_data_health.mjs
+node scripts/test_events_list.mjs
+node scripts/test_recap_publish.mjs
+node scripts/test_content_center.mjs      # +26 checks this session, 47 total
+python scripts/check_anon_exposure.py
+```
+`test_content_center.mjs` now covers the content list as well as the event hub - it
+extracts a second region from `dashboard.html` between `function socialFmtDate(d)` and
+`// The filter strip lives in its own element`. **If you move that code, move the
+markers.**
+
+Three of the new checks were **mutation-tested** (break the pillar editor, break the
+banding, break the caption search - each fails the suite as it should), because a
+regex assertion that passes against a mutant is documentation, not a test.
+
+## Parked / next
+- The two candidates at the top of this file.
+- `ticketing` / `sponsorships` / `third_party_donations` still hard-delete while income
+  and expenses soft-delete. **Deliberate** - ~10 views sum those three without a
+  `deleted_at` filter, so adding the column alone leaves ghost revenue. Documented in 179.
+- `v_pipeline.needs_revenue_estimate` reads `events.expected_revenue`, so an event with
+  forecast *revenue lines* still shows as needing an estimate.
+- **Data Health: 569 open findings** at last sweep - 11 high, 23 medium, 535 low (502 of
+  the low are the photo credits above). Nightly sweep at 07:00 UTC.
+- Everything in the 2026-08-19 close still stands - Janelle's W-9, SS83(b), the WBH
+  bulk-edit review.
+
+*Narrative: `reviews/session_2026-08-21.md`. Previous close begins below.*
+
+---
+
 # Carryover - 2026-08-20 (payables -> forecast -> audit -> a live leak - DESKTOP)
 
 ## >> START HERE NEXT SESSION

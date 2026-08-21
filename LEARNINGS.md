@@ -932,3 +932,83 @@ and flagged instead: `tools/visualizer.html` reads it with **no sign-in at all**
 revoking would have broken a working tool silently — which is the thing this whole
 section is about.
 
+## Section 38 — An inline editor must not narrow the field it edits (2026-08-21)
+
+The Social Calendar's timeline view became a list view built to the events-list
+spec: the same `data-table`, the same banding, the same chip filters, and the four
+fields that actually move a post along editable in place.
+
+Two of those four fields could not take the obvious editor, and both would have
+failed the same way — **silently, on save, destroying data the user could see a
+second earlier**.
+
+- **`social_posts.channels` is an ARRAY.** A single `<select>` bound to it turns a
+  post that goes out on Instagram *and* TikTok into a post that goes out on one of
+  them, the moment anybody touches that cell for any reason. The cell renders one
+  removable chip per channel and a separate `＋` select that only offers channels
+  the post does not already have. Adding is additive; removing is explicit.
+- **`social_posts.content_pillar` is FREE TEXT.** The modal has always been a text
+  box, so the column holds whatever anyone typed. A select over a hardcoded list of
+  pillars silently rewrites any value not on that list to whichever option the
+  browser picked instead. The options are **derived** — the five we always use, plus
+  every distinct value on file — so an off-list `takeover` renders selected and
+  survives an edit to the row's stage.
+
+The general rule: **an inline editor is a promise that the widget can express every
+value the column can hold.** Where it cannot, either widen the widget or leave the
+field to the modal. A `<select>` over an array or over free text is not an editor,
+it is a delete button with a friendly label. Same family as §26 (never default a
+field that feeds a computation) — a lossy control and an invented placeholder both
+replace real data with something that merely looks reasonable.
+
+Regression-tested in `scripts/test_content_center.mjs`: a two-channel post keeps both
+chips and is not re-offered a channel it already has; an off-list pillar comes back
+`selected`. Both checks were mutation-tested — breaking them fails the suite.
+
+While there: the timeline view is **gone**, not kept alongside. Keeping it would have
+left two views called "List", and the list strictly supersedes it — everything the
+timeline showed, plus editing, plus filters. Views: Calendar, List, Board.
+
+## Section 39 — A deferral has to carry the check that would kill it (2026-08-21)
+
+186 revoked three anon-readable internal views and deliberately left a fourth,
+`v_kpi_targets_current`, with this written into the migration:
+
+> tools/visualizer.html reads it ANONYMOUSLY - it has no sign-in at all - so
+> revoking would break a working internal tool without warning.
+
+**Every clause of that was wrong.** `tools/visualizer.html` line 7 loads
+`/staging/guard.js` and line 60 imports its Supabase client from it — the same admin
+gate every `/staging/` page uses; with no session it redirects to `/dashboard.html`.
+And the tool could never have worked signed-out anyway. Asked as the public with a
+key that actually works:
+
+| what the visualizer reads | as anon |
+|---|---|
+| `metric_definitions` | `200 []` — RLS returns nothing, so the metric picker is empty |
+| `v_data_points` | `401` — already revoked, nothing to chart |
+| `v_kpi_targets_current` | **`200`, real rows** |
+
+Two of its three sources were already closed. The grant was not holding a working
+tool up; it was publishing every KPI target we have set. Revoked in **187**.
+`authenticated` keeps SELECT, verified before and after, so nothing changed for a
+signed-in admin.
+
+### The part worth remembering
+
+This is §37's failure one level up. There, two checks tested a **proxy** for the
+invariant. Here, the decision not to check rested on a **premise stated in prose**
+that nobody had ever executed — and prose in a migration header reads exactly as
+authoritative as a verified fact, because it sits in the same file.
+
+So: **when you defer a security fix, write down the command that would prove the
+premise wrong, and run it.** "The tool reads it anonymously" is a claim about a live
+system; it takes one `curl` with a real key. Three lines of investigation would have
+closed this on 2026-08-20 instead of parking it as a decision for Keith.
+
+Corollary, and the reason this was cheap to find: **the leak stayed on a list.** The
+carryover named it as item 2 and `check_anon_exposure.py` carried it in `PUBLIC_OK`
+with a comment saying why. A known exception that is written down where the sweep
+will show it is survivable; the same exception held only in someone's head is not.
+It has now moved to `MUST_BE_EMPTY`, and **nothing in `public` is anon-readable
+except the public site feed.**

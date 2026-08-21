@@ -1218,7 +1218,7 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
 
 ## 2026-08-20 — FP&A completed, and the ecosystem audited
 
-**Done.** Migrations 177–186.
+**Done.** Migrations 177–187.
 
 - **Payables** — `expenses.status` (accrued → invoiced → paid), `v_payables`. Each view
   picks a basis: P&L counts all three; cash, capital and the 1099 count only `paid`, and
@@ -1239,13 +1239,27 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
   listener; **185 closed a live leak of the financial ledger to anonymous callers**; 186
   revoked three internal views. LEARNINGS §37.
 
+### 2026-08-21 — the content list, and the last public view
+
+- **Content module: the timeline view is now a LIST view**, built to the events-list
+  spec — same table, same banding, names as links with rename behind the pencil,
+  multi-select chip filters, and stage / scheduled date / channels / pillar editable in
+  place. The timeline is **deleted**; views are Calendar / List / Board.
+  `channels` (an array) and `content_pillar` (free text) needed non-obvious controls so
+  that editing a row cannot silently narrow the value — LEARNINGS §38.
+- **Security — 187** revoked `v_kpi_targets_current` from anon, the last knowingly-public
+  internal view. 186 had left it granted on the premise that `tools/visualizer.html`
+  read it with no sign-in; the page has loaded `/staging/guard.js` all along, and its
+  other two sources already answered `200 []` / `401` to anon, so nothing was relying on
+  the grant. **Nothing in `public` is anon-readable now except the public site feed.**
+  LEARNINGS §39.
+
 **Parked (design-first).**
-- Timeline view → list view, to the events-list spec. **Next session, item one.**
-- `tools/visualizer.html` is publicly served with no auth.
 - Company-level forecasting: event-scoped forecast lines and period budgets do not talk.
 - Soft-delete parity for `ticketing` / `sponsorships` / `third_party_donations` — needs
   ~10 views updated in the same change or it leaves ghost revenue.
 
-**Backlog.** Bulk photographer credit for 502 photos; `v_pipeline` reading forecast
-revenue lines as well as `expected_revenue`.
+**Backlog.** Bulk photographer credit for 502 photos — needs a bulk action on the Photos
+tab, and `pruneSelection()` read first (§28); `v_pipeline` reading forecast revenue lines
+as well as `expected_revenue`.
 

@@ -1474,22 +1474,12 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .note-body { font-size: 0.85rem; line-height: 1.45; white-space: pre-wrap; }
 .note-add { display: flex; gap: 8px; align-items: flex-start; }
 .note-add textarea { flex: 1; }
-/* Social timeline view */
-.timeline { margin: 4px 0 0 8px; }
-.tl-group { position: relative; padding-left: 26px; border-left: 2px solid var(--border); }
-.tl-group:last-child { border-left-color: transparent; }
-.tl-node { position: relative; margin: 6px 0 2px; }
-.tl-dot { position: absolute; left: -33px; top: 2px; width: 13px; height: 13px; border-radius: 50%;
-  background: var(--red); border: 2px solid var(--bg); box-shadow: 0 0 0 2px var(--border); }
-.tl-date { font-family: 'Inconsolata', monospace; font-size: 0.74rem; font-weight: 700;
-  letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink); }
-.tl-items { display: flex; flex-wrap: wrap; gap: 10px; padding: 6px 0 16px; }
-.tl-card { flex: 0 0 258px; max-width: 320px; background: var(--surface); border: 1px solid var(--border-strong);
-  border-left-width: 4px; padding: 9px 11px; margin: 0; }
-.tl-card-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.stage-pill { color: #fff; font-size: 0.55rem; letter-spacing: 0.08em; text-transform: uppercase;
-  padding: 2px 8px; border-radius: 10px; font-weight: 700; }
-.tl-time { font-size: 0.68rem; color: var(--mid); font-variant-numeric: tabular-nums; }
+/* Content list — the channel cell. Everything else (table, banding, chips,
+   inline selects) is shared with the events list on purpose. */
+.sc-chans { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.sc-chan-x { font-family: inherit; background: none; cursor: pointer; line-height: 1.5; }
+.sc-chan-x:hover { color: var(--red); border-color: var(--red); }
+.sc-chan-add { max-width: 88px; }
 .hub-status-sel {
   font-family: 'Inconsolata', monospace; font-size: 0.72rem; padding: 3px 6px;
   border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink);
@@ -1974,20 +1964,12 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
         <div class="social-toolbar">
           <button class="strat-btn primary" id="socialAddBtn">＋ New post</button>
           <button class="hub-mini" id="socialWeekPlanBtn" title="Populate the recurring weekly posts — customizable">🗓 Plan a week</button>
-          <select class="hub-status-sel" id="socialStageFilter">
-            <option value="">All stages</option>
-          </select>
-          <select class="hub-status-sel" id="socialSeriesFilter">
-            <option value="">All series</option>
-            <option value="Come With Parties">Come With Parties</option>
-            <option value="Dance Infusion">Dance Infusion</option>
-            <option value="__none">General</option>
-          </select>
           <button class="hub-mini" id="socialViewToggle" data-view="calendar">View: Calendar</button>
           <button class="hub-mini" id="socialSnapshotBtn" title="Open a read-only snapshot to print, save as PDF, or send">📤 Share snapshot</button>
           <button class="hub-mini" id="socialEmailBtn" title="Email this view to someone">✉️ Email</button>
         </div>
         <div id="social-state"></div>
+        <div id="socialFilters"></div>
         <div id="socialBody"></div>
       </div>
 
@@ -2726,12 +2708,15 @@ const SOCIAL_STAGE_LABEL = { idea: 'Idea', drafted: 'Drafted', review: 'In revie
 const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'email', 'blog', 'other'];
 const SOCIAL_CHAN_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X', youtube: 'YouTube', email: 'Email', blog: 'Blog', other: 'Other' };
 const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', drafted: '#B5791F', review: '#8362A8', planned: '#2F6F9F', scheduled: '#2E8E72', posted: '#3DA35D', archived: '#B8B0A4' };
-const SOCIAL_VIEWS = ['calendar', 'timeline', 'board', 'list'];
-const SOCIAL_VIEW_LABEL = { calendar: 'Calendar', timeline: 'Timeline', board: 'Board', list: 'List', center: '📋 Control Center' };
+const SOCIAL_VIEWS = ['calendar', 'list', 'board'];
+const SOCIAL_VIEW_LABEL = { calendar: 'Calendar', board: 'Board', list: 'List', center: '📋 Control Center' };
 // Social calendar state: a month grid of scheduled posts + a board of the tasks
 // tagged to those posts — a content-only mirror of Calendar & Tasks.
 const socialCal = { month: new Date().toISOString().slice(0, 7), tasks: [] };
-const social = { posts: [], noteCounts: {}, filterStage: '', filterSeries: '', view: 'calendar', selected: new Set() };
+// Every filter is a LIST, like the events list. One-of was fine until "show me
+// the drafts and the ones in review" - most real questions - needed two passes.
+const social = { posts: [], noteCounts: {}, q: '', fStage: [], fSeries: [], fChan: [],
+                 view: 'calendar', selected: new Set() };
 let socialPeople = null, socialEvents = null;
 
 // Order posts chronologically by scheduled_for, bucketed by day; undated last.
@@ -2757,8 +2742,6 @@ function socialFmtDate(d) {
 }
 
 async function loadSocialCalendar() {
-  const sel = $('socialStageFilter');
-  if (sel.options.length <= 1) for (const s of SOCIAL_STAGES) sel.add(new Option(SOCIAL_STAGE_LABEL[s], s));
   $('social-state').innerHTML = '';
   $('socialBody').innerHTML = '<div class="placeholder">Loading posts…</div>';
   const { data, error } = await sb.from('social_posts')
@@ -2774,13 +2757,31 @@ async function loadSocialCalendar() {
   renderSocial();
 }
 
+// An empty group means "no filter", not "match nothing" - the distinction that
+// makes multi-select feel like the old single-select until you want more.
 function socialFiltered() {
-  return social.posts.filter(p => {
-    if (social.filterStage && p.stage !== social.filterStage) return false;
-    if (social.filterSeries === '__none') { if (p.series) return false; }
-    else if (social.filterSeries && p.series !== social.filterSeries) return false;
-    return true;
-  });
+  const s = social, ql = (s.q || '').toLowerCase();
+  const any = (arr, v) => !arr.length || arr.indexOf(v) >= 0;
+  return s.posts.filter(p =>
+    any(s.fStage, p.stage || '') &&
+    any(s.fSeries, p.series || '__none') &&
+    (!s.fChan.length || (p.channels || []).some(c => s.fChan.indexOf(c) >= 0)) &&
+    (!ql || (p.title || '').toLowerCase().includes(ql)
+         || (p.content_pillar || '').toLowerCase().includes(ql)
+         || (p.caption || '').toLowerCase().includes(ql)));
+}
+
+// One sentence describing the current filter, for the shared snapshot and the
+// email. Written once so the two exports can never disagree about it.
+function socialFilterDesc() {
+  const s = social;
+  const parts = [
+    s.fSeries.length ? s.fSeries.map(x => x === '__none' ? 'General' : x).join(', ') : 'All series',
+    s.fStage.length ? s.fStage.map(x => SOCIAL_STAGE_LABEL[x] || x).join(', ') : 'All stages',
+  ];
+  if (s.fChan.length) parts.push(s.fChan.map(c => SOCIAL_CHAN_LABEL[c] || c).join(', '));
+  if (s.q) parts.push('\u201c' + s.q + '\u201d');
+  return parts.join(' \u00b7 ');
 }
 
 function postCardHtml(p) {
@@ -2799,51 +2800,155 @@ function postCardHtml(p) {
   </div>`;
 }
 
-function timelineCardHtml(p) {
-  const color = SOCIAL_STAGE_COLOR[p.stage] || '#8A7F72';
-  const chans = (p.channels || []).map(c => `<span class="chan-chip">${escapeHtml(SOCIAL_CHAN_LABEL[c] || c)}</span>`).join('');
-  const time = p.scheduled_for ? new Date(p.scheduled_for).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
-  const nc = social.noteCounts[p.id] || 0;
-  const owner = p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '';
-  return `<div class="tl-card post-card" data-post="${p.id}" style="border-left-color:${color}">
-    <div class="tl-card-top"><span class="stage-pill" style="background:${color}">${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</span>${time ? `<span class="tl-time">${escapeHtml(time)}</span>` : ''}</div>
-    <div class="post-card-title">${escapeHtml(p.title)}</div>
-    ${chans ? `<div class="post-card-chans">${chans}</div>` : ''}
-    <div class="post-card-meta">${p.series ? `<span>${escapeHtml(p.series)}</span>` : ''}${owner ? `<span>👤 ${owner}</span>` : ''}${nc ? `<span class="note-count">💬 ${nc}</span>` : ''}</div>
-  </div>`;
+// ---------------------------------------------------------------------------
+// The content LIST - deliberately the same table as the events list, because
+// you already know how to read that one. Stage, date, channels and pillar are
+// what move day to day, so they are editable in place and write straight
+// through; the full brief still opens in the modal.
+// ---------------------------------------------------------------------------
+function socialSeriesList() {
+  const present = [...new Set(social.posts.map(p => p.series).filter(Boolean))].sort();
+  return [...new Set(['Come With Parties', 'Dance Infusion'].concat(present))];
+}
+// content_pillar is FREE TEXT on social_posts, so the options are derived from
+// what is on file plus the handful we always use. A select over a hardcoded
+// list would quietly drop any other value the moment somebody touched the row.
+function socialPillarList() {
+  const present = [...new Set(social.posts.map(p => p.content_pillar).filter(Boolean))];
+  return [...new Set(['recap', 'promo', 'bts', 'lineup', 'announcement'].concat(present))].sort();
 }
 
+// channels is an ARRAY, so a single select would be a data-loss button. Chips
+// remove, the select adds, and a post keeps every channel it had.
+function socialChanCell(p) {
+  const have = p.channels || [];
+  const chips = have.map(c =>
+    '<button type="button" class="chan-chip sc-chan-x" data-sp-chandel="' + escapeHtml(p.id) +
+    '" data-val="' + escapeHtml(c) + '" title="Remove ' + escapeHtml(SOCIAL_CHAN_LABEL[c] || c) + '">' +
+    escapeHtml(SOCIAL_CHAN_LABEL[c] || c) + ' \u00d7</button>').join('');
+  const left = SOCIAL_CHANNELS.filter(c => have.indexOf(c) < 0);
+  const add = left.length
+    ? '<select class="hub-status-sel cc-sel sc-chan-add" data-sp-chanadd="' + escapeHtml(p.id) +
+      '" title="Add a channel"><option value="">\uFF0B</option>' +
+      left.map(c => '<option value="' + c + '">' + escapeHtml(SOCIAL_CHAN_LABEL[c] || c) + '</option>').join('') +
+      '</select>'
+    : '';
+  return '<div class="sc-chans">' + chips + add + '</div>';
+}
+
+function socialListHTML(posts) {
+  const pillars = socialPillarList();
+  const rows = posts.map(p => {
+    const when = p.posted_at ? 'posted ' + fmtDate(p.posted_at)
+      : (p.scheduled_for ? socialFmtDate(p.scheduled_for) : 'no date');
+    const seriesChip = p.series
+      ? ' <span class="role-chip" style="cursor:default;">' + escapeHtml(p.series) + '</span>' : '';
+    const ev = p.event && p.event.name ? ' \u00b7 ' + escapeHtml(p.event.name) : '';
+    return '<tr class="' + ccPostBand(p) + '">' +
+      '<td>' + ccTitle('sl:' + p.id, p.title || 'Untitled', p.link_url) +
+        '<div class="li-sub">' + escapeHtml(when) + ev + seriesChip + '</div></td>' +
+      '<td>' + ccSel('data-sp-field="stage" data-id="' + escapeHtml(p.id) + '"',
+                     SOCIAL_STAGES.map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
+                     'Where the post has got to') + '</td>' +
+      '<td><input class="modal-input ev-inline cc-date" type="date" data-sp-field="scheduled_for" data-id="' +
+        escapeHtml(p.id) + '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) +
+        '" title="When it goes out"></td>' +
+      '<td>' + socialChanCell(p) + '</td>' +
+      '<td>' + ccSel('data-sp-field="content_pillar" data-id="' + escapeHtml(p.id) + '"',
+                     [['', '\u2014']].concat(pillars.map(v => [v, v])), p.content_pillar || '',
+                     'What the post is for') + '</td>' +
+      '<td class="li-sub">' + (p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '\u2014') + '</td>' +
+      '<td class="num">' + (social.noteCounts[p.id] || 0) + '</td>' +
+      '<td class="cc-act"><button class="hub-mini" data-sc-edit="' + escapeHtml(p.id) +
+        '" title="Caption, channels, assets, notes">Brief \u2192</button></td></tr>';
+  }).join('') || '<tr><td colspan="8" class="muted" style="padding:14px;">No posts match these filters.</td></tr>';
+  return '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
+    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Channels</th><th>Pillar</th>' +
+    '<th>Owner</th><th class="num">Notes</th><th class="cc-act"></th>' +
+    '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+}
+
+// Chips rather than <select multiple>, which is unusable with a mouse and
+// invisible on a phone. Each chip carries its own count, so an empty filter is
+// obvious before you click it.
+function renderSocialFilters() {
+  const s = social, el = $('socialFilters');
+  if (!el) return;
+  const anyFilter = s.q || s.fStage.length || s.fSeries.length || s.fChan.length;
+  const chip = (grp, val, label, count, title) =>
+    '<button class="ev-chip' + (s[grp].indexOf(val) >= 0 ? ' on' : '') + '"' +
+    ' data-scchip="' + grp + '" data-val="' + escapeHtml(val) + '"' +
+    (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' + escapeHtml(label) +
+    (count == null ? '' : ' <span class="ev-chip-n">' + count + '</span>') + '</button>';
+  const nStage = (k) => s.posts.filter(p => (p.stage || '') === k).length;
+  const nSeries = (k) => s.posts.filter(p => (p.series || '__none') === k).length;
+  const nChan = (k) => s.posts.filter(p => (p.channels || []).indexOf(k) >= 0).length;
+  const group = (label, html) => html
+    ? '<div class="ev-filter-row"><span class="ev-filter-lbl">' + label + '</span>' +
+      '<span class="ev-chips">' + html + '</span></div>' : '';
+  const series = socialSeriesList().filter(k => nSeries(k)).map(k => chip('fSeries', k, k, nSeries(k))).join('') +
+    (nSeries('__none') ? chip('fSeries', '__none', 'General', nSeries('__none'), 'Not tied to a series') : '');
+  el.innerHTML = '<div class="ev-filters">' +
+    '<div class="ev-filter-row">' +
+      '<input class="modal-input" data-scq placeholder="\uD83D\uDD0E Search posts\u2026" ' +
+        'style="max-width:220px;" value="' + escapeHtml(s.q) + '">' +
+      '<button class="ev-chip shortcut" data-scnotposted ' +
+        'title="Everything still to go out: idea through scheduled">Not posted</button>' +
+      (anyFilter ? '<button class="hub-mini" data-scclear>\u2715 clear all</button>' : '') +
+      '<span class="li-sub" style="margin-left:auto;" id="scCount">' +
+        socialFiltered().length + ' of ' + s.posts.length + '</span>' +
+    '</div>' +
+    group('Stage', SOCIAL_STAGES.filter(k => nStage(k))
+      .map(k => chip('fStage', k, SOCIAL_STAGE_LABEL[k] || k, nStage(k))).join('')) +
+    group('Series', series) +
+    group('Channel', SOCIAL_CHANNELS.filter(k => nChan(k))
+      .map(k => chip('fChan', k, SOCIAL_CHAN_LABEL[k] || k, nChan(k))).join('')) +
+    '</div>';
+}
+
+// One write path for the inline fields. Saves, patches the row in memory and
+// re-renders, so a change that moves the row out of the current filter visibly
+// does so rather than sitting there looking unsaved.
+async function socialPatch(id, field, raw) {
+  const p = social.posts.find(x => x.id === id);
+  if (!p) return;
+  let val = (raw == null || String(raw).trim() === '') ? null : String(raw).trim();
+  // A date input gives a bare day; scheduled_for is a timestamp, so keep any
+  // time already on the row rather than silently moving the post to midnight.
+  if (field === 'scheduled_for' && val) val = val + 'T' + ((p.scheduled_for || '').slice(11, 19) || '12:00:00');
+  const patch = { [field]: val };
+  // The band, the calendar and the recap picker all read posted_at, so marking
+  // a post posted has to write one.
+  if (field === 'stage' && val === 'posted' && !p.posted_at) patch.posted_at = new Date().toISOString();
+  const { error } = await sb.from('social_posts').update(patch).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); renderSocial(); return; }
+  Object.assign(p, patch);
+  toast('Saved', 'ok');
+  renderSocial();
+}
+async function socialSetChannels(id, next) {
+  const p = social.posts.find(x => x.id === id);
+  if (!p) return;
+  const { error } = await sb.from('social_posts').update({ channels: next }).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+  p.channels = next;
+  renderSocial();
+}
+
+// The filter strip lives in its own element so that typing in the search box
+// does not tear down the input you are typing into.
 function renderSocial() {
+  renderSocialFilters();
+  renderSocialView();
+}
+function renderSocialView() {
   const posts = socialFiltered();
   const body = $('socialBody');
   if (social.view === 'calendar') { renderSocialGrid(posts); return; }
   if (!social.posts.length) { body.innerHTML = '<div class="placeholder">No posts yet. Click <b>＋ New post</b> to start planning with Janelle.</div>'; return; }
-  if (social.view === 'timeline') {
-    const groups = socialGroupByDate(posts);
-    if (!groups.length) { body.innerHTML = '<div class="placeholder">No posts match this filter.</div>'; return; }
-    body.innerHTML = '<div class="timeline">' + groups.map(g =>
-      `<div class="tl-group"><div class="tl-node"><span class="tl-dot"></span><span class="tl-date">${escapeHtml(g.label)}</span></div>` +
-      `<div class="tl-items">${g.items.map(timelineCardHtml).join('')}</div></div>`).join('') + '</div>';
-    return;
-  }
-  if (social.view === 'list') {
-    let h = '<table class="data-table"><thead><tr><th>Title</th><th>Stage</th><th>Channels</th><th>Series</th><th>Scheduled</th><th>Owner</th><th class="num">Notes</th></tr></thead><tbody>';
-    for (const p of posts) {
-      h += `<tr class="post-card" data-post="${p.id}" style="cursor:pointer;">
-        <td>${escapeHtml(p.title)}</td>
-        <td>${escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</td>
-        <td class="muted">${(p.channels || []).map(c => SOCIAL_CHAN_LABEL[c] || c).join(', ')}</td>
-        <td class="muted">${escapeHtml(p.series || '—')}</td>
-        <td class="muted">${escapeHtml(socialFmtDate(p.scheduled_for))}</td>
-        <td class="muted">${p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '—'}</td>
-        <td class="num">${social.noteCounts[p.id] || 0}</td>
-      </tr>`;
-    }
-    body.innerHTML = h + '</tbody></table>';
-    return;
-  }
+  if (social.view === 'list') { body.innerHTML = socialListHTML(posts); return; }
   if (social.view === 'center') { renderSocialCenter(posts); return; }
-  const stages = social.filterStage ? [social.filterStage] : SOCIAL_STAGES;
+  const stages = social.fStage.length ? SOCIAL_STAGES.filter(k => social.fStage.indexOf(k) >= 0) : SOCIAL_STAGES;
   let h = '<div class="social-board">';
   for (const s of stages) {
     const col = posts.filter(p => p.stage === s);
@@ -3214,10 +3319,7 @@ async function exportSnapshot() {
   const esc = escapeHtml;
   const now = new Date();
   const stamp = now.toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const filterDesc = [
-    social.filterSeries === '__none' ? 'General' : (social.filterSeries || 'All series'),
-    social.filterStage ? SOCIAL_STAGE_LABEL[social.filterStage] : 'All stages',
-  ].join(' · ');
+  const filterDesc = socialFilterDesc();
 
   const groups = socialGroupByDate(posts);
   let sections = '';
@@ -3318,7 +3420,7 @@ $('socialEmailBtn').addEventListener('click', emailSocialCalendar);
 async function emailSocialCalendar() {
   const posts = socialFiltered();
   if (!posts.length) { toast('No posts in this view to email.', 'err'); return; }
-  const filterDesc = [social.filterSeries === '__none' ? 'General' : (social.filterSeries || 'All series'), social.filterStage ? SOCIAL_STAGE_LABEL[social.filterStage] : 'All stages'].join(' · ');
+  const filterDesc = socialFilterDesc();
   // People you can pick: team (profiles) + contacts (person actors) that have an email.
   const [pf, ac] = await Promise.all([
     sb.from('profiles').select('full_name,email').not('email', 'is', null),
@@ -3369,7 +3471,7 @@ async function sendSocialCalendarEmail(posts) {
 function buildSocialEmailHtml(posts, byPost, note) {
   const esc = escapeHtml;
   const stamp = new Date().toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' });
-  const filterDesc = [social.filterSeries === '__none' ? 'General' : (social.filterSeries || 'All series'), social.filterStage ? SOCIAL_STAGE_LABEL[social.filterStage] : 'All stages'].join(' · ');
+  const filterDesc = socialFilterDesc();
   let sec = '';
   for (const g of socialGroupByDate(posts)) {
     sec += `<tr><td style="padding:18px 0 6px;font:700 14px Arial,sans-serif;color:#16243f;border-bottom:2px solid #eee">${esc(g.label)} <span style="color:#999;font-weight:400">· ${g.items.length} post${g.items.length === 1 ? '' : 's'}</span></td></tr>`;
@@ -3397,11 +3499,35 @@ function buildSocialEmailHtml(posts, byPost, note) {
     <div style="color:#aaa;font:11px Arial,sans-serif;margin-top:18px">Read-only snapshot from Come With · ${esc(stamp)}</div>
   </div>`;
 }
-$('socialStageFilter').addEventListener('change', (e) => { social.filterStage = e.target.value; renderSocial(); });
-$('socialSeriesFilter').addEventListener('change', (e) => { social.filterSeries = e.target.value; renderSocial(); });
+$('socialFilters').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-scq]');
+  if (!q) return;
+  // Only the VIEW is redrawn - redrawing the filter strip would blow away the
+  // box you are typing in. The count is patched in place instead.
+  social.q = q.value;
+  renderSocialView();
+  const c = $('scCount');
+  if (c) c.textContent = socialFiltered().length + ' of ' + social.posts.length;
+});
+$('socialFilters').addEventListener('click', (e) => {
+  const ch = e.target.closest('[data-scchip]');
+  if (ch) { const g = ch.dataset.scchip; social[g] = evToggle(social[g], ch.dataset.val); renderSocial(); return; }
+  if (e.target.closest('[data-scnotposted]')) {
+    // A shortcut, not a filter of its own: it selects the stages that still owe
+    // work. Pressing it again clears them, so it reads as a toggle.
+    const pre = ['idea', 'drafted', 'review', 'planned', 'scheduled'];
+    const now = social.fStage.slice().sort().join(',');
+    social.fStage = now === pre.slice().sort().join(',') ? [] : pre.slice();
+    renderSocial(); return;
+  }
+  if (e.target.closest('[data-scclear]')) {
+    social.q = ''; social.fStage = []; social.fSeries = []; social.fChan = [];
+    renderSocial();
+  }
+});
 // Control Center is its own module now — the calendar's toggle just cycles the
 // three planning views.
-const SOCIAL_CYCLE = ['calendar', 'timeline', 'board', 'list'];
+const SOCIAL_CYCLE = ['calendar', 'list', 'board'];
 $('socialViewToggle').addEventListener('click', () => {
   const i = SOCIAL_CYCLE.indexOf(social.view);
   social.view = SOCIAL_CYCLE[(i + 1) % SOCIAL_CYCLE.length];
@@ -3414,6 +3540,15 @@ $('socialBody').addEventListener('click', (e) => {
   // Control Center actions
   const ed = e.target.closest('[data-sc-edit]'); if (ed) { e.preventDefault(); const p = social.posts.find(x => x.id === ed.dataset.scEdit); if (p) openPostModal(p); return; }
   if (e.target.closest('[data-sc-clearsel]')) { social.selected.clear(); renderSocial(); return; }
+  // List view: rename in place, and remove a channel chip.
+  const ren = e.target.closest('[data-cc-rename]');
+  if (ren) { ccStartRename(ren.dataset.ccRename, $('socialBody')); return; }
+  const cx = e.target.closest('[data-sp-chandel]');
+  if (cx) {
+    const p = social.posts.find(x => x.id === cx.dataset.spChandel);
+    if (p) socialSetChannels(p.id, (p.channels || []).filter(c => c !== cx.dataset.val));
+    return;
+  }
   const bp = e.target.closest('[data-sc-bulkposted]'); if (bp) { socialBulk({ stage: 'posted', posted_at: new Date().toISOString() }, 'marked posted'); return; }
   if (e.target.closest('[data-sc-bulkdelete]')) { if (confirm(`Delete ${social.selected.size} post(s)? (soft-delete, recoverable)`)) socialBulk({ deleted_at: new Date().toISOString() }, 'deleted'); return; }
   const card = e.target.closest('[data-post]');
@@ -3422,6 +3557,14 @@ $('socialBody').addEventListener('click', (e) => {
   if (p) openPostModal(p);
 });
 $('socialBody').addEventListener('change', (e) => {
+  const sp = e.target.closest('[data-sp-field]');
+  if (sp) { socialPatch(sp.dataset.id, sp.dataset.spField, e.target.value); return; }
+  const ca = e.target.closest('[data-sp-chanadd]');
+  if (ca && ca.value) {
+    const p = social.posts.find(x => x.id === ca.dataset.spChanadd);
+    if (p) socialSetChannels(p.id, (p.channels || []).concat([ca.value]));
+    return;
+  }
   const sc = e.target.closest('[data-sc-sel]'); if (sc) { sc.checked ? social.selected.add(sc.dataset.scSel) : social.selected.delete(sc.dataset.scSel); renderSocial(); return; }
   const sa = e.target.closest('[data-sc-selall]'); if (sa) { const ev = sa.dataset.scSelall; socialFiltered().filter(p => (p.event_id || '__none') === ev).forEach(p => sa.checked ? social.selected.add(p.id) : social.selected.delete(p.id)); renderSocial(); return; }
   const bs = e.target.closest('[data-sc-bulkstage]'); if (bs && bs.value) { const patch = { stage: bs.value }; if (bs.value === 'posted') patch.posted_at = new Date().toISOString(); socialBulk(patch, 'moved to ' + (SOCIAL_STAGE_LABEL[bs.value] || bs.value)); return; }
@@ -10018,6 +10161,8 @@ function ccApplyRename(key, value) {
     hubAssetPatch(ref, 'label', value).then(() => hubSecPhotos());
   } else if (kind === 'sp') {
     hubPostPatch(ref, 'title', value).then(() => hubSecPhotos());
+  } else if (kind === 'sl') {
+    socialPatch(ref, 'title', value);   // the same pencil, on the content list
   }
 }
 

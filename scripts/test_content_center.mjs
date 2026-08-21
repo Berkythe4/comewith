@@ -164,5 +164,155 @@ if (!/resolveMediaUrls\(\[a\.url\]\)/.test(promo)) {
   fail('sending an asset to the site does not resolve the link - on.soundcloud.com short links will not embed');
 } else pass('sending to the site resolves the link first');
 
+
+// =============================================================================
+// The content LIST - the Social Calendar's list view, rebuilt to the events-list
+// spec (2026-08-21). It replaced the timeline. Same table, same banding, the
+// four moving fields editable in place, chip filters instead of dropdowns.
+// =============================================================================
+const SOC_START = 'function socialFmtDate(d)';
+const SOC_END = '// The filter strip lives in its own element';
+const si = mod.indexOf(SOC_START), sj = mod.indexOf(SOC_END, si);
+if (si < 0 || sj < 0) { console.error('SOCIAL REGION NOT FOUND - markers moved'); process.exit(1); }
+const socRegion = mod.slice(si, sj);
+
+const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'email', 'blog', 'other'];
+const SOCIAL_CHAN_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X', youtube: 'YouTube', email: 'Email', blog: 'Blog', other: 'Other' };
+const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', posted: '#3DA35D' };
+const social = {
+  q: '', fStage: [], fSeries: [], fChan: [], view: 'list', selected: new Set(),
+  noteCounts: { p1: 3 },
+  posts: [
+    { id: 'p1', title: 'Recap reel', stage: 'posted', posted_at: '2026-08-01T20:00:00Z',
+      scheduled_for: '2026-07-31T18:30:00Z', channels: ['instagram', 'tiktok'], content_pillar: 'recap',
+      series: 'Come With Parties', link_url: 'https://instagram.com/p/x',
+      owner: { full_name: 'Janelle' }, event: { name: '7-11' } },
+    { id: 'p2', title: 'Lineup drop', stage: 'scheduled', scheduled_for: '2026-09-04T17:00:00Z',
+      channels: ['instagram'], content_pillar: 'lineup', series: 'Dance Infusion',
+      owner: { email: 'liz@comewith.org' } },
+    { id: 'p3', title: 'Studio session', stage: 'idea', scheduled_for: null, channels: [],
+      content_pillar: 'takeover', series: null, caption: 'Berky in the booth' },
+    { id: 'p4', title: 'Old announcement', stage: 'archived', posted_at: null,
+      scheduled_for: '2026-01-02T12:00:00Z', channels: ['email'], series: 'Come With Parties' },
+  ],
+};
+let filterHtml = '';
+const $stub = (id) => (id === 'socialFilters'
+  ? { set innerHTML(v) { filterHtml = v; }, get innerHTML() { return filterHtml; } }
+  : null);
+
+const socFn = new Function(
+  'escapeHtml,fmtDate,fmtDateTime,mediaKindLabel,SOCIAL_STAGES,SOCIAL_STAGE_LABEL,SOCIAL_CHANNELS,SOCIAL_CHAN_LABEL,SOCIAL_STAGE_COLOR,toast,confirm,sb,hub,social,$',
+  recapRule + '\n' + region + '\n' + socRegion +
+  '\n; return { socialListHTML, socialFiltered, socialFilterDesc, renderSocialFilters, socialPillarList, socialChanCell };');
+const soc = socFn(escapeHtml, fmtDate, fmtDateTime, mediaKindLabel, SOCIAL_STAGES, SOCIAL_STAGE_LABEL,
+                  SOCIAL_CHANNELS, SOCIAL_CHAN_LABEL, SOCIAL_STAGE_COLOR, toast, confirm, sb, hub, social, $stub);
+
+// ---- the table itself --------------------------------------------------------
+const clist = render('content list', () => soc.socialListHTML(social.posts));
+for (const need of ['data-sp-field="stage"', 'data-sp-field="scheduled_for"', 'data-sp-field="content_pillar"']) {
+  if (!clist.includes(need)) fail('the list has no inline editor for ' + need);
+}
+if (!/data-sp-field="stage"[\s\S]{0,400}?<\/select>/.test(clist)) fail('the stage editor is not a select');
+else pass('stage, date and pillar edit in place');
+if (!/class="data-table cc-table"/.test(clist)) fail('the list is not the events-list table');
+else pass('same data-table as the events list, with a real thead');
+if (!/<thead><tr><th>Post<\/th>/.test(clist)) fail('the list has no real header row');
+
+// The name is a LINK with the pencil beside it - never a full-width input box.
+if (!/data-cc-rename="sl:p1"/.test(clist)) fail('there is no way to rename a post in place');
+else pass('every row renames behind the pencil');
+if (!/class="cc-title-link"/.test(clist)) fail('the post name is not a clickable link');
+else pass('names are clickable links');
+const stray = clist.match(/<input(?![^>]*type="date")[^>]*>/);
+if (stray) fail('a name still renders as an input box: ' + stray[0].slice(0, 60));
+else pass('no name input boxes on the list');
+
+// ---- banding, on the events-list vocabulary ---------------------------------
+const band = (id, cls) => {
+  const row = clist.split('<tr class="').find(s => s.includes('sl:' + id));
+  if (!row) { fail('row ' + id + ' is missing from the list'); return; }
+  if (!row.startsWith(cls)) fail(id + ' should band ' + cls + ', got ' + row.slice(0, 9));
+};
+band('p1', 'cc-done');    // posted   -> green
+band('p2', 'cc-active');  // scheduled-> blue
+band('p3', 'cc-todo');    // idea     -> amber
+band('p4', 'cc-off');     // archived -> muted
+if (!fails) pass('three-colour banding: posted green, scheduled blue, idea amber, archived muted');
+
+// ---- channels: an array, so a single select would delete data ---------------
+const cell = soc.socialChanCell(social.posts[0]);
+if (!/data-sp-chandel="p1" data-val="instagram"/.test(cell)) fail('a channel cannot be removed');
+if (/<option value="instagram"/.test(cell)) fail('the add-a-channel list re-offers a channel the post already has');
+if (!/<option value="youtube"/.test(cell)) fail('the add-a-channel list is missing an unused channel');
+if (!/data-sp-chandel="p1" data-val="tiktok"/.test(cell)) fail('the second channel was dropped');
+else pass('channels: both kept, one add select, no data loss');
+if (!/value="2026-09-04"/.test(clist)) fail('the scheduled date does not reach the date input');
+else pass('the scheduled day lands in the date box');
+
+// content_pillar is FREE TEXT. A value nobody hardcoded must survive the select.
+if (!/<option value="takeover" selected>/.test(clist)) {
+  fail('a free-text pillar is not preselected - editing that row would erase it');
+} else pass('an off-list pillar stays selected');
+if (soc.socialPillarList().indexOf('takeover') < 0) fail('the pillar list is not derived from the data');
+
+if (!/No posts match these filters\./.test(soc.socialListHTML([]))) {
+  fail('an empty list says nothing');
+} else pass('an empty list says why it is empty');
+
+// ---- multi-select filtering --------------------------------------------------
+const only = (patch) => {
+  Object.assign(social, { q: '', fStage: [], fSeries: [], fChan: [] }, patch);
+  const n = soc.socialFiltered().length;
+  Object.assign(social, { q: '', fStage: [], fSeries: [], fChan: [] });
+  return n;
+};
+const expect = (label, got, want) => (got === want ? pass(label) : fail(label + ': got ' + got + ', wanted ' + want));
+expect('no filter means every post', only({}), 4);
+expect('two stages at once', only({ fStage: ['idea', 'scheduled'] }), 2);
+expect('series General means the ones tied to nothing', only({ fSeries: ['__none'] }), 1);
+expect('two series at once', only({ fSeries: ['Come With Parties', 'Dance Infusion'] }), 3);
+expect('a channel filter matches any channel on the post', only({ fChan: ['tiktok'] }), 1);
+expect('two channels at once', only({ fChan: ['tiktok', 'email'] }), 2);
+expect('groups combine (AND across, OR within)', only({ fStage: ['posted'], fChan: ['email'] }), 0);
+expect('search reaches the caption', only({ q: 'booth' }), 1);
+expect('search reaches the pillar', only({ q: 'takeover' }), 1);
+
+social.fStage = ['idea', 'drafted'];
+const desc = soc.socialFilterDesc();
+if (!/All series/.test(desc) || !/Idea, Drafted/.test(desc)) fail('the shared filter description drops values: ' + desc);
+else pass('the snapshot and email describe every selected value');
+social.fStage = [];
+
+// ---- the filter strip: chips, not dropdowns ---------------------------------
+soc.renderSocialFilters();
+if (/<select/.test(filterHtml)) fail('the filter strip still has a dropdown in it');
+else pass('filters are chips, not single-value dropdowns');
+for (const g of ['fStage', 'fSeries', 'fChan']) {
+  if (!filterHtml.includes('data-scchip="' + g + '"')) fail('no chip group for ' + g);
+}
+if (!/data-val="__none"[^>]*>General/.test(filterHtml)) fail('there is no "General" chip for unfiled posts');
+if (!/data-val="posted"[^>]*>Posted <span class="ev-chip-n">1<\/span>/.test(filterHtml)) {
+  fail('chips do not carry their own count');
+} else pass('every chip carries its count');
+if (!/id="scCount">4 of 4</.test(filterHtml)) fail('the strip does not say how many of how many are shown');
+else pass('the strip says 4 of 4');
+if (/data-scclear/.test(filterHtml)) fail('"clear all" shows when nothing is filtered');
+social.fChan = ['email'];
+soc.renderSocialFilters();
+if (!/data-scclear/.test(filterHtml)) fail('"clear all" is missing while a filter is on');
+else pass('"clear all" appears only when there is something to clear');
+if (!/class="ev-chip on" data-scchip="fChan" data-val="email"/.test(filterHtml)) {
+  fail('the active chip is not marked on');
+} else pass('the active chip reads as on');
+social.fChan = [];
+
+// The timeline is gone, and nothing may still reach for it.
+for (const dead of ['timelineCardHtml', 'tl-card', "'timeline'"]) {
+  if (mod.includes(dead)) fail('the timeline left ' + dead + ' behind');
+}
+if (!fails) pass('the timeline view is fully gone');
+
+
 console.log(fails ? '\n' + fails + ' FAILURE(S)' : '\nAll checks passed.');
 process.exit(fails ? 1 : 0);

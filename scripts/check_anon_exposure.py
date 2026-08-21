@@ -31,8 +31,6 @@ from pathlib import Path
 PUBLIC_OK = {
     "v_public_events", "v_public_recap", "v_public_artists", "v_public_event_photos",
     "v_public_impact_report", "v_public_survey", "v_artist_gigs", "v_artist_content",
-    # Deliberately public: tools/visualizer.html reads it with no sign-in. See 186.
-    "v_kpi_targets_current",
     "site_content", "module_registry",
 }
 
@@ -61,6 +59,11 @@ MUST_BE_EMPTY = [
     ("v_equipment_roi", "equipment purchase prices and revenue per item"),
     ("v_mailing_list_health", "how big the mailing list is"),
     ("v_metric_prior", "the internal KPI scoreboard"),
+    # Revoked in 187. 186 left this one granted believing tools/visualizer.html
+    # read it anonymously; it does not - it loads /staging/guard.js and reads
+    # with an admin session, and its other two sources answer [] / 401 to anon
+    # anyway, so the tool never worked signed-out.
+    ("v_kpi_targets_current", "every KPI target we have set"),
 ]
 
 
