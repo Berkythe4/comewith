@@ -9182,7 +9182,7 @@ async function hubSecOverview() {
   const dayof = `
     <div class="dayof-callout">
       <div class="doh">Build the task checklist</div>
-      <p>Walks the standard ${escapeHtml(e.type || 'event')} checklist — planning → promo → day of → wrap — from your templates, plus steps for assigned gear &amp; performers. <strong>Each step opens for you to edit before it's created</strong>, and you can skip any that don't apply to this one. Gear set to <strong>${e.cw_providing_gear ? 'CW providing' : 'venue / other'}</strong>, so it offers the ${e.cw_providing_gear ? 'load-in / soundcheck / breakdown / return' : 'confirm-house-gear-with-venue'} set. Outreach steps come with your venue/vendor contact already suggested. Safe to run again — steps already on the event are never offered twice, and editing a template only affects future runs.</p>
+      <p>Pick which template set this event runs, then walk it — planning → promo → day of → wrap — plus steps for assigned gear &amp; performers. <strong>Each step opens for you to edit before it's created</strong>, and you can skip any that don't apply to this one. Any set can be used on any event, so a “v2” you're trying out is one pick away. Gear set to <strong>${e.cw_providing_gear ? 'CW providing' : 'venue / other'}</strong>, so it offers the ${e.cw_providing_gear ? 'load-in / soundcheck / breakdown / return' : 'confirm-house-gear-with-venue'} steps. Outreach steps come with your venue/vendor contact already suggested. Safe to run again — steps already on the event are never offered twice, and editing a set only affects future runs.</p>
       <button class="hub-btn" data-hub-action="gen-dayof">Build task checklist</button>
       ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
     </div>`;
@@ -11846,25 +11846,38 @@ async function venContactRemove(spec) {
 // ============================================================
 // TASK TEMPLATE EDITOR (Part 3b.3) — Keith edits his standard workflows here.
 // Edits apply to FUTURE generation only; already-generated tasks are never rewritten
-// (generation reads templates at run time). CRUD + reorder over task_templates.
+// (generation reads templates at run time).
+//
+// Since 196 a template is a named SET of steps ("Party — standard", "Event
+// Template v2"), not a per-event-type list. Sets are free: any set can be
+// applied to any event, and you pick which one when you build the checklist.
+// So this page is CRUD over sets, and CRUD + reorder over the steps inside one.
 // ============================================================
-const TMPL_EVENT_TYPES = ['party', 'dance_infusion', 'production', 'showcase'];
 const TMPL_PHASES = ['planning', 'promo', 'day_of', 'wrap'];
 const TARGET_FUNCS = ['', 'venue:booking', 'venue:sound', 'venue:day_of', 'venue:gm', 'venue:security', 'vendor'];
 let templatesCache = [];
+let tmplSetsCache = [];
+let tmplUseCounts = {};
 
 async function loadTemplates() { await renderTemplates(); }
 let emailTplCache = [];
 async function renderTemplates() {
-  const [{ data, error }, etRes] = await Promise.all([
+  const [setRes, tplRes, etRes, useRes] = await Promise.all([
+    sb.from('task_template_sets').select('id, name, description, active').order('name'),
     sb.from('task_templates')
-      .select('id, event_type, title, default_offset_days, default_role, phase, gear_applicability, target_function, sort_order')
-      .order('event_type').order('phase').order('sort_order').order('title'),
+      .select('id, set_id, title, default_offset_days, default_role, phase, gear_applicability, target_function, sort_order')
+      .order('sort_order').order('title'),
     sb.from('email_templates').select('key, label, subject, body, placeholders').order('label'),
+    sb.from('events').select('task_template_set_id').is('deleted_at', null).not('task_template_set_id', 'is', null),
   ]);
+  const error = setRes.error || tplRes.error;
   if (error) { $('templatesBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
-  templatesCache = data || [];
+  tmplSetsCache = setRes.data || [];
+  templatesCache = tplRes.data || [];
   emailTplCache = etRes.data || [];
+  tmplUseCounts = {};
+  (useRes.data || []).forEach(e => { tmplUseCounts[e.task_template_set_id] = (tmplUseCounts[e.task_template_set_id] || 0) + 1; });
+
   // Email templates — the copy of system-sent emails, editable here.
   const etRows = emailTplCache.map(t => `<div class="hub-li">
       <div class="li-main"><strong>${escapeHtml(t.label)}</strong><div class="li-sub">Subject: ${escapeHtml(t.subject)}</div></div>
@@ -11873,38 +11886,124 @@ async function renderTemplates() {
   let html = `<div class="hub-sec-bar"><h3>Email templates</h3></div>
     <div class="kpi-hint" style="margin-bottom:8px;">The copy of emails the system sends for you (artist links, subscribe confirmation, survey invites). Edit the words — the <code>{{placeholders}}</code> get filled in automatically at send time.</div>
     <div class="hub-list" style="margin-bottom:18px;">${etRows || '<div class="hub-empty">No email templates.</div>'}</div>
-    <div class="hub-sec-bar"><h3>Task templates</h3><button class="hub-btn" data-tmpl-action="add">+ Add template</button></div>
-    <div class="kpi-hint" style="margin-bottom:14px;">These are your standard checklists — the day-of generator builds from them. Editing here changes <strong>future</strong> generation only; it never rewrites tasks already generated on an event. “Applies when gear is” controls gear / no-gear / both event modes; “auto-assign” routes outreach tasks to that venue/vendor contact.</div>`;
-  for (const et of TMPL_EVENT_TYPES) {
-    const inType = templatesCache.filter(t => t.event_type === et);
-    if (!inType.length) continue;
-    html += `<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:1.05rem;">${et}</h3></div>`;
-    for (const ph of TMPL_PHASES) {
-      const rows = inType.filter(t => t.phase === ph);
-      if (!rows.length) continue;
-      html += `<div class="lookup-box"><div class="lh">${ph}</div><div class="hub-list">` + rows.map(t => {
-        const off = t.default_offset_days != null ? `T${t.default_offset_days >= 0 ? '+' : ''}${t.default_offset_days}` : '—';
-        const gear = `<span class="contact-fn">${escapeHtml(t.gear_applicability)}</span>`;
-        const tgt = t.target_function ? `<span class="contact-fn primary">→ ${escapeHtml(t.target_function)}</span>` : '';
-        return `<div class="hub-li">
-          <div class="li-main"><strong>${escapeHtml(t.title)}</strong> ${gear} ${tgt}<div class="li-sub">${off}${t.default_role ? (' · ' + escapeHtml(t.default_role)) : ''}</div></div>
-          <div class="hub-li-actions">
-            <button class="hub-mini" data-tmpl-up="${escapeHtml(t.id)}" title="Move up">↑</button>
-            <button class="hub-mini" data-tmpl-down="${escapeHtml(t.id)}" title="Move down">↓</button>
-            <button class="hub-mini" data-tmpl-action="edit" data-id="${escapeHtml(t.id)}">Edit</button>
-            <button class="hub-mini danger" data-tmpl-del="${escapeHtml(t.id)}">Remove</button>
-          </div></div>`;
-      }).join('') + `</div></div>`;
+    <div class="hub-sec-bar"><h3>Task template sets</h3><button class="hub-btn" data-tset-action="add">+ New template set</button></div>
+    <div class="kpi-hint" style="margin-bottom:14px;">Each set is a named checklist. When you build an event's tasks you pick which set to use, then review and edit every step before it's created — so a set is a starting point, not a contract. A set isn't tied to an event type: keep a “v2” alongside the standard one and try it on a single event. Editing here changes <strong>future</strong> generation only; it never rewrites tasks already on an event.</div>`;
+
+  if (!tmplSetsCache.length) {
+    html += `<div class="hub-empty">No template sets yet. Make one, then add the steps it should create.</div>`;
+  }
+
+  for (const s of tmplSetsCache) {
+    const rows = templatesCache.filter(t => t.set_id === s.id);
+    const used = tmplUseCounts[s.id] || 0;
+    html += `<div class="lookup-box" style="margin-top:16px;">
+      <div class="lh" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <span>${escapeHtml(s.name)}</span>
+        ${s.active ? '' : '<span class="contact-fn">inactive</span>'}
+        <span style="font-weight:400;text-transform:none;letter-spacing:0;color:var(--mid);font-size:0.75rem;">
+          ${rows.length} step${rows.length === 1 ? '' : 's'} · used by ${used} event${used === 1 ? '' : 's'}
+        </span>
+        <span style="flex:1 1 auto;"></span>
+        <button class="hub-mini" data-tset-action="addstep" data-id="${escapeHtml(s.id)}">+ Add step</button>
+        <button class="hub-mini" data-tset-action="edit" data-id="${escapeHtml(s.id)}">Rename</button>
+        <button class="hub-mini" data-tset-action="dup" data-id="${escapeHtml(s.id)}">Duplicate</button>
+        <button class="hub-mini danger" data-tset-del="${escapeHtml(s.id)}">Delete set</button>
+      </div>
+      ${s.description ? `<div class="kpi-hint" style="margin:6px 0 4px;">${escapeHtml(s.description)}</div>` : ''}`;
+    if (!rows.length) {
+      html += `<div class="hub-empty">No steps in this set yet.</div>`;
+    } else {
+      for (const ph of TMPL_PHASES) {
+        const inPh = rows.filter(t => t.phase === ph);
+        if (!inPh.length) continue;
+        html += `<div class="lh" style="margin-top:10px;font-size:0.8rem;">${ph}</div><div class="hub-list">` + inPh.map(t => {
+          const off = t.default_offset_days != null ? `T${t.default_offset_days >= 0 ? '+' : ''}${t.default_offset_days}` : '—';
+          const gear = `<span class="contact-fn">${escapeHtml(t.gear_applicability)}</span>`;
+          const tgt = t.target_function ? `<span class="contact-fn primary">→ ${escapeHtml(t.target_function)}</span>` : '';
+          return `<div class="hub-li">
+            <div class="li-main"><strong>${escapeHtml(t.title)}</strong> ${gear} ${tgt}<div class="li-sub">${off}${t.default_role ? (' · ' + escapeHtml(t.default_role)) : ''}</div></div>
+            <div class="hub-li-actions">
+              <button class="hub-mini" data-tmpl-up="${escapeHtml(t.id)}" title="Move up">↑</button>
+              <button class="hub-mini" data-tmpl-down="${escapeHtml(t.id)}" title="Move down">↓</button>
+              <button class="hub-mini" data-tmpl-action="edit" data-id="${escapeHtml(t.id)}">Edit</button>
+              <button class="hub-mini danger" data-tmpl-del="${escapeHtml(t.id)}">Remove</button>
+            </div></div>`;
+        }).join('') + `</div>`;
+      }
     }
+    html += `</div>`;
   }
   $('templatesBody').innerHTML = html;
 }
 
-function templateFormHTML(t) {
+// ---- the set itself ----
+function openSetForm(id) {
+  const s = id ? tmplSetsCache.find(x => x.id === id) : null;
+  openKpi(id ? 'Rename template set' : 'New template set',
+    id ? 'Renaming affects this set everywhere; the steps in it are untouched.' : 'A named checklist you can apply to any event',
+    `<div class="modal-form-row"><label class="modal-label">Name *</label><input class="modal-input" name="name" value="${s ? escapeHtml(s.name) : ''}" placeholder="Event Template v2"></div>
+     <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="2" placeholder="What this checklist is for, and when to reach for it">${s ? escapeHtml(s.description || '') : ''}</textarea></div>
+     <div class="modal-form-row"><label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" name="active"${!s || s.active ? ' checked' : ''}> Offer this set when building an event's checklist</label></div>
+     <div class="kpi-hint">Unticking hides it from the picker without deleting it or the events already running it.</div>`,
+    () => submitSet(id), id ? 'Save' : 'Create set');
+}
+async function submitSet(id) {
+  const name = kpiVal('name'); if (!name) throw new Error('Name is required');
+  const row = {
+    name,
+    description: kpiVal('description') || null,
+    active: !!$('kpiModalBody').querySelector('[name="active"]')?.checked,
+  };
+  const op = id ? sb.from('task_template_sets').update(row).eq('id', id) : sb.from('task_template_sets').insert(row);
+  const { error } = await op;
+  if (error) throw new Error(error.code === '23505' ? 'A template set with that name already exists.' : error.message);
+  closeKpi(); toast(id ? 'Set updated' : 'Set created', 'ok'); await renderTemplates();
+}
+// Duplicating is how you get a v2 without risking v1 — copy, then edit the copy.
+async function setDuplicate(id) {
+  const s = tmplSetsCache.find(x => x.id === id); if (!s) return;
+  const steps = templatesCache.filter(t => t.set_id === id);
+  let name = `${s.name} copy`;
+  const taken = new Set(tmplSetsCache.map(x => x.name.trim().toLowerCase()));
+  let n = 2; while (taken.has(name.trim().toLowerCase())) { name = `${s.name} copy ${n++}`; }
+  const { data, error } = await sb.from('task_template_sets')
+    .insert({ name, description: s.description, active: s.active }).select('id').single();
+  if (error) { toast('Duplicate failed: ' + error.message, 'err'); return; }
+  if (steps.length) {
+    const copies = steps.map(t => ({
+      set_id: data.id, title: t.title, phase: t.phase,
+      default_offset_days: t.default_offset_days, sort_order: t.sort_order,
+      gear_applicability: t.gear_applicability, target_function: t.target_function,
+      default_role: t.default_role,
+    }));
+    const { error: se } = await sb.from('task_templates').insert(copies);
+    // The set exists either way; say so rather than leaving a mystery empty set.
+    if (se) { toast(`Set copied, but its steps did not: ${se.message}`, 'err'); await renderTemplates(); return; }
+  }
+  toast(`Created “${name}” with ${steps.length} step${steps.length === 1 ? '' : 's'}`, 'ok');
+  await renderTemplates();
+}
+async function setRemove(id) {
+  const s = tmplSetsCache.find(x => x.id === id); if (!s) return;
+  const steps = templatesCache.filter(t => t.set_id === id).length;
+  const used = tmplUseCounts[id] || 0;
+  // Spell out the blast radius: the steps go with it, and any event running it
+  // stops having a checklist to be measured against.
+  if (!confirm(`Delete the template set “${s.name}”?\n\nThis also deletes its ${steps} step${steps === 1 ? '' : 's'}.` +
+    (used ? `\n\n${used} event${used === 1 ? '' : 's'} currently run${used === 1 ? 's' : ''} this set — their existing tasks stay, but they will show as having no checklist picked.` : '') +
+    `\n\nTasks already created on events are never deleted.`)) return;
+  const { error } = await sb.from('task_template_sets').delete().eq('id', id);
+  if (error) { toast('Delete failed: ' + error.message, 'err'); return; }
+  toast('Template set deleted', 'ok'); await renderTemplates();
+}
+
+// ---- a step within a set ----
+function templateFormHTML(t, setId) {
   const opt = (vals, cur) => vals.map(x => `<option value="${escapeHtml(x)}"${(cur || '') === x ? ' selected' : ''}>${escapeHtml(x) || '— none —'}</option>`).join('');
+  const sets = tmplSetsCache.map(s => `<option value="${escapeHtml(s.id)}"${(t?.set_id || setId) === s.id ? ' selected' : ''}>${escapeHtml(s.name)}</option>`).join('');
   return `
     <div class="modal-form-row half-row">
-      <div><label class="modal-label">Event type *</label><select class="modal-select" name="event_type">${opt(TMPL_EVENT_TYPES, t?.event_type)}</select></div>
+      <div><label class="modal-label">Template set *</label><select class="modal-select" name="set_id">${sets}</select></div>
       <div><label class="modal-label">Phase *</label><select class="modal-select" name="phase">${opt(TMPL_PHASES, t?.phase)}</select></div>
     </div>
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" value="${t ? escapeHtml(t.title) : ''}"></div>
@@ -11918,29 +12017,32 @@ function templateFormHTML(t) {
     </div>
     <div class="modal-form-row"><label class="modal-label">Default role (optional label)</label><input class="modal-input" name="default_role" value="${t ? escapeHtml(t.default_role || '') : ''}"></div>`;
 }
-function openTemplateForm(id) {
+function openTemplateForm(id, setId) {
   const t = id ? templatesCache.find(x => x.id === id) : null;
-  openKpi(id ? 'Edit template' : 'Add template', 'Standard checklist item — affects FUTURE generation only', templateFormHTML(t), () => submitTemplate(id), id ? 'Save changes' : 'Add template');
+  if (!tmplSetsCache.length) { toast('Make a template set first — a step has to live in one.', 'err'); return; }
+  openKpi(id ? 'Edit step' : 'Add step', 'Standard checklist item — affects FUTURE generation only', templateFormHTML(t, setId), () => submitTemplate(id), id ? 'Save changes' : 'Add step');
 }
 async function submitTemplate(id) {
   const title = kpiVal('title'); if (!title) throw new Error('Title is required');
   const off = kpiVal('default_offset_days'); const so = kpiVal('sort_order');
   const row = {
-    event_type: kpiVal('event_type'), phase: kpiVal('phase'), title,
+    set_id: kpiVal('set_id'), phase: kpiVal('phase'), title,
     default_offset_days: off === '' ? null : Number(off),
     sort_order: so === '' ? 0 : Number(so),
     gear_applicability: kpiVal('gear_applicability') || 'both',
     target_function: kpiVal('target_function') || null,
     default_role: kpiVal('default_role') || null,
   };
+  if (!row.set_id) throw new Error('Pick a template set');
   const op = id ? sb.from('task_templates').update(row).eq('id', id) : sb.from('task_templates').insert(row);
   const { error } = await op;
-  if (error) throw new Error(error.code === '23505' ? 'A template with that title already exists for this event type.' : error.message);
-  closeKpi(); toast(id ? 'Template updated' : 'Template added', 'ok'); await renderTemplates();
+  if (error) throw new Error(error.code === '23505' ? 'That set already has a step with this title.' : error.message);
+  closeKpi(); toast(id ? 'Step updated' : 'Step added', 'ok'); await renderTemplates();
 }
 async function templateReorder(id, dir) {
   const t = templatesCache.find(x => x.id === id); if (!t) return;
-  const group = templatesCache.filter(x => x.event_type === t.event_type && x.phase === t.phase)
+  // Ordering is within one phase of one SET (was: one phase of one event type).
+  const group = templatesCache.filter(x => x.set_id === t.set_id && x.phase === t.phase)
     .sort((a, b) => (a.sort_order - b.sort_order) || a.title.localeCompare(b.title));
   const idx = group.findIndex(x => x.id === id);
   const swap = dir === 'up' ? idx - 1 : idx + 1;
@@ -11954,16 +12056,26 @@ async function templateReorder(id, dir) {
 }
 async function templateRemove(id) {
   const t = templatesCache.find(x => x.id === id);
-  if (!confirm(`Remove template "${t?.title || ''}"? Future generation won't include it. Tasks already on events are untouched.`)) return;
+  if (!confirm(`Remove step "${t?.title || ''}" from this set? Future generation won't include it. Tasks already on events are untouched.`)) return;
   const { error } = await sb.from('task_templates').delete().eq('id', id);
   if (error) { toast('Remove failed: ' + error.message, 'err'); return; }
-  toast('Template removed', 'ok'); await renderTemplates();
+  toast('Step removed', 'ok'); await renderTemplates();
 }
 $('panel-templates').addEventListener('click', (e) => {
   const et = e.target.closest('[data-etpl-edit]'); if (et) { openEmailTemplateForm(et.dataset.etplEdit); return; }
   const up = e.target.closest('[data-tmpl-up]'); if (up) { templateReorder(up.dataset.tmplUp, 'up'); return; }
   const dn = e.target.closest('[data-tmpl-down]'); if (dn) { templateReorder(dn.dataset.tmplDown, 'down'); return; }
   const del = e.target.closest('[data-tmpl-del]'); if (del) { templateRemove(del.dataset.tmplDel); return; }
+  const sdel = e.target.closest('[data-tset-del]'); if (sdel) { setRemove(sdel.dataset.tsetDel); return; }
+  const sact = e.target.closest('[data-tset-action]'); if (sact) {
+    ({
+      add: () => openSetForm(null),
+      edit: () => openSetForm(sact.dataset.id),
+      dup: () => setDuplicate(sact.dataset.id),
+      addstep: () => openTemplateForm(null, sact.dataset.id),
+    }[sact.dataset.tsetAction] || (() => {}))();
+    return;
+  }
   const act = e.target.closest('[data-tmpl-action]'); if (act) {
     ({ add: () => openTemplateForm(null), edit: () => openTemplateForm(act.dataset.id) }[act.dataset.tmplAction] || (() => {}))();
   }
@@ -20848,10 +20960,10 @@ async function calFetch() {
       .is('deleted_at', null).or(`status.neq.done,updated_at.gte.${doneSince}`), 'id'),
     // ---- gap scan inputs (deliberately NOT month-bound: a workflow that was
     // never generated for next month is a gap you need to see this month) ----
-    sb.from('events').select('id,name,type,series,event_date,status,cw_providing_gear')
+    sb.from('events').select('id,name,type,series,event_date,status,cw_providing_gear,task_template_set_id')
       .is('deleted_at', null).gte('event_date', todayISO).lte('event_date', gapTo)
       .order('event_date').limit(CAL_GAP_MAX_EVENTS),
-    sb.from('task_templates').select('id,event_type,title,phase,default_offset_days,gear_applicability'),
+    sb.from('task_templates').select('id,set_id,title,phase,default_offset_days,gear_applicability'),
     sb.from('sc_playlists').select('id,station_no,name,status,drop_date').in('status', ['building', 'testing']),
   ]);
   for (const r of [evs, ms, ven, tasks]) if (r.error) throw r.error;
@@ -20864,20 +20976,22 @@ async function calFetch() {
   const gapOr = [];
   if (gapEvents.length) gapOr.push(`event_id.in.(${gapEvents.map(e => e.id).join(',')})`);
   if (gapStations.length) gapOr.push(`station_id.in.(${gapStations.map(s => s.id).join(',')})`);
-  const [parts, gapT] = await Promise.all([
+  const [parts, gapT, tplSets] = await Promise.all([
     ids.length
       ? sb.from('event_participants').select('event_id,roles,role,bill_order,actor:actors(id,display_name)').in('event_id', ids)
       : Promise.resolve({ data: [] }),
     gapOr.length
       ? sbAll(() => sb.from('tasks').select('id,event_id,station_id,title,status,milestone,template_id').is('deleted_at', null).or(gapOr.join(',')), 'id')
       : Promise.resolve({ data: [] }),
+    sb.from('task_template_sets').select('id,name,active').order('name'),
   ]);
   // A gap-scan failure degrades to "scan unavailable" on one card; it must never
   // take the calendar down with it.
-  const gapErr = [upEv, tpl, stns, gapT].map(r => r && r.error).find(Boolean);
+  const gapErr = [upEv, tpl, stns, gapT, tplSets].map(r => r && r.error).find(Boolean);
   CAL.gapErr = gapErr ? (gapErr.message || String(gapErr)) : null;
   CAL.gap = gapErr ? null : {
     events: gapEvents, templates: tpl.data || [], stations: gapStations, tasks: gapT.data || [],
+    sets: tplSets.data || [],
     capped: gapEvents.length >= CAL_GAP_MAX_EVENTS,
   };
   const partsByEvent = {};
@@ -20990,8 +21104,14 @@ function calGaps() {
       if (t.event_id) { const a = byEv.get(t.event_id) || []; a.push(t); byEv.set(t.event_id, a); }
       if (t.station_id) { const a = bySt.get(t.station_id) || []; a.push(t); bySt.set(t.station_id, a); }
     });
-    const tplByType = {};
-    (g.templates || []).forEach(tp => (tplByType[tp.event_type] ||= []).push(tp));
+    // Steps group by SET now, not by event type (196). Which set an event is
+    // running is recorded on the event itself, so gaps are measured against the
+    // checklist it actually uses — an event deliberately run on "Event Template
+    // v2" must not read as missing all of the standard checklist's steps.
+    const tplBySet = {};
+    (g.templates || []).forEach(tp => (tplBySet[tp.set_id] ||= []).push(tp));
+    const setName = new Map((g.sets || []).map(s => [s.id, s.name]));
+    const anySet = (g.sets || []).length > 0;
     (g.events || []).forEach(ev => {
       const have = byEv.get(ev.id) || [];
       // Matched by template_id first (195), title only as the fallback for rows
@@ -21002,14 +21122,25 @@ function calGaps() {
       const tplIds = new Set(have.map(t => t.template_id).filter(Boolean));
       // Same filter the generator applies, so the count we promise is the count
       // the button actually creates.
-      const tpl = (tplByType[ev.type] || []).filter(tp =>
+      const setId = ev.task_template_set_id;
+      const tpl = (setId ? (tplBySet[setId] || []) : []).filter(tp =>
         tp.gear_applicability === 'both' || tp.gear_applicability === (ev.cw_providing_gear ? 'gear' : 'no_gear'));
       const days = calDaysBetween(today, ev.event_date);
       const when = `${escapeHtml(fmtDate(ev.event_date))} · ${days === 0 ? 'today' : days === 1 ? 'tomorrow' : `in ${days}d`}`;
       const nm = escapeHtml(ev.name || 'Untitled event');
+      // No set chosen yet is a different problem from a set with nothing in it,
+      // and only one of the two is fixed on the Templates page.
+      if (!setId) {
+        if (!have.length) out.push({ sev: days <= 30 ? 1 : 2, icon: '🧩', title: `${nm} — no tasks, and no checklist picked`,
+          sub: `${when}. ${anySet ? 'Pick which template set this event runs and review its steps.' : 'There are no template sets yet — build one on the Templates page.'}`,
+          act: anySet
+            ? `<button class="hub-btn" data-gap-gen="${escapeHtml(ev.id)}" data-gap-name="${nm}">Pick a checklist</button>`
+            : `<button class="hub-mini" data-gap-go="templates">Templates →</button>` });
+        return;
+      }
       if (!tpl.length) {
-        if (!have.length) out.push({ sev: 2, icon: '🧩', title: `${nm} — no tasks, and no workflow defined for “${escapeHtml(ev.type || '?')}”`,
-          sub: `${when}. Nothing will ever generate for this event type until its standard steps exist.`,
+        if (!have.length) out.push({ sev: 2, icon: '🧩', title: `${nm} — no tasks, and “${escapeHtml(setName.get(setId) || 'its checklist')}” has no steps`,
+          sub: `${when}. Nothing will generate until that set has steps in it.`,
           act: `<button class="hub-mini" data-gap-go="templates">Templates →</button>` });
         return;
       }
@@ -21018,10 +21149,10 @@ function calGaps() {
       const late = missing.filter(tp => tp.default_offset_days != null && calAddDays(ev.event_date, tp.default_offset_days) <= today);
       if (!have.length) {
         out.push({ sev: days <= 30 ? 0 : 1, icon: '⚙️', title: `${nm} — workflow never generated`,
-          sub: `${when} · ${tpl.length} standard step${tpl.length !== 1 ? 's' : ''} for a ${escapeHtml(ev.type)}${late.length ? ` · ${late.length} already past their start date` : ''}`,
+          sub: `${when} · ${tpl.length} step${tpl.length !== 1 ? 's' : ''} in “${escapeHtml(setName.get(setId) || '?')}”${late.length ? ` · ${late.length} already past their start date` : ''}`,
           act: `<button class="hub-btn" data-gap-gen="${escapeHtml(ev.id)}" data-gap-name="${nm}">Review ${tpl.length}</button>` });
       } else {
-        out.push({ sev: late.length ? 1 : 2, icon: '◑', title: `${nm} — ${missing.length} of ${tpl.length} workflow steps missing`,
+        out.push({ sev: late.length ? 1 : 2, icon: '◑', title: `${nm} — ${missing.length} of ${tpl.length} steps missing from “${escapeHtml(setName.get(setId) || '?')}”`,
           sub: `${when}${late.length ? ` · ${late.length} should already have started` : ''} · missing: ${escapeHtml(missing.slice(0, 3).map(m => m.title).join('; '))}${missing.length > 3 ? ` +${missing.length - 3} more` : ''}`,
           act: `<button class="hub-mini" data-gap-gen="${escapeHtml(ev.id)}" data-gap-name="${nm}">Fill in ${missing.length}</button>` });
       }
@@ -21552,19 +21683,69 @@ async function calAddTask(pre = {}) {
 // calendar's gap panel and can be generated later. Removing a step for good is
 // an edit on the Templates page, which is a different intent and a different
 // screen. Renaming here is safe because the task carries template_id (195).
-const TPLQ = { rows: [], i: 0, made: 0, skipped: 0, eventId: null, evName: '', opts: null, onDone: null };
+const TPLQ = { rows: [], i: 0, made: 0, skipped: 0, eventId: null, evName: '', setId: null, stamped: false, opts: null, onDone: null };
 
-function tplqReset() { TPLQ.rows = []; TPLQ.i = 0; TPLQ.made = 0; TPLQ.skipped = 0; TPLQ.eventId = null; TPLQ.evName = ''; TPLQ.opts = null; TPLQ.onDone = null; }
+function tplqReset() { TPLQ.rows = []; TPLQ.i = 0; TPLQ.made = 0; TPLQ.skipped = 0; TPLQ.eventId = null; TPLQ.evName = ''; TPLQ.setId = null; TPLQ.stamped = false; TPLQ.opts = null; TPLQ.onDone = null; }
 
+// Step one is choosing WHICH checklist (196). Sets are free — any set can be
+// applied to any event — so the picker lists them all rather than guessing from
+// the event's type, with whatever the event already runs selected.
 async function applyTemplateQueue(eventId, { onDone, evName } = {}) {
-  const { data, error } = await sb.rpc('plan_event_tasks', { p_event_id: eventId });
+  const [setsRes, evRes] = await Promise.all([
+    sb.from('task_template_sets').select('id,name,description,active,task_templates(id)').eq('active', true).order('name'),
+    sb.from('events').select('task_template_set_id').eq('id', eventId).single(),
+  ]);
+  if (setsRes.error) { toast('Could not read the template sets: ' + setsRes.error.message, 'err'); return; }
+  const sets = setsRes.data || [];
+  if (!sets.length) {
+    toast('No template sets yet — build one on the Templates page first.', 'err');
+    return;
+  }
+  const current = evRes.error ? null : (evRes.data?.task_template_set_id || null);
+  const rows = sets.map(s => {
+    const n = (s.task_templates || []).length;
+    const on = current && s.id === current;
+    return `<label class="hub-li" style="display:flex;gap:10px;align-items:flex-start;cursor:pointer;">
+      <input type="radio" name="tplset" value="${escapeHtml(s.id)}"${on ? ' checked' : ''} style="margin-top:4px;">
+      <span class="li-main"><strong>${escapeHtml(s.name)}</strong>${on ? ' <span class="contact-fn primary">currently used</span>' : ''}
+        <span class="li-sub">${n} step${n === 1 ? '' : 's'}${s.description ? ' · ' + escapeHtml(s.description) : ''}</span></span>
+    </label>`;
+  }).join('');
+  openKpi(evName ? `Which checklist — ${evName}` : 'Which checklist?',
+    'Any set can be applied to any event. You review and edit every step before it is created.',
+    `<div class="hub-list">${rows}</div>`,
+    async () => {
+      const picked = $('kpiModalBody').querySelector('[name="tplset"]:checked');
+      if (!picked) throw new Error('Pick a checklist first');
+      await tplqStart(eventId, picked.value, { onDone, evName });
+    }, 'Next →');
+}
+
+async function tplqStart(eventId, setId, { onDone, evName } = {}) {
+  const { data, error } = await sb.rpc('plan_event_tasks', { p_event_id: eventId, p_set_id: setId });
   if (error) { toast('Could not read the workflow: ' + error.message, 'err'); return; }
   const rows = (data || []).slice().sort((a, b) => (a.sort_key || 0) - (b.sort_key || 0));
-  if (!rows.length) { toast('Nothing to add — every step of this workflow is already on the event.', 'ok'); return; }
+  if (!rows.length) {
+    closeKpi();
+    toast('Nothing to add — every step of that checklist is already on the event.', 'ok');
+    if (onDone) await onDone();
+    return;
+  }
   tplqReset();
-  TPLQ.rows = rows; TPLQ.eventId = eventId; TPLQ.evName = evName || ''; TPLQ.onDone = onDone || null;
+  TPLQ.rows = rows; TPLQ.eventId = eventId; TPLQ.evName = evName || ''; TPLQ.setId = setId; TPLQ.onDone = onDone || null;
   TPLQ.opts = await taskFormOptions();
   tplqStep();
+}
+
+// Record which set this event runs, once it genuinely has a step from it. Doing
+// it on the first CREATE rather than on the pick means an abandoned run never
+// relabels the event, and the calendar's gap panel keeps telling the truth.
+async function tplqStamp() {
+  const q = TPLQ;
+  if (q.stamped || !q.setId || !q.eventId) return;
+  q.stamped = true;
+  const { error } = await sb.from('events').update({ task_template_set_id: q.setId }).eq('id', q.eventId);
+  if (error) toast('Tasks are being created, but the event did not record which checklist it uses: ' + error.message, 'err');
 }
 
 const TPLQ_PHASE = { planning: 'Planning', promo: 'Promo', day_of: 'Day of', wrap: 'Wrap-up' };
@@ -21615,6 +21796,7 @@ function tplqStep() {
         // The task exists; a failed assignment must not look like a failed step.
         if (ae) toast('Step created, but the assignee did not stick: ' + ae.message, 'err');
       }
+      await tplqStamp();
       q.made++; q.i++;
       tplqStep();
     }, 'Create task');
@@ -21641,6 +21823,7 @@ async function tplqRest() {
     if (r.suggested_actor_id) {
       await sb.from('task_assignments').insert({ task_id: data.id, actor_id: r.suggested_actor_id, role: 'doer' });
     }
+    await tplqStamp();
     q.made++;
   }
   q.i = q.rows.length;
