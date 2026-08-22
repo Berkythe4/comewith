@@ -9181,9 +9181,9 @@ async function hubSecOverview() {
   const hasP = (hub.counts?.people || 0) > 0, hasE = (hub.counts?.equipment || 0) > 0;
   const dayof = `
     <div class="dayof-callout">
-      <div class="doh">Generate task checklist</div>
-      <p>Builds the standard ${escapeHtml(e.type || 'event')} checklist — across planning → wrap — from your templates, plus tasks for assigned gear & performers. Gear set to <strong>${e.cw_providing_gear ? 'CW providing' : 'venue / other'}</strong>, so it generates the ${e.cw_providing_gear ? 'load-in / soundcheck / breakdown / return' : 'confirm-house-gear-with-venue'} set. Outreach tasks auto-assign to your venue/vendor contacts. Safe to run again — existing tasks (by title) are never duplicated, and editing a template only affects future runs.</p>
-      <button class="hub-btn" data-hub-action="gen-dayof">Generate task checklist</button>
+      <div class="doh">Build the task checklist</div>
+      <p>Walks the standard ${escapeHtml(e.type || 'event')} checklist — planning → promo → day of → wrap — from your templates, plus steps for assigned gear &amp; performers. <strong>Each step opens for you to edit before it's created</strong>, and you can skip any that don't apply to this one. Gear set to <strong>${e.cw_providing_gear ? 'CW providing' : 'venue / other'}</strong>, so it offers the ${e.cw_providing_gear ? 'load-in / soundcheck / breakdown / return' : 'confirm-house-gear-with-venue'} set. Outreach steps come with your venue/vendor contact already suggested. Safe to run again — steps already on the event are never offered twice, and editing a template only affects future runs.</p>
+      <button class="hub-btn" data-hub-action="gen-dayof">Build task checklist</button>
       ${(!hasP || !hasE) ? `<div class="dayof-hint">Tip: assign performers and equipment first for a complete checklist — you can still generate from templates alone.</div>` : ''}
     </div>`;
   const cards = (isProd || isGig) ? `
@@ -10871,12 +10871,13 @@ async function hubSetStage(stage) {
   hub.event.stage = stage; renderHubHead(); toast('Stage → ' + stage, 'ok');
 }
 
+// No confirm() any more — the review queue IS the confirmation, and a far
+// better one: you see each step, edit it, and decide on it individually.
 async function hubGenerateDayOf() {
-  if (!confirm('Generate the day-of checklist for this event?\n\nIt builds tasks from assigned gear, performers, and the standard templates. Safe to run again — tasks that already exist (by title) are skipped, never duplicated.')) return;
-  const { error } = await sb.rpc('generate_day_of_tasks', { p_event_id: hub.eventId });
-  if (error) { toast('Generate failed: ' + error.message, 'err'); return; }
-  toast('Day-of tasks generated', 'ok');
-  hub.section = 'tasks'; await hubReload('tasks');
+  await applyTemplateQueue(hub.eventId, {
+    evName: hub.event?.name || '',
+    onDone: async () => { hub.section = 'tasks'; await hubReload('tasks'); },
+  });
 }
 
 async function hubFeeToExpense(participantId) {
@@ -20850,7 +20851,7 @@ async function calFetch() {
     sb.from('events').select('id,name,type,series,event_date,status,cw_providing_gear')
       .is('deleted_at', null).gte('event_date', todayISO).lte('event_date', gapTo)
       .order('event_date').limit(CAL_GAP_MAX_EVENTS),
-    sb.from('task_templates').select('event_type,title,phase,default_offset_days,gear_applicability'),
+    sb.from('task_templates').select('id,event_type,title,phase,default_offset_days,gear_applicability'),
     sb.from('sc_playlists').select('id,station_no,name,status,drop_date').in('status', ['building', 'testing']),
   ]);
   for (const r of [evs, ms, ven, tasks]) if (r.error) throw r.error;
@@ -20868,7 +20869,7 @@ async function calFetch() {
       ? sb.from('event_participants').select('event_id,roles,role,bill_order,actor:actors(id,display_name)').in('event_id', ids)
       : Promise.resolve({ data: [] }),
     gapOr.length
-      ? sbAll(() => sb.from('tasks').select('id,event_id,station_id,title,status,milestone').is('deleted_at', null).or(gapOr.join(',')), 'id')
+      ? sbAll(() => sb.from('tasks').select('id,event_id,station_id,title,status,milestone,template_id').is('deleted_at', null).or(gapOr.join(',')), 'id')
       : Promise.resolve({ data: [] }),
   ]);
   // A gap-scan failure degrades to "scan unavailable" on one card; it must never
@@ -20993,7 +20994,12 @@ function calGaps() {
     (g.templates || []).forEach(tp => (tplByType[tp.event_type] ||= []).push(tp));
     (g.events || []).forEach(ev => {
       const have = byEv.get(ev.id) || [];
+      // Matched by template_id first (195), title only as the fallback for rows
+      // the backfill couldn't reach. Title alone stopped being safe the moment
+      // the review queue let people rename a step as they created it — a rename
+      // would have read as "still missing" forever.
       const titles = new Set(have.map(t => (t.title || '').trim().toLowerCase()));
+      const tplIds = new Set(have.map(t => t.template_id).filter(Boolean));
       // Same filter the generator applies, so the count we promise is the count
       // the button actually creates.
       const tpl = (tplByType[ev.type] || []).filter(tp =>
@@ -21007,17 +21013,17 @@ function calGaps() {
           act: `<button class="hub-mini" data-gap-go="templates">Templates →</button>` });
         return;
       }
-      const missing = tpl.filter(tp => !titles.has(tp.title.trim().toLowerCase()));
+      const missing = tpl.filter(tp => !tplIds.has(tp.id) && !titles.has(tp.title.trim().toLowerCase()));
       if (!missing.length) return;
       const late = missing.filter(tp => tp.default_offset_days != null && calAddDays(ev.event_date, tp.default_offset_days) <= today);
       if (!have.length) {
         out.push({ sev: days <= 30 ? 0 : 1, icon: '⚙️', title: `${nm} — workflow never generated`,
           sub: `${when} · ${tpl.length} standard step${tpl.length !== 1 ? 's' : ''} for a ${escapeHtml(ev.type)}${late.length ? ` · ${late.length} already past their start date` : ''}`,
-          act: `<button class="hub-btn" data-gap-gen="${escapeHtml(ev.id)}">Generate ${tpl.length}</button>` });
+          act: `<button class="hub-btn" data-gap-gen="${escapeHtml(ev.id)}" data-gap-name="${nm}">Review ${tpl.length}</button>` });
       } else {
         out.push({ sev: late.length ? 1 : 2, icon: '◑', title: `${nm} — ${missing.length} of ${tpl.length} workflow steps missing`,
           sub: `${when}${late.length ? ` · ${late.length} should already have started` : ''} · missing: ${escapeHtml(missing.slice(0, 3).map(m => m.title).join('; '))}${missing.length > 3 ? ` +${missing.length - 3} more` : ''}`,
-          act: `<button class="hub-mini" data-gap-gen="${escapeHtml(ev.id)}">Fill in ${missing.length}</button>` });
+          act: `<button class="hub-mini" data-gap-gen="${escapeHtml(ev.id)}" data-gap-name="${nm}">Fill in ${missing.length}</button>` });
       }
     });
     (g.stations || []).forEach(st => {
@@ -21449,25 +21455,44 @@ async function openEditTask(taskId, onSaved) {
     });
   }, 40);
 }
-async function calAddTask(pre = {}) {
+// ---- Shared task form ------------------------------------------------------
+// One field set, several callers: Add task, Notes → convert, and the template
+// review queue. Split into options / markup / collect so the queue can fetch the
+// option lists ONCE for an eleven-step run instead of twice per step.
+async function taskFormOptions() {
   const [evs, team] = await Promise.all([
     sb.from('events').select('id,name,event_date').is('deleted_at', null).order('event_date', { ascending: false }).limit(150),
     sb.from('actor_roles').select('actor:actors(id,display_name,deleted_at)').eq('role', 'team').eq('active', true),
   ]);
-  const evOpts = (evs.data || []).map(e => `<option value="${escapeHtml(e.id)}">${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('');
-  const asgOpts = (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at)
-    .map(a => `<option value="${escapeHtml(a.id)}">${escapeHtml(a.display_name)}</option>`).join('');
+  return {
+    events: evs.data || [],
+    team: (team.data || []).map(r => r.actor).filter(a => a && !a.deleted_at),
+  };
+}
+// `pre` prefills any field. `pre.extraAssignees` prepends people who aren't on
+// the team list — the venue contact the planner suggested for an outreach step
+// is usually not team, and a suggestion you can't select isn't a suggestion.
+function taskFormMarkup(opts, pre = {}) {
+  const sel = (a, b) => (a != null && a !== '' && String(a) === String(b)) ? ' selected' : '';
+  const evOpts = opts.events.map(e =>
+    `<option value="${escapeHtml(e.id)}"${sel(pre.event_id, e.id)}>${escapeHtml(e.name)} (${escapeHtml((e.event_date || '').slice(0, 10))})</option>`).join('');
+  const extra = pre.extraAssignees || [];
+  const people = extra.concat(opts.team.filter(a => !extra.some(x => x.id === a.id)));
+  const asgOpts = people.map(a =>
+    `<option value="${escapeHtml(a.id)}"${sel(pre.assignee, a.id)}>${escapeHtml(a.display_name || '')}</option>`).join('');
   // Bucket was filterable on the board but never settable at creation — which is
   // why 83 tasks have none. `pre` lets another surface (Notes → convert) open
   // this same modal pre-filled instead of growing a second task form.
   const bucketOpts = ['<option value="">— none —</option>'].concat(WS_PILLARS.map(p =>
-    `<option value="${p}"${p === pre.pillar ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`)).join('');
-  openKpi(pre.heading || 'Add task / milestone', pre.sub || 'Milestones show on the calendar grid; tasks live on the board', `
+    `<option value="${p}"${sel(pre.pillar, p)}>${escapeHtml(wsPillarLabel(p))}</option>`)).join('');
+  const prOpts = ['<option value="">—</option>'].concat(['high', 'medium', 'low'].map(p =>
+    `<option value="${p}"${sel(pre.priority, p)}>${p}</option>`)).join('');
+  return `
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required value="${escapeHtml(pre.title || '')}"></div>
     <div class="modal-form-row"><label class="modal-label">Description</label><textarea class="modal-textarea" name="description" rows="3">${escapeHtml(pre.description || '')}</textarea></div>
     <div class="modal-form-row half-row">
-      <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date"></div>
-      <div><label class="modal-label">Priority</label><select class="modal-select" name="priority"><option value="">—</option><option value="high">high</option><option value="medium">medium</option><option value="low">low</option></select></div>
+      <div><label class="modal-label">Due date</label><input class="modal-input" type="date" name="due_date" value="${escapeHtml(pre.due_date || '')}"></div>
+      <div><label class="modal-label">Priority</label><select class="modal-select" name="priority">${prOpts}</select></div>
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Bucket</label><select class="modal-select" name="pillar">${bucketOpts}</select></div>
@@ -21475,16 +21500,30 @@ async function calAddTask(pre = {}) {
     </div>
     <div class="modal-form-row half-row">
       <div><label class="modal-label">Assignee (optional)</label><select class="modal-select" name="assignee"><option value="">—</option>${asgOpts}</select></div>
-      <div><label class="modal-label" style="display:flex;gap:8px;align-items:center;margin-top:22px;"><input type="checkbox" name="milestone"> ⭐ Milestone</label></div>
-    </div>`,
+      <div><label class="modal-label" style="display:flex;gap:8px;align-items:center;margin-top:22px;"><input type="checkbox" name="milestone"${pre.milestone ? ' checked' : ''}> ⭐ Milestone</label></div>
+    </div>`;
+}
+// Reads the shared fields back off the open modal. Callers add their own
+// columns (source, template_id, feedback_note_id) on top.
+function taskFormCollect() {
+  const title = kpiVal('title'); if (!title) throw new Error('Title is required');
+  const t = { title, status: 'todo', milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked };
+  const desc = kpiVal('description'); if (desc) t.description = desc;
+  const dd = kpiVal('due_date'); if (dd) t.due_date = dd;
+  const pr = kpiVal('priority'); if (pr) t.priority = pr;
+  const ev = kpiVal('event_id'); if (ev) t.event_id = ev;
+  const pil = kpiVal('pillar'); if (pil) t.pillar = pil;
+  return t;
+}
+
+async function calAddTask(pre = {}) {
+  const opts = await taskFormOptions();
+  openKpi(pre.heading || 'Add task / milestone',
+    pre.sub || 'Milestones show on the calendar grid; tasks live on the board',
+    taskFormMarkup(opts, pre),
     async () => {
-      const title = kpiVal('title'); if (!title) throw new Error('Title is required');
-      const t = { title, source: pre.source || 'manual', status: 'todo', milestone: !!$('kpiModalBody').querySelector('[name="milestone"]')?.checked };
-      const desc = kpiVal('description'); if (desc) t.description = desc;
-      const dd = kpiVal('due_date'); if (dd) t.due_date = dd;
-      const pr = kpiVal('priority'); if (pr) t.priority = pr;
-      const ev = kpiVal('event_id'); if (ev) t.event_id = ev;
-      const pil = kpiVal('pillar'); if (pil) t.pillar = pil;
+      const t = taskFormCollect();
+      t.source = pre.source || 'manual';
       if (pre.feedback_note_id) t.feedback_note_id = pre.feedback_note_id;
       // NB: tasks.created_by is an FK to actors, not auth.users — leave it unset.
       const { data, error } = await sb.from('tasks').insert(t).select('id').single();
@@ -21502,6 +21541,143 @@ async function calAddTask(pre = {}) {
       if (pre.onCreated) await pre.onCreated(); else await loadCalendar();
     }, 'Add');
 }
+
+// ---- Applying a workflow, one step at a time -------------------------------
+// Applying a template used to be a single server-side shot: you found out what
+// had been created after it was created. plan_event_tasks() (195) says what it
+// WOULD create without writing, so the workflow is now walked one step at a
+// time and every step can be edited — or skipped for this event — first.
+//
+// Skip means skip THIS event: nothing is written, so the step still shows in the
+// calendar's gap panel and can be generated later. Removing a step for good is
+// an edit on the Templates page, which is a different intent and a different
+// screen. Renaming here is safe because the task carries template_id (195).
+const TPLQ = { rows: [], i: 0, made: 0, skipped: 0, eventId: null, evName: '', opts: null, onDone: null };
+
+function tplqReset() { TPLQ.rows = []; TPLQ.i = 0; TPLQ.made = 0; TPLQ.skipped = 0; TPLQ.eventId = null; TPLQ.evName = ''; TPLQ.opts = null; TPLQ.onDone = null; }
+
+async function applyTemplateQueue(eventId, { onDone, evName } = {}) {
+  const { data, error } = await sb.rpc('plan_event_tasks', { p_event_id: eventId });
+  if (error) { toast('Could not read the workflow: ' + error.message, 'err'); return; }
+  const rows = (data || []).slice().sort((a, b) => (a.sort_key || 0) - (b.sort_key || 0));
+  if (!rows.length) { toast('Nothing to add — every step of this workflow is already on the event.', 'ok'); return; }
+  tplqReset();
+  TPLQ.rows = rows; TPLQ.eventId = eventId; TPLQ.evName = evName || ''; TPLQ.onDone = onDone || null;
+  TPLQ.opts = await taskFormOptions();
+  tplqStep();
+}
+
+const TPLQ_PHASE = { planning: 'Planning', promo: 'Promo', day_of: 'Day of', wrap: 'Wrap-up' };
+function tplqKindNote(r) {
+  if (r.kind === 'gear') return 'From this event’s gear flag, not a template.';
+  if (r.kind === 'soundcheck') return 'From the lineup, not a template.';
+  return r.suggested_actor_name
+    ? `Standard step · suggested assignee: ${r.suggested_actor_name}`
+    : 'Standard step for this event type.';
+}
+
+function tplqStep() {
+  const q = TPLQ;
+  if (q.i >= q.rows.length) return tplqFinish();
+  const r = q.rows[q.i];
+  const extra = r.suggested_actor_id
+    ? [{ id: r.suggested_actor_id, display_name: (r.suggested_actor_name || 'Suggested contact') + ' (suggested)' }]
+    : [];
+  const left = q.rows.length - q.i;
+  const bar = `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;margin-bottom:12px;border:1px solid var(--border);border-radius:8px;background:var(--surface-2);">
+      <span style="font-weight:600;">Step ${q.i + 1} of ${q.rows.length}</span>
+      <span style="color:var(--mid);">${escapeHtml(TPLQ_PHASE[r.phase] || r.phase || '')} · ${escapeHtml(tplqKindNote(r))}</span>
+      <span style="flex:1 1 auto;"></span>
+      <button type="button" class="hub-mini" data-tplq="skip">Skip this step</button>
+      ${left > 1 ? `<button type="button" class="hub-mini" data-tplq="rest">Create remaining ${left} unedited</button>` : ''}
+    </div>`;
+  openKpi(
+    q.evName ? `Workflow — ${q.evName}` : 'Apply workflow',
+    'Edit anything before it is created. Skip leaves the step off this event; it stays available to generate later.',
+    bar + taskFormMarkup(q.opts, {
+      title: r.title,
+      description: r.description || '',
+      due_date: r.due_date || '',
+      event_id: q.eventId,
+      assignee: r.suggested_actor_id || '',
+      extraAssignees: extra,
+    }),
+    async () => {
+      const t = taskFormCollect();
+      t.source = 'template';
+      if (r.template_id) t.template_id = r.template_id;
+      const { data, error } = await sb.from('tasks').insert(t).select('id').single();
+      if (error) throw error;
+      const asg = kpiVal('assignee');
+      if (asg) {
+        const { error: ae } = await sb.from('task_assignments').insert({ task_id: data.id, actor_id: asg, role: 'doer' });
+        // The task exists; a failed assignment must not look like a failed step.
+        if (ae) toast('Step created, but the assignee did not stick: ' + ae.message, 'err');
+      }
+      q.made++; q.i++;
+      tplqStep();
+    }, 'Create task');
+}
+
+// "Create remaining N unedited" writes the rest exactly as planned, from the
+// CURRENT position — steps already skipped stay skipped. It deliberately does
+// not call generate_day_of_tasks, which would re-propose them.
+async function tplqRest() {
+  const q = TPLQ;
+  const rest = q.rows.slice(q.i);
+  const btns = $('kpiModalBody').querySelectorAll('[data-tplq]');
+  btns.forEach(b => { b.disabled = true; });
+  for (const r of rest) {
+    const t = { title: r.title, status: 'todo', source: 'template', event_id: q.eventId };
+    if (r.description) t.description = r.description;
+    if (r.due_date) t.due_date = r.due_date;
+    if (r.template_id) t.template_id = r.template_id;
+    const { data, error } = await sb.from('tasks').insert(t).select('id').single();
+    // Stop on the row that failed and re-open it, so the modal is showing the
+    // step the error is about rather than whatever was on screen when we
+    // started. What was already written stays written.
+    if (error) { toast('Stopped at “' + r.title + '”: ' + error.message, 'err'); q.i = q.rows.indexOf(r); tplqStep(); return; }
+    if (r.suggested_actor_id) {
+      await sb.from('task_assignments').insert({ task_id: data.id, actor_id: r.suggested_actor_id, role: 'doer' });
+    }
+    q.made++;
+  }
+  q.i = q.rows.length;
+  tplqFinish();
+}
+
+async function tplqFinish() {
+  const q = TPLQ;
+  const made = q.made, skipped = q.skipped, onDone = q.onDone;
+  tplqReset();
+  closeKpi();
+  const parts = [`${made} task${made === 1 ? '' : 's'} created`];
+  if (skipped) parts.push(`${skipped} skipped`);
+  toast(made ? parts.join(' · ') : 'Nothing created — every step was skipped.', made ? 'ok' : 'err');
+  if (onDone) await onDone();
+}
+
+// Abandoning the run (Cancel / ✕) is not a failure — it just stops here, and
+// says what did get made so a half-applied workflow is never silent.
+async function tplqAbort() {
+  if (!TPLQ.rows.length) return;
+  const q = TPLQ;
+  const made = q.made, left = q.rows.length - q.i, onDone = q.onDone;
+  tplqReset();
+  toast(`Stopped — ${made} created, ${left} not added. Run it again to pick up the rest.`, made ? 'ok' : 'err');
+  if (onDone) await onDone();
+}
+
+$('kpiModalOverlay').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-tplq]');
+  if (!b || !TPLQ.rows.length) return;
+  e.preventDefault();
+  if (b.dataset.tplq === 'skip') { TPLQ.skipped++; TPLQ.i++; tplqStep(); return; }
+  if (b.dataset.tplq === 'rest') await tplqRest();
+});
+// Cancel / ✕ already call closeKpi; this only reports what the run got through.
+['kpiModalCancel', 'kpiModalX'].forEach(id => $(id).addEventListener('click', () => { tplqAbort(); }));
 // A focus tile is a saved board view, not a new filter axis — it sets the
 // date/status axes it owns and leaves search / event / assignee alone, so
 // clicking "Overdue" while filtered to one event still means that event.
@@ -21547,18 +21723,19 @@ $('panel-calendar').addEventListener('click', async (e) => {
     const t = CAL.tasks.find(x => x.id === id); if (t) t.status = 'done';
     toast('Done ✓', 'ok'); calRefreshFocus(); calRenderBoard(); return;
   }
-  // Gap: run the standard workflow generator for that event. Idempotent by
-  // title server-side, so re-running only fills what's missing.
+  // Gap: walk that event's standard workflow. The planner only ever proposes
+  // steps that don't exist yet, so re-running still only fills what's missing —
+  // but now each step is reviewed before it's written.
   const gen = e.target.closest('[data-gap-gen]');
   if (gen) {
     e.preventDefault();
-    if (!confirm('Generate this event\'s standard workflow?\n\nIt creates the template steps (plus gear/performer tasks) that don\'t exist yet. Steps already on the event are skipped, never duplicated.')) return;
     gen.disabled = true;
-    const { data, error } = await sb.rpc('generate_day_of_tasks', { p_event_id: gen.dataset.gapGen });
+    await applyTemplateQueue(gen.dataset.gapGen, {
+      evName: gen.dataset.gapName || '',
+      onDone: async () => { await loadCalendar(); },
+    });
     gen.disabled = false;
-    if (error) { toast('Generate failed: ' + error.message, 'err'); return; }
-    toast(`${data ?? 0} task${data === 1 ? '' : 's'} created`, 'ok');
-    await loadCalendar(); return;
+    return;
   }
   const go = e.target.closest('[data-gap-go]');
   if (go) {
