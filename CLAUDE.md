@@ -239,6 +239,62 @@ Four Come-With-specific rules on top of whichever variant you run:
   alphabetical and puts day_of first; harmless in a bulk insert, nonsense when a person
   is being walked through it.
 
+## Planning / FP&A (the Planning tab, 197-202)
+
+- **The unit of planning is an OFFERING, not an event.** `plan_offerings` is a
+  repeatable thing you sell - a party, a DJ booking, a rental, a production gig -
+  with a price, costs that scale with it, and a count per month. `creates_event`
+  is a **flag**, not an assumption (a rental books no event), and `scale` is
+  abstract and named per offering via `scale_label` ("Paid attendance", "Units").
+  That indirection is deliberate: the same four tables model a SKU. Do not
+  hardcode "event" into anything here.
+- **Line bases are `per_unit` / `per_scale` / `pct_revenue`, and `pct_revenue` is
+  EXPENSE-ONLY by constraint.** A percent-of-revenue income line is defined in
+  terms of itself; forbidding it at the schema keeps every view a plain aggregate
+  with no evaluation order to get wrong. `pct_revenue.amount` is a **percent**
+  (6 = 6%), never a fraction.
+- **`plan_offering_lines.category` must be a REAL P&L category.** It is the join
+  key: `v_plan_vs_actual` matches plan to actual on `(period, ledger, section,
+  category)`. Putting the unit's NAME there is exactly what broke the legacy
+  `budget_lines` rows, which reported 100% variance silently for their whole
+  life. LEARNINGS §47.
+- **`budget_lines` rows with `version_id is null` are LEGACY and invisible to the
+  planner.** The 37 hand-built rows are preserved as history; every planner view
+  filters `version_id is not null`. Never "tidy up" by back-filling a version
+  onto them - that double-counts against the offerings seeded from them.
+- **Nothing in the planner may reach the P&L.** Plan rows live in their own
+  tables and no view that computes actuals reads them. This is the separation 178
+  established so a forecast can never be mistaken for money (LEARNINGS §33). A
+  new planning view must not be joined into `v_pl_monthly` or anything under it.
+- **A published round is frozen by TRIGGER** (`plan_frozen_guard`), not by the
+  dashboard - a client-side guard is bypassed by any REST token, and actual vs
+  forecast is meaningless if the forecast can be improved afterwards. Publishing
+  **snapshots** the live plan rather than closing it: the `working` version stays
+  editable forever, which is what a rolling forecast needs. Exactly one `working`
+  version exists (partial unique index).
+- **Copying into a published round is impossible by design, so publishing is a
+  function.** `plan_publish_round()` creates the version in a transient state,
+  fills it, then marks it published - all in one transaction. Do not try to
+  reimplement it as client-side steps; the trigger will refuse them, and a
+  half-copied round is worse than none.
+- **`needs_review` / `provisional` are load-bearing, not decoration.** Lines
+  seeded from a lump sum whose category could not be derived carry
+  `needs_review`, and the board must present that offering as provisional rather
+  than settled. Equally, `has_cost_model` / `has_revenue_model` exist so a
+  missing side renders as "no cost" instead of a confident 100% margin - a `$0`
+  line asserts "this costs nothing", which is a different claim from "not
+  modelled yet". LEARNINGS §26, §48.
+- **The forecast maths is implemented TWICE - in SQL (`v_plan_monthly`) and in JS
+  (`planModelMonth`)** - because a lever that needs a round trip before it shows
+  the answer is a form, not a lever. The view is the source of truth and is what
+  a reload reads. **If you change one, change the other**, or the number you type
+  against stops matching the number you reload into.
+- **Parties have no per-head pricing yet, and that is a data fact, not an
+  oversight.** There is not one paid `ticketing` row against any event of type
+  `party`; priced tickets exist only for Dance Infusion. Do not seed a ticket
+  price to "make the lever work" - it would feed straight into every forecast
+  figure as invented evidence.
+
 ## Series contract (events.series)
 
 `events.series` is free text. KPI views match it **exactly**. The Log Event form

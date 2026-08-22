@@ -1,3 +1,159 @@
+# Carryover - 2026-08-21 (FP&A: the Planning board - KEITH'S machine)
+
+**Third close on 2026-08-21.** Henry's task-templates close and the desktop's
+invoicing close are both preserved below, unchanged. This one is about
+**financial planning** and one dashboard CSS fix.
+
+## >> START HERE NEXT SESSION
+
+**1. Nobody has opened the Planning tab in a browser yet.** Everything is
+verified at the data layer against prod - the seed previewed inside a rolled-back
+transaction, `v_plan_monthly` / `v_plan_vs_actual` / `v_event_contribution` all
+returning sensible numbers, RLS and grants confirmed with `has_table_privilege` -
+and the inline module parses. But no click has happened. **First job: Finance ->
+the Planning tab.** Change a volume number and confirm the headline, the
+contribution row and the statement all move, and that the value sticks after a
+reload.
+
+**2. Six offerings are PROVISIONAL and want ten minutes of your attention.**
+They were seeded from your 37 legacy budget rows, and the amounts are yours -
+but the **P&L category** on each line is a guess (the $1,200 against "Come With
+Party #1" is one number covering venue, talent and marketing, and that split is
+not recoverable from the data). Open **Pricing models**, fix the categories,
+click confirm. Until then the board labels itself provisional, which is correct
+but not useful for long.
+
+**3. Two model gaps worth a decision, not a default.**
+   - **Parties have no per-head pricing** because *there is not one paid ticket
+     row against any event of type `party`* - priced ticketing exists only for
+     Dance Infusion. So "avg attendance" is a lever that currently moves no
+     money. Enter a ticket price on the party's income line (basis "per unit of
+     scale") and attendance becomes live. `default_scale` is already set to the
+     real recorded average, 43.5.
+   - **Equipment Rental books no event** (`creates_event = false`). You said
+     rentals should be mergeable into an event; there is no event *type* for a
+     rental, and inventing one would put rentals in the events list and the P&L.
+     Say which you want and it is a one-line change.
+
+**4. This machine cannot run two of the standard checks.** Neither is a
+blocker, both should be fixed:
+   - **No `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env`**, so
+     `python scripts/check_anon_exposure.py` cannot run (same as Henry's
+     machine - see his note below). Anon exposure was verified this session with
+     `has_table_privilege()` in SQL instead, which is authoritative for grants
+     but does **not** exercise PostgREST end to end. Run the real sweep from the
+     desktop.
+   - **No JS runtime at all** - `node`, `deno`, `bun`, `npx` all absent - so
+     `node --check` is impossible here. Substituted a Python esprima parse with
+     the pre-edit file as a control and a deliberately-broken copy as a negative
+     control (LEARNINGS §49). Installing Node would restore the documented loop.
+
+**5. WARNING: `.env` on this machine has a bare `SBP_REF=yaytdosxfhcqatmhctzk`** -
+i.e. **prod**. CLAUDE.md explicitly says not to add one, precisely so the target
+project is visible in the command being approved. Every `db.py` call this
+session passed the literal anyway, but as it stands a bare `python db.py x.sql`
+silently hits production. **Recommend deleting that line**; left alone rather
+than editing your local config unasked.
+
+---
+
+## State summary
+
+- **Migrations 197-202 applied, no drift.** Highest: `202_plan_guard_grants.sql`.
+  Prod `applied_migrations` max = 202, repo max = 202. Every one dry-run against
+  prod (`commit;` -> `rollback;`) before applying; 199 and 201 were additionally
+  *previewed* inside the rolled-back transaction so the seed and the publish
+  function were seen working before they landed.
+- **All 5 financial views still anon-revoked**, re-verified. All 9 new planning
+  objects: no anon SELECT, RLS on with a real policy, and added to
+  `check_anon_exposure.py` for the next machine that can run it.
+- **All 3 planning functions blocked for anon**, confirmed with
+  `has_function_privilege` (not by reading the SQL - see §49).
+- **Latest LEARNINGS: §49.** Three added (§47-§49).
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: pushed to master, Netlify auto-deploying. No parked branches.
+- Ran on **Keith's machine**. No edge functions touched.
+
+## This session shipped
+
+### 1. The P&L boxes were white (commit `61e649e`)
+
+The P&L stylesheet was written against a light theme and dropped into the dark
+dashboard. It painted backgrounds with `var(--panel, #fff)` - and **`--panel` is
+defined nowhere in the file**, so every one of those fell back to literal white
+while the text stayed `--ink` cream. Only *some* cards broke because `.accent`
+and `.warn` tint with `rgba()` and composite correctly over the plum-black page.
+
+Re-toned onto the real palette (`--surface` / `--border`, `--green` /
+`--red-dk`). Also caught the same white fallback on the total and profit bands,
+the payee picker and the charge-detail inputs, which had `color: inherit` and so
+went invisible too.
+
+### 2. Planning - FP&A, built on units rather than events
+
+**The unit is an OFFERING, not an event.** A party, a DJ booking, a rental, a
+production gig: each is a repeatable thing with a price, costs that scale with
+it, and a count per month. That is also exactly a SKU, which is why
+`plan_offerings` is generic - `creates_event` is a flag, and `scale` is abstract
+and named per offering ("Paid attendance", "Units"). The fashion-company version
+of this tool is the same four tables.
+
+| # | What |
+|---|---|
+| 197 | `plan_versions` / `plan_offerings` / `plan_offering_lines` / `plan_volumes` / `plan_overrides`; `budget_lines` gains `version_id` + `ledger`; freeze triggers |
+| 198 | `v_plan_offering_unit`, `v_plan_monthly`, `v_plan_vs_actual`, `v_event_contribution` |
+| 199 | Seeded 6 offerings, 9 lines, 17 volumes and 14 overhead rows from the legacy budget |
+| 200 | Registered the module (Finance, sort 16, master-only) |
+| 201 | `plan_publish_round()` - freezes a snapshot in one transaction |
+| 202 | Stated the 197 trigger guards' EXECUTE instead of inheriting PUBLIC |
+
+**The bug behind the feature.** `budget_lines` already held a forecast in
+roughly the right shape - but it put the *unit name* in `category`, and
+`v_pl_monthly_vs_budget` joins plan to actual **on category**. "DJ Gig #1"
+matches no P&L category, so all 37 rows had been reporting 100% variance
+silently since they were written. The dashboard then fetched that view on every
+P&L open and built a `planned` lookup it never read. Both halves deleted;
+LEARNINGS §47.
+
+**Nothing here can leak into the P&L.** Plan rows live in their own tables and
+no view that computes actuals reads them - the separation 178 established so a
+forecast can never be mistaken for money. The legacy 37 rows keep
+`version_id is null` and the planner reads only rows that carry one, so the old
+forecast survives as history and cannot double-count.
+
+**A published round is frozen by trigger, not by the dashboard.** Actual vs
+forecast only means something if the forecast cannot be improved afterwards.
+Publishing *snapshots* the live plan rather than closing it, so the working plan
+stays editable forever - which is what a rolling forecast needs.
+
+### First readings off the new board
+
+Worth looking at before changing anything:
+
+- **A DJ booking contributes $75 on $500** - 15% margin - against **$1,150 at
+  46%** for a party. Same effort, very different businesses.
+- **Every completed event came in under model.** Come With 7-11 contributed
+  **-$900** against a modelled **+$1,150**; Frick Frack $98 against $800. The
+  seeded model is systematically optimistic, which is exactly what
+  `v_event_contribution` exists to surface.
+- **`test event come with` (2026-08-22) is real data in prod** and shows up in
+  the contribution table. Probably wants deleting.
+
+## Not built (deliberately)
+
+- **Scenarios / saved what-ifs.** You can move levers and watch the answer, but
+  there is no "save this as Plan B and compare". Next obvious step.
+- **Turning a planned unit into a real event.** The schema is ready for it -
+  `plan_offerings.event_type` + `series` exist so a unit knows what event it
+  would become - but there is no button. This was your "forecastable and then
+  turned into / merged into an event" ask; it is the other half.
+- **Cash runway.** The headline shows forecast net, not runway against the
+  $5,000 float. `v_cash_position` already has what it needs.
+- **Forecast drift across rounds.** `plan_publish_round()` stores the history;
+  nothing charts it yet.
+
+---
+
 # Carryover - 2026-08-21 (task templates: named sets, reviewed step by step - HENRY'S machine)
 
 **Second close on 2026-08-21.** The desktop's invoicing close is preserved below,

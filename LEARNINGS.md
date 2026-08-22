@@ -1258,3 +1258,106 @@ Also worth recording, since it was a deliberate choice and not an oversight:
 `event_type` was **dropped rather than left nullable**. A stale column that
 nothing reads is worse than no column — the next person filters on it and gets a
 silently empty list, which is the failure mode this file keeps returning to.
+
+---
+
+## Section 47 — A forecast keyed on the unit's NAME can never be compared to actuals (2026-08-21)
+
+`budget_lines` held a hand-built forecast that looked completely reasonable:
+`Come With Party #1 (7/11)`, `DJ Gig #1`, `Equipment Rental #1`..`#6`, each with
+an income row and an expense row, plus standing `Marketing` $500 and `Software`
+$230. Thirty-seven rows, $33,469. Someone had done real work.
+
+None of it could ever have produced a variance number. `v_pl_monthly_vs_budget`
+joins plan to actual **on `(period, category)`** — and those rows put the *unit's
+name* in `category`. No P&L category is called "DJ Gig #1", so the join matched
+nothing, every line reported 100% variance, and it had been doing so silently
+since the day it was written.
+
+The dashboard made it worse in the quietest possible way: `renderPLGrid()`
+fetched that view on **every** P&L open and built a `planned` lookup from it —
+then never read the variable. A variance feature wired to nothing, sitting on
+top of a join that could not succeed. Neither half was visible as a failure,
+because the output of both is *no output*.
+
+Two rules out of it.
+
+**A field that is a JOIN KEY is not a label.** `category` is how plan meets
+actual. The moment it carries "which one is this" instead of "what kind is
+this", the two sides stop being comparable and nothing announces it. The unit's
+identity needed its own home — which is what `plan_offerings` is.
+
+**Dead code that computes is worse than dead code that sits there.** An unused
+`const` is a tidiness problem. An unused `const` built from a network fetch on
+every render is a cost being paid for an answer nobody reads, and it reads to
+the next person as "variance is handled here" — which is precisely why it
+survived. When the feature moved to its own tab, the fetch and the lookup were
+deleted rather than left "in case".
+
+## Section 48 — Seed from what you can derive; flag what you had to guess (2026-08-21)
+
+Migration 199 seeded six offerings out of those 37 legacy rows. Most of it was
+honest derivation: the amounts are Keith's own budget figures, and the ticket
+economics came from real `ticketing` history (Dance Infusion: 61 paid heads at
+$28.06, both computed, neither invented).
+
+One thing could not be derived. The $1,200 sitting against "Come With Party #1"
+is a single number covering venue, talent and marketing, and the P&L category it
+belongs to is simply not recoverable from it. Splitting it three ways would have
+looked like data and behaved like data — feeding contribution, margin, breakeven
+and every variance figure downstream — while being something we made up. That is
+§26 exactly: a placeholder that reaches a computation stops being a placeholder.
+
+So the split was not invented. Each seeded line carries `needs_review`, the
+offering reports `provisional`, and the board says so in the header rather than
+presenting the forecast as settled. The number is usable *and* labelled.
+
+The same logic forbade a tempting shortcut in the other direction. Equipment
+Rental and Event Production have no expense in the legacy budget, and Artist
+Showcase has no income. Writing a `$0.00` line would have been easy and would
+have asserted "this costs nothing" — a claim nobody made. No line is written,
+and `v_plan_offering_unit` exposes `has_cost_model` / `has_revenue_model` so a
+missing side renders as "no cost" rather than as a confident 100% margin. "Zero"
+and "not modelled" are opposite claims; the schema now has room to say which.
+
+The forward-looking half of this is that the guess is *correctable and tracked*:
+`v_event_contribution` puts each event's real contribution next to what the
+model predicted. First reading, every completed event came in under model —
+Come With 7-11 contributed **−$900** against a modelled **+$1,150**. A model
+that is wrong and says so is worth having; a model that is wrong and confident
+is not.
+
+## Section 49 — Verify the verifier, especially when it agrees with you (2026-08-21)
+
+Three checks lied during this session, each in a way that would have passed
+unnoticed.
+
+**The grant check.** A hand-written query counted anon grants of *any* privilege
+type and reported the new planning objects as FAIL — and, in the same run, the
+five canonical financial views as FAIL too. Those are known-good and verified
+401 in two prior closes. The disagreement with established truth is what exposed
+the check: the blanket-grant era left non-SELECT anon grants behind that were
+never revoked, so only `privilege_type = 'SELECT'` means anything. `post_apply.sql`
+already documents this in a comment. The lesson is not "read the comment" — it
+is that **a check whose result contradicts something you already know to be true
+is reporting on itself, not on the system.** Re-run with
+`has_table_privilege()`, which is authoritative, before believing either answer.
+
+**The syntax check.** This machine has no JS runtime at all — `node`, `deno`,
+`bun`, `npx` all absent — so `node --check`, the loop CLAUDE.md documents, could
+not run. The substitute (esprima via Python) failed on the *pre-edit* file at
+`||=`, then `?.[`, then `catch {`, then top-level `await`: four ES2019–2022
+constructs an ES2017 parser cannot see. Each failure looked exactly like a
+syntax error in the new code. **The control run is the entire method.** Only
+once the unmodified file parsed did a PASS on the patched file mean anything —
+and a deliberately broken brace was then injected to confirm the checker still
+caught real errors, because a checker that passes everything passes your bug too.
+
+**The function grants.** §45 landed in `CLAUDE.md` mid-session, from another
+machine, saying `revoke ... from anon` on a function is a silent no-op. 201 had
+used the correct `from public, anon` form — but that was checked against prod
+with `has_function_privilege()` rather than assumed from reading the SQL, and
+the check found something else: 197's two trigger guards had been created with
+no grants at all and so carried `PUBLIC EXECUTE`. Harmless in fact (invoker
+trigger functions refuse a direct call), closed anyway in 202. Reading your own
+migration proves what you *wrote*, never what the database *did*.
