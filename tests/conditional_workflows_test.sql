@@ -27,7 +27,13 @@ begin
   returning id into v_event;
 
   insert into public.venues (name) values ('TEST 3b venue') returning id into v_venue;
-  update public.events set venue_id = v_venue where id = v_event;
+  -- 196: which checklist an event runs is a property of the EVENT now, not of
+  -- its type. Without this the generator has no set to read and creates only
+  -- the derived gear/soundcheck steps.
+  update public.events e
+     set venue_id = v_venue,
+         task_template_set_id = (select id from public.task_template_sets where name = 'Dance Infusion — standard')
+   where e.id = v_event;
 
   -- Matrix: a SOUND contact only (no booking contact) → booking outreach must degrade
   insert into public.venue_contacts (venue_id, actor_id, function, is_primary) values (v_venue, v_sound, 'sound', true);
@@ -60,7 +66,12 @@ begin
 
   -- ── FUTURE-ONLY proof: edit the rider template's offset, re-run; the EXISTING
   --    generated task keeps its original due_date (templates never rewrite live tasks).
-  update public.task_templates set default_offset_days = -99 where event_type='dance_infusion' and title='Send rider to sound contact';
+  -- 196: steps belong to a named SET, not to an event_type.
+  update public.task_templates tt set default_offset_days = -99
+    from public.task_template_sets s
+   where s.id = tt.set_id
+     and s.name = 'Dance Infusion — standard'
+     and tt.title = 'Send rider to sound contact';
   perform public.generate_day_of_tasks(v_event);
   select due_date into v_rider_due_after_edit from public.tasks where event_id=v_event and title='Send rider to sound contact' and deleted_at is null;
 
