@@ -1813,6 +1813,7 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-invoices"><div id="invoicesBody"></div></div>
       <div class="panel" id="panel-gearwatch"><div id="gearWatchBody"></div></div>
       <div class="panel" id="panel-pl"><div id="plBody"></div></div>
+      <div class="panel" id="panel-planning"><div id="planningBody"></div></div>
       <div class="panel" id="panel-market"><div id="marketBody"></div></div>
       <div class="panel" id="panel-scene-map"><div id="sceneMapBody"></div></div>
       <div class="panel" id="panel-ra-market"><div id="raMarketBody"></div><div id="raDock" style="position:fixed;bottom:14px;right:14px;width:min(440px,94vw);z-index:1000;"></div></div>
@@ -2228,6 +2229,8 @@ async function renderNav() {
   // Invoices sits with the money modules. Registered client-side the same way as
   // the others so the nav does not depend on migration 188 having propagated.
   if (!MODULES.some(m => m.key === 'invoices')) MODULES.push({ key: 'invoices', label: '🧾 Invoices', nav_group: 'Finance', sort_order: 12, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'full'] });
+  // Planning sits immediately after the P&L: the same statement read forward.
+  if (!MODULES.some(m => m.key === 'planning')) MODULES.push({ key: 'planning', label: '📈 Planning', nav_group: 'Finance', sort_order: 16, built: true, signed_off: false, master_only: true, default_roles: [] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -4956,6 +4959,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'invoices') { await loadInvoices(); return; } // custom (billing the accrued revenue)
   if (tab === 'gearwatch') { await loadGearWatch(); return; } // master-only (stolen-gear resale scan)
   if (tab === 'pl') { await loadPL(); return; } // master-only (month-by-month P&L, actual vs budget)
+  if (tab === 'planning') { await loadPlanning(); return; } // master-only (offerings, volumes, forecast vs actual)
   if (tab === 'market') { await loadMarket(); return; } // custom (Best Nights — scheduling intel)
   if (tab === 'scene-map') { await loadSceneMap(); return; } // custom (internal Scene Map)
   if (tab === 'ra-market') { await loadRaMarket(); return; } // custom (Come With Radio)
@@ -14862,6 +14866,14 @@ function pickFrom(title, items, opts) {
 // MASTER ONLY. Reads v_pl_summary (the three profit lines), v_pl_monthly
 // (sectioned detail), v_capital and v_cash_position.
 //
+// FORECAST LIVES ON THE PLANNING TAB, NOT HERE. This used to fetch
+// v_pl_monthly_vs_budget on every open and build a `planned` lookup that was
+// never read — a variance feature that was wired up to nothing. It could not
+// have worked anyway: that view joins plan to actual ON CATEGORY, and the
+// budget rows behind it store the unit name ("DJ Gig #1") where the category
+// belongs, so nothing ever matched. Planning (197-201) does the comparison
+// properly, against categories the P&L actually uses.
+//
 // Shape follows the accounting, not the table:
 //     Revenue
 //   - Direct    cost tied to a specific event
@@ -14891,10 +14903,9 @@ function plPct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
 
 async function loadPL() {
   $('plBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading P&L…</div>';
-  const [sumRes, plRes, bvRes, capRes, cashRes, diRes, actRes, evmRes, expRes] = await Promise.all([
+  const [sumRes, plRes, capRes, cashRes, diRes, actRes, evmRes, expRes] = await Promise.all([
     sb.from('v_pl_summary').select('*'),
     sb.from('v_pl_monthly').select('*'),
-    sb.from('v_pl_monthly_vs_budget').select('*'),
     sb.from('v_capital').select('*').maybeSingle(),
     sb.from('v_cash_position').select('*').maybeSingle(),
     sb.from('v_kpi_dance_infusion').select('*'),
@@ -14911,7 +14922,7 @@ async function loadPL() {
   const err = [sumRes.error, plRes.error, expRes.error].find(Boolean);
   if (err) { $('plBody').innerHTML = '<div class="panel-state err">Could not load the P&L: ' + escapeHtml(err.message) + '</div>'; return; }
 
-  plState.data = { sum: sumRes.data || [], pl: plRes.data || [], bv: bvRes.data || [],
+  plState.data = { sum: sumRes.data || [], pl: plRes.data || [],
                    cap: capRes.data || {}, cash: cashRes.data || {}, di: diRes.data || [],
                    actors: actRes.data || [], evm: evmRes.data || [], exp: expRes.data || [] };
   if (!plState.from) plApplyPreset('recent');
@@ -15125,7 +15136,6 @@ function renderPL() {
 function renderPLGrid() {
   const d = plState.data;
   const rows = d.pl.filter(plKeep);
-  const bv = d.bv.filter(r => plInRange(r.period));
   const months = [...new Set(rows.map(r => r.period))].filter(Boolean).sort();
   const sum = d.sum.filter(plKeep);
   const byMonth = {}; sum.forEach(r => byMonth[r.period] = r);
@@ -15136,8 +15146,6 @@ function renderPLGrid() {
     const k = r.section + '|' + r.category + '|' + r.period;
     val[k] = (val[k] || 0) + amt;
   });
-  const planned = {};
-  bv.forEach(r => { const k = r.category + '|' + r.period; planned[k] = (planned[k] || 0) + plNum(r.planned_cost) + plNum(r.planned_revenue); });
 
   const head = '<tr><th class="pl-lbl">Line</th>' + months.map(m => '<th class="num">' + m.slice(2) + '</th>').join('') +
                '<th class="num">Total</th></tr>';
@@ -15472,6 +15480,685 @@ $('panel-pl').addEventListener('change', (e) => {
   const f = e.target.closest('[data-plfrom]'); if (f) { plState.from = f.value; plState.preset = null; if (plState.to < plState.from) plState.to = plState.from; renderPL(); return; }
   const t = e.target.closest('[data-plto]'); if (t) { plState.to = t.value; plState.preset = null; if (plState.from > plState.to) plState.from = plState.to; renderPL(); return; }
 });
+
+// ================= PLANNING — what we intend to do, and what it earns =========
+// MASTER ONLY. The forward half of the P&L: the same statement read in the other
+// direction, off v_plan_monthly / v_plan_offering_unit / v_event_contribution.
+//
+// THE MODEL. Everything here stands on an OFFERING — a repeatable unit of
+// business (a party, a DJ booking, a rental) with a price, costs that scale with
+// it, and a count per month. Change the count and every number moves. That is
+// the point, and it is why the arithmetic below is a second implementation of
+// what v_plan_monthly does in SQL: a lever that needs a round trip before it
+// shows you the answer is not a lever, it is a form. The view stays the source
+// of truth and is what the page reloads from; planModelMonth() must be kept in
+// step with it.
+//
+// COLUMNS READ BACKWARD THEN FORWARD. Three completed months, the current month,
+// then the rolling horizon (6, or 9/12 on request). A past cell shows what
+// HAPPENED with a chip for how far off the plan was; a future cell shows what is
+// PLANNED. One number per cell, always the best available truth.
+//
+// NOTHING HERE WRITES TO THE P&L. Plan rows live in their own tables and no view
+// that computes actuals reads them — the separation 178 established so a
+// forecast can never be mistaken for money (LEARNINGS §33).
+const PLAN_LOOKBACK = 3;
+
+const planState = {
+  ledger: 'come_with', horizon: 6, view: 'board',
+  version: null, versions: [],
+  offerings: [], lines: [], volumes: {}, overhead: [], overrides: [],
+  actual: {}, actualEvents: {}, contrib: [],
+  pending: new Map(), saveTimer: null, saving: false, saveState: '',
+};
+
+function planPeriods() {
+  const now = plNow(), out = [];
+  for (let i = -PLAN_LOOKBACK; i < planState.horizon; i++) out.push(plShiftMonth(now, i));
+  return out;
+}
+function planForwardPeriods() {
+  const now = plNow(), out = [];
+  for (let i = 0; i < planState.horizon; i++) out.push(plShiftMonth(now, i));
+  return out;
+}
+function planIsPast(p) { return p < plNow(); }
+function planVid() { return (planState.version || {}).id || ''; }
+function planEditable() { return !!planState.version && planState.version.status === 'working'; }
+
+async function loadPlanning() {
+  $('planningBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading the plan…</div>';
+  const [verRes, offRes, lineRes, volRes, ohRes, ovRes, plRes, cbRes] = await Promise.all([
+    sb.from('plan_versions').select('*').order('created_at', { ascending: false }),
+    sb.from('v_plan_offering_unit').select('*').order('sort_order'),
+    sb.from('plan_offering_lines').select('*').is('deleted_at', null).order('sort_order'),
+    sb.from('plan_volumes').select('*'),
+    sb.from('budget_lines').select('*').not('version_id', 'is', null).is('deleted_at', null),
+    sb.from('plan_overrides').select('*'),
+    sb.from('v_pl_monthly').select('*'),
+    sb.from('v_event_contribution').select('*').order('event_date', { ascending: false }),
+  ]);
+
+  const notInstalled = [verRes.error, offRes.error, volRes.error]
+    .find(e => e && /does not exist|schema cache|relation/i.test(e.message || ''));
+  if (notInstalled) {
+    $('planningBody').innerHTML = '<div class="panel-state info">Planning is not installed yet — apply migrations ' +
+      '<code>197</code> to <code>201</code> to prod, then reload.</div>';
+    return;
+  }
+  const err = [verRes.error, offRes.error, volRes.error, plRes.error].find(Boolean);
+  if (err) {
+    $('planningBody').innerHTML = '<div class="panel-state err">Could not load the plan: ' + escapeHtml(err.message) + '</div>';
+    return;
+  }
+
+  planState.versions  = verRes.data || [];
+  planState.version   = planState.versions.find(v => v.status === 'working') || planState.versions[0] || null;
+  planState.horizon   = (planState.version && planState.version.horizon_months) || 6;
+  planState.offerings = offRes.data || [];
+  planState.lines     = lineRes.data || [];
+  planState.overhead  = ohRes.data || [];
+  planState.overrides = ovRes.data || [];
+  planState.contrib   = cbRes.data || [];
+
+  planState.volumes = {};
+  (volRes.data || []).forEach(v => { planState.volumes[v.version_id + '|' + v.offering_id + '|' + v.period] = v; });
+
+  // Actuals keyed period|ledger|section|category. Presence of the key is what
+  // distinguishes "nothing happened" from "no data" — never read the 0.
+  planState.actual = {};
+  (plRes.data || []).forEach(r => {
+    const k = r.period + '|' + (r.ledger || 'come_with') + '|' + r.section + '|' + r.category;
+    planState.actual[k] = (planState.actual[k] || 0) + Number((r.section === 'revenue' ? r.revenue : r.cost) || 0);
+  });
+
+  // How many of each offering ACTUALLY happened, per month — the backward half
+  // of the levers table. Upcoming events are excluded: they have not happened.
+  planState.actualEvents = {};
+  planState.contrib.forEach(c => {
+    if (!c.offering_key || !c.period || c.upcoming) return;
+    const k = c.offering_key + '|' + c.period;
+    planState.actualEvents[k] = (planState.actualEvents[k] || 0) + 1;
+  });
+
+  renderPlanning();
+}
+
+// ---- the model, mirrored from v_plan_monthly --------------------------------
+function planUnits(offeringId, period) {
+  const v = planState.volumes[planVid() + '|' + offeringId + '|' + period];
+  return v ? Number(v.units) || 0 : 0;
+}
+function planScale(o, period) {
+  const v = planState.volumes[planVid() + '|' + o.id + '|' + period];
+  const s = (v && v.scale != null) ? Number(v.scale) : Number(o.default_scale);
+  return Number.isFinite(s) ? s : 0;
+}
+function planLinesFor(offeringId) {
+  return planState.lines.filter(l => l.offering_id === offeringId);
+}
+
+// Returns { 'section|category': amount } for one month of the current ledger.
+function planModelMonth(period) {
+  const out = {};
+  const add = (section, category, amt) => {
+    if (!amt) return;
+    const k = section + '|' + category;
+    out[k] = (out[k] || 0) + amt;
+  };
+
+  planState.offerings.filter(o => o.ledger === planState.ledger && o.active).forEach(o => {
+    const units = planUnits(o.id, period);
+    if (!units) return;
+    const scale = planScale(o, period);
+    const lines = planLinesFor(o.id);
+    // Revenue per unit at THIS period's scale, so a pct_revenue cost follows a
+    // bigger room. Same ordering as the SQL: revenue first, percentages after.
+    let rpu = 0;
+    lines.forEach(l => {
+      if (l.direction !== 'income' || l.basis === 'pct_revenue') return;
+      rpu += l.basis === 'per_scale' ? Number(l.amount) * scale : Number(l.amount);
+    });
+    lines.forEach(l => {
+      let per;
+      if (l.basis === 'per_unit') per = Number(l.amount);
+      else if (l.basis === 'per_scale') per = Number(l.amount) * scale;
+      else per = (Number(l.amount) / 100) * rpu;
+      add(l.direction === 'income' ? 'revenue' : 'direct', l.category, units * per);
+    });
+  });
+
+  planState.overhead.forEach(b => {
+    if (b.version_id !== planVid() || b.period !== period) return;
+    if ((b.ledger || 'come_with') !== planState.ledger || b.scope !== 'period') return;
+    add(b.direction === 'income' ? 'revenue' : 'indirect', b.category, Number(b.planned_amount) || 0);
+  });
+
+  // A typed-over cell REPLACES the model rather than adding to it.
+  planState.overrides.forEach(o => {
+    if (o.version_id !== planVid() || o.period !== period || o.ledger !== planState.ledger) return;
+    out[o.section + '|' + o.category] = Number(o.amount) || 0;
+  });
+  return out;
+}
+
+function planTotalsFromMap(m) {
+  let revenue = 0, direct = 0, indirect = 0;
+  Object.keys(m).forEach(k => {
+    const sec = k.slice(0, k.indexOf('|'));
+    if (sec === 'revenue') revenue += m[k];
+    else if (sec === 'direct') direct += m[k];
+    else indirect += m[k];
+  });
+  return { revenue, direct, indirect, contribution: revenue - direct, net: revenue - direct - indirect };
+}
+function planMonthTotals(period) { return planTotalsFromMap(planModelMonth(period)); }
+
+function planHasActual(period) {
+  const pre = period + '|' + planState.ledger + '|';
+  return Object.keys(planState.actual).some(k => k.indexOf(pre) === 0);
+}
+function planActualTotals(period) {
+  const pre = period + '|' + planState.ledger + '|';
+  let revenue = 0, direct = 0, indirect = 0;
+  Object.keys(planState.actual).forEach(k => {
+    if (k.indexOf(pre) !== 0) return;
+    const sec = k.slice(pre.length, k.indexOf('|', pre.length));
+    const v = planState.actual[k];
+    if (sec === 'revenue') revenue += v; else if (sec === 'direct') direct += v; else indirect += v;
+  });
+  return { revenue, direct, indirect, contribution: revenue - direct, net: revenue - direct - indirect };
+}
+
+// ---- render -----------------------------------------------------------------
+function renderPlanning() {
+  if (!planState.version) {
+    $('planningBody').innerHTML = '<div class="panel-state info">There is no plan round yet. ' +
+      'Migration <code>199</code> seeds one — apply it and reload.</div>';
+    return;
+  }
+  const periods = planPeriods();
+  const body = planState.view === 'model'
+    ? planModelEditorHtml()
+    : '<div id="planHeadline">' + planHeadlineHtml(planForwardPeriods()) + '</div>' +
+      '<div id="planLevers">' + planLeversHtml(periods) + '</div>' +
+      '<div id="planStatement">' + planStatementHtml(periods) + '</div>' +
+      planBackwardHtml();
+  $('planningBody').innerHTML = planControlsHtml() + body;
+  planWire();
+}
+
+function planControlsHtml() {
+  const v = planState.version;
+  const on = (b) => b ? ' style="background:var(--red);color:#fff;border-color:var(--red)"' : '';
+  const vOpt = planState.versions.map(x =>
+    '<option value="' + x.id + '"' + (x.id === v.id ? ' selected' : '') + '>' +
+    escapeHtml(x.label) + (x.status === 'working' ? ' (live)' : ' — frozen') + '</option>').join('');
+  return '<div class="pl-bar">' +
+    '<span class="pl-bar-l">Books</span>' +
+    '<button class="hub-mini" data-planledger="come_with"' + on(planState.ledger === 'come_with') + '>Come With</button>' +
+    '<button class="hub-mini" data-planledger="dance_infusion"' + on(planState.ledger === 'dance_infusion') + '>Dance Infusion</button>' +
+    '<span class="pl-bar-sep"></span>' +
+    '<span class="pl-bar-l">Horizon</span>' +
+    [6, 9, 12].map(h => '<button class="hub-mini" data-planhorizon="' + h + '"' + on(planState.horizon === h) +
+      ' title="rolling ' + h + ' months from this month">' + h + ' mo</button>').join('') +
+    '<span class="pl-bar-sep"></span>' +
+    '<span class="pl-bar-l">Round</span>' +
+    '<select class="hub-status-sel" data-planversion>' + vOpt + '</select>' +
+    '<button class="hub-mini" data-planpublish title="Freeze a copy of the live plan so you can measure against what you said today. The live plan stays editable.">📌 Freeze a round</button>' +
+    '<span class="pl-bar-sep"></span>' +
+    '<button class="hub-mini" data-planview="board"' + on(planState.view === 'board') + '>Board</button>' +
+    '<button class="hub-mini" data-planview="model"' + on(planState.view === 'model') + '>Pricing models</button>' +
+    '<span class="plan-save" id="planSaveState">' + escapeHtml(planState.saveState) + '</span>' +
+    (planEditable() ? '' : '<span class="plan-frozen-note">frozen round — read only</span>') +
+    '</div>';
+}
+
+// ---- headline ---------------------------------------------------------------
+function planHeadlineHtml(fwd) {
+  let revenue = 0, direct = 0, indirect = 0, events = 0;
+  fwd.forEach(p => {
+    const t = planMonthTotals(p);
+    revenue += t.revenue; direct += t.direct; indirect += t.indirect;
+    planState.offerings.forEach(o => {
+      if (o.ledger === planState.ledger && o.creates_event) events += planUnits(o.id, p);
+    });
+  });
+  const contribution = revenue - direct, net = revenue - direct - indirect;
+  const margin = revenue > 0 ? Math.round((contribution / revenue) * 100) + '%' : null;
+
+  const card = (label, val, sub, cls, title) =>
+    '<div class="pl-kpi' + (cls ? ' ' + cls : '') + '"' + (title ? ' title="' + escapeHtml(title) + '"' : '') + '>' +
+    '<div class="pl-kpi-l">' + label + '</div><div class="pl-kpi-v">' + val + '</div>' +
+    '<div class="pl-kpi-s">' + (sub || '') + '</div></div>';
+
+  const band = (title, cards) =>
+    '<div class="pl-band"><div class="pl-band-t">' + title + '</div><div class="pl-kpis">' + cards + '</div></div>';
+
+  const provisional = planState.offerings.filter(o => o.ledger === planState.ledger && o.active && o.provisional).length;
+
+  const line1 = band(planState.horizon + ' months from ' + plNow() + ' — what the plan earns', [
+    card('Events planned', String(events), 'across ' + planState.horizon + ' months', events ? 'accent' : 'warn',
+      'Every unit of an offering that books an event. Rentals are counted separately because they do not create one.'),
+    card('Forecast revenue', money(revenue), 'all streams', revenue > 0 ? 'pos' : ''),
+    card('Contribution', money(contribution), margin ? margin + ' of revenue' : 'no revenue to measure against',
+      contribution < 0 ? 'neg' : 'pos', 'Revenue less the costs that only exist because the event does. What is left to cover overhead.'),
+    card('Overhead', money(indirect), 'the cost of existing'),
+    card('Forecast net', money(net), net < 0 ? 'not covering overhead' : 'covering overhead', net < 0 ? 'neg' : 'pos'),
+  ].join(''));
+
+  return line1 + planLeverReadoutHtml(net) +
+    (provisional ? '<div class="plan-warn">⚠ ' + provisional + ' of these offerings ' +
+      (provisional === 1 ? 'is' : 'are') + ' <b>provisional</b> — seeded from a lump sum whose P&L category had to be guessed. ' +
+      'Open <b>Pricing models</b> and confirm them; until then these forecasts rest on an assumption.</div>' : '');
+}
+
+// The actual lever: what would have to change to close the gap. Answered per
+// offering rather than as one number, because "3 more parties" and "46 more DJ
+// bookings" are the same dollars and completely different businesses.
+function planLeverReadoutHtml(net) {
+  const usable = planState.offerings
+    .filter(o => o.ledger === planState.ledger && o.active && Number(o.contribution_per_unit) > 0)
+    .sort((a, b) => Number(b.contribution_per_unit) - Number(a.contribution_per_unit));
+  if (!usable.length) {
+    return '<div class="plan-lever"><span class="plan-lever-t">Break even</span>' +
+      '<span class="muted">No offering has a positive contribution yet, so there is no volume that closes the gap. ' +
+      'Set prices and costs in <b>Pricing models</b> first.</span></div>';
+  }
+  if (net >= 0) {
+    const best = usable[0];
+    return '<div class="plan-lever"><span class="plan-lever-t">Headroom</span>' +
+      'The plan covers overhead with <b class="pos">' + money(net) + '</b> to spare — about <b>' +
+      (Math.floor(net / Number(best.contribution_per_unit))) + '</b> ' + escapeHtml(best.label) +
+      (Math.floor(net / Number(best.contribution_per_unit)) === 1 ? '' : 's') + ' worth of cushion.</div>';
+  }
+  const gap = -net;
+  const opts = usable.map(o => {
+    const n = Math.ceil(gap / Number(o.contribution_per_unit));
+    return '<b>' + n + '</b> more ' + escapeHtml(o.label) + (n === 1 ? '' : 's') +
+      ' <span class="muted">(' + money(o.contribution_per_unit) + ' each)</span>';
+  });
+  return '<div class="plan-lever"><span class="plan-lever-t">Break even</span>' +
+    'Short by <b class="neg">' + money(gap) + '</b> over ' + planState.horizon + ' months. Any one of: ' +
+    opts.join(' &nbsp;·&nbsp; ') + '.</div>';
+}
+
+// ---- levers: how many of each, per month ------------------------------------
+function planLeversHtml(periods) {
+  const offs = planState.offerings.filter(o => o.ledger === planState.ledger && o.active);
+  if (!offs.length) {
+    return '<div class="plan-sec"><div class="plan-sec-t">Volume</div>' +
+      '<div class="panel-state info">No offerings on this ledger yet. Add one in <b>Pricing models</b>.</div></div>';
+  }
+  const head = '<tr><th class="pl-lbl">Offering</th>' +
+    '<th class="num">Rev / unit</th><th class="num">Cost / unit</th><th class="num">Contribution</th><th class="num">Margin</th>' +
+    periods.map(p => '<th class="num' + (planIsPast(p) ? ' plan-past' : '') + '">' + p.slice(2) + '</th>').join('') +
+    '<th class="num">Ahead</th></tr>';
+
+  const rows = offs.map(o => {
+    const cells = periods.map(p => {
+      if (planIsPast(p)) {
+        const n = planState.actualEvents[o.key + '|' + p];
+        const planned = planUnits(o.id, p);
+        const title = 'planned ' + planned + ', actually ' + (n || 0);
+        return '<td class="num plan-past" title="' + escapeHtml(title) + '">' +
+          (n ? '<b>' + n + '</b>' : '<span class="muted">·</span>') +
+          (planned && planned !== (n || 0) ? '<span class="plan-chip ' + ((n || 0) < planned ? 'neg' : 'pos') + '">' +
+            (((n || 0) - planned) > 0 ? '+' : '') + ((n || 0) - planned) + '</span>' : '') + '</td>';
+      }
+      const val = planUnits(o.id, p);
+      return '<td class="num"><input class="plan-vol" type="number" min="0" step="1" ' +
+        'data-off="' + o.id + '" data-per="' + p + '" value="' + val + '"' +
+        (planEditable() ? '' : ' disabled') + ' aria-label="' + escapeHtml(o.label + ' in ' + p) + '"></td>';
+    }).join('');
+    const ahead = planForwardPeriods().reduce((t, p) => t + planUnits(o.id, p), 0);
+    // A missing side of the model is not a zero — say which side is missing.
+    const gap = !o.has_revenue_model ? '<span class="plan-chip warn" title="No revenue line on this offering — its contribution is cost only">no price</span>'
+              : !o.has_cost_model ? '<span class="plan-chip warn" title="No cost line on this offering, so the margin below reads as 100%">no cost</span>'
+              : o.provisional ? '<span class="plan-chip warn" title="Seeded from a lump sum; the P&L category is a guess">review</span>' : '';
+    return '<tr><td class="pl-lbl"><b>' + escapeHtml(o.label) + '</b> ' + gap +
+      '<div class="plan-sub">' + escapeHtml(o.scale_label) + ' ' + Number(o.default_scale) +
+      (o.creates_event ? '' : ' · books no event') + '</div></td>' +
+      '<td class="num">' + (o.has_revenue_model ? money(o.revenue_per_unit) : '<span class="muted">—</span>') + '</td>' +
+      '<td class="num">' + (o.has_cost_model ? money(o.cost_per_unit) : '<span class="muted">—</span>') + '</td>' +
+      '<td class="num ' + (Number(o.contribution_per_unit) < 0 ? 'neg' : 'pos') + '"><b>' + money(o.contribution_per_unit) + '</b></td>' +
+      '<td class="num">' + (o.contribution_margin_pct == null ? '<span class="muted">—</span>' : o.contribution_margin_pct + '%') + '</td>' +
+      cells + '<td class="num" data-ahead="' + o.id + '"><b>' + ahead + '</b></td></tr>';
+  }).join('');
+
+  const totalRow = '<tr class="pl-profit"><td class="pl-lbl"><b>Contribution</b></td>' +
+    '<td class="num" colspan="4"></td>' +
+    periods.map(p => {
+      const t = planIsPast(p) && planHasActual(p) ? planActualTotals(p) : planMonthTotals(p);
+      return '<td class="num ' + (t.contribution < 0 ? 'neg' : 'pos') + (planIsPast(p) ? ' plan-past' : '') +
+        '" data-contrib="' + p + '"><b>' + money(t.contribution) + '</b></td>';
+    }).join('') + '<td class="num"></td></tr>';
+
+  return '<div class="plan-sec"><div class="plan-sec-t">Volume — change a number and everything below moves' +
+    (planEditable() ? '' : ' <span class="muted">(this round is frozen)</span>') + '</div>' +
+    '<div class="pl-scroll"><table class="data-table pl-table plan-table"><thead>' + head + '</thead><tbody>' +
+    rows + totalRow + '</tbody></table></div></div>';
+}
+
+// ---- the statement ----------------------------------------------------------
+function planStatementHtml(periods) {
+  const model = {};
+  periods.forEach(p => { model[p] = planModelMonth(p); });
+
+  const cats = { revenue: [], direct: [], indirect: [] };
+  const seen = { revenue: {}, direct: {}, indirect: {} };
+  const note = (sec, cat) => { if (sec && seen[sec] && !seen[sec][cat]) { seen[sec][cat] = 1; cats[sec].push(cat); } };
+  periods.forEach(p => {
+    Object.keys(model[p]).forEach(k => { const i = k.indexOf('|'); note(k.slice(0, i), k.slice(i + 1)); });
+  });
+  // Categories that only ever showed up in actuals still need a row, or a real
+  // cost would be invisible on a page whose whole job is comparing the two.
+  periods.filter(planIsPast).forEach(p => {
+    const pre = p + '|' + planState.ledger + '|';
+    Object.keys(planState.actual).forEach(k => {
+      if (k.indexOf(pre) !== 0) return;
+      const rest = k.slice(pre.length), i = rest.indexOf('|');
+      note(rest.slice(0, i), rest.slice(i + 1));
+    });
+  });
+
+  const cell = (p, sec, cat) => {
+    const plan = model[p][sec + '|' + cat] || 0;
+    const akey = p + '|' + planState.ledger + '|' + sec + '|' + cat;
+    const hasA = Object.prototype.hasOwnProperty.call(planState.actual, akey);
+    if (!planIsPast(p)) {
+      return '<td class="num">' + (plan ? money(plan) : '<span class="muted">·</span>') + '</td>';
+    }
+    if (!hasA) {
+      return '<td class="num plan-past">' + (plan
+        ? '<span class="muted" title="planned ' + money(plan) + ', nothing recorded">' + money(0) + '</span>'
+        : '<span class="muted">·</span>') + '</td>';
+    }
+    const act = planState.actual[akey];
+    return '<td class="num plan-past">' + money(act) + planVarChip(sec, plan, act, hasA) + '</td>';
+  };
+
+  const SECS = [
+    { key: 'revenue',  label: 'Revenue' },
+    { key: 'direct',   label: 'Direct costs', note: 'only exist because the event does' },
+    { key: 'indirect', label: 'Overhead',     note: 'the cost of existing' },
+  ];
+
+  let html = '';
+  SECS.forEach(s => {
+    const secTotal = (p) => cats[s.key].reduce((t, c) => t + (model[p][s.key + '|' + c] || 0), 0);
+    const secActual = (p) => {
+      const pre = p + '|' + planState.ledger + '|' + s.key + '|';
+      return Object.keys(planState.actual).reduce((t, k) => k.indexOf(pre) === 0 ? t + planState.actual[k] : t, 0);
+    };
+    html += '<tr class="pl-section pl-sec-' + s.key + '"><td class="pl-lbl"><b>' + s.label + '</b>' +
+      (s.note ? ' <span class="muted">' + s.note + '</span>' : '') + '</td>' +
+      periods.map(p => {
+        const use = planIsPast(p) && planHasActual(p) ? secActual(p) : secTotal(p);
+        return '<td class="num' + (planIsPast(p) ? ' plan-past' : '') + '"><b>' + money(use) + '</b></td>';
+      }).join('') + '</tr>';
+    if (!cats[s.key].length) {
+      html += '<tr class="pl-empty"><td class="pl-lbl muted">nothing planned or recorded</td>' +
+        '<td colspan="' + periods.length + '"></td></tr>';
+    }
+    cats[s.key].sort().forEach(c => {
+      html += '<tr><td class="pl-lbl">' + escapeHtml(c) + '</td>' +
+        periods.map(p => cell(p, s.key, c)).join('') + '</tr>';
+    });
+    if (s.key === 'direct') {
+      html += '<tr class="pl-profit"><td class="pl-lbl"><b>Contribution</b></td>' +
+        periods.map(p => {
+          const t = planIsPast(p) && planHasActual(p) ? planActualTotals(p) : planMonthTotals(p);
+          return '<td class="num ' + (t.contribution < 0 ? 'neg' : 'pos') + (planIsPast(p) ? ' plan-past' : '') +
+            '"><b>' + money(t.contribution) + '</b></td>';
+        }).join('') + '</tr>';
+    }
+  });
+  html += '<tr class="pl-profit pl-net"><td class="pl-lbl"><b>Net</b></td>' +
+    periods.map(p => {
+      const t = planIsPast(p) && planHasActual(p) ? planActualTotals(p) : planMonthTotals(p);
+      return '<td class="num ' + (t.net < 0 ? 'neg' : 'pos') + (planIsPast(p) ? ' plan-past' : '') +
+        '"><b>' + money(t.net) + '</b></td>';
+    }).join('') + '</tr>';
+
+  const head = '<tr><th class="pl-lbl">Line</th>' +
+    periods.map(p => '<th class="num' + (planIsPast(p) ? ' plan-past' : '') + '">' + p.slice(2) +
+      (planIsPast(p) ? '<div class="plan-colnote">actual</div>' : '<div class="plan-colnote">plan</div>') + '</th>').join('') +
+    '</tr>';
+
+  return '<div class="plan-sec"><div class="plan-sec-t">The statement — actuals to the left, plan to the right</div>' +
+    '<div class="pl-scroll"><table class="data-table pl-table"><thead>' + head + '</thead><tbody>' + html +
+    '</tbody></table></div></div>';
+}
+
+// Over on revenue is good; over on cost is not. The view computes `favourable`
+// the same way — this is the client-side twin.
+function planVarChip(section, plan, act) {
+  if (!plan) return '<span class="plan-chip warn" title="not in the plan">unplanned</span>';
+  const d = act - plan;
+  if (Math.abs(d) < 0.005) return '';
+  const good = section === 'revenue' ? d >= 0 : d <= 0;
+  const pct = Math.round((d / Math.abs(plan)) * 100);
+  return '<span class="plan-chip ' + (good ? 'pos' : 'neg') + '" title="plan ' + money(plan) + '">' +
+    (d > 0 ? '+' : '') + pct + '%</span>';
+}
+
+// ---- backward: what actually happened ---------------------------------------
+function planBackwardHtml() {
+  const rows = planState.contrib
+    .filter(c => (c.ledger || 'come_with') === planState.ledger && !c.upcoming)
+    .slice(0, 25);
+  if (!rows.length) {
+    return '<div class="plan-sec"><div class="plan-sec-t">What events actually contributed</div>' +
+      '<div class="panel-state info">No completed events on this ledger yet.</div></div>';
+  }
+  const body = rows.map(c => {
+    const vs = c.vs_model == null ? '<span class="muted">no model</span>'
+      : '<span class="' + (Number(c.vs_model) >= 0 ? 'pos' : 'neg') + '">' +
+        (Number(c.vs_model) >= 0 ? '+' : '') + money(c.vs_model) + '</span>';
+    return '<tr><td class="pl-lbl">' + escapeHtml(c.name || '(untitled)') +
+      '<div class="plan-sub">' + escapeHtml(c.event_date || '') +
+      (c.offering_label ? ' · ' + escapeHtml(c.offering_label) : ' · <span class="muted">no offering matched</span>') + '</div></td>' +
+      '<td class="num">' + money(c.revenue) + '</td>' +
+      '<td class="num">' + money(c.direct_cost) + '</td>' +
+      '<td class="num ' + (Number(c.contribution) < 0 ? 'neg' : 'pos') + '"><b>' + money(c.contribution) + '</b></td>' +
+      '<td class="num">' + (c.contribution_margin_pct == null ? '<span class="muted">—</span>' : c.contribution_margin_pct + '%') + '</td>' +
+      '<td class="num">' + (c.total_attendance == null ? '<span class="muted">—</span>' : c.total_attendance) + '</td>' +
+      '<td class="num">' + (c.contribution_per_head == null ? '<span class="muted">—</span>' : money(c.contribution_per_head)) + '</td>' +
+      '<td class="num">' + vs + '</td></tr>';
+  }).join('');
+  return '<div class="plan-sec"><div class="plan-sec-t">What events actually contributed — and how wrong the model was</div>' +
+    '<div class="pl-scroll"><table class="data-table pl-table"><thead><tr>' +
+    '<th class="pl-lbl">Event</th><th class="num">Revenue</th><th class="num">Direct cost</th>' +
+    '<th class="num">Contribution</th><th class="num">Margin</th><th class="num">Attended</th>' +
+    '<th class="num">Per head</th><th class="num">vs model</th></tr></thead><tbody>' + body +
+    '</tbody></table></div></div>';
+}
+
+// ---- pricing models ---------------------------------------------------------
+function planModelEditorHtml() {
+  const offs = planState.offerings.filter(o => o.ledger === planState.ledger);
+  if (!offs.length) return '<div class="panel-state info">No offerings on this ledger.</div>';
+  const BASIS = [['per_unit', 'per unit'], ['per_scale', 'per unit of scale'], ['pct_revenue', '% of revenue']];
+  return '<div class="plan-sec"><div class="plan-sec-t">Pricing models — what one of each is worth</div>' +
+    offs.map(o => {
+      const lines = planLinesFor(o.id);
+      const rows = lines.map(l =>
+        '<tr><td>' + (l.direction === 'income' ? '<span class="pos">income</span>' : '<span class="neg">cost</span>') + '</td>' +
+        '<td><input class="plan-f" data-line="' + l.id + '" data-f="category" value="' + escapeHtml(l.category) + '"' +
+          (planEditable() ? '' : ' disabled') + '></td>' +
+        '<td><input class="plan-f" data-line="' + l.id + '" data-f="label" value="' + escapeHtml(l.label || '') + '"' +
+          (planEditable() ? '' : ' disabled') + '></td>' +
+        '<td><select class="plan-f" data-line="' + l.id + '" data-f="basis"' + (planEditable() ? '' : ' disabled') + '>' +
+          BASIS.map(b => '<option value="' + b[0] + '"' + (l.basis === b[0] ? ' selected' : '') + '>' + b[1] + '</option>').join('') +
+          '</select></td>' +
+        '<td><input class="plan-f num" type="number" step="0.01" data-line="' + l.id + '" data-f="amount" value="' +
+          Number(l.amount) + '"' + (planEditable() ? '' : ' disabled') + '></td>' +
+        '<td>' + (l.needs_review
+          ? '<button class="hub-mini" data-planreview="' + l.id + '" title="Confirm this line is filed against the right P&L category">✓ confirm</button>'
+          : '<span class="muted">confirmed</span>') + '</td></tr>').join('');
+      return '<div class="plan-model">' +
+        '<div class="plan-model-h"><b>' + escapeHtml(o.label) + '</b>' +
+        (o.provisional ? ' <span class="plan-chip warn">provisional</span>' : '') +
+        '<span class="plan-model-econ">' +
+          (o.has_revenue_model ? money(o.revenue_per_unit) : '<span class="muted">no price</span>') + ' − ' +
+          (o.has_cost_model ? money(o.cost_per_unit) : '<span class="muted">no cost</span>') + ' = <b class="' +
+          (Number(o.contribution_per_unit) < 0 ? 'neg' : 'pos') + '">' + money(o.contribution_per_unit) + '</b>' +
+          (o.contribution_margin_pct == null ? '' : ' <span class="muted">(' + o.contribution_margin_pct + '%)</span>') +
+        '</span></div>' +
+        '<div class="plan-model-scale">' + escapeHtml(o.scale_label) + ' per unit: ' +
+          '<input class="plan-f" type="number" step="0.01" min="0" data-off="' + o.id + '" data-f="default_scale" value="' +
+          Number(o.default_scale) + '"' + (planEditable() ? '' : ' disabled') + '>' +
+          '<span class="muted"> — only moves money on lines priced "per unit of scale"</span></div>' +
+        (rows ? '<table class="data-table pl-table plan-model-t"><thead><tr><th>Kind</th><th>P&L category</th>' +
+          '<th>Label</th><th>Basis</th><th class="num">Amount</th><th>Review</th></tr></thead><tbody>' + rows +
+          '</tbody></table>'
+        : '<div class="panel-state info">No lines yet — this offering forecasts nothing.</div>') +
+        '</div>';
+    }).join('') + '</div>';
+}
+
+// ---- writes -----------------------------------------------------------------
+// Recompute everything that DEPENDS on the volumes without touching the inputs
+// themselves. Re-rendering the whole board on change stole focus mid-tab: the
+// change event fires during blur, so restoring focus afterwards fights whichever
+// cell the user was moving to.
+function planRefreshDerived() {
+  const periods = planPeriods();
+  const h = $('planHeadline');
+  if (h) h.innerHTML = planHeadlineHtml(planForwardPeriods());
+  const s = $('planStatement');
+  if (s) s.innerHTML = planStatementHtml(periods);
+  planState.offerings.forEach(o => {
+    const cell = document.querySelector('[data-ahead="' + o.id + '"]');
+    if (cell) cell.innerHTML = '<b>' + planForwardPeriods().reduce((t, p) => t + planUnits(o.id, p), 0) + '</b>';
+  });
+  periods.forEach(p => {
+    const c = document.querySelector('[data-contrib="' + p + '"]');
+    if (!c) return;
+    const t = planIsPast(p) && planHasActual(p) ? planActualTotals(p) : planMonthTotals(p);
+    c.className = 'num ' + (t.contribution < 0 ? 'neg' : 'pos') + (planIsPast(p) ? ' plan-past' : '');
+    c.innerHTML = '<b>' + money(t.contribution) + '</b>';
+  });
+}
+
+function planSetSave(msg) {
+  planState.saveState = msg;
+  const el = $('planSaveState');
+  if (el) el.textContent = msg;
+}
+
+function planQueueVolume(offeringId, period, units) {
+  const key = planVid() + '|' + offeringId + '|' + period;
+  const prev = planState.volumes[key];
+  planState.volumes[key] = Object.assign({}, prev || {}, {
+    version_id: planVid(), offering_id: offeringId, period, units,
+  });
+  planState.pending.set(offeringId + '|' + period, { offeringId, period, units });
+  planSetSave('saving…');
+  clearTimeout(planState.saveTimer);
+  planState.saveTimer = setTimeout(planFlushVolumes, 600);
+}
+
+async function planFlushVolumes() {
+  if (planState.saving || !planState.pending.size) return;
+  if (!planEditable()) {
+    planState.pending.clear();
+    planSetSave('');
+    toast('That round is frozen. Switch to the live plan to edit it.', 'err');
+    return;
+  }
+  planState.saving = true;
+  const batch = [...planState.pending.values()];
+  planState.pending.clear();
+  const rows = batch.map(b => ({
+    version_id: planVid(), offering_id: b.offeringId, period: b.period, units: b.units,
+  }));
+  const { data, error } = await sb.from('plan_volumes')
+    .upsert(rows, { onConflict: 'version_id,offering_id,period' }).select();
+  planState.saving = false;
+  if (error) {
+    planSetSave('not saved');
+    toast('Could not save the plan: ' + error.message, 'err');
+    return;
+  }
+  (data || []).forEach(v => { planState.volumes[v.version_id + '|' + v.offering_id + '|' + v.period] = v; });
+  planSetSave('saved');
+  if (planState.pending.size) planFlushVolumes();
+}
+
+async function planSaveField(table, id, field, value) {
+  const patch = {};
+  patch[field] = value;
+  const { error } = await sb.from(table).update(patch).eq('id', id);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return false; }
+  return true;
+}
+
+async function planPublish() {
+  const label = prompt('Name this round (leave blank for today’s date):', '');
+  if (label === null) return;
+  const { data, error } = await sb.rpc('plan_publish_round', { p_label: label || null });
+  if (error) { toast('Could not freeze the round: ' + error.message, 'err'); return; }
+  toast('Round frozen. The live plan is untouched and still editable.');
+  await loadPlanning();
+  return data;
+}
+
+// ---- wiring -----------------------------------------------------------------
+function planWire() {
+  const body = $('planningBody');
+  if (!body) return;
+
+  body.querySelectorAll('[data-planledger]').forEach(b => b.onclick = () => {
+    planState.ledger = b.dataset.planledger; renderPlanning();
+  });
+  body.querySelectorAll('[data-planhorizon]').forEach(b => b.onclick = async () => {
+    planState.horizon = Number(b.dataset.planhorizon);
+    renderPlanning();
+    if (planEditable()) await planSaveField('plan_versions', planVid(), 'horizon_months', planState.horizon);
+  });
+  body.querySelectorAll('[data-planview]').forEach(b => b.onclick = () => {
+    planState.view = b.dataset.planview; renderPlanning();
+  });
+  const vs = body.querySelector('[data-planversion]');
+  if (vs) vs.onchange = () => {
+    planState.version = planState.versions.find(x => x.id === vs.value) || planState.version;
+    planState.horizon = planState.version.horizon_months || 6;
+    renderPlanning();
+  };
+  const pub = body.querySelector('[data-planpublish]');
+  if (pub) pub.onclick = planPublish;
+
+  body.querySelectorAll('input.plan-vol').forEach(inp => {
+    // `input`, not `change`: the answer should move as you type, and change
+    // only fires on blur. The write itself is debounced in planQueueVolume.
+    inp.oninput = () => {
+      const n = Math.max(0, Math.round(Number(inp.value) || 0));
+      if (!Number.isFinite(n)) return;
+      planQueueVolume(inp.dataset.off, inp.dataset.per, n);
+      planRefreshDerived();
+    };
+    inp.onblur = () => { inp.value = Math.max(0, Math.round(Number(inp.value) || 0)); };
+  });
+
+  body.querySelectorAll('.plan-f').forEach(el => {
+    el.onchange = async () => {
+      const isLine = !!el.dataset.line;
+      const table = isLine ? 'plan_offering_lines' : 'plan_offerings';
+      const id = isLine ? el.dataset.line : el.dataset.off;
+      const f = el.dataset.f;
+      const value = (f === 'amount' || f === 'default_scale') ? Number(el.value) || 0 : el.value;
+      if (await planSaveField(table, id, f, value)) { toast('Saved'); await loadPlanning(); }
+    };
+  });
+
+  body.querySelectorAll('[data-planreview]').forEach(b => b.onclick = async () => {
+    if (await planSaveField('plan_offering_lines', b.dataset.planreview, 'needs_review', false)) {
+      toast('Confirmed'); await loadPlanning();
+    }
+  });
+}
 
 // ================= GEAR WATCH — stolen-rig resale scan ==========================
 // MASTER ONLY (module_registry.master_only, migration 146). Reads the tables the
@@ -24343,6 +25030,41 @@ table.pl-table td.pl-indent{padding-left:26px}
 /* ---- P&L: vendor roll-up spellings badge (160) ---- */
 .pl-spell{font-size:9.5px;text-transform:uppercase;letter-spacing:.04em;padding:1px 5px;border-radius:8px;
   background:#eef2f8;color:#4b5c78;border:1px solid #dde4ee;white-space:nowrap}
+
+/* ---- Planning board (197-201) ---- */
+.plan-sec{margin:16px 0 0}
+.plan-sec-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mid);margin:0 0 6px}
+.plan-save{font-size:11px;color:var(--mid);margin-left:auto}
+.plan-frozen-note{font-size:11px;color:var(--amber)}
+.plan-sub{font-size:10.5px;color:var(--mid);font-weight:400;margin-top:2px}
+.plan-colnote{font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid);font-weight:400}
+table.plan-table td.num{white-space:nowrap}
+td.plan-past,th.plan-past{background:rgba(237,228,211,0.035)}
+input.plan-vol{width:54px;font:inherit;font-size:12px;text-align:right;padding:3px 5px;
+  border:1px solid var(--border-strong);border-radius:5px;background:var(--surface-2);color:inherit}
+input.plan-vol:focus{outline:none;border-color:var(--red)}
+input.plan-vol:disabled{opacity:.5}
+.plan-chip{display:inline-block;margin-left:5px;font-size:9.5px;letter-spacing:.03em;padding:1px 5px;
+  border-radius:8px;border:1px solid var(--border-strong);color:var(--mid);white-space:nowrap}
+.plan-chip.pos{color:var(--green);border-color:rgba(155,214,74,.45)}
+.plan-chip.neg{color:var(--red-dk);border-color:rgba(209,58,114,.5)}
+.plan-chip.warn{color:var(--amber);border-color:rgba(233,185,73,.5)}
+.plan-lever{border:1px solid var(--border);border-left:3px solid var(--red);border-radius:8px;
+  background:var(--surface);padding:10px 13px;margin:0 0 12px;font-size:12.5px;line-height:1.6}
+.plan-lever-t{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mid);margin-bottom:3px}
+.plan-warn{border:1px solid var(--amber);border-left-width:4px;border-radius:8px;background:var(--amber-bg);
+  padding:10px 13px;margin:0 0 12px;font-size:12.5px;line-height:1.5}
+.plan-model{border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:12px 14px;margin:0 0 12px}
+.plan-model-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:13.5px;margin-bottom:6px}
+.plan-model-econ{margin-left:auto;font-size:12px;font-variant-numeric:tabular-nums}
+.plan-model-scale{font-size:11.5px;color:var(--mid);margin-bottom:9px}
+.plan-model-t{margin-top:4px}
+input.plan-f,select.plan-f{font:inherit;font-size:12px;padding:4px 6px;border:1px solid var(--border-strong);
+  border-radius:5px;background:var(--surface-2);color:inherit;max-width:180px}
+input.plan-f.num{text-align:right;max-width:110px}
+input.plan-f:disabled,select.plan-f:disabled{opacity:.5}
+.plan-sec .pos,.plan-lever .pos{color:var(--green)}
+.plan-sec .neg,.plan-lever .neg{color:var(--red-dk)}
 
 /* ---- Income: revenue gap banner (160) ---- */
 .inc-gap{border:1px solid #c9922f;border-left-width:4px;border-radius:8px;background:rgba(201,146,47,.07);

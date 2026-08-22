@@ -79,6 +79,16 @@ MUST_BE_EMPTY = [
     ("v_invoice_line_calc", "invoice line detail"),
     ("v_income_invoiced", "which income is billed"),
     ("invoice_events", "who was chased, when, and what they paid"),
+    # --- planning (197-199) ---
+    ("plan_versions", "what we forecast and when we said it"),
+    ("plan_offerings", "the unit economics of everything we sell"),
+    ("plan_offering_lines", "prices and costs per unit"),
+    ("plan_volumes", "how many events we intend to run"),
+    ("plan_overrides", "hand-set forecast figures"),
+    ("v_plan_offering_unit", "margin per party, per gig, per rental"),
+    ("v_plan_monthly", "the whole forward forecast"),
+    ("v_plan_vs_actual", "forecast against actuals"),
+    ("v_event_contribution", "what every event actually contributed"),
 ]
 
 
