@@ -24270,14 +24270,14 @@ async function invLog(kind, detail) {
 
 /* ---- P&L: KPI strip, collapsible grid, drill rows (migration 149/151) ---- */
 .pl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:8px;margin:0 0 12px}
-.pl-kpi{background:var(--panel,#fff);border:1px solid var(--line,#e3e3e6);border-radius:8px;padding:8px 11px;min-width:0}
-.pl-kpi.accent{border-color:#305496;background:rgba(48,84,150,.05)}
-.pl-kpi.neg{border-color:rgba(190,60,60,.45)}
-.pl-kpi.pos{border-color:rgba(40,140,80,.35)}
+.pl-kpi{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 11px;min-width:0}
+.pl-kpi.accent{border-color:var(--blue);background:var(--blue-bg)}
+.pl-kpi.neg{border-color:rgba(209,58,114,.55)}
+.pl-kpi.pos{border-color:rgba(155,214,74,.45)}
 .pl-kpi-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-kpi-v{font-size:19px;font-weight:700;line-height:1.15;font-variant-numeric:tabular-nums;margin:1px 0}
-.pl-kpi.neg .pl-kpi-v{color:#be3c3c}
-.pl-kpi.pos .pl-kpi-v{color:#1f7a4d}
+.pl-kpi.neg .pl-kpi-v{color:var(--red-dk)}
+.pl-kpi.pos .pl-kpi-v{color:var(--green)}
 .pl-kpi-s{font-size:10.5px;color:var(--mid,#888);line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pl-bar{display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin:0 0 12px;font-size:12px}
 .pl-bar-l{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888)}
@@ -24295,7 +24295,7 @@ table.pl-table tr.pl-sub td{background:var(--bg,#fafafa);font-size:12px;padding-
 .pl-sub-vendor{font-weight:600}
 .pl-sub-act{text-align:right;white-space:nowrap}
 .pl-sub-act .hub-mini{margin-left:4px}
-table.pl-table tr.pl-total td{border-top:2px solid #305496;background:var(--panel,#fff)}
+table.pl-table tr.pl-total td{border-top:2px solid #305496;background:var(--surface)}
 
 /* ---- Expenses: selection, verify, tags, bulk bar (migration 151) ---- */
 td.exp-check,th.exp-check{width:30px;text-align:center;padding-left:4px;padding-right:4px}
@@ -24320,18 +24320,18 @@ tr.exp-selected>td{background:rgba(48,84,150,.09)}
 /* ---- P&L bands + sectioned statement (153/154) ---- */
 .pl-band{margin:0 0 10px}
 .pl-band-t{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mid,#888);margin:0 0 5px}
-.pl-kpi.warn{border-color:#c9922f;background:rgba(201,146,47,.07)}
-.pl-kpi.warn .pl-kpi-v{color:#8a6208}
+.pl-kpi.warn{border-color:var(--amber);background:var(--amber-bg)}
+.pl-kpi.warn .pl-kpi-v{color:var(--amber)}
 table.pl-table td.pl-lbl,table.pl-table th.pl-lbl{min-width:230px;text-align:left}
 table.pl-table tr.pl-section td{background:rgba(48,84,150,.10);border-top:2px solid #305496;font-size:12.5px}
 table.pl-table tr.pl-sec-revenue td{background:rgba(31,122,77,.10);border-top-color:#1f7a4d}
-table.pl-table tr.pl-profit td{background:var(--panel,#fff);border-top:1px dashed #305496;border-bottom:1px solid var(--line,#e3e3e6)}
+table.pl-table tr.pl-profit td{background:var(--surface);border-top:1px dashed #305496;border-bottom:1px solid var(--line,#e3e3e6)}
 table.pl-table tr.pl-net td{border-top:2px solid #305496;border-bottom:2px solid #305496}
 table.pl-table tr.pl-empty td{font-size:11.5px;padding-top:3px;padding-bottom:3px}
 table.pl-table tr.pl-monthhead td{background:rgba(48,84,150,.06);font-size:11.5px;padding-top:3px;padding-bottom:3px}
 .pl-mh{font-weight:700;letter-spacing:.02em}
-table.pl-table td.num.neg,table.pl-table td.num.neg b{color:#be3c3c}
-table.pl-table td.num.pos,table.pl-table td.num.pos b{color:#1f7a4d}
+table.pl-table td.num.neg,table.pl-table td.num.neg b{color:var(--red-dk)}
+table.pl-table td.num.pos,table.pl-table td.num.pos b{color:var(--green)}
 
 /* ---- P&L detail: month rows collapse, payee roll-up (156/157) ---- */
 table.pl-table tr.pl-monthhead{cursor:pointer}
@@ -24354,7 +24354,7 @@ table.pl-table td.pl-indent{padding-left:26px}
 /* ---- searchable picker (161) ---- */
 .pick-ov{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:10000;display:flex;
   align-items:flex-start;justify-content:center}
-.pick-box{background:var(--panel,#fff);color:inherit;margin-top:9vh;width:min(460px,94vw);
+.pick-box{background:var(--surface);color:inherit;margin-top:9vh;width:min(460px,94vw);
   border-radius:10px;box-shadow:0 12px 40px rgba(0,0,0,.35);overflow:hidden}
 .pick-head{padding:11px 14px;font-weight:700;font-size:13.5px;border-bottom:1px solid var(--line,#e3e3e6);
   display:flex;justify-content:space-between;align-items:center;gap:8px}
@@ -24374,7 +24374,7 @@ table.pl-table td.pl-indent{padding-left:26px}
 .chg-vendor{font-size:13px;margin-bottom:12px}
 .chg-f{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--mid,#888);margin:0 0 9px}
 .chg-f select,.chg-f input{display:block;width:100%;margin-top:3px;font:inherit;font-size:13px;text-transform:none;
-  letter-spacing:0;color:inherit;padding:6px 8px;border:1px solid var(--line,#ccd);border-radius:5px;background:var(--panel,#fff)}
+  letter-spacing:0;color:inherit;padding:6px 8px;border:1px solid var(--line,#ccd);border-radius:5px;background:var(--surface-2)}
 .chg-actions{display:flex;gap:6px;align-items:center;margin-top:14px;padding-top:12px;border-top:1px solid var(--line,#e3e3e6)}
 .hub-mini.primary{background:#305496;color:#fff;border-color:#305496}
 
