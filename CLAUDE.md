@@ -5,9 +5,29 @@ Broader migration history and architecture live in `ROADMAP.md`.
 
 ## Start of session (read these, in this order)
 
-Keith works from **two machines** (desktop + laptop). Claude Code's memory is
-per-machine and does **not** sync, so everything a session needs to resume lives
-**in the repo**:
+> ### ⚠ OPEN ITEM — owed since 2026-08-21: the anon sweep
+>
+> **On a machine with `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env` (the desktop),
+> run this FIRST, before any other work:**
+>
+> ```
+> python scripts/check_anon_exposure.py
+> ```
+>
+> Migrations 197-202 added nine planning objects to prod. Their grants are
+> verified in SQL (`has_table_privilege` / `has_function_privilege`: anon has no
+> SELECT and no EXECUTE), but **PostgREST has never been exercised against
+> them** — the machine that built them has no publishable key. A grants query
+> cannot catch a table answering `200` with a body because RLS let a row
+> through, which is precisely LEARNINGS §37.
+>
+> **Delete this block once the sweep has run clean**, and record the result in
+> `CARRYOVER.md`. It is repeated at the top of `CARRYOVER.md` with the full
+> reasoning. If the sweep reports rows on any object, treat it as a live leak.
+
+Keith works from **three machines** now (the desktop, `C:\Users\keith\comewith`,
+and Henry's). Claude Code's memory is per-machine and does **not** sync, so
+everything a session needs to resume lives **in the repo**:
 
 1. **`CARRYOVER.md`** — where the last session left off, and what's next. Start here.
 2. **`DEV_DOCS/claude-memory/MEMORY.md`** — index of the desktop's Claude memory,

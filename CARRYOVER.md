@@ -4,6 +4,40 @@
 invoicing close are both preserved below, unchanged. This one is about
 **financial planning** and one dashboard CSS fix.
 
+## >> ON THE DESKTOP, DO THIS FIRST — BEFORE ANY OTHER WORK
+
+**RUN THE ANON EXPOSURE SWEEP. It is owed from 2026-08-21 and has not been run
+against the nine new planning objects.**
+
+```
+python scripts/check_anon_exposure.py
+```
+
+Every row must report blocked. `plan_versions`, `plan_offerings`,
+`plan_offering_lines`, `plan_volumes`, `plan_overrides`, `v_plan_offering_unit`,
+`v_plan_monthly`, `v_plan_vs_actual` and `v_event_contribution` were added to the
+script's target list in the same commit that created them, so they are already
+covered — the script just could not be run on the machine that wrote them.
+
+**Why it is outstanding, and why the SQL check is not a substitute.** The machine
+that built Planning (`C:\Users\keith\comewith`) has no
+`SUPABASE_PROD_PUBLISHABLE_KEY` in `.env`, so the script exits with "no prod URL
+/ publishable key". Grants were verified there in SQL with
+`has_table_privilege()` / `has_function_privilege()` instead — anon has no SELECT
+on any of the nine, and no EXECUTE on any of the three planning functions. That
+is authoritative **for grants**, but it never touches PostgREST. It cannot catch
+a table that answers `200` with a body because RLS let a row through, which is
+the exact failure mode LEARNINGS §37 exists for. Read the body, never the status.
+
+If the sweep comes back clean, note it in the next carryover and this item is
+closed. If anything returns rows, treat it as a live leak.
+
+*(Also worth doing from the desktop while you are there: `node --check` on
+`dashboard.html` via the extraction loop. The build machine had no JS runtime at
+all — see item 5.)*
+
+---
+
 ## >> START HERE NEXT SESSION
 
 **1. Nobody has opened the Planning tab in a browser yet.** Everything is
@@ -35,14 +69,12 @@ but not useful for long.
      rental, and inventing one would put rentals in the events list and the P&L.
      Say which you want and it is a one-line change.
 
-**4. This machine cannot run two of the standard checks.** Neither is a
+**4. The build machine cannot run two of the standard checks.** Neither is a
 blocker, both should be fixed:
    - **No `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env`**, so
-     `python scripts/check_anon_exposure.py` cannot run (same as Henry's
-     machine - see his note below). Anon exposure was verified this session with
-     `has_table_privilege()` in SQL instead, which is authoritative for grants
-     but does **not** exercise PostgREST end to end. Run the real sweep from the
-     desktop.
+     `python scripts/check_anon_exposure.py` cannot run there (same as Henry's
+     machine - see his note below). **This is the outstanding sweep at the top of
+     this file** - run it on the desktop before anything else.
    - **No JS runtime at all** - `node`, `deno`, `bun`, `npx` all absent - so
      `node --check` is impossible here. Substituted a Python esprima parse with
      the pre-edit file as a control and a deliberately-broken copy as a negative
@@ -66,7 +98,10 @@ than editing your local config unasked.
   function were seen working before they landed.
 - **All 5 financial views still anon-revoked**, re-verified. All 9 new planning
   objects: no anon SELECT, RLS on with a real policy, and added to
-  `check_anon_exposure.py` for the next machine that can run it.
+  `check_anon_exposure.py`.
+- **⚠ THE ANON REST SWEEP HAS NOT BEEN RUN** against the new objects — the build
+  machine has no publishable key. Grants are verified in SQL, PostgREST is not.
+  See the block at the top of this file; it is the first job on the desktop.
 - **All 3 planning functions blocked for anon**, confirmed with
   `has_function_privilege` (not by reading the SQL - see §49).
 - **Latest LEARNINGS: §49.** Three added (§47-§49).

@@ -1326,3 +1326,78 @@ deliberately removed.
 
 **Backlog.** A "skip the rest and stop" control in the review queue (Cancel/✕ already
 does this and reports honestly, so it's a nicety).
+
+---
+
+## 2026-08-21 — Planning: FP&A on units of business, not on events
+
+**The ask.** Keith ran budgets and forecast-vs-actual at Maersk, weekly at times and
+usually twice monthly, and wanted the tool to do that job: update future numbers easily,
+keep actuals lined up against them, and let him pull levers rather than read reports.
+He was explicit that hitting a committed budget matters *less* than continuously
+re-forecasting expected earnings — and that the same structure should later serve a
+goods business deciding how many units of each SKU to order.
+
+**The discovery.** `budget_lines` already held a hand-built forecast in almost exactly
+the right shape — 37 rows, $33,469, one income and one expense line per unit ("Come With
+Party #1 (7/11)", "DJ Gig #1", "Equipment Rental #1..#6"), plus standing Marketing and
+Software. It could never have produced a variance number: those rows put the *unit's
+name* in `category`, and `v_pl_monthly_vs_budget` joins plan to actual **on category**.
+Every line had reported 100% variance silently since it was written. The dashboard then
+fetched that view on every P&L open and built a `planned` lookup it never read — a
+variance feature wired to nothing, on top of a join that could not succeed. LEARNINGS §47.
+
+**Done.** A **Planning** board (Finance, master-only), built on `plan_offerings` — a
+repeatable *unit of business* rather than an event. `creates_event` is a flag (a rental
+books none) and `scale` is abstract with a per-offering label ("Paid attendance",
+"Units"), because the same four tables have to model a SKU later. Three line bases:
+`per_unit`, `per_scale`, `pct_revenue` (expense-only by constraint — a
+percent-of-revenue income line is defined in terms of itself). Volumes are the lever;
+changing one moves the headline, contribution and statement instantly, which is why the
+arithmetic exists twice, in SQL for truth and JS for the levers. Columns read three
+months back as actuals then forward across a rolling 6, switchable to 9 or 12.
+Migrations 197–202.
+
+`v_event_contribution` closes the loop backward: each completed event's real
+contribution next to what the model predicted. First reading — every event under model,
+Come With 7-11 at **−$900** against a modelled **+$1,150**.
+
+**Decision — a published round is frozen by TRIGGER, not by the dashboard.** A
+client-side guard is bypassed by any REST token, and actual-vs-forecast is meaningless
+if the forecast can be improved afterwards. Publishing *snapshots* the live plan rather
+than closing it, so the working plan stays editable forever — what a rolling forecast
+needs. `plan_publish_round()` does the copy in one transaction because the freeze
+trigger makes a multi-step client copy impossible to do safely.
+
+**Decision — the legacy 37 rows were preserved, not migrated.** `budget_lines` gained
+`version_id`; the planner reads only rows that carry one. The old forecast survives as
+history and cannot double-count against the offerings seeded from it.
+
+**Decision — seeded models are labelled, not laundered.** Amounts are Keith's own
+figures and real ticket/attendance history. The P&L *category* behind each legacy lump
+is not recoverable (the $1,200 against a party covers venue, talent and marketing as one
+number), so every seeded line is `needs_review` and its offering reads `provisional`.
+Offerings with no cost line report `has_cost_model = false` rather than a confident 100%
+margin, and no `$0` line is written where the truth is "not modelled". LEARNINGS §48.
+
+**Parked.** Nothing has been clicked in a browser. Verified at the data layer against
+prod — the seed previewed inside a rolled-back transaction, all four views returning
+sensible numbers, grants confirmed with `has_table_privilege` — and the inline module
+parses. First job next session.
+
+**Parked.** Turning a planned unit into a real event. `plan_offerings.event_type` +
+`series` exist so a unit knows what it would become; there is no button. This was the
+other half of the ask.
+
+**Parked.** Saved scenarios ("Plan B vs Plan A"), cash runway against the $5,000 float
+(`v_cash_position` already has what it needs), and charting forecast drift across frozen
+rounds (`plan_publish_round()` stores the history; nothing reads it yet).
+
+**Open risk.** The anon REST sweep has **not** run against the nine new objects — the
+build machine has no publishable key. Grants are verified in SQL; PostgREST is not. It
+is the first item in CARRYOVER and in CLAUDE.md.
+
+**Also done.** The P&L's KPI cards were rendering white-on-cream: the stylesheet used
+`var(--panel, #fff)` and `--panel` is defined nowhere in the file. Re-toned onto the
+real dark palette, along with the total/profit bands, the payee picker and the
+charge-detail inputs, which carried the same fallback under `color: inherit`.
