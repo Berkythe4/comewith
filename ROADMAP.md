@@ -1292,3 +1292,37 @@ synced to the site, 19/19 genre + show, 17/19 release dates, scheduled 3pm.
 tab, and `pruneSelection()` read first (§28); `v_pipeline` reading forecast revenue lines
 as well as `expected_revenue`.
 
+
+## 2026-08-21 — Task templates became named sets, applied one reviewed step at a time
+
+**Done.** Applying a template to an event is no longer a bulk insert you inspect
+afterwards. The decision and the write are separate — `plan_event_tasks(event, set)`
+returns what would be created and writes nothing; `generate_day_of_tasks` loops that
+plan and inserts. The dashboard walks the plan a step at a time in the ordinary task
+form, prefilled, with per-step **Skip** (this event only) and **Create remaining N
+unedited**. Migration 195, plus `tasks.template_id` so a step renamed at creation time
+is still recognised as that template's step.
+
+**Done.** Templates are now named **sets** (`task_template_sets`) rather than one flat
+list per event type. `task_templates.event_type` is **gone**; any set applies to any
+event and you pick which at apply time. The three existing groups became `Party —
+standard` (11 steps), `Dance Infusion — standard` (14), `Showcase — standard` (2), so
+no event changed behaviour. The Templates page is CRUD over sets — create, rename,
+duplicate, deactivate, delete — with steps managed inside a set.
+`events.task_template_set_id` records which set an event runs and is what the calendar
+gap panel measures against. Migration 196.
+
+This supersedes the "in-dashboard Templates editor" line in the sprint-3b entry above:
+that editor was per-event-type, and per-event-type no longer exists.
+
+**Parked.** Nothing has been exercised in a browser yet — the flow is verified at the
+data layer against prod (planner output, RLS as a real authenticated admin, the 3b
+suite, `node --check`, headless form assertions), but the modals themselves have not
+been clicked. That is the next session's first job.
+
+**Parked.** If the set picker gets long, sort it by how often a set is used on similar
+events. A sort — resisting the urge to make it a filter, which is the coupling 196
+deliberately removed.
+
+**Backlog.** A "skip the rest and stop" control in the review queue (Cancel/✕ already
+does this and reports honestly, so it's a nicety).

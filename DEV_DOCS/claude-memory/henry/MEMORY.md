@@ -1,2 +1,2 @@
-- [User identity](user-identity.md) — Henry Zaradich; repo belongs to Keith Berkman, so push rights aren't a given.
-- [Come With local setup](comewith-local-setup.md) — what's installed at C:\comewith and what's still blocking (push auth, .env, Python).
+- [User identity](user-identity.md) — Henry Zaradich; a master_admin with repo WRITE who does direct merges, but confirm first: master auto-deploys.
+- [Come With local setup](comewith-local-setup.md) — what's installed at C:\comewith, how to run db.py against prod, and what's still blocking (publishable key, ffmpeg).

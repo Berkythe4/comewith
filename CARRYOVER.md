@@ -1,3 +1,109 @@
+# Carryover - 2026-08-21 (task templates: named sets, reviewed step by step - HENRY'S machine)
+
+**Second close on 2026-08-21.** The desktop's invoicing close is preserved below,
+unchanged. This one ran on **Henry's machine** and is about task templates only.
+
+## >> START HERE NEXT SESSION
+
+**1. Nobody has clicked through the new template UI yet.** Everything below is
+verified at the data layer against prod - planner output, RLS as a real
+authenticated admin, the 3b test suite - plus `node --check`. But the modals
+themselves (the step-by-step review queue, the set picker, set CRUD, Duplicate)
+have never been exercised in a browser, because this machine can't sign in to the
+dashboard. **First job next session: open Events -> an event -> Build task
+checklist and walk it.** Then the Templates page: make a set, duplicate one,
+delete one.
+
+**2. `.env` on Henry's machine has only `SBP_PAT` and `SBP_REF_PROD`.** No
+publishable key, so `python scripts/check_anon_exposure.py` reports
+"no prod URL / publishable key in .env" and cannot run here. The anon checks in
+this close were done with `curl` using the key read out of `dashboard.html`,
+proving the key live first (`v_public_events` -> 200 **with a body**) before
+trusting any 401. Adding `SUPABASE_PROD_PUBLISHABLE_KEY` to this machine's `.env`
+would make the real script work.
+
+---
+
+## State summary
+
+- **Migrations 195-196 applied, no drift.** Highest: `196_template_sets.sql`.
+  Prod `applied_migrations` max = 196, repo max = 196, verified after the merge.
+- **All 5 financial views return anon 401**, re-verified with a key proven to
+  work first. `task_template_sets` returns `200 []` - the same RLS-blocked shape
+  as `tasks`, not a leak.
+- **Latest LEARNINGS: SS46.** Four added (SS43-SS46).
+- **CLAUDE.md gained a "Task templates" section** and two migration rules
+  (function grants, destructive-vs-additive sequencing). Read them before
+  touching templates or writing a `revoke`.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: PR #17 merged to master, Netlify deploy verified live.
+- Ran on **Henry's machine**. No parked branches.
+- No edge functions touched.
+
+## This session shipped
+
+**Applying a task template is now a review, not a bulk insert.** Two migrations.
+
+**195 - plan/apply split.** `generate_day_of_tasks` decided what to create and
+created it in one transaction, so you saw the result only after it existed. Split
+into `plan_event_tasks(event, set)` (decides, writes nothing) and
+`generate_day_of_tasks` (loops the plan, inserts). The dashboard walks the plan a
+step at a time: each step opens in the ordinary task form, prefilled, and is
+created when you save it. **Skip this step** leaves it off this event;
+**Create remaining N unedited** writes the rest from the current position, so
+skips stick; Cancel/X stops and reports what got made. Added `tasks.template_id`
+(34 rows backfilled) because renaming a step is the point of the feature and
+title-matching would have read a rename as permanently missing. Phase ordering
+fixed: was alphabetical, so day_of came before planning.
+
+**196 - templates are named SETS.** `task_templates` was a flat list keyed by
+`event_type`, so a party had exactly one possible checklist. Now
+`task_template_sets` holds named checklists ("Event Template v2") and any set can
+be applied to any event - **`event_type` is gone from the model entirely**
+(decided with Henry). The three existing groups became `Party - standard` (11),
+`Dance Infusion - standard` (14), `Showcase - standard` (2); no event changed
+behaviour. Templates page is now CRUD over sets, with **Duplicate** as the way to
+fork a set without risking the original. Applying opens a picker first.
+`events.task_template_set_id` records which set an event runs, written on the
+first CREATED task so an abandoned run never relabels an event; the gap panel
+measures missing steps against it.
+
+**Two things worth knowing:**
+- **196 broke live prod for about half an hour.** It drops
+  `task_templates.event_type`, which the deployed dashboard still selected, so
+  the Templates page and the calendar gap scan were broken between applying the
+  migration and merging PR #17. Additive migrations may ship ahead of their UI;
+  destructive ones may not. LEARNINGS SS46, now also a CLAUDE.md rule.
+- **`revoke ... from anon` on a new function is a no-op.** EXECUTE goes to
+  PUBLIC and anon inherits it. 195 shipped with the wrong form and the post-apply
+  grant check caught it - reading the SQL had not. LEARNINGS SS45.
+
+## Tests (run before touching any of these screens)
+```
+SBP_REF=yaytdosxfhcqatmhctzk python db.py tests/conditional_workflows_test.sql
+```
+Expects `TEST_RESULTS_OK` with all eleven assertions true; it aborts its own
+transaction, so nothing persists. It covers gear filtering, outreach
+auto-assignment and its no-contact degradation, idempotency, and future-only
+template edits. **It needed fixing for 196** - it edited a template by
+`event_type` and its test event had no `task_template_set_id`, so the generator
+had no set to read.
+
+The dashboard tests from the invoicing close all still apply; see the block below.
+
+## Parked / next
+- The two items at the top of this file.
+- **The review queue has no "skip the rest" that also stops the run.** Cancel/X
+  does that and reports honestly, so this is a nicety, not a gap.
+- **Sets have no per-event-type suggestion.** Deliberate (they're free), but if
+  the picker gets long, sorting by "most used on events like this one" is the
+  obvious next move - it's a sort, not a filter, and shouldn't become one.
+- Everything parked in the invoicing close below still stands.
+
+*Narrative: `reviews/session_2026-08-21_template_sets.md`. Previous close begins below.*
+
+---
+
 # Carryover - 2026-08-21 (invoicing, end to end - DESKTOP)
 
 ## >> START HERE NEXT SESSION

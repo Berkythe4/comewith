@@ -1147,3 +1147,114 @@ The file parses perfectly with a leaked inline style. Only running the screens i
 order, or asserting on the reset, shows it — the same lesson as §38's note that
 the money panel's own test caught a helper defined outside its region while the
 syntax check saw nothing wrong.
+
+## Section 43 — A generator that decides and writes in the same breath can't be reviewed (2026-08-21)
+
+`generate_day_of_tasks` read the event, chose the steps, and inserted them in one
+transaction. The only interaction it offered was a `confirm()` describing what it
+was *about* to do in prose. You found out what had actually been created by
+looking at the task list afterwards.
+
+Making the steps editable first was not a UI problem. It was that **the decision
+and the write were the same function**, so there was no moment at which the
+proposal existed and could be shown to anyone. The fix is the split:
+
+- `plan_event_tasks(event, set)` — decides, returns rows, writes **nothing**
+- `generate_day_of_tasks` — loops the plan and inserts
+
+The generator is now a thin consumer of the planner, which matters more than it
+looks: the calendar gap panel **already** re-implemented the generator's filter
+client-side, to promise a count that matched what the button would create. That
+was two copies of the rules. A third — a preview that decided separately from the
+thing that wrote — would have drifted the first time either changed, and drifted
+*silently*, because a preview that over-promises looks exactly like a preview
+that's right.
+
+The corollary is worth stating: **a review step replaces a confirm dialog, it
+does not sit next to one.** Both entry points dropped their `confirm()`. Asking
+"are you sure?" before showing someone the eleven things they're agreeing to was
+never really a question.
+
+## Section 44 — If people can rename a thing, its identity cannot be its name (2026-08-21)
+
+Template-generated tasks were matched back to their template by
+`lower(trim(title))`, in two places: the generator's "already exists" suppression,
+and the gap panel's "N of M workflow steps missing". That was survivable for as
+long as the titles were machine-written and nobody could edit them.
+
+The whole point of the review flow is that you *can* edit them — rename
+"Confirm vendor arrival window" to "Check with Sal re: 6pm drop" as you create it.
+Under title-matching that rename means the step reads as missing **forever**, and
+the next run re-creates the original alongside your renamed one. The feature would
+have quietly corrupted the thing that measures it.
+
+So `tasks.template_id` carries the link, with the title kept only as a fallback
+for rows created before the change (34 backfilled). The general rule:
+
+> The moment you let a user edit a field, that field stops being available as a
+> join key. Identity has to move to something they can't type.
+
+Same shape as the `station_no` / `edition_seq` split (§ radio): a number a human
+reads is not the number the system keys on.
+
+## Section 45 — `revoke ... from anon` on a new function is a no-op (2026-08-21)
+
+Migration 195 shipped with:
+
+```sql
+revoke all on function public.plan_event_tasks(uuid) from anon;
+```
+
+The post-apply check reported **FAIL** — anon could still execute it. Postgres
+grants `EXECUTE` on a newly created function to **`PUBLIC`**, and `anon` inherits
+that. Revoking from `anon` removes a grant `anon` never separately held.
+
+The correct form revokes PUBLIC and grants the role you actually want back:
+
+```sql
+revoke all on function public.f(args) from public, anon;
+grant execute on function public.f(args) to authenticated;
+```
+
+This is the same fact 183 acted on for `snapshot_kpis` (`from public, anon,
+authenticated`) — the knowledge was in the repo and still didn't survive contact
+with a new migration, because the `from anon` form *looks* correct and fails
+silently. Both functions guard themselves with `is_admin()` anyway, so nothing
+was ever exposed; what was exposed was the gap between the check and the review.
+
+**Reading the SQL did not catch this. The post-apply grant check did.** Which is
+the argument for running it every time rather than when a migration "looks
+grant-ish" — this one wasn't about grants at all, it was about a new function.
+
+## Section 46 — A migration that DROPS something must ship with its UI, not before it (2026-08-21)
+
+196 dropped `task_templates.event_type`. The deployed dashboard still selected
+that column, so between applying the migration and merging the branch, two live
+surfaces were broken on comewith.org: the Templates page rendered an error panel,
+and the calendar's gap scan degraded to "scan unavailable".
+
+The database is not branchable — a DB change that ships before its UI is the
+normal shape here, and 145 did exactly that. But 145 was **additive**. The
+asymmetry is the lesson:
+
+- **Additive** (new column, new function, new table): the old UI keeps working,
+  and the window is harmless. Apply whenever.
+- **Destructive** (drop a column, drop a function signature, tighten a
+  constraint): the old UI breaks the instant it applies. The window is a live
+  outage, and its length is however long the UI takes.
+
+For destructive changes, either apply *after* the UI is merged and ready to
+deploy, or make the change in two migrations — add the new shape, ship the UI,
+drop the old shape — which is the only version with no window at all.
+
+What made this survivable rather than serious was luck about *what* broke: both
+casualties were read-only surfaces that already degrade gracefully. The apply
+button kept working only because adding a defaulted second parameter left the
+one-argument RPC call resolvable — verified, not assumed. Had the new signature
+not been call-compatible, dropping the old function would have broken the
+feature the migration existed to improve.
+
+Also worth recording, since it was a deliberate choice and not an oversight:
+`event_type` was **dropped rather than left nullable**. A stale column that
+nothing reads is worse than no column — the next person filters on it and gets a
+silently empty list, which is the failure mode this file keeps returning to.

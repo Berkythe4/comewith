@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 43d45cf6-b868-4f32-9a6c-033e1bc425b5
-  modified: 2026-08-15T23:05:27.222Z
+  modified: 2026-08-22T00:36:31.446Z
 ---
 
 As of 2026-08-15, `C:\comewith` is a fresh clone of `github.com/Berkythe4/comewith`
@@ -66,6 +66,17 @@ added by hand.
 The publishable anon key is public and lives in the frontend — `radio.html:282`
 (`CWURL` / `CWKEY`) — so the anon-401 invariant check needs no PAT at all.
 
+**`scripts/check_anon_exposure.py` CANNOT run on this machine** (confirmed 2026-08-21):
+it wants `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env`, which here holds only `SBP_PAT` and
+`SBP_REF_PROD`, so it exits `FAIL no prod URL / publishable key in .env`. Until that key
+is added, do the anon checks by hand with `curl`, reading the key out of the frontend
+(`grep -ohE "sb_publishable_[A-Za-z0-9_-]+" dashboard.html | head -1`). **Prove the key
+works before trusting any 401** — that script exists precisely because an empty key
+answers 401 for everything and made a real leak look blocked. Use
+`v_public_events?select=*` and check for a **200 with a non-empty body**; don't pick a
+column at random, that view has no `id` and a bad column name returns 400, which reads
+like a broken key.
+
 **Still missing:** **ffmpeg/ffprobe** — blocks verifying video renders by pulling a frame.
 
 `dashboard.html` is ~1.3 MB in one inline `<script type="module">`. Never read it into
@@ -78,3 +89,15 @@ for a console check.
 
 **Why it matters:** `master` auto-deploys to comewith.org through Netlify, so pushing to
 `master` is a production deploy, not a merge. Work on a branch and let Keith merge.
+
+**The `C:\comewith` checkout MOVES under you mid-session.** Other sessions and machines
+share it: over one session on 2026-08-15 it went `docs/dashboard-editing-convention` →
+`fix/post-apply-checks` → `feature/calendar-focus-scope` → `master`, and PRs were merged
+while work was still in flight. Never assume your branch is still checked out — re-check
+`git branch --show-current` before editing, and if it has moved, do NOT switch it back
+(that yanks the tree out from under whoever is using it). Use a throwaway worktree
+instead: `git worktree add <scratchpad>/wt-x <branch>`, edit there, commit, push,
+`git worktree remove`. This worked cleanly four times in a row and never disturbed the
+other session. Corollary: a branch you pushed may be merged before you push a follow-up,
+so **check PR state before assuming you can add a commit to it** — a merged PR needs a
+fresh branch cut from the current `master`, not another push to the old one.

@@ -126,6 +126,22 @@ Four Come-With-specific rules on top of whichever variant you run:
     do answer 401. Tables carry an anon grant from 013 and rely on RLS, so they
     answer **200 with a body** — `[]` is correct, rows are a leak. Read the body,
     never the status.
+- **`revoke ... from anon` on a FUNCTION is a no-op.** Postgres grants `EXECUTE` on a
+  new function to **`PUBLIC`**, and `anon` inherits it — revoking from `anon` removes a
+  grant it never separately held, and the function stays wide open. Always
+  `revoke all on function public.f(args) from public, anon;` then
+  `grant execute on function public.f(args) to authenticated;`. 183 got this right for
+  `snapshot_kpis`; 195 got it wrong anyway, because the `from anon` form *looks*
+  correct and fails silently. Only the post-apply grant check caught it — which is why
+  that check runs on every migration, not just the grant-ish ones. LEARNINGS §45.
+- **A DESTRUCTIVE migration ships WITH its UI; an additive one may ship ahead.** The DB
+  isn't branchable, so a schema change landing before its UI is normal here — but only
+  when it's additive (new column/function/table), where the old UI keeps working. A drop
+  (column, function signature, tightened constraint) breaks the deployed dashboard the
+  instant it applies, and the outage lasts as long as the UI takes. 196 dropped
+  `task_templates.event_type` and broke the live Templates page and gap scan until the
+  branch merged. Either apply after the UI is merged, or split it: add the new shape →
+  ship the UI → drop the old one. LEARNINGS §46.
 - **`INSERT..RETURNING` enforces the SELECT policy mid-statement.** A security-definer
   helper that re-queries the table cannot see the not-yet-visible new row, so
   `.insert().select()` fails RLS even for the creator (bit us on 097 chat DMs).
@@ -191,6 +207,37 @@ Four Come-With-specific rules on top of whichever variant you run:
   an event's `ticket_url` must be set BEFORE promotion starts or every click before it is
   lost. Keep `v_event_funnel` / `v_site_exposure_30d` anon-revoked like the other
   financial-adjacent views.
+
+## Task templates (named SETS, since 196 — not per-event-type lists)
+
+- **A template is a named SET of steps, and sets are FREE.** `task_template_sets`
+  ("Party — standard", "Event Template v2") holds ordered `task_templates` rows via
+  `set_id`. There is **no `event_type`** anywhere in the model — it was dropped in 196.
+  Any set can be applied to any event; you pick which one when you build the checklist.
+  Don't re-introduce a type filter "to tidy the picker" — keeping a v2 alongside v1 and
+  trying it on one event is the whole point.
+- **`events.task_template_set_id` is which set that event RUNS**, and the calendar gap
+  panel measures "N of M steps missing" against it. It is written on the **first task
+  actually created**, never when the set is merely picked, so an abandoned run can't
+  relabel an event. An event with no set gets "no checklist picked", which is a
+  different problem from "its set is empty" and is fixed on a different screen.
+- **Decide and write are separate: `plan_event_tasks(event, set)` writes NOTHING**;
+  `generate_day_of_tasks(event, set)` loops the plan and inserts. The dashboard walks the
+  plan a step at a time so each can be edited or skipped. Any new surface must go through
+  the planner — a preview that decides for itself is a third copy of the rules (the gap
+  panel is already the second) and will drift silently. LEARNINGS §43.
+- **Skip means skip THIS event.** Nothing is written, so the step still shows as missing
+  and can be generated later. Removing a step for good is an edit on the Templates page.
+- **`tasks.template_id` is the template link — NOT the title.** Steps are renamable at
+  creation time, so title-matching would read a renamed step as missing forever and
+  re-create the original next to it. Suppression and gap detection match on
+  `template_id`, with the title kept only as a pre-195 fallback. LEARNINGS §44.
+- **Gear and soundcheck steps are derived from the EVENT** (`cw_providing_gear`, the
+  performing participants), not from a set, so they're offered whichever set you pick.
+  They have no `template_id` and stay title-suppressed.
+- **Phases order by MEANING** — planning → promo → day_of → wrap. `order by phase` is
+  alphabetical and puts day_of first; harmless in a bulk insert, nonsense when a person
+  is being walked through it.
 
 ## Series contract (events.series)
 
