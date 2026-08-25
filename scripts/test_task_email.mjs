@@ -28,9 +28,10 @@ const grab = (startMark, endMark) => {
   if (j < 0) throw new Error('could not find end ' + endMark);
   return mod.slice(i, j);
 };
+const shared = grab('const TASK_DUE_WORDS', '\n// ---- Email a task list');
 const builder = grab('function buildTasksEmailHtml(tasks, opts = {})', '\nasync function hubEmailTasks(');
-const calBits = grab('const CAL_DUE_WORDS', '\nasync function calEmailTasks(');
 const board = grab('function calBoardTasks() {', '\nfunction calRenderBoard(');
+const hubBoard = grab('function hubBoardTasks() {', '\nfunction hubRenderTaskBoard(');
 
 const STUBS = `
 const CAL_DEFAULT_STATUS = ['todo','doing','blocked'];
@@ -41,11 +42,12 @@ const fmtDate = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { m
 const calToday = () => TODAY;
 const calAddDays = (ds, n) => { const d = new Date(ds+'T00:00:00'); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
 export const CAL = { tasks: [], board: null };
+export const hub = { tasks: [], tboard: null };
 export const TODAY = '2026-08-25';
 `;
 const file = path.join(os.tmpdir(), 'cw_task_email_' + process.pid + '.mjs');
-fs.writeFileSync(file, STUBS + builder + '\n' + calBits + '\n' + board +
-  '\nexport { buildTasksEmailHtml, calFilterWords, calBoardTasks };\n');
+fs.writeFileSync(file, STUBS + shared + '\n' + builder + '\n' + board + '\n' + hubBoard +
+  '\nexport { buildTasksEmailHtml, calFilterWords, taskFilterWords, taskScopeLine, taskFilterNote, calBoardTasks, hubBoardTasks };\n');
 const M = await import('file://' + file.replace(/\\/g, '/'));
 fs.unlinkSync(file);
 
@@ -200,6 +202,48 @@ const orderIn = (html) => TASKS.map(t => [t.title, at(html, t)])
   else if (!/<b style="color:#C75A3C;">1 overdue<\/b>/.test(html)) fail('the header overdue-count does not match the list');
   else if (!/1 done/.test(html)) fail('the header done-count does not match the list');
   else pass('the header counts describe the tasks actually sent');
+}
+
+// ---- 9. the EVENT HUB button obeys its own board the same way ---------------
+// Same rule, different board: the hub's ✉ sends the filtered view of that one
+// event, not every task on it. Its filter has no event dropdown, so the words
+// must never mention one.
+{
+  const evTasks = TASKS.filter(t => t.event.id === 'e1');   // one event's tasks
+  const hubBase = () => ({ q: '', status: ['todo', 'doing', 'blocked'], assignee: '', priority: '',
+                           pillar: '', due: 'all', msOnly: false, unassigned: false, sort: 'due', dir: 1 });
+  const withHub = (mut) => { M.hub.tasks = evTasks; M.hub.tboard = hubBase(); mut(M.hub.tboard); return M.hub.tboard; };
+
+  withHub(() => {});
+  const openOnly = M.hubBoardTasks();
+  eq(openOnly.map(t => t.title), ['Confirm Ali on the lineup', 'Post the flyer'], 'hub board hides done by default');
+  const htmlAll = M.buildTasksEmailHtml(openOnly, { order: 'as-sorted' });
+  if (htmlAll.includes('Pay the venue deposit')) fail('the hub email included a done task the board was hiding');
+  else pass('the hub email leaves out what the hub board is hiding');
+
+  const f = withHub(x => { x.priority = 'high'; });
+  const shown = M.hubBoardTasks();
+  const html = M.buildTasksEmailHtml(shown, { order: 'as-sorted' });
+  eq(titlesIn(html).sort(), shown.map(t => t.title).sort(), 'the hub email contains exactly its filtered rows');
+  eq(M.taskFilterWords(f, evTasks), ['high priority'], 'hub filter words describe the hub filter');
+
+  // withEvent defaults off — the hub has no event dropdown to report.
+  const sneaky = { ...hubBase(), event: 'e1' };
+  eq(M.taskFilterWords(sneaky, evTasks), [], 'hub filter words never mention an event');
+  eq(M.taskFilterWords(sneaky, evTasks, { withEvent: true }), ['event: Dance Infusion 3'],
+     'the calendar still reports its event filter');
+
+  // The scope sentence says which board it came from.
+  if (!M.taskScopeLine(hubBase(), []).includes('All open tasks. Sorted by due date'))
+    fail('the default scope line is wrong for the calendar');
+  else if (!M.taskScopeLine(hubBase(), [], 'All open tasks on this event').includes('All open tasks on this event'))
+    fail('the hub scope line does not name the event scope');
+  else pass('the scope line names the right scope for each board');
+
+  eq(M.taskFilterNote([], 3, 3), '', 'an unfiltered view produces no filter note');
+  if (!M.taskFilterNote(['high priority'], 1, 4).includes('(1 of 4 tasks)'))
+    fail('the filter note does not give the N-of-M count');
+  else pass('a filtered view reports N of M in the note');
 }
 
 console.log(fails ? `\n${fails} FAILED` : '\nAll checks passed.');

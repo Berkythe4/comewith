@@ -9490,6 +9490,37 @@ function hubRenderTaskBoard() {
   if (onQ) { const inp = el.querySelector('[data-ht-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 
+// ---- Describing a filtered task view in words ------------------------------
+// Shared by both task boards. A filtered list emailed without saying so reads
+// as "this is everything" — the same failure as a silent cap — so the words
+// that describe the filter travel with the email, in the header and the note.
+const TASK_DUE_WORDS = { overdue: 'overdue only', today: 'due today', 7: 'overdue + next 7 days',
+                         14: 'overdue + next 14 days', 30: 'overdue + next 30 days', none: 'no due date' };
+const TASK_SORT_WORDS = { due: 'due date', priority: 'priority', event: 'event', title: 'task', status: 'status' };
+function taskFilterWords(f, tasks, { withEvent = false } = {}) {
+  const parts = [];
+  const st = [...f.status].sort().join(',');
+  if (st !== [...CAL_DEFAULT_STATUS].sort().join(',')) parts.push(f.status.length ? `status: ${f.status.join(', ')}` : 'no status selected');
+  if (withEvent && f.event) { const t = (tasks || []).find(x => String(x.event?.id) === f.event); parts.push(`event: ${t?.event?.name || f.event}`); }
+  if (f.assignee) { const a = (tasks || []).flatMap(t => t.task_assignments || []).find(x => x.actor?.id === f.assignee); parts.push(`assigned to ${a?.actor?.display_name || 'someone'}`); }
+  if (f.priority) parts.push(`${f.priority} priority`);
+  if (f.pillar) parts.push(`bucket: ${wsPillarLabel(f.pillar)}`);
+  if (f.due !== 'all') parts.push(TASK_DUE_WORDS[f.due] || f.due);
+  if (f.msOnly) parts.push('milestones only');
+  if (f.unassigned) parts.push('unassigned only');
+  if (f.q) parts.push(`matching “${f.q}”`);
+  return parts;
+}
+function taskScopeLine(f, words, allLabel = 'All open tasks') {
+  const s = `${TASK_SORT_WORDS[f.sort] || f.sort} ${f.dir > 0 ? '(ascending)' : '(descending)'}`;
+  return words.length ? `Filtered view — ${words.join(' · ')}. Sorted by ${s}.` : `${allLabel}. Sorted by ${s}.`;
+}
+function taskFilterNote(words, shown, total) {
+  return words.length
+    ? `This is a filtered view of the task board (${shown} of ${total} tasks), not the full list — ${words.join(' · ')}.`
+    : '';
+}
+function calFilterWords() { return taskFilterWords(CAL.board, CAL.tasks, { withEvent: true }); }
 // ---- Email a task list (concise, formatted for team inboxes) ----
 // Email-client-safe: table layout + inline styles only, no CSS classes.
 // Shared by the event hub (one event, grouped by status) and the Calendar &
@@ -9558,16 +9589,20 @@ function buildTasksEmailHtml(tasks, opts = {}) {
   </div>`;
 }
 async function hubEmailTasks() {
-  const [evRes, tRes, staff, partsRes] = await Promise.all([
+  // The board's current view IS the list — same rule as Calendar & Tasks.
+  // hub.tasks / hub.tboard are loaded by hubSecTasks, which is the only screen
+  // this button appears on, so there is nothing to re-fetch.
+  const tasks = hubBoardTasks();
+  const total = (hub.tasks || []).length;
+  if (!total) { toast('No tasks on this event yet', 'err'); return; }
+  if (!tasks.length) { toast('Nothing in the current view to send — clear a filter first', 'err'); return; }
+  const [evRes, staff, partsRes] = await Promise.all([
     sb.from('events').select('name,event_date,series,status,venue:venues(name)').eq('id', hub.eventId).single(),
-    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,task_assignments(role,actor:actors(display_name))')
-      .eq('event_id', hub.eventId).is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }),
     loadStaff(),
     sb.from('event_participants').select('actor:actors(id,display_name,email)').eq('event_id', hub.eventId),
   ]);
-  const ev = evRes.data, tasks = tRes.data || [];
+  const ev = evRes.data;
   if (!ev) { toast('Event not found', 'err'); return; }
-  if (!tasks.length) { toast('No tasks on this event yet', 'err'); return; }
   // Recipients: staff pre-checked; event people with an email opt-in.
   const seen = new Set();
   const recipRow = (email, name, checked) => {
@@ -9578,23 +9613,30 @@ async function hubEmailTasks() {
   };
   const staffRows = staff.map(p => recipRow(p.email, p.full_name || p.email, true)).join('');
   const partRows = (partsRes.data || []).map(x => x.actor).filter(a => a && a.email).map(a => recipRow(a.email, a.display_name, false)).join('');
-  const evSub = `${fmtDate(ev.event_date)}${ev.venue?.name ? ' \u00b7 ' + ev.venue.name : ''}${ev.series ? ' \u00b7 ' + ev.series : ''}`;
-  const preview = () => buildTasksEmailHtml(tasks, {
-    heading: `${ev.name} \u2014 Tasks`, subhead: evSub, order: 'grouped',
-    includeDone: !!$('kpiModalBody').querySelector('#etIncDone')?.checked,
+  const words = taskFilterWords(hub.tboard, hub.tasks);
+  const scope = taskScopeLine(hub.tboard, words, 'All open tasks on this event');
+  const filterNote = taskFilterNote(words, tasks.length, total);
+  const evSub = `${fmtDate(ev.event_date)}${ev.venue?.name ? ' · ' + ev.venue.name : ''}${ev.series ? ' · ' + ev.series : ''} · ${scope}`;
+  // Single event, so the event name stays off every row — it's in the heading.
+  const opts = () => ({
+    heading: `${ev.name} — Tasks`, subhead: evSub, filterNote,
+    order: $('kpiModalBody').querySelector('#etGroup')?.checked ? 'grouped' : 'as-sorted',
+    includeDone: hub.tboard.status.includes('done'),
     note: $('kpiModalBody').querySelector('#etNote')?.value || '' });
-  openKpi('Email task list', ev.name, `
+  const preview = () => buildTasksEmailHtml(tasks, opts());
+  openKpi('Email task list', `${tasks.length} task${tasks.length === 1 ? '' : 's'} — exactly what the board is showing`, `
+    <div class="kpi-hint" style="margin:-4px 0 10px;max-width:62ch;">${escapeHtml(scope)}</div>
     <div class="modal-form-row"><label class="modal-label">To</label>
       <div class="hub-list" style="max-height:150px;overflow:auto;">
         ${staffRows}${partRows ? `<div class="li-sub" style="margin-top:6px;">Event people</div>${partRows}` : ''}
       </div></div>
     <div class="modal-form-row"><label class="modal-label">Subject</label>
-      <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})"></div>
+      <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})${words.length ? ' · ' + escapeHtml(words.join(', ')) : ''}"></div>
     <div class="modal-form-row"><label class="modal-label">Message (goes above the task list)</label>
       <textarea class="modal-textarea" id="etNote" rows="3" placeholder="Hey team — here's where we stand for the weekend. Flag anything blocked…"></textarea></div>
-    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etIncDone" style="width:auto;margin:0;"> Include completed tasks</label>
+    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etGroup" style="width:auto;margin:0;"> Group by status instead of the order on screen</label>
     <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
-      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(tasks, { heading: `${ev.name} \u2014 Tasks`, subhead: evSub, order: 'grouped' })}</div></div>`,
+      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(tasks, { heading: `${ev.name} — Tasks`, subhead: evSub, filterNote, order: 'as-sorted', includeDone: hub.tboard.status.includes('done') })}</div></div>`,
     async () => {
       const recips = [...$('kpiModalBody').querySelectorAll('[data-etrecip]:checked')]
         .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
@@ -9615,18 +9657,18 @@ async function hubEmailTasks() {
           if (team) await sb.from('chat_messages').insert({
             channel_id: team.id, author_id: ME.id, kind: 'email', email_subject: subject,
             conversation_id: data.conversation_id,
-            body: `Task list for ${ev.name} — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
+            body: `Task list for ${ev.name} (${tasks.length} task${tasks.length === 1 ? '' : 's'}${words.length ? ', filtered' : ''}) — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
           });
         } catch (_) { /* notice is best-effort; the email already went out */ }
       }
       toast(sent ? `Task list sent (${sent} recipients, one thread) · posted to # Team chat` : 'Send failed', sent ? 'ok' : 'err');
     }, 'Send task list');
   setTimeout(() => {
-    $('kpiModalBody').querySelector('#etIncDone')?.addEventListener('change', () => { $('etPreview').innerHTML = preview(); });
-    $('kpiModalBody').querySelector('#etNote')?.addEventListener('input', () => { $('etPreview').innerHTML = preview(); });
+    const re = () => { $('etPreview').innerHTML = preview(); };
+    $('kpiModalBody').querySelector('#etGroup')?.addEventListener('change', re);
+    $('kpiModalBody').querySelector('#etNote')?.addEventListener('input', re);
   }, 40);
 }
-
 // ---- Section: Money (INLINE — line items live in the hub, refresh on every write) ----
 // Sprint-1 bug: this section only launched a modal and never listed line items, so adds
 // showed in Overview's rollup but "vanished" here. Now it renders the same sources inline.
@@ -22265,38 +22307,14 @@ function calDayListHtml(b, mkMax) {
   return `<div class="hub-list">${out.join('')}</div>`;
 }
 // ---- Email the task board (only what the filters currently show) ----
-// A filtered list emailed without saying so reads as "this is everything".
-// calFilterWords() turns the active filters into a sentence that rides along in
-// the email, so the recipient knows what they're looking at and what they're not.
-const CAL_DUE_WORDS = { overdue: 'overdue only', today: 'due today', 7: 'overdue + next 7 days',
-                        14: 'overdue + next 14 days', 30: 'overdue + next 30 days', none: 'no due date' };
-function calFilterWords() {
-  const f = CAL.board, parts = [];
-  const st = [...f.status].sort().join(',');
-  if (st !== [...CAL_DEFAULT_STATUS].sort().join(',')) parts.push(f.status.length ? `status: ${f.status.join(', ')}` : 'no status selected');
-  if (f.event) { const t = CAL.tasks.find(x => String(x.event?.id) === f.event); parts.push(`event: ${t?.event?.name || f.event}`); }
-  if (f.assignee) { const a = CAL.tasks.flatMap(t => t.task_assignments || []).find(x => x.actor?.id === f.assignee); parts.push(`assigned to ${a?.actor?.display_name || 'someone'}`); }
-  if (f.priority) parts.push(`${f.priority} priority`);
-  if (f.pillar) parts.push(`bucket: ${wsPillarLabel(f.pillar)}`);
-  if (f.due !== 'all') parts.push(CAL_DUE_WORDS[f.due] || f.due);
-  if (f.msOnly) parts.push('milestones only');
-  if (f.unassigned) parts.push('unassigned only');
-  if (f.q) parts.push(`matching “${f.q}”`);
-  return parts;
-}
 async function calEmailTasks() {
   const tasks = calBoardTasks();
   if (!tasks.length) { toast('Nothing in the current view to send — clear a filter first', 'err'); return; }
   const staff = await loadStaff();
   if (!staff.length) { toast('No other admins to send to', 'err'); return; }
   const words = calFilterWords();
-  const sortWord = { due: 'due date', priority: 'priority', event: 'event', title: 'task', status: 'status' }[CAL.board.sort] || CAL.board.sort;
-  const scope = words.length
-    ? `Filtered view — ${words.join(' · ')}. Sorted by ${sortWord} ${CAL.board.dir > 0 ? '(ascending)' : '(descending)'}.`
-    : `All open tasks. Sorted by ${sortWord} ${CAL.board.dir > 0 ? '(ascending)' : '(descending)'}.`;
-  const filterNote = words.length
-    ? `This is a filtered view of the task board (${tasks.length} of ${CAL.tasks.length} tasks), not the full list — ${words.join(' · ')}.`
-    : '';
+  const scope = taskScopeLine(CAL.board, words);
+  const filterNote = taskFilterNote(words, tasks.length, CAL.tasks.length);
   const recipRow = (email, name) =>
     `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;">
       <input type="checkbox" data-ctrecip data-email="${escapeHtml(email)}" data-name="${escapeHtml(name)}" checked style="width:auto;margin:0;">
