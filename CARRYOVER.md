@@ -1,3 +1,115 @@
+# Carryover - 2026-08-25 (part two: Gear Watch - all four sources live - DESKTOP)
+
+**Second close on 2026-08-25.** The task-boards close from earlier today is
+preserved below, unchanged.
+
+## >> START HERE NEXT SESSION
+
+**1. MIGRATION DRIFT, unchanged and still owed by the laptop.** Prod is on
+**203**, the repo stops at **202**. `203_plan_line_quantity.sql` was applied from
+machine `MSI` on 2026-08-22 and never committed. Recovered effect:
+`plan_offering_lines.quantity numeric default 1 NOT NULL`. No replacement file
+has been written on purpose - a different `sha256` from the `bbb8cfbb8894` in
+`applied_migrations` would make the drift permanent instead of loud. **Next
+migration number is 204.**
+
+**2. Planning tab still unopened in a browser.** Carried from 2026-08-21. Six
+offerings still provisional.
+
+**3. Invoice payment details still empty**, `CW-2026-0001` still went out without
+them. Carried from 2026-08-21.
+
+**4. One unreviewed Gear Watch hit worth a look** - score **80**, "CDJ 3000 (UP
+TO 4 AVAILABLE)", **$2,000, New York NY**, found on Facebook. Keith has serials
+for both his CDJ-3000s (`EBMP011913CC`, `DJMP007750CC`). Compare against the
+seller's photos. Do not contact the seller - send it to the detective.
+
+## State summary
+
+- **Prod max migration 203; repo max 202 - DRIFT (item 1).** No migrations
+  written this session.
+- **All 5 financial views return anon 401**, verified through PostgREST with the
+  key proven live first. **54-object anon sweep: 0 FAIL.**
+- **Latest LEARNINGS: §53.** Four added today (§50, §51 this morning; §52, §53 now).
+- Roles unchanged. Git: committed and pushed to master, Netlify deployed.
+- Ran on the **desktop**.
+- **Edge functions deployed this session:** `scan-gear-market` **v17**, and
+  `ebay-account-deletion` **v1 (`--no-verify-jwt`)**.
+
+## This session shipped (part two)
+
+| Commit | What |
+|---|---|
+| `8cc4bfa` | Gear Watch: one button that finishes, and one that costs money |
+| `8b09b22` | An eBay endpoint, and a correction: the secrets API returns digests |
+
+### Gear Watch now has all four sources working, for the first time
+
+| Source | Before | Now |
+|---|---|---|
+| Reverb | auto 3x/day | unchanged |
+| Craigslist | auto 3x/day | unchanged |
+| **eBay** | **never ran, not once** | **auto 3x/day** |
+| Facebook | ran once, 2026-08-19 | its own button, rotating |
+
+**"Run scan now" had never succeeded.** 19 runs in the log, all `cron`, zero
+`manual`. It was the only path that ran Facebook, whose Apify scrape blocks
+until it finishes; four targets blew the 150s wall clock and returned **546**.
+The run row is written last, so every press left no trace - a toast that faded.
+Reproduced at 151.3s before touching anything. Split into `manual` (the free
+three, **6.9s**) and `facebook` (its own button, 110s deadline, cost confirm).
+
+**Facebook rotates.** Only 2-3 scrapes fit, so each run starts where the last
+stopped; otherwise the tail of the target list is never searched however often
+you press. Status names the gear, not a count. A real run covered 3 of 4 targets
+and stored **5 new hits**.
+
+**eBay was never a credentials problem.** eBay disables a production keyset
+until the account has a working Marketplace Account Deletion endpoint, and a
+disabled keyset answers `401 invalid_client` - identical to a wrong password.
+New `ebay-account-deletion` edge function answers the challenge hash; once
+verified, eBay went `NOT CONFIGURED` -> `ok - 173 listing(s)` and the scan's
+reach went **173 -> 346 listings, 4 -> 13 matches**.
+
+### The correction that cost two round trips (§52)
+
+**The Supabase Management API returns a SHA-256 DIGEST in a secret's `value`
+field, not the value.** Everything reads back as 64 hex characters. I read
+Keith's `App ID` / `Cert ID` that way, concluded from the *shape* that they
+"aren't eBay keysets", told him so twice, copied the digests into
+`EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`, and tested **the digests** against
+eBay - which returned `invalid_client` and read as confirmation. He was right
+both times.
+
+**A secret is write-only. It can be written and exercised, never inspected, and
+never renamed or copied.** Both digest-valued secrets were deleted so the
+scanner said `NOT CONFIGURED` (true) rather than blaming his keys.
+
+### Loose ends
+
+- **`ebay_verification_token.txt`** in the repo root holds the eBay verification
+  token. **Gitignored**, and it must stay that way. It is the shared secret
+  behind the account-deletion challenge hash; if it is ever rotated, update
+  `EBAY_VERIFICATION_TOKEN` **and** the eBay portal together or the endpoint
+  stops verifying.
+- **Two stray secrets, `App ID` and `Cert ID`**, are still on prod. Nothing reads
+  them. Keith was asked twice about deleting them and hasn't said; they are
+  harmless but they are also the exact confusion that started this.
+- **eBay brings parts and accessories in.** Two replacement CDJ-3000 *screens*
+  scored 65. If they clutter the list, add exclude tokens (`display`, `screen`,
+  `for pioneer`) to the CDJ-3000 target.
+- **A known false positive:** "Blackview wave8" (a phone, $115) scores 75 against
+  **AlphaTheta Wave 8**. The "wave 8" token matches.
+- **Two targets still have no serial** - AlphaTheta Wave 8 and KRK Rokit 5 - so
+  they can never reach the serial-match top score. It was a KRK listing that
+  scored 93, the highest the tool has produced.
+- **Supabase edge-function logs are empty on this plan.** `function_edge_logs`
+  returned zero rows for every function, including ones invoked minutes earlier.
+  Do not read an empty result there as "it was never called".
+
+---
+---
+
 # Carryover - 2026-08-25 (task boards + emailing the view you're looking at - DESKTOP)
 
 ## >> START HERE NEXT SESSION

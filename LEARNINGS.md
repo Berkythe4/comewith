@@ -1433,3 +1433,96 @@ you cannot point at the line that would go red, the item is decoration.**
 public view first and refuses to continue unless the key actually works (§37),
 and exits non-zero on any 200. Both scripts run at every close — the sweep for
 breadth, this one for the five that are named in the rules.
+
+## Section 52 — A secret cannot be read back, and the thing that looks like its value is a digest (2026-08-25)
+
+Gear Watch's eBay source had never run. Keith added the credentials; the scanner
+still said `NOT CONFIGURED`, because they had been saved under eBay's own field
+labels — `App ID` and `Cert ID` — rather than the names the code reads. Fine so
+far. What happened next cost two round trips and produced a confident, wrong
+accusation.
+
+The Supabase **Management API returns a SHA-256 digest in the `value` field of a
+secret, not the secret.** Every secret reads back as 64 hex characters whatever
+it holds. Read that way, `App ID` and `Cert ID` looked like "64 hex characters,
+no hyphens, no `PRD` marker" — which is emphatically not the shape of an eBay
+keyset. From that I concluded the values were wrong, told Keith so, copied those
+digests into `EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`, and tested **the digests**
+against eBay's OAuth endpoint. eBay answered `401 invalid_client`, which read as
+confirmation. It was nothing of the kind: I had authenticated with a hash of his
+password and reported that his password was wrong.
+
+Proving it took one line — set a secret to a URL known exactly, read it back,
+and compare against `sha256(url)`. It matched.
+
+**Rules that follow:**
+
+- **A secret is write-only.** It can be written and then *exercised*; it can never
+  be inspected. There is no rename, no copy, no "move this value to that name" —
+  any of those require plaintext nobody has. Re-entering it is not a workaround,
+  it is the only mechanism.
+- **Never characterise a credential from a read.** Length, charset and prefix are
+  all properties of the digest. The only legitimate test of a credential is to
+  send it to the system that owns it and see what that system says.
+- **When an inspection contradicts the user, distrust the inspection first.**
+  Keith said twice that the values were correct. Both times the reply was a
+  sharper description of the digest. He was right, the tool was lying, and the
+  tie-breaker — "what does eBay say when we use the real value?" — was the one
+  test not being run.
+
+Same family as §49 and §37: the check measured a proxy for the thing. Here the
+proxy was so faithful in shape (fixed-width hex, stable per value, different per
+secret) that nothing about it looked like a placeholder.
+
+*Applied correctly the same hour, for once:* the edge-function log query returned
+zero rows for `ebay-account-deletion`, which would have proved eBay never called
+it. Running the same query with no filter also returned zero — for functions
+invoked minutes earlier. The log source was simply empty on this plan, so the
+finding was reported as "cannot tell" rather than "eBay never called".
+
+## Section 53 — A paid, blocking source must not share a button with free, instant ones (2026-08-25)
+
+"Run scan now" on Gear Watch had **never once succeeded.** `gear_watch_runs` held
+19 rows, all `cron`, zero `manual`. Reproduced before changing anything: HTTP
+**546 at 151.3 seconds** — the edge runtime's 150s wall clock.
+
+The cause was one button standing for four sources that are not comparable.
+Reverb, Craigslist and eBay are API calls that finish in about six seconds
+between them. Facebook is an Apify scrape via `run-sync-get-dataset-items`, which
+**holds the connection open until the scrape completes** — tens of seconds each,
+once per target, sequentially. Four of those cannot fit in 150s and never could.
+Because the run row is written last, every press died before writing anything:
+no error row, no log line, nothing but a toast that faded. The feature had a
+failure mode with no evidence, which is why it survived from the day it shipped.
+
+Three things it now does:
+
+- **Split by cost and latency, not by category.** `manual` is the free three;
+  `facebook` is its own button behind a confirm that names the price. Cron is
+  unchanged. A source excluded by mode says which mode excluded it — it never
+  reports zero.
+- **Bound the blocking call.** Facebook runs against a 110s deadline with
+  `AbortSignal.timeout` per scrape, leaving room to score and store, and refuses
+  to start a scrape it cannot finish rather than burning the credit and the wall
+  clock together.
+- **Rotate, or the tail of the list is never searched.** Only two or three
+  scrapes fit. Starting at target #1 every press meant the last targets would
+  *never* be searched, however many times the button was pressed — a permanent
+  blind spot that reports itself as a completed scan. Each run now starts where
+  the last one stopped, and the status names the gear rather than a count:
+  "searched AlphaTheta Wave 8, Pioneer XDJ-AZ, Pioneer CDJ-3000; **NOT searched
+  KRK Rokit 5** — press again to continue where this left off." `PARTIAL` is its
+  own state and the UI toasts it as a problem, not a success. §18 again: a
+  subset that does not announce itself reads as the whole.
+
+**And the reason eBay was dark had nothing to do with any of this.** eBay
+disables a production keyset until the account has a working Marketplace Account
+Deletion endpoint, and a disabled keyset answers `401 invalid_client` — byte-for-
+byte what a wrong password returns. The keys were right the whole time. A new
+`ebay-account-deletion` function (deployed `--no-verify-jwt`, since eBay calls it
+unauthenticated) answers the challenge with
+`sha256(challengeCode + verificationToken + endpoint)`; the endpoint in that hash
+comes from a secret rather than `req.url`, because behind a proxy those differ
+and the mismatch yields a valid-looking hash eBay silently rejects. With it
+verified, eBay went from `NOT CONFIGURED` to `ok — 173 listing(s)`, and the
+scan's reach went from 173 listings to 346.

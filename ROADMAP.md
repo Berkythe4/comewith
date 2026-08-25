@@ -1444,3 +1444,39 @@ instead of loud. **Next migration number is 204.**
 `check_anon_exposure.py` does not test (§51). Prod was fine; the check was
 decoration. `scripts/check_financial_views.py` now asserts all five by name, and
 both scripts run at every close.
+
+---
+
+## 2026-08-25 (part two) — Gear Watch: all four sources live
+
+**Done.** eBay now scans automatically 3x/day. It had **never run once** since the
+tool was built — and not because of a bad key. eBay disables a production keyset
+until the account has a working Marketplace Account Deletion endpoint, and a
+disabled keyset answers `401 invalid_client`, byte-for-byte what a wrong password
+returns. New `ebay-account-deletion` edge function (deployed `--no-verify-jwt`)
+answers the challenge hash. Once verified: `NOT CONFIGURED` → `ok — 173
+listing(s)`, and the scan's reach went **173 → 346 listings, 4 → 13 matches**.
+
+**Done.** "Run scan now" had **never succeeded** — 19 runs logged, all cron, zero
+manual. It was the only path that ran Facebook, whose Apify scrape blocks until it
+completes; four targets blew the 150s wall clock and returned 546, and since the
+run row is written last, every press left no trace. Now split: **Run scan now** =
+the free three (6.9s), **Scan Facebook** = its own button, 110s deadline, cost
+confirm. Facebook **rotates** across targets so the tail of the list is not
+permanently unsearched, and reports `PARTIAL` naming the gear it did not reach.
+
+**Found:** 5 new hits from the first real Facebook run, including a score-**80**
+CDJ-3000 "up to 4 available", $2,000, New York NY — **still unreviewed**, and item
+4 at the top of CARRYOVER.
+
+**The correction (§52).** The Supabase Management API returns a **SHA-256 digest**
+in a secret's `value` field. Reading a credential back and judging it by its shape
+judges the digest. That misread produced two wrong rounds of "your keys are
+invalid" before the real cause — the disabled keyset — surfaced. A secret is
+write-only: it can be written and exercised, never inspected, renamed or copied.
+Now a standing rule in CLAUDE.md.
+
+**Open:** two stray secrets (`App ID`, `Cert ID`) nothing reads; eBay pulls in
+parts/accessories (two CDJ-3000 replacement screens scored 65) that may want
+exclude tokens; "Blackview wave8" (a phone) scores 75 against AlphaTheta Wave 8;
+and two targets still have no serial.

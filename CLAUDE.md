@@ -516,6 +516,50 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **`is_public` defaults to FALSE.** The bucket itself is public, so never put
   documents there; publishing an image is a deliberate toggle. LEARNINGS §32.
 
+## Secrets and third-party credentials
+
+- **A Supabase secret is WRITE-ONLY. The Management API returns a SHA-256 DIGEST
+  in the `value` field, not the value.** Every secret reads back as 64 hex
+  characters whatever it holds. So: you cannot rename a secret, cannot copy one to
+  another name, and **cannot judge a credential from what you read back** — length,
+  charset and prefix are all properties of the digest. On 2026-08-25 that misread
+  produced a confident accusation that Keith's eBay keys were "not an eBay keyset"
+  (they were fine), then a test that authenticated with the *digests* and reported
+  eBay's `invalid_client` as proof. **The only legitimate test of a credential is
+  to send it to the system that owns it.** If an inspection contradicts what Keith
+  says he entered, distrust the inspection. LEARNINGS §52.
+- **`401 invalid_client` from eBay usually means the KEYSET IS DISABLED, not that
+  the key is wrong.** eBay disables a production keyset until the account has a
+  working Marketplace Account Deletion endpoint. `supabase/functions/ebay-account-deletion`
+  is that endpoint, deployed **`--no-verify-jwt`** (eBay calls it unauthenticated; a
+  gateway 401 reads to them as a dead host). It answers the challenge with
+  `sha256(challengeCode + verificationToken + endpoint)`, and the endpoint in that
+  hash comes from the `EBAY_DELETION_ENDPOINT` **secret, not `req.url`** — behind a
+  proxy they differ and the mismatch yields a valid-looking hash eBay silently
+  rejects. The shared token lives in `EBAY_VERIFICATION_TOKEN` and in the gitignored
+  `ebay_verification_token.txt`; rotate BOTH sides together or verification breaks.
+- **Supabase edge-function logs are empty on this plan.** `function_edge_logs`
+  returns zero rows for every function, including ones invoked minutes earlier.
+  Never read an empty result there as "it was never called" — run the control
+  query first. §52.
+
+## A source that costs money does not share a button with sources that don't
+
+- **Split manual actions by COST and LATENCY, not by category.** Gear Watch had one
+  "Run scan now" covering four sources. Three are API calls totalling ~6s; Facebook
+  is an Apify scrape that BLOCKS until it finishes, once per target. Four of those
+  never fit the edge runtime's **150s wall clock**, so the button returned 546 — and
+  because the run row is written last, every press since it shipped left **no trace
+  at all**. `manual` is now the free three; `facebook` is its own button behind a
+  confirm naming the price. LEARNINGS §53.
+- **Bound any blocking third-party call** (`AbortSignal.timeout`), leave room after
+  it to finish the work, and **refuse to start one you cannot finish** — that wastes
+  the credit and the wall clock together.
+- **If only part of the list fits, ROTATE and say what you missed.** Starting at
+  item #1 every press means the tail is never processed however often it is pressed
+  — a permanent blind spot reporting itself as a clean run. Name the items skipped,
+  not a count, and make `PARTIAL` its own state that the UI shows as a problem.
+
 ## Scheduled work (pg_cron → edge functions)
 
 - **pg_cron cannot mint an admin JWT.** A scheduled job that needs an edge function calls
