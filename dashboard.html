@@ -9490,20 +9490,34 @@ function hubRenderTaskBoard() {
   if (onQ) { const inp = el.querySelector('[data-ht-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 
-// ---- Email the event's task list (concise, formatted for team inboxes) ----
+// ---- Email a task list (concise, formatted for team inboxes) ----
 // Email-client-safe: table layout + inline styles only, no CSS classes.
-function buildTasksEmailHtml(ev, tasks, includeDone, note) {
+// Shared by the event hub (one event, grouped by status) and the Calendar &
+// Tasks board (the filtered view, in the order it's shown). One builder on
+// purpose — two copies of an email template is two places to fix a typo.
+//   opts.heading    headline text
+//   opts.subhead    grey line under it (event date/venue, or the scope)
+//   opts.filterNote said out loud when the list is a FILTERED subset
+//   opts.order      'grouped' (overdue/doing/blocked/todo/done) | 'as-sorted'
+//   opts.showEvent  put each task's event name on the row (cross-event lists)
+//   opts.includeDone  grouped mode only; as-sorted sends exactly what it's given
+function buildTasksEmailHtml(tasks, opts = {}) {
+  const { heading = 'Tasks', subhead = '', filterNote = '', note = '', includeDone = false,
+          order = 'grouped', showEvent = false } = opts;
   const today = new Date().toISOString().slice(0, 10);
   const fmtDue = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const prioBadge = (p) => p ? `<span style="font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:1px 6px;border-radius:3px;color:#fff;background:${p === 'high' ? '#C75A3C' : p === 'medium' ? '#B5791F' : '#8a8377'};">${p}</span>` : '';
   const row = (t, overdue) => {
     const who = (t.task_assignments || []).map(a => a.actor?.display_name).filter(Boolean).join(', ');
     const bits = [];
+    if (showEvent && t.event?.name) bits.push(`<span style="color:#59524a;font-weight:bold;">${escapeHtml(t.event.name)}</span>`);
     if (t.due_date) bits.push(`<span style="color:${overdue ? '#C75A3C' : '#8a8377'};${overdue ? 'font-weight:bold;' : ''}">due ${fmtDue(t.due_date)}</span>`);
     bits.push(who ? escapeHtml(who) : '<span style="color:#b3aa99;">unassigned</span>');
     if (t.description) bits.push(escapeHtml(t.description.slice(0, 110)) + (t.description.length > 110 ? '…' : ''));
+    // In a flat list nothing else says what state a task is in, so the row does.
+    if (order === 'as-sorted') bits.push(`<span style="color:#8a8377;">${escapeHtml(t.status)}</span>`);
     return `<tr><td style="padding:8px 10px;border-bottom:1px solid #eee6d8;font-family:Arial,Helvetica,sans-serif;">
-      <span style="font-size:14px;font-weight:bold;color:#26221c;">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</span> ${prioBadge(t.priority)}
+      <span style="font-size:14px;font-weight:bold;color:#26221c;${t.status === 'done' ? 'text-decoration:line-through;color:#a09884;' : ''}">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</span> ${prioBadge(t.priority)}
       <div style="font-size:12px;color:#8a8377;margin-top:2px;">${bits.join(' &nbsp;·&nbsp; ')}</div>
     </td></tr>`;
   };
@@ -9515,20 +9529,31 @@ function buildTasksEmailHtml(ev, tasks, includeDone, note) {
   const overdue = open.filter(t => t.due_date && t.due_date < today);
   const byStatus = (s) => open.filter(t => t.status === s && !overdue.includes(t));
   const dueSort = (a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
-  [overdue, done].forEach(l => l.sort(dueSort));
   const nextDue = open.filter(t => t.due_date && t.due_date >= today).sort(dueSort)[0];
-  return `<div style="max-width:620px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#26221c;">
-    <div style="border-left:4px solid #C75A3C;background:#faf7f1;padding:12px 16px;">
-      <div style="font-size:20px;font-weight:bold;">${escapeHtml(ev.name)} — Tasks</div>
-      <div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(fmtDate(ev.event_date))}${ev.venue?.name ? ' · ' + escapeHtml(ev.venue.name) : ''}${ev.series ? ' · ' + escapeHtml(ev.series) : ''}</div>
-      <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
-    </div>
-    ${note ? `<div style="font-size:14px;line-height:1.55;color:#3c362e;margin:14px 2px 4px;">${note.trim().split(/\n{2,}/).map(p => `<p style="margin:0 0 10px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
-    ${section('⚠ Overdue', '#C75A3C', overdue, true)}
+  let bodyHtml;
+  if (order === 'as-sorted') {
+    // Exactly the rows on screen, in the order they're on screen. No regrouping
+    // and no re-sorting — that's the whole point of "email what I'm looking at".
+    bodyHtml = tasks.length
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px;">${tasks.map(t => row(t, t.due_date && t.due_date < today && t.status !== 'done')).join('')}</table>`
+      : '';
+  } else {
+    const ov = [...overdue].sort(dueSort), dn = [...done].sort(dueSort);
+    bodyHtml = `${section('⚠ Overdue', '#C75A3C', ov, true)}
     ${section('In progress', '#B5791F', byStatus('doing').sort(dueSort))}
     ${section('Blocked', '#8362A8', byStatus('blocked').sort(dueSort))}
     ${section('To do', '#59524a', byStatus('todo').sort(dueSort))}
-    ${includeDone ? section('✓ Done', '#2E8E72', done) : (done.length ? `<div style="font-size:12px;color:#a09884;margin-top:14px;">✓ ${done.length} completed task${done.length === 1 ? '' : 's'} not shown</div>` : '')}
+    ${includeDone ? section('✓ Done', '#2E8E72', dn) : (done.length ? `<div style="font-size:12px;color:#a09884;margin-top:14px;">✓ ${done.length} completed task${done.length === 1 ? '' : 's'} not shown</div>` : '')}`;
+  }
+  return `<div style="max-width:620px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#26221c;">
+    <div style="border-left:4px solid #C75A3C;background:#faf7f1;padding:12px 16px;">
+      <div style="font-size:20px;font-weight:bold;">${escapeHtml(heading)}</div>
+      ${subhead ? `<div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(subhead)}</div>` : ''}
+      <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
+    </div>
+    ${filterNote ? `<div style="font-size:12px;color:#8a8377;font-style:italic;margin:10px 2px 0;border-left:2px solid #e0d8c8;padding-left:8px;">${escapeHtml(filterNote)}</div>` : ''}
+    ${note ? `<div style="font-size:14px;line-height:1.55;color:#3c362e;margin:14px 2px 4px;">${note.trim().split(/\n{2,}/).map(p => `<p style="margin:0 0 10px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
+    ${bodyHtml}
     <div style="font-size:11px;color:#b3aa99;margin-top:18px;border-top:1px solid #eee6d8;padding-top:8px;">Sent from the Come With dashboard · ${escapeHtml(fmtDate(today))}</div>
   </div>`;
 }
@@ -9553,9 +9578,11 @@ async function hubEmailTasks() {
   };
   const staffRows = staff.map(p => recipRow(p.email, p.full_name || p.email, true)).join('');
   const partRows = (partsRes.data || []).map(x => x.actor).filter(a => a && a.email).map(a => recipRow(a.email, a.display_name, false)).join('');
-  const preview = () => buildTasksEmailHtml(ev, tasks,
-    !!$('kpiModalBody').querySelector('#etIncDone')?.checked,
-    $('kpiModalBody').querySelector('#etNote')?.value || '');
+  const evSub = `${fmtDate(ev.event_date)}${ev.venue?.name ? ' \u00b7 ' + ev.venue.name : ''}${ev.series ? ' \u00b7 ' + ev.series : ''}`;
+  const preview = () => buildTasksEmailHtml(tasks, {
+    heading: `${ev.name} \u2014 Tasks`, subhead: evSub, order: 'grouped',
+    includeDone: !!$('kpiModalBody').querySelector('#etIncDone')?.checked,
+    note: $('kpiModalBody').querySelector('#etNote')?.value || '' });
   openKpi('Email task list', ev.name, `
     <div class="modal-form-row"><label class="modal-label">To</label>
       <div class="hub-list" style="max-height:150px;overflow:auto;">
@@ -9567,7 +9594,7 @@ async function hubEmailTasks() {
       <textarea class="modal-textarea" id="etNote" rows="3" placeholder="Hey team — here's where we stand for the weekend. Flag anything blocked…"></textarea></div>
     <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etIncDone" style="width:auto;margin:0;"> Include completed tasks</label>
     <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
-      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(ev, tasks, false)}</div></div>`,
+      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(tasks, { heading: `${ev.name} \u2014 Tasks`, subhead: evSub, order: 'grouped' })}</div></div>`,
     async () => {
       const recips = [...$('kpiModalBody').querySelectorAll('[data-etrecip]:checked')]
         .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
@@ -22127,7 +22154,9 @@ function calRender() {
     </div>
     <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : CAL.view === 'week' ? calWeekHtml() : calAgendaHtml()}</div>
     <div id="calDayDetail">${CAL.selDay ? calDayDetailHtml(CAL.selDay) : ''}</div>
-    <div class="hub-sec-bar" style="margin-top:22px;" id="calTasksHead"><h3>✅ Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
+    <div class="hub-sec-bar" style="margin-top:22px;" id="calTasksHead"><h3>✅ Tasks</h3><span style="display:flex;gap:8px;">
+      <button class="hub-btn" data-cal-email-tasks title="Email exactly what the board is showing — the current filters and sort order">✉ Email task list</button>
+      <button class="hub-btn" data-cal-task-add>+ Task / milestone</button></span></div>
     <div class="cal-board" id="calBoard"></div>`;
   calRenderBoard();
 }
@@ -22234,6 +22263,95 @@ function calDayListHtml(b, mkMax) {
     `${escapeHtml(e.venue_name || '')}${e.attending != null ? ' · ' + e.attending + ' RSVP' : ''}${e.source === 'tm' ? ' · Ticketmaster' : ''}`)));
   if ((b.mk || []).length > mkMax) out.push(`<div class="li-sub" style="padding:4px 8px;">…+${b.mk.length - mkMax} more market shows</div>`);
   return `<div class="hub-list">${out.join('')}</div>`;
+}
+// ---- Email the task board (only what the filters currently show) ----
+// A filtered list emailed without saying so reads as "this is everything".
+// calFilterWords() turns the active filters into a sentence that rides along in
+// the email, so the recipient knows what they're looking at and what they're not.
+const CAL_DUE_WORDS = { overdue: 'overdue only', today: 'due today', 7: 'overdue + next 7 days',
+                        14: 'overdue + next 14 days', 30: 'overdue + next 30 days', none: 'no due date' };
+function calFilterWords() {
+  const f = CAL.board, parts = [];
+  const st = [...f.status].sort().join(',');
+  if (st !== [...CAL_DEFAULT_STATUS].sort().join(',')) parts.push(f.status.length ? `status: ${f.status.join(', ')}` : 'no status selected');
+  if (f.event) { const t = CAL.tasks.find(x => String(x.event?.id) === f.event); parts.push(`event: ${t?.event?.name || f.event}`); }
+  if (f.assignee) { const a = CAL.tasks.flatMap(t => t.task_assignments || []).find(x => x.actor?.id === f.assignee); parts.push(`assigned to ${a?.actor?.display_name || 'someone'}`); }
+  if (f.priority) parts.push(`${f.priority} priority`);
+  if (f.pillar) parts.push(`bucket: ${wsPillarLabel(f.pillar)}`);
+  if (f.due !== 'all') parts.push(CAL_DUE_WORDS[f.due] || f.due);
+  if (f.msOnly) parts.push('milestones only');
+  if (f.unassigned) parts.push('unassigned only');
+  if (f.q) parts.push(`matching “${f.q}”`);
+  return parts;
+}
+async function calEmailTasks() {
+  const tasks = calBoardTasks();
+  if (!tasks.length) { toast('Nothing in the current view to send — clear a filter first', 'err'); return; }
+  const staff = await loadStaff();
+  if (!staff.length) { toast('No other admins to send to', 'err'); return; }
+  const words = calFilterWords();
+  const sortWord = { due: 'due date', priority: 'priority', event: 'event', title: 'task', status: 'status' }[CAL.board.sort] || CAL.board.sort;
+  const scope = words.length
+    ? `Filtered view — ${words.join(' · ')}. Sorted by ${sortWord} ${CAL.board.dir > 0 ? '(ascending)' : '(descending)'}.`
+    : `All open tasks. Sorted by ${sortWord} ${CAL.board.dir > 0 ? '(ascending)' : '(descending)'}.`;
+  const filterNote = words.length
+    ? `This is a filtered view of the task board (${tasks.length} of ${CAL.tasks.length} tasks), not the full list — ${words.join(' · ')}.`
+    : '';
+  const recipRow = (email, name) =>
+    `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;">
+      <input type="checkbox" data-ctrecip data-email="${escapeHtml(email)}" data-name="${escapeHtml(name)}" checked style="width:auto;margin:0;">
+      ${escapeHtml(name)} <span class="li-sub">${escapeHtml(email)}</span></label>`;
+  const preview = () => buildTasksEmailHtml(tasks, {
+    heading: 'Come With — Tasks',
+    subhead: scope,
+    filterNote,
+    note: $('kpiModalBody').querySelector('#ctNote')?.value || '',
+    order: $('kpiModalBody').querySelector('#ctGroup')?.checked ? 'grouped' : 'as-sorted',
+    includeDone: CAL.board.status.includes('done'),
+    showEvent: true,
+  });
+  openKpi('Email task list', `${tasks.length} task${tasks.length === 1 ? '' : 's'} — exactly what the board is showing`, `
+    <div class="kpi-hint" style="margin:-4px 0 10px;max-width:62ch;">${escapeHtml(scope)}</div>
+    <div class="modal-form-row"><label class="modal-label">To</label>
+      <div class="hub-list" style="max-height:150px;overflow:auto;">${staff.map(p => recipRow(p.email, p.full_name || p.email)).join('')}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Subject</label>
+      <input class="modal-input" id="ctSubject" value="Tasks — ${escapeHtml(words.length ? words.join(', ') : 'all open')}"></div>
+    <div class="modal-form-row"><label class="modal-label">Message (goes above the task list)</label>
+      <textarea class="modal-textarea" id="ctNote" rows="3" placeholder="Here's where we stand. Flag anything blocked…"></textarea></div>
+    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="ctGroup" style="width:auto;margin:0;"> Group by status instead of the order on screen</label>
+    <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
+      <div id="ctPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${preview()}</div></div>`,
+    async () => {
+      const recips = [...$('kpiModalBody').querySelectorAll('[data-ctrecip]:checked')]
+        .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
+      if (!recips.length) throw new Error('Pick at least one recipient');
+      const subject = $('ctSubject').value.trim(); if (!subject) throw new Error('Subject is required');
+      const { data, error } = await sb.functions.invoke('send-actor-email', { body: {
+        recipients: recips, subject, body: preview(), single_thread: true,
+        // Not event-scoped: source_id stays null so Conversations shows no
+        // "Go to source" button rather than a link to one arbitrary event.
+        source: 'Calendar & Tasks', source_kind: 'task_board', source_id: null, visibility: 'team' } });
+      if (error) throw new Error(error.message || 'send failed');
+      closeKpi();
+      const sent = data?.sent || 0;
+      if (data?.conversation_id) {
+        try {
+          let team = CHAT.channels.find(c => c.kind === 'team');
+          if (!team) { await chatLoadChannels(); team = CHAT.channels.find(c => c.kind === 'team'); }
+          if (team) await sb.from('chat_messages').insert({
+            channel_id: team.id, author_id: ME.id, kind: 'email', email_subject: subject,
+            conversation_id: data.conversation_id,
+            body: `Task list (${tasks.length} task${tasks.length === 1 ? '' : 's'}${words.length ? ', filtered' : ''}) — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
+          });
+        } catch (_) { /* notice is best-effort; the email already went out */ }
+      }
+      toast(sent ? `Task list sent (${sent} recipients, one thread) · posted to # Team chat` : 'Send failed', sent ? 'ok' : 'err');
+    }, 'Send task list');
+  setTimeout(() => {
+    const re = () => { $('ctPreview').innerHTML = preview(); };
+    $('kpiModalBody').querySelector('#ctNote')?.addEventListener('input', re);
+    $('kpiModalBody').querySelector('#ctGroup')?.addEventListener('change', re);
+  }, 40);
 }
 // ---- Tasks board (below the grid) ----
 const CAL_PRIO_RANK = { high: 0, medium: 1, low: 2 };
@@ -22777,6 +22895,7 @@ $('panel-calendar').addEventListener('click', async (e) => {
   if (layer) { const k = layer.dataset.calLayer; CAL.layers[k] = !CAL.layers[k]; await loadCalendar(); return; }
   const cell = e.target.closest('.cal-cell[data-cal-day]');
   if (cell) { CAL.selDay = CAL.selDay === cell.dataset.calDay ? null : cell.dataset.calDay; calRefreshViews(); return; }
+  if (e.target.closest('[data-cal-email-tasks]')) { calEmailTasks(); return; }
   if (e.target.closest('[data-cal-task-add]')) { calAddTask(); return; }
   const star = e.target.closest('[data-tb-star]');
   if (star) {
