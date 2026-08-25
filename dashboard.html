@@ -16370,7 +16370,7 @@ function planWire() {
 // +60, local +20, listed 2 days after the theft" is.
 const GW_STATUS = ['new', 'reviewed', 'reported', 'dismissed', 'recovered'];
 const GW_STATUS_COLOR = { new: 'var(--amber,#b58900)', reviewed: '#5b7fb3', reported: 'var(--green,#1f7a1f)', dismissed: 'var(--mid,#888)', recovered: 'var(--green,#1f7a1f)' };
-let gwState = { filter: 'new', open: null, scanning: false };
+let gwState = { filter: 'new', open: null, scanning: false, scanKind: null };
 
 async function loadGearWatch() {
   $('gearWatchBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading gear watch…</div>';
@@ -16475,9 +16475,10 @@ async function loadGearWatch() {
     </div>
 
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-      <button class="hub-btn" data-gw-scan${gwState.scanning ? ' disabled' : ''}>${gwState.scanning ? 'Scanning…' : '🔍 Run scan now'}</button>
+      <button class="hub-btn" data-gw-scan${gwState.scanning ? ' disabled' : ''}>${gwState.scanKind === 'manual' ? 'Scanning…' : '🔍 Run scan now'}</button>
+      <button class="hub-btn" data-gw-scanfb${gwState.scanning ? ' disabled' : ''} title="Facebook Marketplace is a paid scrape and takes a minute or two — it is not part of the automatic scans">${gwState.scanKind === 'facebook' ? 'Scanning Facebook…' : '📘 Scan Facebook'}</button>
       <button class="hub-btn" data-gw-settings>⚙ Settings</button>
-      <span class="kpi-hint" style="margin:0;">Automatic scans run 8am · 2pm · 8pm ET.</span>
+      <span class="kpi-hint" style="margin:0;">Automatic scans run 8am · 2pm · 8pm ET — Reverb, Craigslist and eBay. Facebook costs credit, so it is a separate press.</span>
     </div>
 
     ${!cfg.theft_date ? `<div class="panel-state info" style="margin-bottom:10px;">Set the <strong>theft date</strong> in Settings. Until it's set, listings posted <em>before</em> the theft can't be filtered out and the scores will be noisy.</div>` : ''}
@@ -16510,13 +16511,29 @@ async function loadGearWatch() {
     </div>`;
 }
 
-async function gwRunScan() {
-  gwState.scanning = true; loadGearWatch();
-  const { data, error } = await sb.functions.invoke('scan-gear-market', { body: { trigger: 'manual' } });
-  gwState.scanning = false;
+// Two entry points, one runner. "Run scan now" is the three free sources and
+// returns in seconds; "Scan Facebook" is the paid scrape on its own. They were
+// one button until 2026-08-25, and that button could never finish: Facebook's
+// scrape blocks for minutes, four targets in a row blew the edge function's
+// 150s wall clock, and because the run row is written last, every press failed
+// leaving no trace at all — just a toast that faded.
+async function gwRunScan(kind = 'manual') {
+  if (kind === 'facebook' && !confirm(
+    ['Scan Facebook Marketplace?', '',
+     'This one is a paid scrape (roughly $0.30 of Apify credit) and takes a minute or two.',
+     'The other three sources are free and already run automatically three times a day.'
+    ].join(String.fromCharCode(10)))) return;
+  gwState.scanning = true; gwState.scanKind = kind; loadGearWatch();
+  const { data, error } = await sb.functions.invoke('scan-gear-market', { body: { trigger: kind } });
+  gwState.scanning = false; gwState.scanKind = null;
   if (error) { toast('Scan failed: ' + error.message, 'err'); loadGearWatch(); return; }
-  const failed = Object.entries(data?.sources || {}).filter(([, v]) => String(v).startsWith('FAILED'));
+  const entries = Object.entries(data?.sources || {});
+  const failed = entries.filter(([, v]) => String(v).startsWith('FAILED'));
+  // PARTIAL is not success. A Facebook run that reached two of four targets has
+  // NOT looked for the other two, and must never read as a completed sweep.
+  const partial = entries.filter(([, v]) => String(v).startsWith('PARTIAL'));
   if (failed.length) toast(`Scanned with ${failed.length} source(s) down: ${failed.map(([k]) => k).join(', ')}`, 'err');
+  else if (partial.length) toast(`Partial scan — ${partial.map(([k]) => k).join(', ')} did not cover every target. See Sources below.`, 'err');
   else toast(`Scan done — ${data?.inserted ?? 0} new, ${data?.matched ?? 0} matched`, 'ok');
   loadGearWatch();
 }
@@ -16592,7 +16609,8 @@ async function gwOpenSettings() {
 }
 
 $('panel-gearwatch').addEventListener('click', (e) => {
-  if (e.target.closest('[data-gw-scan]')) return gwRunScan();
+  if (e.target.closest('[data-gw-scan]')) return gwRunScan('manual');
+  if (e.target.closest('[data-gw-scanfb]')) return gwRunScan('facebook');
   if (e.target.closest('[data-gw-settings]')) return gwOpenSettings();
   const f = e.target.closest('[data-gw-filter]');
   if (f) { gwState.filter = f.dataset.gwFilter; loadGearWatch(); }
