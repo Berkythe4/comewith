@@ -1361,3 +1361,75 @@ the check found something else: 197's two trigger guards had been created with
 no grants at all and so carried `PUBLIC EXECUTE`. Harmless in fact (invoker
 trigger functions refuse a direct call), closed anyway in 202. Reading your own
 migration proves what you *wrote*, never what the database *did*.
+
+## Section 50 — A filtered view sent onward must say what it filtered out (2026-08-25)
+
+"Email task list" on Calendar & Tasks sends the board's current view — the active
+filters, in the order on screen. That was the ask, and it is the right default:
+the list you are looking at is the list you mean.
+
+But it creates a hazard the unfiltered version never had. A recipient cannot see
+your filter chips. A mail containing four tasks, sent while "high priority ·
+overdue only" was set, reads as *"there are four things outstanding"* — and the
+reader has no way to tell it apart from a mail that genuinely contains
+everything. The sender knows the difference for about ten seconds; the mail
+outlives that, gets forwarded, and gets acted on.
+
+**So the filter travels with the mail.** `taskFilterWords()` turns the active
+filters into a sentence, which rides in three places: the subject line, the grey
+scope line under the heading ("Filtered view — high priority · overdue only.
+Sorted by due date (ascending)."), and an italic note giving the count as **N of
+M**. An unfiltered send carries none of it, so the note's presence is itself
+information.
+
+This is the same shape as the silent-cap rule in §18 — a truncated list that does
+not announce its truncation reads as a complete one — and the same shape as §28,
+where a bulk edit applied to rows a filter had scrolled out of view. **Any time a
+subset leaves the screen it was defined on, it has to carry its own definition
+with it.** The board, the email and the export are three views of one list, and
+only the board shows the chips.
+
+Two smaller rules fell out of building it:
+
+- **Do not offer a second control that can contradict the first.** The hub's mail
+  had an "Include completed tasks" checkbox. Once the board grew a `done` status
+  chip, that checkbox could disagree with the board — tick one, untick the other,
+  and you send a list that does not match what you were looking at when you
+  pressed send. It was deleted; the chip decides, and grouped mode derives from it.
+- **Two boards describing the same filters must not describe them twice.** The
+  hub and the calendar were one copy-paste away from two slightly different
+  sentences for the same state. `taskFilterWords` / `taskScopeLine` /
+  `taskFilterNote` are shared, and `calFilterWords` is a wrapper that passes
+  `withEvent` — the hub has no event dropdown and must never claim one.
+
+## Section 51 — The close was verifying five views that nothing actually checked (2026-08-25)
+
+`CLAUDE.md` and `MERGE_ROUTINE.md` both open the close with the same instruction:
+all five financial views must return anon **401** — `v_event_summary`,
+`v_kpi_event_financials`, `v_kpi_parties`, `v_kpi_dance_infusion`,
+`v_kpi_dashboard`. That check is the direct descendant of the 016/017 regression
+and is the single most-repeated rule in the repo.
+
+`scripts/check_anon_exposure.py` is the tool the same file says to use, and says
+not to hand-roll. **It does not check any of the five.** Its output was read for
+months as satisfying the instruction because it is long, it names dozens of
+objects, it ends with "Nothing is exposed that should not be", and four of the
+five have names that *look* like things in the list (`v_kpi_targets_current` is
+in there; `v_kpi_dashboard` is not). Grepping its 54 lines for the five names
+returns nothing.
+
+Prod was fine — verified independently, all five 401. The invariant held. **The
+check on it did not exist.** For as long as that was true, a real regression
+would have produced exactly the same clean-looking close.
+
+The failure is one step further out than §37's. There the check read a proxy for
+the invariant (grants instead of the response body, an empty key instead of a
+working one). Here the check simply did not cover the thing, and the *ritual*
+was the proxy — running a script named `check_anon_exposure` felt like checking
+anon exposure. **A checklist item is only as good as the assertion behind it; if
+you cannot point at the line that would go red, the item is decoration.**
+
+`scripts/check_financial_views.py` now names all five explicitly, reads a known-
+public view first and refuses to continue unless the key actually works (§37),
+and exits non-zero on any 200. Both scripts run at every close — the sweep for
+breadth, this one for the five that are named in the rules.

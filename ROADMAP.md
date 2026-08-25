@@ -971,7 +971,8 @@ built (024/026) but **no non-admin login is provisioned**.
 
 ### 🐞 Still-open bugs (re-verify when next in that flow)
 - Events Services Agreement (payment-method/recording-rights buttons, fee-total auto-update, client
-  auto-populate); dashboard tabs need filter/sort.
+  auto-populate); dashboard tabs need filter/sort. **Both task boards got filter/sort
+  2026-08-25** — the rest of the tabs have not.
 
 ---
 
@@ -1401,3 +1402,45 @@ is the first item in CARRYOVER and in CLAUDE.md.
 `var(--panel, #fff)` and `--panel` is defined nowhere in the file. Re-toned onto the
 real dark palette, along with the total/profit bands, the payee picker and the
 charge-detail inputs, which carried the same fallback under `color: inherit`.
+
+---
+
+## 2026-08-25 — One task board, and emailing the view you're looking at
+
+**Done.** The event hub's Tasks tab was a stack of rows with the assignee and due
+date buried in a subline. It is now the *same table* as Calendar & Tasks — star,
+task, assignees, priority, due, inline status, edit/delete — with the calendar's
+whole filter bar (search, status chips, assignee, priority, bucket, due horizon,
+milestones-only, unassigned-only, clear-filters, N-of-M count) and sortable
+headers. Only the Event column and filter are dropped: every row on an event hub
+is already that event's.
+
+**Done.** Both boards can now email their list, and both send the **current
+view** — the active filters, in the order on screen — rather than everything.
+Default is a flat list in screen order; a checkbox restores the grouped
+Overdue/In-progress/Blocked/To-do layout. The filter travels with the mail in the
+subject, a scope line and an *N of M* note, because the recipient cannot see your
+filter chips (§50). `buildTasksEmailHtml` and the filter-wording helpers are
+shared by both boards rather than copied.
+
+**Fixed along the way.** A stale assignee filter carried between events and could
+silently empty the board; `hubSetTaskStatus` didn't re-render, so a task marked
+done sat in a list that filters on status; and typing in either board's search
+box threw focus to the body — one character per click, a bug the calendar had
+had unreported because nobody had used the search.
+
+**New:** `scripts/test_task_email.mjs` (30 checks). It runs the real functions
+lifted out of `dashboard.html` rather than grepping their source, so a refactor
+that changes behaviour fails it.
+
+**Open, and the reason the next session starts there:** prod is on migration
+**203**, the repo stops at **202**. `203_plan_line_quantity.sql` was applied from
+the laptop on 2026-08-22 and never committed. Its effect was recovered by
+introspection (`plan_offering_lines.quantity numeric default 1 NOT NULL`) but no
+replacement was authored — a different `sha256` would make the drift permanent
+instead of loud. **Next migration number is 204.**
+
+**Also:** the close has been claiming to verify five financial views that
+`check_anon_exposure.py` does not test (§51). Prod was fine; the check was
+decoration. `scripts/check_financial_views.py` now asserts all five by name, and
+both scripts run at every close.

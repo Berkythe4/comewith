@@ -5,26 +5,6 @@ Broader migration history and architecture live in `ROADMAP.md`.
 
 ## Start of session (read these, in this order)
 
-> ### ⚠ OPEN ITEM — owed since 2026-08-21: the anon sweep
->
-> **On a machine with `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env` (the desktop),
-> run this FIRST, before any other work:**
->
-> ```
-> python scripts/check_anon_exposure.py
-> ```
->
-> Migrations 197-202 added nine planning objects to prod. Their grants are
-> verified in SQL (`has_table_privilege` / `has_function_privilege`: anon has no
-> SELECT and no EXECUTE), but **PostgREST has never been exercised against
-> them** — the machine that built them has no publishable key. A grants query
-> cannot catch a table answering `200` with a body because RLS let a row
-> through, which is precisely LEARNINGS §37.
->
-> **Delete this block once the sweep has run clean**, and record the result in
-> `CARRYOVER.md`. It is repeated at the top of `CARRYOVER.md` with the full
-> reasoning. If the sweep reports rows on any object, treat it as a live leak.
-
 Keith works from **three machines** now (the desktop, `C:\Users\keith\comewith`,
 and Henry's). Claude Code's memory is per-machine and does **not** sync, so
 everything a session needs to resume lives **in the repo**:
@@ -146,6 +126,15 @@ Four Come-With-specific rules on top of whichever variant you run:
     do answer 401. Tables carry an anon grant from 013 and rely on RLS, so they
     answer **200 with a body** — `[]` is correct, rows are a leak. Read the body,
     never the status.
+- **The sweep does NOT check the five financial views. Run
+  `python scripts/check_financial_views.py` as well.** `check_anon_exposure.py`
+  discovers objects from the schema and is the right tool for breadth, but grep its
+  output for `v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+  `v_kpi_dance_infusion` or `v_kpi_dashboard` and you get nothing — none of the five
+  named in the rule two bullets up are in it. For months the close read its 54 confident
+  lines as satisfying "all five return 401". Prod was fine; the check was decoration.
+  The new script names all five, proves the publishable key works before trusting a
+  single 401, and exits non-zero on any 200. **Both scripts, every close.** LEARNINGS §51.
 - **`revoke ... from anon` on a FUNCTION is a no-op.** Postgres grants `EXECUTE` on a
   new function to **`PUBLIC`**, and `anon` inherits it — revoking from `anon` removes a
   grant it never separately held, and the function stays wide open. Always
