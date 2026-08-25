@@ -9381,33 +9381,113 @@ function hubEmailPeople(oneActorId) {
 }
 
 // ---- Section: Tasks (tasks + task_assignments) ----
+// The same board as Calendar & Tasks, minus the Event column — on an event hub
+// every row is already this event's, so a column of one repeated name is noise.
+// The filters, sort, ⭐ toggle and inline status are the calendar's on purpose:
+// two different task tables is two things to learn and two places to fix.
+const HUB_TB_DEFAULTS = () => ({
+  q: '', status: [...CAL_DEFAULT_STATUS], assignee: '', priority: '', pillar: '',
+  due: 'all', msOnly: false, unassigned: false, sort: 'due', dir: 1,
+});
 async function hubSecTasks() {
   const { data, error } = await sb.from('tasks')
-    .select('id, title, description, status, priority, due_date, task_assignments(id, role, actor:actors(display_name))')
+    .select('id, title, description, status, priority, due_date, milestone, pillar, link_url, task_assignments(id, role, actor:actors(id, display_name))')
     .eq('event_id', hub.eventId).is('deleted_at', null)
     .order('due_date', { ascending: true, nullsFirst: false }).order('created_at');
   if (error) throw error;
   hub.tasks = data || [];
-  const statusSel = (t) => `<select class="hub-status-sel" data-hub-tstatus="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
-  const rows = hub.tasks.length ? hub.tasks.map(t => {
-    const who = (t.task_assignments || []).map(a => `${escapeHtml(a.actor?.display_name || '?')} (${escapeHtml(a.role)})`).join(', ');
-    return `<div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(t.title)}</strong>
-        <div class="li-sub">${t.priority ? ('[' + escapeHtml(t.priority) + '] ') : ''}${t.due_date ? ('due ' + escapeHtml(fmtDate(t.due_date)) + ' · ') : ''}${who ? ('→ ' + who) : 'unassigned'}</div>
-      </div>
-      <div class="hub-li-actions">
-        ${statusSel(t)}
-        <button class="hub-mini" data-hub-action="edit-task" data-id="${escapeHtml(t.id)}">Edit</button>
-        <button class="hub-mini" data-hub-action="assign-task" data-id="${escapeHtml(t.id)}">Assign</button>
-        <button class="hub-mini danger" data-hub-del="tasks:${escapeHtml(t.id)}">Delete</button>
-      </div>
-    </div>`;
-  }).join('') : `<div class="hub-empty">No tasks yet. Add one, or generate the day-of checklist from Overview.</div>`;
+  if (!hub.tboard) hub.tboard = HUB_TB_DEFAULTS();
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Tasks</h3><span style="display:flex;gap:8px;">
       <button class="hub-btn" data-hub-action="email-tasks" title="Send a formatted task-list email to the team">✉ Email task list</button>
       <button class="hub-btn" data-hub-action="add-task">+ Add task</button></span></div>
-    <div class="hub-list">${rows}</div>`;
+    <div class="cal-board" id="hubTaskBoard"></div>`;
+  hubRenderTaskBoard();
+}
+function hubBoardTasks() {
+  const f = hub.tboard, today = calToday();
+  let list = (hub.tasks || []).filter(t =>
+    (!f.status.length || f.status.includes(t.status)) &&
+    (!f.assignee || (t.task_assignments || []).some(a => a.actor && a.actor.id === f.assignee)) &&
+    (!f.priority || t.priority === f.priority) &&
+    (!f.pillar || t.pillar === f.pillar) &&
+    (!f.msOnly || t.milestone) &&
+    (!f.unassigned || !(t.task_assignments || []).length) &&
+    (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
+  // Same horizon rule as the calendar board: "next N days" runs from the past to
+  // today+N, so overdue work is always inside it rather than hidden by it.
+  if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
+  else if (f.due === 'today') list = list.filter(t => t.due_date === today);
+  else if (f.due === '7' || f.due === '14' || f.due === '30') { const lim = calAddDays(today, Number(f.due)); list = list.filter(t => t.due_date && t.due_date <= lim); }
+  else if (f.due === 'none') list = list.filter(t => !t.due_date);
+  const dir = f.dir;
+  list.sort((a, b) => {
+    if (f.sort === 'due') return dir * String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
+    if (f.sort === 'priority') return dir * ((CAL_PRIO_RANK[a.priority] ?? 3) - (CAL_PRIO_RANK[b.priority] ?? 3));
+    if (f.sort === 'title') return dir * String(a.title || '').localeCompare(String(b.title || ''));
+    return dir * String(a.status).localeCompare(String(b.status));
+  });
+  return list;
+}
+function hubRenderTaskBoard() {
+  const f = hub.tboard, today = calToday();
+  const asgMap = new Map();
+  (hub.tasks || []).forEach(t => (t.task_assignments || []).forEach(a => { if (a.actor) asgMap.set(a.actor.id, a.actor.display_name); }));
+  // The filter state persists across events, so an assignee who works on the
+  // event you just left and not this one would silently empty the board while
+  // the select still read "Anyone". Drop a selection this event can't show.
+  if (f.assignee && !asgMap.has(f.assignee)) f.assignee = '';
+  const list = hubBoardTasks();
+  // A short list because of a filter you forgot you set reads exactly like a
+  // short list because there's no work — so say when the view is narrowed.
+  const dirty = !!(f.q || f.assignee || f.priority || f.pillar || f.msOnly || f.unassigned
+    || f.due !== 'all' || [...f.status].sort().join(',') !== [...CAL_DEFAULT_STATUS].sort().join(','));
+  const asgOpts = [...asgMap.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => `<option value="${escapeHtml(id)}"${f.assignee === id ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+  const sChip = (s) => `<button class="cal-chipbtn${f.status.includes(s) ? ' on' : ''}" data-ht-sf="${s}">${s}</button>`;
+  const statusSel = (t) => `<select class="hub-status-sel" data-hub-tstatus="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const th = (k, lbl) => `<th data-ht-sort="${k}">${lbl}${f.sort === k ? (f.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+  const rows = list.map(t => {
+    const who = (t.task_assignments || []).map(a => escapeHtml(a.actor?.display_name || '?')).join(', ');
+    const over = t.due_date && t.due_date < today && t.status !== 'done';
+    return `<tr class="${t.status === 'done' ? 'done' : ''}${over ? ' over' : ''}">
+      <td><span class="tb-star${t.milestone ? ' on' : ''}" data-ht-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
+      <td><a href="#" data-ht-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the linked page">📢</a>` : ''}${t.pillar ? ` <span class="role-chip" style="cursor:default;background:${wsPillarColor(t.pillar)};color:#fff;font-size:.6rem;">${escapeHtml(wsPillarLabel(t.pillar))}</span>` : ''}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
+      <td>${who || '<span class="li-sub">unassigned</span>'}</td>
+      <td>${t.priority ? escapeHtml(t.priority) : '<span class="li-sub">—</span>'}</td>
+      <td class="${over ? 'cal-due-over' : ''}">${t.due_date ? escapeHtml(fmtDate(t.due_date)) : '<span class="li-sub">—</span>'}</td>
+      <td>${statusSel(t)}</td>
+      <td style="white-space:nowrap;"><button class="hub-mini" data-ht-edit="${escapeHtml(t.id)}" title="Edit">✎</button> <button class="hub-mini danger" data-ht-del="${escapeHtml(t.id)}" title="Delete">✕</button></td>
+    </tr>`;
+  }).join('');
+  const total = (hub.tasks || []).length;
+  // "Nothing here" and "nothing matches what you asked for" are different
+  // answers — an event with no tasks at all should say how to make some.
+  const empty = total
+    ? `No tasks match these filters.${dirty ? ' <a href="#" data-ht-clear>Clear them</a>.' : ''}`
+    : 'No tasks yet. Add one, or generate the day-of checklist from Overview.';
+  // Typing in the search box re-renders the bar the box lives in, which throws
+  // focus to the body — so you get one character per click unless the caret is
+  // put back. Same fix as calRenderBoard.
+  const el = $('hubTaskBoard');
+  const onQ = document.activeElement && document.activeElement.matches?.('[data-ht-q]');
+  const caret = onQ ? document.activeElement.selectionStart : null;
+  el.innerHTML = `
+    <div class="cal-board-bar">
+      <input class="modal-input" style="width:180px;padding:5px 8px;font-size:.75rem;" placeholder="Search tasks…" value="${escapeHtml(f.q)}" data-ht-q>
+      ${['todo', 'doing', 'blocked', 'done'].map(sChip).join('')}
+      <select class="hub-status-sel" data-ht-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
+      <select class="hub-status-sel" data-ht-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-ht-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-ht-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['today', 'Due today'], ['7', 'Overdue + next 7 days'], ['14', 'Overdue + next 14 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-ht-mson>⭐ milestones only</button>
+      <button class="cal-chipbtn${f.unassigned ? ' on' : ''}" data-ht-unassigned>👤 unassigned only</button>
+      ${dirty ? '<button class="cal-chipbtn on" data-ht-clear>✕ clear filters</button>' : ''}
+      <span class="li-sub" style="margin-left:auto;">${list.length} of ${total} task${total !== 1 ? 's' : ''}</span>
+    </div>
+    <table><thead><tr><th>⭐</th>${th('title', 'Task')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="7"><div class="hub-empty">${empty}</div></td></tr>`}</tbody></table>`;
+  if (onQ) { const inp = el.querySelector('[data-ht-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 
 // ---- Email the event's task list (concise, formatted for team inboxes) ----
@@ -11080,6 +11160,11 @@ async function submitAddTask() {
   closeKpi(); toast('Task added', 'ok'); await hubReload('tasks');
 }
 
+// UNWIRED since the hub Tasks board became the calendar's board: assignment is
+// done inside openEditTask (chips add/remove immediately), so there is no
+// separate Assign button. Kept because openEditTask's assignee list is
+// narrower - team actors + event participants - while assigneeOptionsHTML also
+// offers VENUE CONTACTS. Re-wire this if that turns out to matter.
 async function hubAssignTask(taskId) {
   const assigneeOpts = await assigneeOptionsHTML(false);
   openKpi('Assign task', 'This event’s people · your team (always) · venue contacts', `
@@ -11281,7 +11366,11 @@ async function hubContractDocDownload(contractId) {
 async function hubSetTaskStatus(id, status) {
   const { error } = await sb.from('tasks').update({ status }).eq('id', id);
   if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  // The board filters on status, so a row moved out of the visible set has to
+  // leave with it — otherwise the count and the list disagree.
+  const t = (hub.tasks || []).find(x => x.id === id); if (t) t.status = status;
   toast('Task → ' + status, 'ok');
+  if (hub.section === 'tasks' && hub.tboard && $('hubTaskBoard')) hubRenderTaskBoard();
 }
 async function hubSetContractStatus(id, status) {
   const { error } = await sb.from('contracts').update({ status }).eq('id', id);
@@ -11551,6 +11640,47 @@ $('panel-eventhub').addEventListener('click', (e) => {
 $('panel-eventhub').addEventListener('change', (e) => {
   const ts = e.target.closest('[data-hub-tstatus]'); if (ts) { hubSetTaskStatus(ts.dataset.hubTstatus, ts.value); return; }
   const cs = e.target.closest('[data-hub-cstatus]'); if (cs) { hubSetContractStatus(cs.dataset.hubCstatus, cs.value); return; }
+});
+// ---- Event-hub tasks board (data-ht-*) ----
+// Deliberately its own namespace, not the calendar's data-tb-*: both boards can
+// be in the DOM at once and a shared attribute would fire the wrong re-render.
+$('panel-eventhub').addEventListener('click', async (e) => {
+  if (hub.section !== 'tasks' || !hub.tboard) return;
+  if (e.target.closest('[data-ht-clear]')) {
+    e.preventDefault(); hub.tboard = HUB_TB_DEFAULTS(); hubRenderTaskBoard(); return;
+  }
+  const ted = e.target.closest('[data-ht-edit]');
+  if (ted) { e.preventDefault(); openEditTask(ted.dataset.htEdit, hubSecTasks); return; }
+  const star = e.target.closest('[data-ht-star]');
+  if (star) {
+    const t = (hub.tasks || []).find(x => x.id === star.dataset.htStar); if (!t) return;
+    const { error } = await sb.from('tasks').update({ milestone: !t.milestone }).eq('id', t.id);
+    if (error) { toast(error.message, 'err'); return; }
+    t.milestone = !t.milestone;
+    toast(t.milestone ? 'Now a milestone — it shows on the calendar grid' : 'No longer a milestone', 'ok');
+    hubRenderTaskBoard(); return;
+  }
+  const del = e.target.closest('[data-ht-del]');
+  if (del) {
+    if (!confirm('Delete this task?')) return;
+    const { error } = await sb.from('tasks').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.htDel);
+    if (error) { toast(error.message, 'err'); return; }
+    toast('Task deleted', 'ok'); await hubReload('tasks'); return;
+  }
+  const sf = e.target.closest('[data-ht-sf]');
+  if (sf) { const s = sf.dataset.htSf, arr = hub.tboard.status, i = arr.indexOf(s); i >= 0 ? arr.splice(i, 1) : arr.push(s); hubRenderTaskBoard(); return; }
+  if (e.target.closest('[data-ht-mson]')) { hub.tboard.msOnly = !hub.tboard.msOnly; hubRenderTaskBoard(); return; }
+  if (e.target.closest('[data-ht-unassigned]')) { hub.tboard.unassigned = !hub.tboard.unassigned; hubRenderTaskBoard(); return; }
+  const srt = e.target.closest('th[data-ht-sort]');
+  if (srt) { const k = srt.dataset.htSort; if (hub.tboard.sort === k) hub.tboard.dir *= -1; else { hub.tboard.sort = k; hub.tboard.dir = 1; } hubRenderTaskBoard(); return; }
+});
+$('panel-eventhub').addEventListener('change', (e) => {
+  const bf = e.target.closest('[data-ht-filter]');
+  if (bf && hub.tboard) { hub.tboard[bf.dataset.htFilter] = bf.value; hubRenderTaskBoard(); }
+});
+$('panel-eventhub').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-ht-q]');
+  if (q && hub.tboard) { hub.tboard.q = q.value; hubRenderTaskBoard(); }
 });
 
 // ============================================================
@@ -22167,7 +22297,12 @@ function calRenderBoard() {
       <td style="white-space:nowrap;"><button class="hub-mini" data-tb-edit="${escapeHtml(t.id)}" title="Edit">✎</button> <button class="hub-mini danger" data-tb-del="${escapeHtml(t.id)}" title="Delete">✕</button></td>
     </tr>`;
   }).join('');
-  $('calBoard').innerHTML = `
+  // Typing in the search box re-renders the bar the box lives in, which throws
+  // focus to the body — one character per click unless the caret is put back.
+  const el = $('calBoard');
+  const onQ = document.activeElement && document.activeElement.matches?.('[data-tb-q]');
+  const caret = onQ ? document.activeElement.selectionStart : null;
+  el.innerHTML = `
     <div class="cal-board-bar">
       <input class="modal-input" style="width:180px;padding:5px 8px;font-size:.75rem;" placeholder="Search tasks…" value="${escapeHtml(f.q)}" data-tb-q>
       ${['todo', 'doing', 'blocked', 'done'].map(sChip).join('')}
@@ -22184,6 +22319,7 @@ function calRenderBoard() {
     <table><thead><tr><th>⭐</th>${th('title', 'Task')}${th('event', 'Event')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.${dirty ? ' <a href="#" data-tb-clear>Clear them</a>.' : ''}</div></td></tr>`}</tbody></table>
     ${f.status.includes('done') ? `<div class="li-sub" style="padding:8px 2px;font-size:.66rem;">Done tasks closed more than ${CAL_DONE_WINDOW} days ago aren't loaded — open work is always complete.</div>` : ''}`;
+  if (onQ) { const inp = el.querySelector('[data-tb-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 // Shared task editor — used by the Calendar tasks board AND the event hub
 // Tasks section. Core fields save on Submit; assignment add/remove applies
