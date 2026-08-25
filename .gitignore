@@ -67,3 +67,4 @@ gearwatch_results.html
 # example file is re-included because it holds key names only, never values.
 .env.*
 !.env.example
+ebay_verification_token.txt
