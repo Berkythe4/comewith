@@ -68,3 +68,6 @@ gearwatch_results.html
 .env.*
 !.env.example
 ebay_verification_token.txt
+
+# Verification stills — verify_episode.py regenerates these every run.
+Radio/**/_preview/

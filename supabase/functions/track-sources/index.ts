@@ -20,7 +20,9 @@
 // Body: { playlist_id, apply_bpm_key?: boolean, limit?: number }
 //   → { results: [{ track_id, title, artist, beatport: {...}|null, bandcamp: {...}|null,
 //                   confidence }], applied, beatport_ok, bandcamp_ok, error? }
-// Results are cached onto sc_playlist_tracks (beatport_url/price, bandcamp_url,
+// Genre is refreshed from Beatport on every run and OVERWRITES the SoundCloud
+// value (see the apply block for why). Results are cached onto
+// sc_playlist_tracks (beatport_url/price, bandcamp_url,
 // sources_checked_at) so reopening the panel doesn't re-hit either API.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -129,16 +131,27 @@ function jwtExp(token: string): number | null {
 }
 // Returns the write error instead of swallowing it — a silent upsert failure here
 // looks exactly like "the token never arrived", which cost real debugging time.
-async function storePastedToken(admin: any, token: string): Promise<string | null> {
+async function storePastedToken(admin: any, token: string, refresh?: string | null): Promise<string | null> {
   const exp = jwtExp(token);
-  const { error } = await admin.from("beatport_oauth").upsert({
+  const row: Record<string, unknown> = {
     id: "singleton",
     access_token: token,
     // Trust the token's own expiry; fall back to a conservative 9 minutes.
     expires_at: new Date((exp ? exp * 1000 : Date.now() + 9 * 60_000)).toISOString(),
     last_error: null,
     updated_at: new Date().toISOString(),
-  });
+  };
+  // THE WHOLE POINT OF THE 10-MINUTE DANCE. bpToken() has always known how to
+  // do a refresh_token grant and persist the rotated result -- it just never had
+  // a refresh token, because this function only ever saved the access token. So
+  // every run past the first needed a human in DevTools again.
+  //
+  // Only written when one actually arrived: a paste that carries just an access
+  // token must not blank the refresh token we already hold. Omitted keys are
+  // left untouched by the upsert, which is why this is conditional rather than
+  // `refresh_token: refresh || null`.
+  if (refresh) row.refresh_token = refresh;
+  const { error } = await admin.from("beatport_oauth").upsert(row);
   return error ? (error.message || String(error)) : null;
 }
 
@@ -240,6 +253,11 @@ async function bpSearch(token: string, title: string, artist: string) {
     song_key: k.song_key, camelot: k.camelot,
     label: best.release?.label?.name || null,
     release_date: best.publish_date || best.new_release_date || null,
+    // Beatport's curated taxonomy: genre is always there, sub_genre sometimes
+    // ("House" + "Acid"). Both, in that order, because the video card prints the
+    // first two joined by a dot and general-then-specific is the useful pair.
+    genres: [best.genre?.name, best.sub_genre?.name].filter(Boolean),
+    sample_url: best.sample_url || null,
     price, score: Number(bestScore.toFixed(2)),
   };
 }
@@ -300,7 +318,21 @@ Deno.serve(async (req) => {
     const applyBpmKey = !!b.apply_bpm_key;
     const limit = Math.min(Number(b.limit) || 60, 60);
     // A token pasted from the browser — cached until its own exp.
-    const pasted = (b.access_token || "").toString().trim().replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "");
+    // Accepts three shapes, because people paste all three: a bare JWT, a
+    // "Bearer x" header value, or the whole `token-refresh-result` object out of
+    // Beatport's localStorage. The object is the one worth having -- it carries
+    // the REFRESH token, which is what ends the every-10-minutes ritual.
+    const rawPaste = (b.access_token || "").toString().trim();
+    let pasted = "";
+    let pastedRefresh: string | null = (b.refresh_token || "").toString().trim() || null;
+    if (rawPaste.startsWith("{")) {
+      try {
+        const o = JSON.parse(rawPaste);
+        pasted = String(o.accessToken || o.access_token || "").trim();
+        pastedRefresh = pastedRefresh || o.refreshToken || o.refresh_token || null;
+      } catch (_) { /* not JSON after all — fall through and treat it as a raw token */ }
+    }
+    if (!pasted) pasted = rawPaste.replace(/^Bearer\s+/i, "").replace(/^["']|["']$/g, "");
     let storeErr: string | null = null;
     if (pasted) {
       const exp = jwtExp(pasted);
@@ -311,7 +343,7 @@ Deno.serve(async (req) => {
           error: "That Beatport token had already expired when it arrived — they only last 10 minutes. Grab a fresh one and paste it again.",
         }), { headers: JH });
       }
-      storeErr = await storePastedToken(admin, pasted);
+      storeErr = await storePastedToken(admin, pasted, pastedRefresh);
     }
 
     // Explicit "save + verify this token" step. Separating it from the scan means
@@ -418,9 +450,18 @@ Deno.serve(async (req) => {
         live = r.ok;
         if (!r.ok) detail = `Beatport rejected it (HTTP ${r.status}).`;
       } catch (e) { detail = e instanceof Error ? e.message : String(e); }
+      // Say plainly whether this paste bought a permanent connection or just
+      // another 10 minutes -- that is the difference the person cares about,
+      // and without it there is no way to tell from the outside.
+      const { data: after } = await admin.from("beatport_oauth")
+        .select("refresh_token").eq("id", "singleton").maybeSingle();
+      const selfRenewing = !!after?.refresh_token;
       return new Response(JSON.stringify({
-        saved: true, live,
+        saved: true, live, self_renewing: selfRenewing,
         expires_in_s: exp ? Math.max(0, Math.round(exp - Date.now() / 1000)) : null,
+        note: selfRenewing
+          ? "Refresh token stored — Beatport will renew itself from now on. You shouldn't need to paste again."
+          : "Access token only, so this expires in ~10 minutes. Copy the WHOLE localStorage value (it starts with '{') to make it permanent.",
         error: live ? null : (detail || "Beatport would not accept that token."),
       }), { headers: JH });
     }
@@ -444,7 +485,7 @@ Deno.serve(async (req) => {
       .select("id", { count: "exact", head: true }).eq("playlist_id", playlistId);
 
     const { data: tracks } = await admin.from("sc_playlist_tracks")
-      .select("id, title, artist_name, bpm, song_key, camelot, release_date, label")
+      .select("id, title, artist_name, bpm, song_key, camelot, release_date, label, genres")
       .eq("playlist_id", playlistId).order("sort").range(offset, offset + limit - 1);
     if (!tracks?.length) {
       return new Response(JSON.stringify({ results: [], applied: 0, total: total || 0, offset, done: true }), { headers: JH });
@@ -453,6 +494,11 @@ Deno.serve(async (req) => {
     const tk = await bpToken(admin);
     const results: any[] = [];
     let applied = 0, bandcampFails = 0;
+    // Per-FIELD tally of what this run actually wrote. `applied` alone lumps
+    // several different fills into one number, which cannot answer the only
+    // question worth asking after a run: what changed?
+    const filled: Record<string, number> = {};
+    const bump = (k: string) => { filled[k] = (filled[k] || 0) + 1; };
 
     // One track at a time (politeness — a burst is what makes an unofficial
     // endpoint start 429ing) but the two stores are queried CONCURRENTLY, which
@@ -460,32 +506,69 @@ Deno.serve(async (req) => {
     for (const t of tracks) {
       const title = t.title || "", artist = t.artist_name || "";
       const q = searchTerms(title, artist);
-      const [beatport, bcOut] = await Promise.all([
-        tk.token ? bpSearch(tk.token, q.title, q.artist).catch(() => null) : Promise.resolve(null),
+      // Both stores report {ok, r}: ok=false means WE COULD NOT ASK (no token,
+      // network error), r=null with ok=true means we asked and it isn't there.
+      const [bpOut, bcOut] = await Promise.all([
+        tk.token
+          ? bpSearch(tk.token, q.title, q.artist).then((r) => ({ ok: true, r })).catch(() => ({ ok: false, r: null }))
+          : Promise.resolve({ ok: false, r: null }),
         bcSearch(q.title, q.artist).then((r) => ({ ok: true, r })).catch(() => ({ ok: false, r: null })),
       ]);
+      const beatport = bpOut.r;
       const bandcamp = bcOut.r;
       if (!bcOut.ok) bandcampFails++;
 
       const patch: Record<string, unknown> = {
-        beatport_url: beatport?.url || null,
-        beatport_price: beatport?.price || null,
-        bandcamp_url: bandcamp?.url || null,
         sources_checked_at: new Date().toISOString(),
       };
+      // Only record a store's verdict when that store actually ANSWERED.
+      //
+      // This used to write `beatport?.url || null` unconditionally, so a single
+      // run with a dead token erased every link and price on the station. That
+      // is not hypothetical: on 2026-08-26 the token expired at 16:21:43, a run
+      // at 16:28:29 found no token, and 18 beatport_url + 18 beatport_price were
+      // silently nulled across show 7. A store we could not ask has told us
+      // nothing -- leave what we already hold alone.
+      if (bpOut.ok) {
+        patch.beatport_url = beatport?.url || null;
+        patch.beatport_price = beatport?.price || null;
+        if (beatport?.url) bump("beatport_url");
+        if (beatport?.price) bump("beatport_price");
+      }
+      if (bcOut.ok) {
+        patch.bandcamp_url = bandcamp?.url || null;
+        if (bandcamp?.url) bump("bandcamp_url");
+      }
       // Only ever FILL IN missing BPM/key — never overwrite what Rekordbox gave
       // you, since your own analysis of the file you own beats a store's metadata.
       if (applyBpmKey && beatport) {
-        if (!t.bpm && beatport.bpm) patch.bpm = beatport.bpm;
-        if (!t.song_key && beatport.song_key) patch.song_key = beatport.song_key;
-        if (!t.camelot && beatport.camelot) patch.camelot = beatport.camelot;
+        if (!t.bpm && beatport.bpm) { patch.bpm = beatport.bpm; bump("bpm"); }
+        if (!t.song_key && beatport.song_key) { patch.song_key = beatport.song_key; bump("song_key"); }
+        if (!t.camelot && beatport.camelot) { patch.camelot = beatport.camelot; bump("camelot"); }
         if (patch.bpm || patch.song_key || patch.camelot) applied++;
       }
       // Release date + label: pure store metadata (not Rekordbox-owned), so just
       // FILL IN when we don't already have it — never overwrite.
       if (beatport) {
-        if (!t.release_date && beatport.release_date) patch.release_date = beatport.release_date;
-        if (!t.label && beatport.label) patch.label = beatport.label;
+        if (!t.release_date && beatport.release_date) { patch.release_date = beatport.release_date; bump("release_date"); }
+        if (!t.label && beatport.label) { patch.label = beatport.label; bump("label"); }
+      }
+      // Genre is the ONE field here that OVERWRITES instead of filling in.
+      // Everything else defers to what we already hold, because Rekordbox's
+      // analysis of a file you own beats a store's guess. Genre is the reverse:
+      // what we already hold came from SoundCloud, where it is free text the
+      // uploader typed -- frequently blank, often "vibes" or the label's name.
+      // Beatport's is a curated taxonomy, and it is what both the track cards
+      // and the site's tracklist read. Guarded on a non-empty result so a
+      // Beatport miss can never wipe a genre we already had.
+      if (beatport?.genres?.length) {
+        const now = Array.isArray(t.genres) ? t.genres : [];
+        const next = beatport.genres as string[];
+        if (now.length !== next.length || now.some((g, i) => g !== next[i])) {
+          patch.genres = next;
+          bump("genres");
+          applied++;
+        }
       }
       await admin.from("sc_playlist_tracks").update(patch).eq("id", t.id);
 
@@ -496,6 +579,7 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({
       results,
       applied,
+      filled,
       total: total || tracks.length,
       offset,
       done: offset + tracks.length >= (total || tracks.length),

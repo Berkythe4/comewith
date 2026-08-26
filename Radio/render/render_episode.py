@@ -535,6 +535,52 @@ BACKDROPS = {"weekly": make_background,
              "ether": make_background_ether}
 
 
+# ---- the site band -----------------------------------------------------------
+# The strip in the lower third of every track card, telling people what waits at
+# comewith.org/radio. It is on screen for the whole hour, so it stays two quiet
+# lines and never competes with the artist name.
+#
+# GLYPH TRAP: Pillow draws from ONE font file with no emoji fallback, unlike the
+# website. In Consolas only these exist -- everything else renders as tofu:
+#       OK:  ▸ (U+25B8)   ♥ (U+2665)   ↓ (U+2193)   ·   —   $
+#       NO:  ▶  ♡  ⬇  🎟  ★
+# So the card uses ▸ ♥ ↓ where the site's buttons read ▶ ♡ ⬇. Verify any new
+# symbol with a render before trusting it.
+HEADER_Y = 66                     # top of the show-name / NOW PLAYING row
+CONTENT_TOP = HEADER_Y + 40       # first pixel the track block may use
+BAND_Y = 792                      # divider rule; the two lines hang below it
+BAND_URL = "COMEWITH.ORG/RADIO"
+
+# The chosen wording. Line 1 leads with the address; line 2 is the menu of what
+# is actually there, in the same order the page presents it.
+BAND_LEAD  = "  —  THE FULL TRACKLIST"
+BAND_ITEMS = [("▸", "PLAY EVERY TRACK"),
+              ("♥", "SAVE YOURS"),
+              ("↓", "EXPORT WITH BPM + KEY"),
+              ("$",       "TICKETS + PRICES")]
+
+
+def draw_band(d):
+    """Two lines in the lower third: where to go, and what you can do there."""
+    d.line([BAR_X, BAND_Y, W - BAR_X, BAND_Y], fill=LINE, width=2)
+
+    f1 = F_monob(34)
+    x, y = BAR_X, BAND_Y + 30
+    d.text((x, y), BAND_URL, font=f1, fill=LIME)
+    x += d.textlength(BAND_URL, font=f1)
+    d.text((x, y), BAND_LEAD, font=f1, fill=FAINT)
+
+    f2 = F_mono(30)
+    x, y = BAR_X, BAND_Y + 84
+    for i, (glyph, words) in enumerate(BAND_ITEMS):
+        if i:
+            x += 46
+        d.text((x, y), glyph, font=f2, fill=LIME)
+        x += d.textlength(glyph + " ", font=f2)
+        d.text((x, y), words, font=f2, fill=DIM)
+        x += d.textlength(words, font=f2)
+
+
 def chip(draw, x, y, text, fnt, accent=False):
     tw = draw.textlength(text, font=fnt)
     ascent, descent = fnt.getmetrics(); th = ascent + descent
@@ -557,14 +603,18 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     im = bg.copy()
     d = ImageDraw.Draw(im)
     # header
-    d.text((BAR_X, 66), ("%s  ·  %s" % (title_text.upper(), ep_label)).upper(),
+    d.text((BAR_X, HEADER_Y), ("%s  ·  %s" % (title_text.upper(), ep_label)).upper(),
            font=F_mono(30), fill=FAINT)
     live = "● NOW PLAYING"
     lw = d.textlength(live, font=F_monob(30))
-    d.text((W - BAR_X - lw, 66), live, font=F_monob(30), fill=LIME)
+    d.text((W - BAR_X - lw, HEADER_Y), live, font=F_monob(30), fill=LIME)
 
-    # cover
-    cs = 470; cx, cy = BAR_X, (H - cs) // 2 - 30
+    # cover. The cover is the tallest thing in the block, so centring it centres
+    # the block. Centre it between the header and the band rule -- NOT on the
+    # canvas: half the canvas now belongs to the band, and (H-cs)//2 left the
+    # art hanging low with a gap above it.
+    cs = 470
+    cx, cy = BAR_X, (CONTENT_TOP + BAND_Y - cs) // 2
     im.paste(cover, (cx, cy), cover)
 
     # meta column
@@ -610,6 +660,8 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     if ven:
         ven = truncate(d, ven, F_mono(34), (mx + mw) - chx - 90)
         chip(d, chx, chy, ven, F_mono(34))
+
+    draw_band(d)
 
     # progress rail + lime fill baked in at this track's position (stepped per
     # track — fast + robust; a per-frame animated bar via ffmpeg geq is far too
@@ -702,7 +754,10 @@ EDITIONS = {
         "intro_cta": "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN",
         "outro_a": "Tickets to every artist you just heard — plus when &",
         "outro_b": "where they play next, and the mix to replay — at",
-        "next_label": "WE PLUG BACK IN NEXT THURSDAY",
+        # Not "NEXT THURSDAY": the show is not weekly any more. Ep 3 drops 27 Aug and
+        # Ep 4 on 10 Sep, so "next Thursday" beside "SEP 10" contradicts itself.
+        # The date pill carries the specifics; this half just names the day.
+        "next_label": "WE PLUG BACK IN THURSDAY",
         "tease": "SOMETHING ELEMENTAL IS COMING",
     },
     "elements": {

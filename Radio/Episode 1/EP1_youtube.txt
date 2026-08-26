@@ -1,0 +1,28 @@
+TITLE:
+Come With Radio — EP 1 · Come With Radio Ep1
+
+DESCRIPTION:
+Come With Radio — EP 1. Mixed by Berky.
+A monthly mix of artists playing New York soon.
+Full tracklist, dates & tickets: https://comewith.org/radio.html?s=come-with-radio-ep1
+
+CHAPTERS (YouTube turns 0:00-style lines into clickable chapters).
+Fill EP1_cues.csv with start times first — then re-run this to bake them in:
+0:00 Max Dean — Talking To Myself
+(time) Luke Alessi — After Five (Extended) (Extended)
+(time) Claude VonStroke, Nala — Everything Is Burning (Original Mix)
+(time) ARTBAT — ARTBAT - Dance
+(time) HannahLaing — Bass Boys
+(time) Age Of Love (Charlotte de Witte show) — The Age Of Love (Charlotte de Witte & Enrico Sangiuliano Remix)
+(time) Effy — Pitched
+(time) Sammy Virji — If U Need It
+(time) Boys Noize — VTSS & Boys Noize "Steady Pace" (Extended Mix)
+(time) Luke Dean — This Heat
+(time) Bakermat — Bakermat - Save My Soul (feat. AMANZI)
+(time) Rafael, Adam Ten — Sweet Boy (Original Mix)
+(time) Malive — Over & Over (Radio Edit)
+(time) Enzo is Burning — Loco (Beatport link in bio)
+(time) Katie Rex — AZARI- M-Body (Katie Rex remix)
+(time) Spencer Brown — Spencer Brown x ilan Bluestone - Hugo's Couch (Paul Deep Mix)
+(time) Massane — In Motion
+(time) Deeper Purpose — Deeper Purpose - Cigarettes [Free Download]

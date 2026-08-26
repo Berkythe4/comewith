@@ -19470,7 +19470,7 @@ async function raDjRevoke() {
 // from the browser, so there's nothing durable to store. Instead: grab a fresh
 // token in one click, paste, run. The server caches it until its own expiry, so
 // repeat runs in the same ten minutes don't ask again. Nothing long-lived is kept.
-const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var t=JSON.parse(v).accessToken;navigator.clipboard.writeText(t);alert('Beatport token copied \\u2014 paste it into the Come With dashboard now (it expires in 10 minutes).')}catch(e){alert('Could not read the token: '+e.message)}})()";
+const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var o=JSON.parse(v);navigator.clipboard.writeText(v);alert(o.refreshToken?'Beatport token AND refresh token copied - paste it into the Come With dashboard. This should be the last time you need to do this.':'Beatport token copied, but this snapshot has no refresh token, so it expires in 10 minutes. Paste it now.')}catch(e){alert('Could not read the token: '+e.message)}})()";
 // ---- Beatport catalogue for one artist (112) --------------------------------
 // SoundCloud can't be trusted to list a label artist's full output, so this is
 // the second source. Cached in raState.bpCatalog per artist key.
@@ -19597,12 +19597,12 @@ async function raArtistCatalogWithToken(token, btn) {
 function raBeatportPasteBox(msg) {
   return `<div style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;margin-bottom:10px;">
     <strong style="font-size:.86rem;">🔑 Beatport token</strong>
-    <div class="kpi-hint" style="margin:4px 0 8px;">${msg} Beatport tokens expire after <strong>10 minutes</strong>, so you grab a fresh one each time you do a buy run — there's nothing to set up and no password stored anywhere.</div>
+    <div class="kpi-hint" style="margin:4px 0 8px;">${msg} Beatport <em>access</em> tokens expire after <strong>10 minutes</strong> — but the copy line below now grabs the <strong>refresh token</strong> as well, and once that is stored Beatport renews itself. You should only need to do this once. No password is stored anywhere.</div>
     <ol class="kpi-hint" style="margin:0 0 8px 16px;padding:0;">
       <li>Open <a href="https://www.beatport.com" target="_blank" rel="noopener">beatport.com</a> in another tab and make sure you're <strong>logged in</strong>.</li>
       <li><strong>Right-click</strong> anywhere on that page → <strong>Inspect</strong> → click the <strong>Console</strong> tab.</li>
       <li>Paste this line and press Enter (if Chrome refuses, type <code>allow pasting</code> + Enter first, then paste):<br>
-        <code style="user-select:all;display:inline-block;margin-top:3px;">copy(JSON.parse(localStorage['token-refresh-result']).accessToken)</code><br>
+        <code style="user-select:all;display:inline-block;margin-top:3px;">copy(localStorage['token-refresh-result'])</code><br>
         Nothing prints — that's correct, it copied to your clipboard.</li>
       <li>Come back here, paste in the box below, and hit <strong>Run with this token</strong>.</li>
     </ol>
@@ -19772,6 +19772,27 @@ async function raCheckSources(accessToken, skipProbe) {
       }
     } catch (_) { /* probe is an optimisation — if it fails just run the check */ }
   }
+  // What this run actually WROTE, field by field. Without it the panel reported
+  // "checked 27 tracks" and you had no way to tell a good run from one that
+  // silently wrote nothing — which is exactly how a dead-token run that nulled
+  // 18 links and prices passed for a success on 2026-08-26.
+  const raFilledSummary = (filled, checked) => {
+    const LABELS = [
+      ['genres', 'genres'], ['release_date', 'release dates'], ['label', 'labels'],
+      ['bpm', 'BPM'], ['song_key', 'keys'], ['camelot', 'Camelot keys'],
+      ['beatport_url', 'Beatport links'], ['beatport_price', 'prices'],
+      ['bandcamp_url', 'Bandcamp links'],
+    ];
+    const hits = LABELS.filter(([k]) => filled[k]).map(([k, lbl]) =>
+      `<span style="display:inline-block;border:1px solid var(--border-strong);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;">
+         <strong>${filled[k]}</strong> ${lbl}</span>`);
+    if (!hits.length) {
+      return `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;margin-bottom:6px;">
+        Checked ${checked} track${checked === 1 ? '' : 's'} but <strong>filled in nothing</strong> — either it was all already there, or Beatport never answered. Check the token before assuming the former.</div>`;
+    }
+    return `<div class="kpi-hint" style="margin-bottom:6px;">Filled in across ${checked} track${checked === 1 ? '' : 's'}: ${hits.join(' ')}</div>`;
+  };
+
   const progress = (done, tot) => {
     const pct = tot ? Math.round((done / tot) * 100) : 0;
     openKpi('🛒 Where to buy', `SHOW ${pl.station_no ?? '—'} · ${pl.name}`, `
@@ -19788,6 +19809,9 @@ async function raCheckSources(accessToken, skipProbe) {
     // the whole run. Now each batch is a few seconds and progress is visible.
     const BATCH = 6;
     let data = null, res = [], off = 0, applied = 0, guard = 0;
+    // Per-field tally, summed across batches — the run is paged, so each batch
+    // only reports its own slice.
+    const filled = {};
     while (guard++ < 40) {
       const r = await sb.functions.invoke('track-sources', {
         body: { playlist_id: pl.id, apply_bpm_key: true, offset: off, limit: BATCH, access_token: accessToken || undefined },
@@ -19797,6 +19821,7 @@ async function raCheckSources(accessToken, skipProbe) {
       if (data.error && !(data.results || []).length) throw new Error(data.error);
       res = res.concat(data.results || []);
       applied += data.applied || 0;
+      for (const [k, v] of Object.entries(data.filled || {})) filled[k] = (filled[k] || 0) + v;
       off += (data.results || []).length || BATCH;
       progress(Math.min(off, data.total || n), data.total || n);
       if (data.done || !(data.results || []).length) break;
@@ -19819,7 +19844,8 @@ async function raCheckSources(accessToken, skipProbe) {
         ? '⚠ That token had already expired when it arrived — grab a fresh one.'
         : 'No Beatport prices or BPM/key below, only Bandcamp — paste a token and run again to get them.') : ''}
       ${data.bandcamp_ok === false ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Bandcamp didn't answer (they have no official API, so this happens). "Not found" below reflects Beatport only — it does <strong>not</strong> mean the song isn't on Bandcamp.</div>` : ''}
-      <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}${data.applied ? `Filled in BPM/key on <strong>${data.applied}</strong> track${data.applied === 1 ? '' : 's'} that didn't have it. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
+      ${raFilledSummary(filled, res.length)}
+      <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
       <div class="hub-list" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">${rows}</div>
       <div class="kpi-hint" style="margin-top:8px;">To actually fill a cart, run <code>/beatport-cart</code> — it adds the matches to your Beatport cart in one go.</div>`,
       () => closeKpi(), 'Close');
