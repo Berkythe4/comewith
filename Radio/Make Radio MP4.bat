@@ -97,13 +97,26 @@ if "!TXT!"=="" (
 echo   tracklist  : !TXT!
 
 rem ---- 3. artwork ----------------------------------------------------------
+rem Find the episode cover WITHOUT insisting on a filename. This matched only
+rem *artwork*, so "CWR_EP.3 COVER.JPG" was invisible and every card would have
+rem silently rendered with the generic station art instead -- the kind of wrong
+rem that only shows up after a 15-minute render.
+rem Prefer a file that names itself; fall back to any image in the folder.
 set "ART="
-for %%F in ("%WK%\*artwork*.png" "%WK%\*artwork*.jpg" "%WK%\*artwork*.JPG") do set "ART=%%~fF"
+for %%P in (cover artwork art) do (
+  for %%E in (jpg jpeg png webp) do (
+    if not defined ART for %%F in ("%WK%\*%%P*.%%E") do if exist "%%~fF" set "ART=%%~fF"
+  )
+)
+if not defined ART for %%E in (jpg jpeg png webp) do (
+  if not defined ART for %%F in ("%WK%\*.%%E") do if exist "%%~fF" set "ART=%%~fF"
+)
 if "!ART!"=="" (
   set "ART=%CD%\Radio\Artwork\Radio_Thumbnail.jpg"
   echo   artwork    : station default ^(no episode cover found^)
 ) else (
   for %%F in ("!ART!") do echo   artwork    : %%~nxF
+  python Radio\render\_check_cover.py "!ART!"
 )
 
 rem ---- 4. the next drop date ------------------------------------------------
