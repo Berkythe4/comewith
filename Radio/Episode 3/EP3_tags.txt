@@ -1,23 +1,76 @@
 TAGS — Episode 3
-==============================================
+==============================================================
 
 Genres played: House (9), Techno (3), Pop (2), Melodic House & Techno (2), Club (2), Dubstep (2), Tech House (2), Dub (1), Hip-hop (1), R&B (1), Electronica (1), Melodic House (1), Acid (1), 140 (1), Deep Dubstep (1), Grime (1), Drum & Bass (1), Dance (1), Bass (1), Jersey Club (1), Mainstage (1), Electro House (1)
 
--- YOUTUBE ------------------------------------
-Paste into the Tags box. 33 tags, 374/500 characters.
+
+=== YOUTUBE ==================================================
+
+Paste into the Tags box. 33 tags, 374 of 500 characters.
 
 Come With, Come With Radio, Come With NYC, NYC nightlife, New York dance music, Brooklyn, DJ mix, DJ set, underground dance music, electronic music, radio show, House, Techno, Pop, Melodic House & Techno, Club, Dubstep, Tech House, Dub, Hip-hop, R&B, Electronica, Melodic House, Acid, 140, Deep Dubstep, Grime, Drum & Bass, Dance, Bass, Jersey Club, Mainstage, Electro House
 
--- SOUNDCLOUD ---------------------------------
-Paste into Additional tags. 30 of a maximum 30 tags.
-Multi-word tags are quoted so SoundCloud keeps them whole.
+
+=== SOUNDCLOUD ===============================================
+
+Four formats below. Try A first. Tell Claude which one actually
+chipped correctly and that becomes the only one the tool writes.
+30 tags — SoundCloud's limit.
+Over the limit, not included: Jersey Club, Mainstage, Electro House
+
+--- A · comma + space ----------------------------------------
+
+Come With, Come With Radio, Come With NYC, NYC nightlife, New York dance music, Brooklyn, DJ mix, DJ set, underground dance music, electronic music, radio show, House, Techno, Pop, Melodic House & Techno, Club, Dubstep, Tech House, Dub, Hip-hop, R&B, Electronica, Melodic House, Acid, 140, Deep Dubstep, Grime, Drum & Bass, Dance, Bass
+
+--- B · comma, no space --------------------------------------
+
+Come With,Come With Radio,Come With NYC,NYC nightlife,New York dance music,Brooklyn,DJ mix,DJ set,underground dance music,electronic music,radio show,House,Techno,Pop,Melodic House & Techno,Club,Dubstep,Tech House,Dub,Hip-hop,R&B,Electronica,Melodic House,Acid,140,Deep Dubstep,Grime,Drum & Bass,Dance,Bass
+
+--- C · one per line -----------------------------------------
+
+Come With
+Come With Radio
+Come With NYC
+NYC nightlife
+New York dance music
+Brooklyn
+DJ mix
+DJ set
+underground dance music
+electronic music
+radio show
+House
+Techno
+Pop
+Melodic House & Techno
+Club
+Dubstep
+Tech House
+Dub
+Hip-hop
+R&B
+Electronica
+Melodic House
+Acid
+140
+Deep Dubstep
+Grime
+Drum & Bass
+Dance
+Bass
+
+--- D · space + quotes (what the tool writes today) -----------
 
 "Come With" "Come With Radio" "Come With NYC" "NYC nightlife" "New York dance music" Brooklyn "DJ mix" "DJ set" "underground dance music" "electronic music" "radio show" House Techno Pop "Melodic House & Techno" Club Dubstep "Tech House" Dub Hip-hop R&B Electronica "Melodic House" Acid 140 "Deep Dubstep" Grime "Drum & Bass" Dance Bass
 
-Over SoundCloud's 30-tag limit, so left out: Jersey Club, Mainstage, Electro House
+--- E · hashtags ---------------------------------------------
 
--- OPTIONAL: the artists ----------------------
-Not included above. Good for discovery, but they are names other
-people search for, so use them only where that is fair game.
+#ComeWith #ComeWithRadio #ComeWithNYC #NYCnightlife #NewYorkdancemusic #Brooklyn #DJmix #DJset #undergrounddancemusic #electronicmusic #radioshow #House #Techno #Pop #MelodicHouseTechno #Club #Dubstep #TechHouse #Dub #Hiphop #RB #Electronica #MelodicHouse #Acid #140 #DeepDubstep #Grime #DrumBass #Dance #Bass
+
+
+=== OPTIONAL: the artists ====================================
+
+Not in the lists above. Good for discovery, but they are other
+people's names — use them only where that is fair game.
 
 John Summit, Channel Tres, Adriatic, Baauer, Chaos In The CBD, justin martin music, DIVERGE RECORDS, Franky Rizardo, Budino, Cataract, Chris Luno, DJ Artwork, Casey Club, bastiengoat, CASPAofficial, Exav0lt, David Löhlein, Black Rave Culture, The Martinez Brothers, Mau P
