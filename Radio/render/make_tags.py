@@ -16,8 +16,9 @@ line for each rather than one list that is subtly wrong on both:
   YouTube      comma separated, and the whole box is capped at 500 CHARACTERS.
                Over that, YouTube silently drops the overflow — you paste 40
                tags, it keeps 28, and nothing tells you.
-  SoundCloud   space separated, and a multi-word tag must be "in quotes" or it
-               becomes several one-word tags. Capped at 30 tags.
+  SoundCloud   space-separated HASHTAGS, capped at 30. Tested against the real
+               field: a comma list, or the quoted form the docs imply, pastes in
+               as ONE enormous tag. Hashtags are what chip into thirty.
 
 Anything that will not fit is reported rather than quietly dropped.
 """
@@ -36,15 +37,41 @@ YT_CHAR_CAP = 500
 SC_TAG_CAP = 30
 
 
-def load_static():
-    """Static tags live in templates.json so they are editable without code."""
+def load_tag_config():
+    """Static tags and hashtag aliases live in templates.json, editable without code."""
     import json
     try:
         with io.open(os.path.join(HERE, "templates.json"), encoding="utf-8") as f:
-            return [t for t in (json.load(f).get("tags") or {}).get("static", []) if t.strip()]
+            t = (json.load(f).get("tags") or {})
+        return ([x for x in t.get("static", []) if x.strip()],
+                {k.lower(): v for k, v in (t.get("hashtag_aliases") or {}).items()})
     except Exception as ex:
         print("(templates.json unreadable — no static tags: %s)" % ex)
-        return []
+        return [], {}
+
+
+def hashtag(t, aliases):
+    """'Tech House' -> '#TechHouse'.
+
+    SoundCloud's tag field turns a pasted comma or quoted list into ONE tag; a
+    space-separated list of hashtags is what actually chips into thirty. Verified
+    against the real field, which is why this is the only format written now.
+
+    Words are capitalised individually rather than the string being stripped of
+    punctuation, because stripping alone gives '#NewYorkdancemusic'. Aliases
+    catch what no rule gets right: 'R&B' would become '#RB'.
+    """
+    a = aliases.get(t.strip().lower())
+    if a:
+        return "#" + re.sub(r"[^A-Za-z0-9]", "", a)
+    words = re.split(r"[^A-Za-z0-9]+", t)
+    out = []
+    for w in words:
+        if not w:
+            continue
+        # leave an existing capital alone (NYC stays NYC, not Nyc)
+        out.append(w if w[:1].isupper() or w.isdigit() else w[:1].upper() + w[1:])
+    return "#" + "".join(out)
 
 
 def split_genres(raw):
@@ -86,9 +113,19 @@ def yt_line(tags):
     return ", ".join(kept), kept
 
 
-def sc_line(tags):
-    kept = tags[:SC_TAG_CAP]
-    return " ".join(('"%s"' % t) if " " in t else t for t in kept), kept
+def sc_line(tags, aliases):
+    """Space-separated hashtags — the one format SoundCloud's field accepts."""
+    kept, seen, tagged = [], set(), []
+    for t in tags:
+        h = hashtag(t, aliases)
+        if len(h) <= 1 or h.lower() in seen:
+            continue                      # two tags can collapse to one hashtag
+        seen.add(h.lower())
+        kept.append(t)
+        tagged.append(h)
+        if len(kept) >= SC_TAG_CAP:
+            break
+    return " ".join(tagged), kept
 
 
 def main():
@@ -118,10 +155,10 @@ def main():
     genres = [g for g, _ in counts.most_common()]
     artists = dedupe([(r.get("artist") or "").strip() for r in rows if (r.get("artist") or "").strip()])
 
-    static = load_static()
+    static, aliases = load_tag_config()
     ordered = dedupe(static + genres)               # static ALWAYS first
     yt, yt_kept = yt_line(ordered)
-    sc, sc_kept = sc_line(ordered)
+    sc, sc_kept = sc_line(ordered, aliases)
 
     dropped_yt = [t for t in ordered if t not in yt_kept]
     dropped_sc = [t for t in ordered if t not in sc_kept]
@@ -143,7 +180,8 @@ def main():
         L.append("")
     L.append("-- SOUNDCLOUD ---------------------------------")
     L.append("Paste into Additional tags. %d of a maximum %d tags." % (len(sc_kept), SC_TAG_CAP))
-    L.append('Multi-word tags are quoted so SoundCloud keeps them whole.')
+    L.append("Hashtags separated by spaces — the only format that field chips")
+    L.append("into separate tags. A comma or quoted list becomes one giant tag.")
     L.append("")
     L.append(sc)
     L.append("")

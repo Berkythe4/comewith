@@ -51,6 +51,8 @@ TOOL = [
 ALSO = [
     ("Radio/Make Radio MP4.bat", "Make Radio MP4.bat"),
     ("Radio/HOW_TO_MAKE_THE_MP4.md", "Radio/HOW_TO_MAKE_THE_MP4.md"),
+    # The visual one. Double-click it — it is the first thing to read.
+    ("Radio/RUN_SHEET.html", "RUN_SHEET.html"),
     ("Radio/Artwork/Radio_Thumbnail.jpg", "Radio/Artwork/Radio_Thumbnail.jpg"),
 ]
 # Files an episode folder needs to render with no database.
@@ -84,7 +86,10 @@ PATH option ticked, and open a NEW terminal afterwards.
 
 MAKING A VIDEO
 --------------
-Double-click `Make Radio MP4.bat` and type the episode number.
+Start with RUN_SHEET.html — double-click it. It is the whole process on one
+page, including every point the tool will stop you.
+
+Then: double-click `Make Radio MP4.bat` and type the episode number.
 
 Everything it needs is already in the `Radio\\Episode N` folder that came with
 this zip. It works completely offline — no logins, no database, no accounts.
@@ -129,7 +134,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--episode", "--week", dest="episode", action="append",
                     help="also bundle this episode's folder (repeatable)")
-    ap.add_argument("--out", default=os.path.join(ROOT, "CWR_render_tool.zip"))
+    ap.add_argument("--out", default=os.path.join(ROOT, "Radio", "CWR_render_tool.zip"))
     a = ap.parse_args()
 
     n = 0

@@ -71,4 +71,4 @@ ebay_verification_token.txt
 
 # Verification stills — verify_episode.py regenerates these every run.
 Radio/**/_preview/
-CWR_render_tool.zip
+# the tool packet is committed at Radio/CWR_render_tool.zip (no credentials in it)

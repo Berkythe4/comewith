@@ -71,9 +71,14 @@
   "tags": {
     "_note": [
       "Static tags go out on EVERY episode, in this order, before the genres.",
-      "YouTube allows 500 characters of tags in total; SoundCloud takes 30 tags.",
+      "YouTube takes 500 characters of comma-separated tags; SoundCloud takes 30",
+      "hashtags separated by spaces — pasting anything else into SoundCloud's field",
+      "makes one giant tag instead of thirty.",
       "make_tags.py fills the rest with the genres actually played, most common",
-      "first, and tells you if anything had to be cut."
+      "first, and tells you if anything had to be cut.",
+      "",
+      "'hashtag_aliases' fixes the tags no rule gets right: R&B would otherwise",
+      "become #RB. Key on the left is matched case-insensitively."
     ],
     "static": [
       "Come With",
@@ -88,6 +93,13 @@
       "underground dance music",
       "electronic music",
       "radio show"
-    ]
+    ],
+    "hashtag_aliases": {
+      "R&B": "RnB",
+      "Drum & Bass": "DnB",
+      "Hip-hop": "HipHop",
+      "New York dance music": "NewYorkDanceMusic",
+      "NYC nightlife": "NYCNightlife"
+    }
   }
 }
