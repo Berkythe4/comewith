@@ -1,5 +1,9 @@
 # How to make the episode MP4
 
+> **The visual version of this page — the whole run as one flow chart — is at**
+> https://claude.ai/code/artifact/677fbf74-c3b6-4258-abff-683b462a2e69
+> Start there. This page is the same thing in writing, and works offline.
+
 Everything you need is one double-click. This sheet is what to put in the folder
 first, what the tool asks you, and what to do when it complains.
 
