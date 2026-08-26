@@ -100,12 +100,21 @@ slide, the closing slide, and the strip along the bottom of each track card.
 Edit it, save it, run the tool again. There is nothing to rebuild.
 
 
+IF YOU CHANGE THE TRACKLIST
+--------------------------
+Edit the "Track List ....txt" and run the tool again. It rebuilds the tracklist
+from the live site by itself — you do not need an account, a password, or a
+login. The episode folder carries a read-only token for that one episode.
+
+What it CANNOT do from here is change the running order on the website. That
+needs the real credentials, and stays with whoever runs the site.
+
+
 WHAT'S NOT IN HERE
 ------------------
-Database credentials, on purpose. The person who sent you this bakes everything
-the renderer needs into the episode folder (episode.json + EPN_cues.csv), so you
-never need an account or a password. If the tool says it can't find episode.json,
-ask them to re-send the episode folder — don't go looking for a login.
+Database credentials, on purpose. Everything you need is already in the episode
+folder. If the tool asks for something you don't have, ask whoever sent this —
+don't go looking for a login.
 """
 
 

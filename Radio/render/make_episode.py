@@ -82,7 +82,7 @@ def resolve_episode(ep_no, edition=None):
     from make_cues import env as _env, q as _q
     E = _env()
     rows = _q(E, """
-        select station_no, name, edition_name, edition_seq, mix_by,
+        select station_no, name, edition_name, edition_seq, mix_by, public_token,
                drop_date::text as drop_date,
                (select drop_date::text from sc_playlists n
                 where n.drop_date > p.drop_date order by n.drop_date limit 1) as next_drop
@@ -103,7 +103,7 @@ def resolve_episode(ep_no, edition=None):
         return None
     r = hits[0]
     return (r["station_no"], "EP %d" % int(ep_no), r.get("mix_by") or "",
-            r.get("drop_date") or "", r.get("next_drop") or "")
+            r.get("drop_date") or "", r.get("next_drop") or "", r.get("public_token") or "")
 
 
 def episode_meta_path(folder):
@@ -196,7 +196,7 @@ def main():
                 "(the show number) explicitly, or check the episode's name in "
                 "the dashboard reads like 'Come With NYC Radio Ep%s'."
                 % (ep_num, ep_num))
-        station_no, ep_label, mixed_by, drop_date, next_date = got
+        station_no, ep_label, mixed_by, drop_date, next_date, public_token = got
         if a.next_date_in:
             next_date = a.next_date_in
         a.station = a.station or station_no
@@ -206,7 +206,11 @@ def main():
             save_episode_meta(wk, episode=str(ep_num), station_no=station_no,
                               ep_label=ep_label, mixed_by=mixed_by,
                               drop_date=drop_date, next_date=next_date,
-                              title=a.title, edition=a.edition_name or "weekly")
+                              title=a.title, edition=a.edition_name or "weekly",
+                              # Scoped to THIS episode, and read-only. It is what
+                              # lets whoever receives the folder rebuild the
+                              # tracklist without any account of their own.
+                              public_token=public_token)
     elif ep_num:
         # OFFLINE. No credentials on this machine, so read what a credentialed
         # run already baked into the folder. Everything the renderer needs is

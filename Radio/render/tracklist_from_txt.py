@@ -87,6 +87,39 @@ def parse(path):
     return out
 
 
+# The public endpoint the website itself uses. `?t=<episode token>` returns an
+# episode -- INCLUDING an unpublished one -- with every field the cues need, and
+# it needs no admin credential of any kind. That is what lets Martin or Henry
+# build a tracklist on their own laptop: a token is enough, and a token is scoped
+# to ONE episode, unlike the management PAT which is the entire project.
+STATION_FN = "https://yaytdosxfhcqatmhctzk.supabase.co/functions/v1/get-station"
+# The site's publishable key. Public by design -- it is hardcoded in radio.html
+# and served to every visitor. It grants nothing on its own; the episode token is
+# what identifies the episode.
+PUBLISHABLE = "sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi"
+
+
+def token_tracks(token):
+    """Episode tracks via get-station. No credentials, one episode only."""
+    import json as _json, urllib.request as _u
+    req = _u.Request("%s?t=%s" % (STATION_FN, token.strip()),
+                     headers={"apikey": PUBLISHABLE,
+                              "Authorization": "Bearer " + PUBLISHABLE})
+    try:
+        j = _json.loads(_u.urlopen(req, timeout=30).read())
+    except Exception as ex:
+        raise SystemExit("Could not reach that episode: %s. Check the token was "
+                         "copied whole." % ex)
+    st, tracks = j.get("station") or {}, j.get("tracks") or []
+    if not tracks:
+        raise SystemExit("That token resolved, but the episode has no tracks yet.")
+    # Same shape db_tracks returns, so the matcher cannot tell which was used.
+    for i, t in enumerate(tracks):
+        t.setdefault("id", None)
+        t.setdefault("sort", (i + 1) * 10)
+    return st, tracks
+
+
 def db_tracks(station_no):
     from make_cues import env, q
     return q(env(), """
@@ -147,6 +180,9 @@ def main():
     ap.add_argument("--episode", "--week", dest="week", help="Radio/Episode N — finds the tracklist txt inside")
     ap.add_argument("--txt", help="the typed tracklist, if not in the week folder")
     ap.add_argument("--station", type=int, help="show number; default resolved from --week")
+    ap.add_argument("--token", help="the episode's share token — builds the tracklist with NO "
+                                    "database credentials. Dashboard: Radio → the episode → "
+                                    "🔗 Copy link, then the t= value from that URL.")
     ap.add_argument("--out-cues", nargs="?", const=True,
                     help="write the render cues CSV (default: Radio/Week N/EPN_cues.csv)")
     ap.add_argument("--write-order", action="store_true",
@@ -162,8 +198,24 @@ def main():
     if not txt or not os.path.exists(txt):
         raise SystemExit("No tracklist txt found (looked in %s)" % (wk or "--txt"))
 
-    station = a.station
-    if not station and a.week:
+    # No credentials on this machine? Use the episode's own token, which the
+    # folder carries. This is why a packaged episode "just works" for someone who
+    # has no account: they never have to know a token exists.
+    if not a.token and wk:
+        import make_episode as _me
+        if not _me.have_db():
+            meta = _me.load_episode_meta(wk) or {}
+            a.token = meta.get("public_token") or None
+            if a.token:
+                print("No credentials here — using the episode token from episode.json")
+
+    station, rows_pre = a.station, None
+    if a.token:
+        st_meta, rows_pre = token_tracks(a.token)
+        station = st_meta.get("station_no")
+        print("Token OK — SHOW %s, %s (no credentials used)"
+              % (station, st_meta.get("name") or "?"))
+    elif not station and a.week:
         import make_episode
         got = make_episode.resolve_episode(a.week)
         if not got:
@@ -182,7 +234,7 @@ def main():
         print("  !! time goes backwards: #%d %s (%s) then #%d %s (%s)"
               % (p["n"], p["raw"][:34], mmss(p["start"]), c["n"], c["raw"][:34], mmss(c["start"])))
 
-    rows = db_tracks(station)
+    rows = rows_pre if rows_pre is not None else db_tracks(station)
     print("Show %s has %d tracks in the dashboard\n" % (station, len(rows)))
     pairs, unmatched, unused = match(entries, rows)
 
@@ -226,6 +278,10 @@ def main():
         print("\nWrote %s  (%d tracks)" % (os.path.relpath(out, ROOT).replace("\\", "/"), len(pairs)))
 
     if a.write_order:
+        if a.token:
+            raise SystemExit(
+                "--write-order changes the live site, so it needs the real "
+                "credentials. A token can read one episode; it can never rewrite it.")
         if unmatched or unused:
             raise SystemExit("\nRefusing to touch the live site while anything is unmatched.")
         from make_cues import env, q
