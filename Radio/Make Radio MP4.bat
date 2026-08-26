@@ -183,9 +183,17 @@ if errorlevel 1 (
   goto :done
 )
 
+rem ---- 8. the tags to paste when uploading -----------------------------------
+echo.
+echo   Tags for YouTube + SoundCloud
+echo   ---------------------------------------------------------------
+python Radio\render\make_tags.py --episode %EP%
+
 echo.
 echo   ===============================================================
 echo    Done.  %WK%\CWR_Ep%EP%_YouTube.mp4
+echo.
+echo    Tags to paste:  %WK%\EP%EP%_tags.txt
 echo.
 echo    Last step is yours: open the three frames in %WK%\_preview\
 echo    and look at them. A card can draw the wrong text and still

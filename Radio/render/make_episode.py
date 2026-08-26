@@ -106,6 +106,48 @@ def resolve_episode(ep_no, edition=None):
             r.get("drop_date") or "", r.get("next_drop") or "")
 
 
+def episode_meta_path(folder):
+    return os.path.join(folder, "episode.json")
+
+
+def save_episode_meta(folder, **kw):
+    """Bake what the database told us into the episode folder.
+
+    This is what makes an episode folder PORTABLE. The renderer itself needs no
+    database — only the lookup of "which show is this, who mixed it, when does
+    the next one drop" does. Written here, that answer travels with the folder,
+    so the whole thing can be zipped and handed to someone who has no
+    credentials and never should have any (see package_tool.py).
+    """
+    import json as _json
+    try:
+        with open(episode_meta_path(folder), "w", encoding="utf-8") as f:
+            _json.dump(kw, f, indent=2, ensure_ascii=False)
+    except Exception as ex:
+        print("(could not write episode.json: %s)" % ex)
+
+
+def load_episode_meta(folder):
+    import json as _json
+    try:
+        with open(episode_meta_path(folder), encoding="utf-8") as f:
+            return _json.load(f)
+    except Exception:
+        return None
+
+
+def have_db():
+    """True only if this machine actually holds project credentials."""
+    try:
+        env_path = os.path.join(ROOT, ".env")
+        if not os.path.exists(env_path):
+            return False
+        txt = open(env_path, encoding="utf-8").read()
+        return "SBP_PAT=" in txt and "SBP_REF_PROD=" in txt
+    except Exception:
+        return False
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--episode", "--week", dest="week", help="episode number / folder — auto-finds the mix, history, cues in Radio/Week N/ and writes CWR_EpN_YouTube.mp4 there")
@@ -146,7 +188,7 @@ def main():
     # 0) which episode is this, and which SHOW is it? (see resolve_episode)
     ep_label = mixed_by = drop_date = next_date = ""
     ep_num = a.week or a.ep
-    if ep_num:
+    if ep_num and have_db():
         got = resolve_episode(ep_num, a.edition_name)
         if not got:
             raise SystemExit(
@@ -160,9 +202,38 @@ def main():
         a.station = a.station or station_no
         print("== %s = SHOW %s -- %s, drops %s, next %s ==" % (
             ep_label, station_no, mixed_by or "?", drop_date or "?", next_date or "?"))
+        if wk:
+            save_episode_meta(wk, episode=str(ep_num), station_no=station_no,
+                              ep_label=ep_label, mixed_by=mixed_by,
+                              drop_date=drop_date, next_date=next_date,
+                              title=a.title, edition=a.edition_name or "weekly")
+    elif ep_num:
+        # OFFLINE. No credentials on this machine, so read what a credentialed
+        # run already baked into the folder. Everything the renderer needs is
+        # either here or in the cues CSV.
+        meta = load_episode_meta(wk) if wk else None
+        if not meta:
+            raise SystemExit(
+                "No database credentials on this machine and no episode.json "
+                "in the episode folder. "
+                "Ask whoever set this up to re-send the episode folder — it "
+                "should contain episode.json and EP%s_cues.csv." % ep_num)
+        ep_label = meta.get("ep_label") or ("EP %s" % ep_num)
+        mixed_by = meta.get("mixed_by") or ""
+        drop_date = meta.get("drop_date") or ""
+        next_date = a.next_date_in or meta.get("next_date") or ""
+        if meta.get("title"):
+            a.title = meta["title"]
+        print("== offline: %s -- %s, drops %s, next %s (from episode.json) ==" % (
+            ep_label, mixed_by or "?", drop_date or "?", next_date or "?"))
 
     # 1) cues
     cues = a.cues
+    if not cues and not have_db():
+        found = sorted(_glob.glob(os.path.join(wk or HERE, "EP*_cues.csv")), key=os.path.getmtime)
+        if not found:
+            raise SystemExit("Offline, and no EP*_cues.csv in %s to render from." % (wk or HERE))
+        cues = found[-1]
     if not cues:
         print("== Pulling tracklist ==")
         cmd = [PY, os.path.join(HERE, "make_cues.py")]

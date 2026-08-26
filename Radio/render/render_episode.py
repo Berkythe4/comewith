@@ -27,7 +27,7 @@ are reported and abort, so you never render a half-timed video by accident.
   --mixed-by TEXT  intro credit;  --drop-date / --next-date  YYYY-MM-DD (bookends)
   --no-bookends    skip the intro + closing;  --intro-secs / --outro-secs  retime
 """
-import argparse, csv, os, random, re, subprocess, sys, tempfile
+import argparse, csv, json, os, random, re, subprocess, sys, tempfile
 import sys as _sys
 try:
     _sys.stdout.reconfigure(encoding="utf-8")
@@ -605,7 +605,7 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     # header
     d.text((BAR_X, HEADER_Y), ("%s  ·  %s" % (title_text.upper(), ep_label)).upper(),
            font=F_mono(30), fill=FAINT)
-    live = "● NOW PLAYING"
+    live = CARD["now_playing"]
     lw = d.textlength(live, font=F_monob(30))
     d.text((W - BAR_X - lw, HEADER_Y), live, font=F_monob(30), fill=LIME)
 
@@ -677,8 +677,8 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     # what's coming. "LAST TRACK" stays: it gives the ending its shape without
     # revealing a single thing.
     if not nxt:
-        d.text((BAR_X, BAR_Y + 40), "LAST TRACK", font=F_mono(30), fill=FAINT)
-    site = "comewith.org"
+        d.text((BAR_X, BAR_Y + 40), CARD["last_track"], font=F_mono(30), fill=FAINT)
+    site = CARD["footer"]
     sw = d.textlength(site, font=F_mono(30))
     d.text((W - BAR_X - sw, BAR_Y + 40), site, font=F_mono(30), fill=(179, 167, 184))
 
@@ -746,7 +746,43 @@ def _cdivider(d, cx, y, half=210):
 # `outro_a/b`  the two closing body lines
 # `next_label` prefix on the closing date pill
 # `tease`      final closing line; "" hides it
-EDITIONS = {
+# ---- editable copy ----------------------------------------------------------
+# Every word the video draws lives in templates.json next to this file, so the
+# wording can be changed without touching Python. What stays here is only the
+# FALLBACK: if that file goes missing, gets deleted by whoever copied the tool,
+# or picks up a typo, the render still happens with the built-in copy and says
+# so, rather than dying halfway through an episode.
+TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates.json")
+
+
+def load_templates(path=None):
+    """templates.json merged over DEFAULT_COPY. Never raises."""
+    import copy as _copy
+    out = _copy.deepcopy(DEFAULT_COPY)
+    path = path or TEMPLATES_PATH
+    try:
+        with open(path, encoding="utf-8") as f:
+            user = json.load(f)
+    except FileNotFoundError:
+        return out
+    except Exception as ex:
+        print("!! templates.json could not be read (%s) — using the built-in copy." % ex)
+        return out
+    for section in ("card", "band"):
+        if isinstance(user.get(section), dict):
+            out[section].update(user[section])
+    for name, ed in (user.get("editions") or {}).items():
+        if isinstance(ed, dict):
+            out["editions"].setdefault(name, {}).update(ed)
+    # items arrive as [[glyph, words], ...] from JSON; the drawing code wants pairs
+    out["band"]["items"] = [tuple(x)[:2] for x in out["band"]["items"] if len(x) >= 2]
+    return out
+
+
+EDITIONS = None   # set below, once the file has been read
+
+
+DEFAULT_COPY_EDITIONS = {
     "weekly": {
         "brand": "COME WITH RADIO",
         "intro_a": "Every track is an artist playing New York — soon.",
@@ -782,6 +818,18 @@ EDITIONS = {
         "bookend_backdrop": "ether",
     },
 }
+DEFAULT_COPY = {
+    "card": {"now_playing": "● NOW PLAYING", "last_track": "LAST TRACK",
+             "footer": "comewith.org"},
+    "band": {"url": BAND_URL, "lead": BAND_LEAD, "items": list(BAND_ITEMS)},
+    "editions": DEFAULT_COPY_EDITIONS,
+}
+
+T = load_templates()
+BAND_URL, BAND_LEAD, BAND_ITEMS = T["band"]["url"], T["band"]["lead"], T["band"]["items"]
+CARD = T["card"]
+EDITIONS = T["editions"]
+
 ED = EDITIONS["weekly"]          # replaced in main() by --edition
 
 # ---- INTRO: one accumulating "slide" that tells the station's story ----------
@@ -881,11 +929,31 @@ def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs, h
         out.append((png, max(0.1, dur)))
     return out
 
+def outro_beats():
+    """The closing slide's reveal cadence, for whoever is drawing it.
+
+    ONE definition, because preview_bookends.py draws the same slide and used to
+    keep its own copy of this loop — so the preview and the render could disagree
+    about how many beats there are, and a finished 65-minute video was the first
+    place you'd find out.
+
+    The tease is the last reveal; with it blank that beat would show a slide
+    identical to the one before it, so the beat is dropped rather than held.
+    """
+    if ED.get("tease"):
+        return list(OUTRO_BEATS)
+    return list(OUTRO_BEATS[:-2]) + [OUTRO_BEATS[-1]]
+
+
 def build_outro(work, bg, cover_sm, next_date, total_secs):
-    scale = total_secs / sum(OUTRO_BEATS)
+    # The tease is the last reveal. With it blank that beat would show a slide
+    # identical to the one before it — a couple of seconds where the video looks
+    # frozen — so the beat is dropped rather than held.
+    beats = outro_beats()
+    scale = total_secs / sum(beats)
     out = []
-    for i, base in enumerate(OUTRO_BEATS):
-        stage = min(i, len(OUTRO_BEATS) - 2)      # last beat = hold on the final stage
+    for i, base in enumerate(beats):
+        stage = min(i, len(beats) - 2)            # last beat = hold on the final stage
         png = os.path.join(work, "outro_%02d.png" % i)
         draw_outro(bg, cover_sm, next_date, stage).save(png)
         out.append((png, max(0.1, base * scale)))
