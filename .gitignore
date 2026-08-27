@@ -67,3 +67,8 @@ gearwatch_results.html
 # example file is re-included because it holds key names only, never values.
 .env.*
 !.env.example
+ebay_verification_token.txt
+
+# Verification stills — verify_episode.py regenerates these every run.
+Radio/**/_preview/
+# the tool packet is committed at Radio/CWR_render_tool.zip (no credentials in it)

@@ -22,6 +22,8 @@ try: sys.stdout.reconfigure(encoding="utf-8")
 except Exception: pass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _paths import episode_dir
 DOCS = os.path.join(ROOT, "Radio", "Documents")
 RENDER = os.path.join(ROOT, "Radio", "render")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
@@ -50,12 +52,12 @@ def q(E, sql):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--station", type=int)
-    ap.add_argument("--week", help="write everything into Radio/Week N/ instead of Documents/ + render/")
+    ap.add_argument("--episode", "--week", dest="week", help="write everything into Radio/Episode N/ instead of Documents/ + render/")
     a = ap.parse_args()
     E = env()
     global DOCS, RENDER
     if a.week:
-        DOCS = RENDER = os.path.join(ROOT, "Radio", "Week %s" % a.week)
+        DOCS = RENDER = episode_dir(ROOT, a.week, must_exist=False)
     os.makedirs(DOCS, exist_ok=True)
 
     where = "p.station_no = %d" % a.station if a.station else "p.status in ('building','testing')"

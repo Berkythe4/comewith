@@ -9381,49 +9381,174 @@ function hubEmailPeople(oneActorId) {
 }
 
 // ---- Section: Tasks (tasks + task_assignments) ----
+// The same board as Calendar & Tasks, minus the Event column — on an event hub
+// every row is already this event's, so a column of one repeated name is noise.
+// The filters, sort, ⭐ toggle and inline status are the calendar's on purpose:
+// two different task tables is two things to learn and two places to fix.
+const HUB_TB_DEFAULTS = () => ({
+  q: '', status: [...CAL_DEFAULT_STATUS], assignee: '', priority: '', pillar: '',
+  due: 'all', msOnly: false, unassigned: false, sort: 'due', dir: 1,
+});
 async function hubSecTasks() {
   const { data, error } = await sb.from('tasks')
-    .select('id, title, description, status, priority, due_date, task_assignments(id, role, actor:actors(display_name))')
+    .select('id, title, description, status, priority, due_date, milestone, pillar, link_url, task_assignments(id, role, actor:actors(id, display_name))')
     .eq('event_id', hub.eventId).is('deleted_at', null)
     .order('due_date', { ascending: true, nullsFirst: false }).order('created_at');
   if (error) throw error;
   hub.tasks = data || [];
-  const statusSel = (t) => `<select class="hub-status-sel" data-hub-tstatus="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
-  const rows = hub.tasks.length ? hub.tasks.map(t => {
-    const who = (t.task_assignments || []).map(a => `${escapeHtml(a.actor?.display_name || '?')} (${escapeHtml(a.role)})`).join(', ');
-    return `<div class="hub-li">
-      <div class="li-main"><strong>${escapeHtml(t.title)}</strong>
-        <div class="li-sub">${t.priority ? ('[' + escapeHtml(t.priority) + '] ') : ''}${t.due_date ? ('due ' + escapeHtml(fmtDate(t.due_date)) + ' · ') : ''}${who ? ('→ ' + who) : 'unassigned'}</div>
-      </div>
-      <div class="hub-li-actions">
-        ${statusSel(t)}
-        <button class="hub-mini" data-hub-action="edit-task" data-id="${escapeHtml(t.id)}">Edit</button>
-        <button class="hub-mini" data-hub-action="assign-task" data-id="${escapeHtml(t.id)}">Assign</button>
-        <button class="hub-mini danger" data-hub-del="tasks:${escapeHtml(t.id)}">Delete</button>
-      </div>
-    </div>`;
-  }).join('') : `<div class="hub-empty">No tasks yet. Add one, or generate the day-of checklist from Overview.</div>`;
+  if (!hub.tboard) hub.tboard = HUB_TB_DEFAULTS();
   $('hubSecBody').innerHTML = `
     <div class="hub-sec-bar"><h3>Tasks</h3><span style="display:flex;gap:8px;">
       <button class="hub-btn" data-hub-action="email-tasks" title="Send a formatted task-list email to the team">✉ Email task list</button>
       <button class="hub-btn" data-hub-action="add-task">+ Add task</button></span></div>
-    <div class="hub-list">${rows}</div>`;
+    <div class="cal-board" id="hubTaskBoard"></div>`;
+  hubRenderTaskBoard();
+}
+function hubBoardTasks() {
+  const f = hub.tboard, today = calToday();
+  let list = (hub.tasks || []).filter(t =>
+    (!f.status.length || f.status.includes(t.status)) &&
+    (!f.assignee || (t.task_assignments || []).some(a => a.actor && a.actor.id === f.assignee)) &&
+    (!f.priority || t.priority === f.priority) &&
+    (!f.pillar || t.pillar === f.pillar) &&
+    (!f.msOnly || t.milestone) &&
+    (!f.unassigned || !(t.task_assignments || []).length) &&
+    (!f.q || (t.title + ' ' + (t.description || '')).toLowerCase().includes(f.q.toLowerCase())));
+  // Same horizon rule as the calendar board: "next N days" runs from the past to
+  // today+N, so overdue work is always inside it rather than hidden by it.
+  if (f.due === 'overdue') list = list.filter(t => t.due_date && t.due_date < today && t.status !== 'done');
+  else if (f.due === 'today') list = list.filter(t => t.due_date === today);
+  else if (f.due === '7' || f.due === '14' || f.due === '30') { const lim = calAddDays(today, Number(f.due)); list = list.filter(t => t.due_date && t.due_date <= lim); }
+  else if (f.due === 'none') list = list.filter(t => !t.due_date);
+  const dir = f.dir;
+  list.sort((a, b) => {
+    if (f.sort === 'due') return dir * String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
+    if (f.sort === 'priority') return dir * ((CAL_PRIO_RANK[a.priority] ?? 3) - (CAL_PRIO_RANK[b.priority] ?? 3));
+    if (f.sort === 'title') return dir * String(a.title || '').localeCompare(String(b.title || ''));
+    return dir * String(a.status).localeCompare(String(b.status));
+  });
+  return list;
+}
+function hubRenderTaskBoard() {
+  const f = hub.tboard, today = calToday();
+  const asgMap = new Map();
+  (hub.tasks || []).forEach(t => (t.task_assignments || []).forEach(a => { if (a.actor) asgMap.set(a.actor.id, a.actor.display_name); }));
+  // The filter state persists across events, so an assignee who works on the
+  // event you just left and not this one would silently empty the board while
+  // the select still read "Anyone". Drop a selection this event can't show.
+  if (f.assignee && !asgMap.has(f.assignee)) f.assignee = '';
+  const list = hubBoardTasks();
+  // A short list because of a filter you forgot you set reads exactly like a
+  // short list because there's no work — so say when the view is narrowed.
+  const dirty = !!(f.q || f.assignee || f.priority || f.pillar || f.msOnly || f.unassigned
+    || f.due !== 'all' || [...f.status].sort().join(',') !== [...CAL_DEFAULT_STATUS].sort().join(','));
+  const asgOpts = [...asgMap.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+    .map(([id, name]) => `<option value="${escapeHtml(id)}"${f.assignee === id ? ' selected' : ''}>${escapeHtml(name)}</option>`).join('');
+  const sChip = (s) => `<button class="cal-chipbtn${f.status.includes(s) ? ' on' : ''}" data-ht-sf="${s}">${s}</button>`;
+  const statusSel = (t) => `<select class="hub-status-sel" data-hub-tstatus="${escapeHtml(t.id)}">${['todo', 'doing', 'blocked', 'done'].map(s => `<option value="${s}"${s === t.status ? ' selected' : ''}>${s}</option>`).join('')}</select>`;
+  const th = (k, lbl) => `<th data-ht-sort="${k}">${lbl}${f.sort === k ? (f.dir > 0 ? ' ↑' : ' ↓') : ''}</th>`;
+  const rows = list.map(t => {
+    const who = (t.task_assignments || []).map(a => escapeHtml(a.actor?.display_name || '?')).join(', ');
+    const over = t.due_date && t.due_date < today && t.status !== 'done';
+    return `<tr class="${t.status === 'done' ? 'done' : ''}${over ? ' over' : ''}">
+      <td><span class="tb-star${t.milestone ? ' on' : ''}" data-ht-star="${escapeHtml(t.id)}" title="Toggle milestone (shows on the calendar grid)">⭐</span></td>
+      <td><a href="#" data-ht-edit="${escapeHtml(t.id)}" title="Open and edit" style="color:inherit;">${escapeHtml(t.title)}</a>${t.link_url ? ` <a href="${escapeHtml(t.link_url)}" target="_blank" rel="noopener" title="Open the linked page">📢</a>` : ''}${t.pillar ? ` <span class="role-chip" style="cursor:default;background:${wsPillarColor(t.pillar)};color:#fff;font-size:.6rem;">${escapeHtml(wsPillarLabel(t.pillar))}</span>` : ''}${t.description ? `<div class="li-sub">${escapeHtml(t.description.slice(0, 90))}</div>` : ''}</td>
+      <td>${who || '<span class="li-sub">unassigned</span>'}</td>
+      <td>${t.priority ? escapeHtml(t.priority) : '<span class="li-sub">—</span>'}</td>
+      <td class="${over ? 'cal-due-over' : ''}">${t.due_date ? escapeHtml(fmtDate(t.due_date)) : '<span class="li-sub">—</span>'}</td>
+      <td>${statusSel(t)}</td>
+      <td style="white-space:nowrap;"><button class="hub-mini" data-ht-edit="${escapeHtml(t.id)}" title="Edit">✎</button> <button class="hub-mini danger" data-ht-del="${escapeHtml(t.id)}" title="Delete">✕</button></td>
+    </tr>`;
+  }).join('');
+  const total = (hub.tasks || []).length;
+  // "Nothing here" and "nothing matches what you asked for" are different
+  // answers — an event with no tasks at all should say how to make some.
+  const empty = total
+    ? `No tasks match these filters.${dirty ? ' <a href="#" data-ht-clear>Clear them</a>.' : ''}`
+    : 'No tasks yet. Add one, or generate the day-of checklist from Overview.';
+  // Typing in the search box re-renders the bar the box lives in, which throws
+  // focus to the body — so you get one character per click unless the caret is
+  // put back. Same fix as calRenderBoard.
+  const el = $('hubTaskBoard');
+  const onQ = document.activeElement && document.activeElement.matches?.('[data-ht-q]');
+  const caret = onQ ? document.activeElement.selectionStart : null;
+  el.innerHTML = `
+    <div class="cal-board-bar">
+      <input class="modal-input" style="width:180px;padding:5px 8px;font-size:.75rem;" placeholder="Search tasks…" value="${escapeHtml(f.q)}" data-ht-q>
+      ${['todo', 'doing', 'blocked', 'done'].map(sChip).join('')}
+      <select class="hub-status-sel" data-ht-filter="assignee"><option value="">Anyone</option>${asgOpts}</select>
+      <select class="hub-status-sel" data-ht-filter="priority"><option value="">Any priority</option>${['high', 'medium', 'low'].map(p => `<option value="${p}"${f.priority === p ? ' selected' : ''}>${p}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-ht-filter="pillar"><option value="">Any bucket</option>${WS_PILLARS.map(p => `<option value="${p}"${f.pillar === p ? ' selected' : ''}>${escapeHtml(wsPillarLabel(p))}</option>`).join('')}</select>
+      <select class="hub-status-sel" data-ht-filter="due">${[['all', 'Any due date'], ['overdue', 'Overdue only'], ['today', 'Due today'], ['7', 'Overdue + next 7 days'], ['14', 'Overdue + next 14 days'], ['30', 'Overdue + next 30 days'], ['none', 'No date']].map(([v, l]) => `<option value="${v}"${f.due === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      <button class="cal-chipbtn${f.msOnly ? ' on' : ''}" data-ht-mson>⭐ milestones only</button>
+      <button class="cal-chipbtn${f.unassigned ? ' on' : ''}" data-ht-unassigned>👤 unassigned only</button>
+      ${dirty ? '<button class="cal-chipbtn on" data-ht-clear>✕ clear filters</button>' : ''}
+      <span class="li-sub" style="margin-left:auto;">${list.length} of ${total} task${total !== 1 ? 's' : ''}</span>
+    </div>
+    <table><thead><tr><th>⭐</th>${th('title', 'Task')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
+    <tbody>${rows || `<tr><td colspan="7"><div class="hub-empty">${empty}</div></td></tr>`}</tbody></table>`;
+  if (onQ) { const inp = el.querySelector('[data-ht-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 
-// ---- Email the event's task list (concise, formatted for team inboxes) ----
+// ---- Describing a filtered task view in words ------------------------------
+// Shared by both task boards. A filtered list emailed without saying so reads
+// as "this is everything" — the same failure as a silent cap — so the words
+// that describe the filter travel with the email, in the header and the note.
+const TASK_DUE_WORDS = { overdue: 'overdue only', today: 'due today', 7: 'overdue + next 7 days',
+                         14: 'overdue + next 14 days', 30: 'overdue + next 30 days', none: 'no due date' };
+const TASK_SORT_WORDS = { due: 'due date', priority: 'priority', event: 'event', title: 'task', status: 'status' };
+function taskFilterWords(f, tasks, { withEvent = false } = {}) {
+  const parts = [];
+  const st = [...f.status].sort().join(',');
+  if (st !== [...CAL_DEFAULT_STATUS].sort().join(',')) parts.push(f.status.length ? `status: ${f.status.join(', ')}` : 'no status selected');
+  if (withEvent && f.event) { const t = (tasks || []).find(x => String(x.event?.id) === f.event); parts.push(`event: ${t?.event?.name || f.event}`); }
+  if (f.assignee) { const a = (tasks || []).flatMap(t => t.task_assignments || []).find(x => x.actor?.id === f.assignee); parts.push(`assigned to ${a?.actor?.display_name || 'someone'}`); }
+  if (f.priority) parts.push(`${f.priority} priority`);
+  if (f.pillar) parts.push(`bucket: ${wsPillarLabel(f.pillar)}`);
+  if (f.due !== 'all') parts.push(TASK_DUE_WORDS[f.due] || f.due);
+  if (f.msOnly) parts.push('milestones only');
+  if (f.unassigned) parts.push('unassigned only');
+  if (f.q) parts.push(`matching “${f.q}”`);
+  return parts;
+}
+function taskScopeLine(f, words, allLabel = 'All open tasks') {
+  const s = `${TASK_SORT_WORDS[f.sort] || f.sort} ${f.dir > 0 ? '(ascending)' : '(descending)'}`;
+  return words.length ? `Filtered view — ${words.join(' · ')}. Sorted by ${s}.` : `${allLabel}. Sorted by ${s}.`;
+}
+function taskFilterNote(words, shown, total) {
+  return words.length
+    ? `This is a filtered view of the task board (${shown} of ${total} tasks), not the full list — ${words.join(' · ')}.`
+    : '';
+}
+function calFilterWords() { return taskFilterWords(CAL.board, CAL.tasks, { withEvent: true }); }
+// ---- Email a task list (concise, formatted for team inboxes) ----
 // Email-client-safe: table layout + inline styles only, no CSS classes.
-function buildTasksEmailHtml(ev, tasks, includeDone, note) {
+// Shared by the event hub (one event, grouped by status) and the Calendar &
+// Tasks board (the filtered view, in the order it's shown). One builder on
+// purpose — two copies of an email template is two places to fix a typo.
+//   opts.heading    headline text
+//   opts.subhead    grey line under it (event date/venue, or the scope)
+//   opts.filterNote said out loud when the list is a FILTERED subset
+//   opts.order      'grouped' (overdue/doing/blocked/todo/done) | 'as-sorted'
+//   opts.showEvent  put each task's event name on the row (cross-event lists)
+//   opts.includeDone  grouped mode only; as-sorted sends exactly what it's given
+function buildTasksEmailHtml(tasks, opts = {}) {
+  const { heading = 'Tasks', subhead = '', filterNote = '', note = '', includeDone = false,
+          order = 'grouped', showEvent = false } = opts;
   const today = new Date().toISOString().slice(0, 10);
   const fmtDue = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   const prioBadge = (p) => p ? `<span style="font-size:10px;font-weight:bold;letter-spacing:1px;text-transform:uppercase;padding:1px 6px;border-radius:3px;color:#fff;background:${p === 'high' ? '#C75A3C' : p === 'medium' ? '#B5791F' : '#8a8377'};">${p}</span>` : '';
   const row = (t, overdue) => {
     const who = (t.task_assignments || []).map(a => a.actor?.display_name).filter(Boolean).join(', ');
     const bits = [];
+    if (showEvent && t.event?.name) bits.push(`<span style="color:#59524a;font-weight:bold;">${escapeHtml(t.event.name)}</span>`);
     if (t.due_date) bits.push(`<span style="color:${overdue ? '#C75A3C' : '#8a8377'};${overdue ? 'font-weight:bold;' : ''}">due ${fmtDue(t.due_date)}</span>`);
     bits.push(who ? escapeHtml(who) : '<span style="color:#b3aa99;">unassigned</span>');
     if (t.description) bits.push(escapeHtml(t.description.slice(0, 110)) + (t.description.length > 110 ? '…' : ''));
+    // In a flat list nothing else says what state a task is in, so the row does.
+    if (order === 'as-sorted') bits.push(`<span style="color:#8a8377;">${escapeHtml(t.status)}</span>`);
     return `<tr><td style="padding:8px 10px;border-bottom:1px solid #eee6d8;font-family:Arial,Helvetica,sans-serif;">
-      <span style="font-size:14px;font-weight:bold;color:#26221c;">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</span> ${prioBadge(t.priority)}
+      <span style="font-size:14px;font-weight:bold;color:#26221c;${t.status === 'done' ? 'text-decoration:line-through;color:#a09884;' : ''}">${t.milestone ? '⭐ ' : ''}${escapeHtml(t.title)}</span> ${prioBadge(t.priority)}
       <div style="font-size:12px;color:#8a8377;margin-top:2px;">${bits.join(' &nbsp;·&nbsp; ')}</div>
     </td></tr>`;
   };
@@ -9435,34 +9560,49 @@ function buildTasksEmailHtml(ev, tasks, includeDone, note) {
   const overdue = open.filter(t => t.due_date && t.due_date < today);
   const byStatus = (s) => open.filter(t => t.status === s && !overdue.includes(t));
   const dueSort = (a, b) => String(a.due_date || '9999').localeCompare(String(b.due_date || '9999'));
-  [overdue, done].forEach(l => l.sort(dueSort));
   const nextDue = open.filter(t => t.due_date && t.due_date >= today).sort(dueSort)[0];
-  return `<div style="max-width:620px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#26221c;">
-    <div style="border-left:4px solid #C75A3C;background:#faf7f1;padding:12px 16px;">
-      <div style="font-size:20px;font-weight:bold;">${escapeHtml(ev.name)} — Tasks</div>
-      <div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(fmtDate(ev.event_date))}${ev.venue?.name ? ' · ' + escapeHtml(ev.venue.name) : ''}${ev.series ? ' · ' + escapeHtml(ev.series) : ''}</div>
-      <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
-    </div>
-    ${note ? `<div style="font-size:14px;line-height:1.55;color:#3c362e;margin:14px 2px 4px;">${note.trim().split(/\n{2,}/).map(p => `<p style="margin:0 0 10px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
-    ${section('⚠ Overdue', '#C75A3C', overdue, true)}
+  let bodyHtml;
+  if (order === 'as-sorted') {
+    // Exactly the rows on screen, in the order they're on screen. No regrouping
+    // and no re-sorting — that's the whole point of "email what I'm looking at".
+    bodyHtml = tasks.length
+      ? `<table width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:14px;">${tasks.map(t => row(t, t.due_date && t.due_date < today && t.status !== 'done')).join('')}</table>`
+      : '';
+  } else {
+    const ov = [...overdue].sort(dueSort), dn = [...done].sort(dueSort);
+    bodyHtml = `${section('⚠ Overdue', '#C75A3C', ov, true)}
     ${section('In progress', '#B5791F', byStatus('doing').sort(dueSort))}
     ${section('Blocked', '#8362A8', byStatus('blocked').sort(dueSort))}
     ${section('To do', '#59524a', byStatus('todo').sort(dueSort))}
-    ${includeDone ? section('✓ Done', '#2E8E72', done) : (done.length ? `<div style="font-size:12px;color:#a09884;margin-top:14px;">✓ ${done.length} completed task${done.length === 1 ? '' : 's'} not shown</div>` : '')}
+    ${includeDone ? section('✓ Done', '#2E8E72', dn) : (done.length ? `<div style="font-size:12px;color:#a09884;margin-top:14px;">✓ ${done.length} completed task${done.length === 1 ? '' : 's'} not shown</div>` : '')}`;
+  }
+  return `<div style="max-width:620px;margin:0 auto;font-family:Arial,Helvetica,sans-serif;color:#26221c;">
+    <div style="border-left:4px solid #C75A3C;background:#faf7f1;padding:12px 16px;">
+      <div style="font-size:20px;font-weight:bold;">${escapeHtml(heading)}</div>
+      ${subhead ? `<div style="font-size:13px;color:#8a8377;margin-top:2px;">${escapeHtml(subhead)}</div>` : ''}
+      <div style="font-size:13px;color:#59524a;margin-top:6px;"><b>${open.length}</b> open${overdue.length ? ` · <b style="color:#C75A3C;">${overdue.length} overdue</b>` : ''} · ${done.length} done${nextDue ? ` · next due <b>${fmtDue(nextDue.due_date)}</b>` : ''}</div>
+    </div>
+    ${filterNote ? `<div style="font-size:12px;color:#8a8377;font-style:italic;margin:10px 2px 0;border-left:2px solid #e0d8c8;padding-left:8px;">${escapeHtml(filterNote)}</div>` : ''}
+    ${note ? `<div style="font-size:14px;line-height:1.55;color:#3c362e;margin:14px 2px 4px;">${note.trim().split(/\n{2,}/).map(p => `<p style="margin:0 0 10px;">${escapeHtml(p).replace(/\n/g, '<br>')}</p>`).join('')}</div>` : ''}
+    ${bodyHtml}
     <div style="font-size:11px;color:#b3aa99;margin-top:18px;border-top:1px solid #eee6d8;padding-top:8px;">Sent from the Come With dashboard · ${escapeHtml(fmtDate(today))}</div>
   </div>`;
 }
 async function hubEmailTasks() {
-  const [evRes, tRes, staff, partsRes] = await Promise.all([
+  // The board's current view IS the list — same rule as Calendar & Tasks.
+  // hub.tasks / hub.tboard are loaded by hubSecTasks, which is the only screen
+  // this button appears on, so there is nothing to re-fetch.
+  const tasks = hubBoardTasks();
+  const total = (hub.tasks || []).length;
+  if (!total) { toast('No tasks on this event yet', 'err'); return; }
+  if (!tasks.length) { toast('Nothing in the current view to send — clear a filter first', 'err'); return; }
+  const [evRes, staff, partsRes] = await Promise.all([
     sb.from('events').select('name,event_date,series,status,venue:venues(name)').eq('id', hub.eventId).single(),
-    sb.from('tasks').select('id,title,description,status,priority,due_date,milestone,task_assignments(role,actor:actors(display_name))')
-      .eq('event_id', hub.eventId).is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }),
     loadStaff(),
     sb.from('event_participants').select('actor:actors(id,display_name,email)').eq('event_id', hub.eventId),
   ]);
-  const ev = evRes.data, tasks = tRes.data || [];
+  const ev = evRes.data;
   if (!ev) { toast('Event not found', 'err'); return; }
-  if (!tasks.length) { toast('No tasks on this event yet', 'err'); return; }
   // Recipients: staff pre-checked; event people with an email opt-in.
   const seen = new Set();
   const recipRow = (email, name, checked) => {
@@ -9473,21 +9613,30 @@ async function hubEmailTasks() {
   };
   const staffRows = staff.map(p => recipRow(p.email, p.full_name || p.email, true)).join('');
   const partRows = (partsRes.data || []).map(x => x.actor).filter(a => a && a.email).map(a => recipRow(a.email, a.display_name, false)).join('');
-  const preview = () => buildTasksEmailHtml(ev, tasks,
-    !!$('kpiModalBody').querySelector('#etIncDone')?.checked,
-    $('kpiModalBody').querySelector('#etNote')?.value || '');
-  openKpi('Email task list', ev.name, `
+  const words = taskFilterWords(hub.tboard, hub.tasks);
+  const scope = taskScopeLine(hub.tboard, words, 'All open tasks on this event');
+  const filterNote = taskFilterNote(words, tasks.length, total);
+  const evSub = `${fmtDate(ev.event_date)}${ev.venue?.name ? ' · ' + ev.venue.name : ''}${ev.series ? ' · ' + ev.series : ''} · ${scope}`;
+  // Single event, so the event name stays off every row — it's in the heading.
+  const opts = () => ({
+    heading: `${ev.name} — Tasks`, subhead: evSub, filterNote,
+    order: $('kpiModalBody').querySelector('#etGroup')?.checked ? 'grouped' : 'as-sorted',
+    includeDone: hub.tboard.status.includes('done'),
+    note: $('kpiModalBody').querySelector('#etNote')?.value || '' });
+  const preview = () => buildTasksEmailHtml(tasks, opts());
+  openKpi('Email task list', `${tasks.length} task${tasks.length === 1 ? '' : 's'} — exactly what the board is showing`, `
+    <div class="kpi-hint" style="margin:-4px 0 10px;max-width:62ch;">${escapeHtml(scope)}</div>
     <div class="modal-form-row"><label class="modal-label">To</label>
       <div class="hub-list" style="max-height:150px;overflow:auto;">
         ${staffRows}${partRows ? `<div class="li-sub" style="margin-top:6px;">Event people</div>${partRows}` : ''}
       </div></div>
     <div class="modal-form-row"><label class="modal-label">Subject</label>
-      <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})"></div>
+      <input class="modal-input" id="etSubject" value="Tasks — ${escapeHtml(ev.name)} (${escapeHtml(fmtDate(ev.event_date))})${words.length ? ' · ' + escapeHtml(words.join(', ')) : ''}"></div>
     <div class="modal-form-row"><label class="modal-label">Message (goes above the task list)</label>
       <textarea class="modal-textarea" id="etNote" rows="3" placeholder="Hey team — here's where we stand for the weekend. Flag anything blocked…"></textarea></div>
-    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etIncDone" style="width:auto;margin:0;"> Include completed tasks</label>
+    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="etGroup" style="width:auto;margin:0;"> Group by status instead of the order on screen</label>
     <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
-      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(ev, tasks, false)}</div></div>`,
+      <div id="etPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${buildTasksEmailHtml(tasks, { heading: `${ev.name} — Tasks`, subhead: evSub, filterNote, order: 'as-sorted', includeDone: hub.tboard.status.includes('done') })}</div></div>`,
     async () => {
       const recips = [...$('kpiModalBody').querySelectorAll('[data-etrecip]:checked')]
         .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
@@ -9508,18 +9657,18 @@ async function hubEmailTasks() {
           if (team) await sb.from('chat_messages').insert({
             channel_id: team.id, author_id: ME.id, kind: 'email', email_subject: subject,
             conversation_id: data.conversation_id,
-            body: `Task list for ${ev.name} — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
+            body: `Task list for ${ev.name} (${tasks.length} task${tasks.length === 1 ? '' : 's'}${words.length ? ', filtered' : ''}) — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
           });
         } catch (_) { /* notice is best-effort; the email already went out */ }
       }
       toast(sent ? `Task list sent (${sent} recipients, one thread) · posted to # Team chat` : 'Send failed', sent ? 'ok' : 'err');
     }, 'Send task list');
   setTimeout(() => {
-    $('kpiModalBody').querySelector('#etIncDone')?.addEventListener('change', () => { $('etPreview').innerHTML = preview(); });
-    $('kpiModalBody').querySelector('#etNote')?.addEventListener('input', () => { $('etPreview').innerHTML = preview(); });
+    const re = () => { $('etPreview').innerHTML = preview(); };
+    $('kpiModalBody').querySelector('#etGroup')?.addEventListener('change', re);
+    $('kpiModalBody').querySelector('#etNote')?.addEventListener('input', re);
   }, 40);
 }
-
 // ---- Section: Money (INLINE — line items live in the hub, refresh on every write) ----
 // Sprint-1 bug: this section only launched a modal and never listed line items, so adds
 // showed in Overview's rollup but "vanished" here. Now it renders the same sources inline.
@@ -11080,6 +11229,11 @@ async function submitAddTask() {
   closeKpi(); toast('Task added', 'ok'); await hubReload('tasks');
 }
 
+// UNWIRED since the hub Tasks board became the calendar's board: assignment is
+// done inside openEditTask (chips add/remove immediately), so there is no
+// separate Assign button. Kept because openEditTask's assignee list is
+// narrower - team actors + event participants - while assigneeOptionsHTML also
+// offers VENUE CONTACTS. Re-wire this if that turns out to matter.
 async function hubAssignTask(taskId) {
   const assigneeOpts = await assigneeOptionsHTML(false);
   openKpi('Assign task', 'This event’s people · your team (always) · venue contacts', `
@@ -11281,7 +11435,11 @@ async function hubContractDocDownload(contractId) {
 async function hubSetTaskStatus(id, status) {
   const { error } = await sb.from('tasks').update({ status }).eq('id', id);
   if (error) { toast('Update failed: ' + error.message, 'err'); return; }
+  // The board filters on status, so a row moved out of the visible set has to
+  // leave with it — otherwise the count and the list disagree.
+  const t = (hub.tasks || []).find(x => x.id === id); if (t) t.status = status;
   toast('Task → ' + status, 'ok');
+  if (hub.section === 'tasks' && hub.tboard && $('hubTaskBoard')) hubRenderTaskBoard();
 }
 async function hubSetContractStatus(id, status) {
   const { error } = await sb.from('contracts').update({ status }).eq('id', id);
@@ -11551,6 +11709,47 @@ $('panel-eventhub').addEventListener('click', (e) => {
 $('panel-eventhub').addEventListener('change', (e) => {
   const ts = e.target.closest('[data-hub-tstatus]'); if (ts) { hubSetTaskStatus(ts.dataset.hubTstatus, ts.value); return; }
   const cs = e.target.closest('[data-hub-cstatus]'); if (cs) { hubSetContractStatus(cs.dataset.hubCstatus, cs.value); return; }
+});
+// ---- Event-hub tasks board (data-ht-*) ----
+// Deliberately its own namespace, not the calendar's data-tb-*: both boards can
+// be in the DOM at once and a shared attribute would fire the wrong re-render.
+$('panel-eventhub').addEventListener('click', async (e) => {
+  if (hub.section !== 'tasks' || !hub.tboard) return;
+  if (e.target.closest('[data-ht-clear]')) {
+    e.preventDefault(); hub.tboard = HUB_TB_DEFAULTS(); hubRenderTaskBoard(); return;
+  }
+  const ted = e.target.closest('[data-ht-edit]');
+  if (ted) { e.preventDefault(); openEditTask(ted.dataset.htEdit, hubSecTasks); return; }
+  const star = e.target.closest('[data-ht-star]');
+  if (star) {
+    const t = (hub.tasks || []).find(x => x.id === star.dataset.htStar); if (!t) return;
+    const { error } = await sb.from('tasks').update({ milestone: !t.milestone }).eq('id', t.id);
+    if (error) { toast(error.message, 'err'); return; }
+    t.milestone = !t.milestone;
+    toast(t.milestone ? 'Now a milestone — it shows on the calendar grid' : 'No longer a milestone', 'ok');
+    hubRenderTaskBoard(); return;
+  }
+  const del = e.target.closest('[data-ht-del]');
+  if (del) {
+    if (!confirm('Delete this task?')) return;
+    const { error } = await sb.from('tasks').update({ deleted_at: new Date().toISOString() }).eq('id', del.dataset.htDel);
+    if (error) { toast(error.message, 'err'); return; }
+    toast('Task deleted', 'ok'); await hubReload('tasks'); return;
+  }
+  const sf = e.target.closest('[data-ht-sf]');
+  if (sf) { const s = sf.dataset.htSf, arr = hub.tboard.status, i = arr.indexOf(s); i >= 0 ? arr.splice(i, 1) : arr.push(s); hubRenderTaskBoard(); return; }
+  if (e.target.closest('[data-ht-mson]')) { hub.tboard.msOnly = !hub.tboard.msOnly; hubRenderTaskBoard(); return; }
+  if (e.target.closest('[data-ht-unassigned]')) { hub.tboard.unassigned = !hub.tboard.unassigned; hubRenderTaskBoard(); return; }
+  const srt = e.target.closest('th[data-ht-sort]');
+  if (srt) { const k = srt.dataset.htSort; if (hub.tboard.sort === k) hub.tboard.dir *= -1; else { hub.tboard.sort = k; hub.tboard.dir = 1; } hubRenderTaskBoard(); return; }
+});
+$('panel-eventhub').addEventListener('change', (e) => {
+  const bf = e.target.closest('[data-ht-filter]');
+  if (bf && hub.tboard) { hub.tboard[bf.dataset.htFilter] = bf.value; hubRenderTaskBoard(); }
+});
+$('panel-eventhub').addEventListener('input', (e) => {
+  const q = e.target.closest('[data-ht-q]');
+  if (q && hub.tboard) { hub.tboard.q = q.value; hubRenderTaskBoard(); }
 });
 
 // ============================================================
@@ -16441,7 +16640,7 @@ function planWire() {
 // +60, local +20, listed 2 days after the theft" is.
 const GW_STATUS = ['new', 'reviewed', 'reported', 'dismissed', 'recovered'];
 const GW_STATUS_COLOR = { new: 'var(--amber,#b58900)', reviewed: '#5b7fb3', reported: 'var(--green,#1f7a1f)', dismissed: 'var(--mid,#888)', recovered: 'var(--green,#1f7a1f)' };
-let gwState = { filter: 'new', open: null, scanning: false };
+let gwState = { filter: 'new', open: null, scanning: false, scanKind: null };
 
 async function loadGearWatch() {
   $('gearWatchBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading gear watch…</div>';
@@ -16546,9 +16745,10 @@ async function loadGearWatch() {
     </div>
 
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
-      <button class="hub-btn" data-gw-scan${gwState.scanning ? ' disabled' : ''}>${gwState.scanning ? 'Scanning…' : '🔍 Run scan now'}</button>
+      <button class="hub-btn" data-gw-scan${gwState.scanning ? ' disabled' : ''}>${gwState.scanKind === 'manual' ? 'Scanning…' : '🔍 Run scan now'}</button>
+      <button class="hub-btn" data-gw-scanfb${gwState.scanning ? ' disabled' : ''} title="Facebook Marketplace is a paid scrape and takes a minute or two — it is not part of the automatic scans">${gwState.scanKind === 'facebook' ? 'Scanning Facebook…' : '📘 Scan Facebook'}</button>
       <button class="hub-btn" data-gw-settings>⚙ Settings</button>
-      <span class="kpi-hint" style="margin:0;">Automatic scans run 8am · 2pm · 8pm ET.</span>
+      <span class="kpi-hint" style="margin:0;">Automatic scans run 8am · 2pm · 8pm ET — Reverb, Craigslist and eBay. Facebook costs credit, so it is a separate press.</span>
     </div>
 
     ${!cfg.theft_date ? `<div class="panel-state info" style="margin-bottom:10px;">Set the <strong>theft date</strong> in Settings. Until it's set, listings posted <em>before</em> the theft can't be filtered out and the scores will be noisy.</div>` : ''}
@@ -16581,13 +16781,29 @@ async function loadGearWatch() {
     </div>`;
 }
 
-async function gwRunScan() {
-  gwState.scanning = true; loadGearWatch();
-  const { data, error } = await sb.functions.invoke('scan-gear-market', { body: { trigger: 'manual' } });
-  gwState.scanning = false;
+// Two entry points, one runner. "Run scan now" is the three free sources and
+// returns in seconds; "Scan Facebook" is the paid scrape on its own. They were
+// one button until 2026-08-25, and that button could never finish: Facebook's
+// scrape blocks for minutes, four targets in a row blew the edge function's
+// 150s wall clock, and because the run row is written last, every press failed
+// leaving no trace at all — just a toast that faded.
+async function gwRunScan(kind = 'manual') {
+  if (kind === 'facebook' && !confirm(
+    ['Scan Facebook Marketplace?', '',
+     'This one is a paid scrape (roughly $0.30 of Apify credit) and takes a minute or two.',
+     'The other three sources are free and already run automatically three times a day.'
+    ].join(String.fromCharCode(10)))) return;
+  gwState.scanning = true; gwState.scanKind = kind; loadGearWatch();
+  const { data, error } = await sb.functions.invoke('scan-gear-market', { body: { trigger: kind } });
+  gwState.scanning = false; gwState.scanKind = null;
   if (error) { toast('Scan failed: ' + error.message, 'err'); loadGearWatch(); return; }
-  const failed = Object.entries(data?.sources || {}).filter(([, v]) => String(v).startsWith('FAILED'));
+  const entries = Object.entries(data?.sources || {});
+  const failed = entries.filter(([, v]) => String(v).startsWith('FAILED'));
+  // PARTIAL is not success. A Facebook run that reached two of four targets has
+  // NOT looked for the other two, and must never read as a completed sweep.
+  const partial = entries.filter(([, v]) => String(v).startsWith('PARTIAL'));
   if (failed.length) toast(`Scanned with ${failed.length} source(s) down: ${failed.map(([k]) => k).join(', ')}`, 'err');
+  else if (partial.length) toast(`Partial scan — ${partial.map(([k]) => k).join(', ')} did not cover every target. See Sources below.`, 'err');
   else toast(`Scan done — ${data?.inserted ?? 0} new, ${data?.matched ?? 0} matched`, 'ok');
   loadGearWatch();
 }
@@ -16663,7 +16879,8 @@ async function gwOpenSettings() {
 }
 
 $('panel-gearwatch').addEventListener('click', (e) => {
-  if (e.target.closest('[data-gw-scan]')) return gwRunScan();
+  if (e.target.closest('[data-gw-scan]')) return gwRunScan('manual');
+  if (e.target.closest('[data-gw-scanfb]')) return gwRunScan('facebook');
   if (e.target.closest('[data-gw-settings]')) return gwOpenSettings();
   const f = e.target.closest('[data-gw-filter]');
   if (f) { gwState.filter = f.dataset.gwFilter; loadGearWatch(); }
@@ -19523,7 +19740,7 @@ async function raDjRevoke() {
 // from the browser, so there's nothing durable to store. Instead: grab a fresh
 // token in one click, paste, run. The server caches it until its own expiry, so
 // repeat runs in the same ten minutes don't ask again. Nothing long-lived is kept.
-const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var t=JSON.parse(v).accessToken;navigator.clipboard.writeText(t);alert('Beatport token copied \\u2014 paste it into the Come With dashboard now (it expires in 10 minutes).')}catch(e){alert('Could not read the token: '+e.message)}})()";
+const RA_BP_GRAB = "javascript:(function(){var v=localStorage['token-refresh-result'];if(!v){alert('Log in at beatport.com first, then click this again.');return}try{var o=JSON.parse(v);navigator.clipboard.writeText(v);alert(o.refreshToken?'Beatport token AND refresh token copied - paste it into the Come With dashboard. This should be the last time you need to do this.':'Beatport token copied, but this snapshot has no refresh token, so it expires in 10 minutes. Paste it now.')}catch(e){alert('Could not read the token: '+e.message)}})()";
 // ---- Beatport catalogue for one artist (112) --------------------------------
 // SoundCloud can't be trusted to list a label artist's full output, so this is
 // the second source. Cached in raState.bpCatalog per artist key.
@@ -19650,12 +19867,12 @@ async function raArtistCatalogWithToken(token, btn) {
 function raBeatportPasteBox(msg) {
   return `<div style="border:1px solid var(--border-strong);border-radius:8px;padding:11px 13px;margin-bottom:10px;">
     <strong style="font-size:.86rem;">🔑 Beatport token</strong>
-    <div class="kpi-hint" style="margin:4px 0 8px;">${msg} Beatport tokens expire after <strong>10 minutes</strong>, so you grab a fresh one each time you do a buy run — there's nothing to set up and no password stored anywhere.</div>
+    <div class="kpi-hint" style="margin:4px 0 8px;">${msg} Beatport <em>access</em> tokens expire after <strong>10 minutes</strong> — but the copy line below now grabs the <strong>refresh token</strong> as well, and once that is stored Beatport renews itself. You should only need to do this once. No password is stored anywhere.</div>
     <ol class="kpi-hint" style="margin:0 0 8px 16px;padding:0;">
       <li>Open <a href="https://www.beatport.com" target="_blank" rel="noopener">beatport.com</a> in another tab and make sure you're <strong>logged in</strong>.</li>
       <li><strong>Right-click</strong> anywhere on that page → <strong>Inspect</strong> → click the <strong>Console</strong> tab.</li>
       <li>Paste this line and press Enter (if Chrome refuses, type <code>allow pasting</code> + Enter first, then paste):<br>
-        <code style="user-select:all;display:inline-block;margin-top:3px;">copy(JSON.parse(localStorage['token-refresh-result']).accessToken)</code><br>
+        <code style="user-select:all;display:inline-block;margin-top:3px;">copy(localStorage['token-refresh-result'])</code><br>
         Nothing prints — that's correct, it copied to your clipboard.</li>
       <li>Come back here, paste in the box below, and hit <strong>Run with this token</strong>.</li>
     </ol>
@@ -19825,6 +20042,27 @@ async function raCheckSources(accessToken, skipProbe) {
       }
     } catch (_) { /* probe is an optimisation — if it fails just run the check */ }
   }
+  // What this run actually WROTE, field by field. Without it the panel reported
+  // "checked 27 tracks" and you had no way to tell a good run from one that
+  // silently wrote nothing — which is exactly how a dead-token run that nulled
+  // 18 links and prices passed for a success on 2026-08-26.
+  const raFilledSummary = (filled, checked) => {
+    const LABELS = [
+      ['genres', 'genres'], ['release_date', 'release dates'], ['label', 'labels'],
+      ['bpm', 'BPM'], ['song_key', 'keys'], ['camelot', 'Camelot keys'],
+      ['beatport_url', 'Beatport links'], ['beatport_price', 'prices'],
+      ['bandcamp_url', 'Bandcamp links'],
+    ];
+    const hits = LABELS.filter(([k]) => filled[k]).map(([k, lbl]) =>
+      `<span style="display:inline-block;border:1px solid var(--border-strong);border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;">
+         <strong>${filled[k]}</strong> ${lbl}</span>`);
+    if (!hits.length) {
+      return `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;margin-bottom:6px;">
+        Checked ${checked} track${checked === 1 ? '' : 's'} but <strong>filled in nothing</strong> — either it was all already there, or Beatport never answered. Check the token before assuming the former.</div>`;
+    }
+    return `<div class="kpi-hint" style="margin-bottom:6px;">Filled in across ${checked} track${checked === 1 ? '' : 's'}: ${hits.join(' ')}</div>`;
+  };
+
   const progress = (done, tot) => {
     const pct = tot ? Math.round((done / tot) * 100) : 0;
     openKpi('🛒 Where to buy', `SHOW ${pl.station_no ?? '—'} · ${pl.name}`, `
@@ -19841,6 +20079,9 @@ async function raCheckSources(accessToken, skipProbe) {
     // the whole run. Now each batch is a few seconds and progress is visible.
     const BATCH = 6;
     let data = null, res = [], off = 0, applied = 0, guard = 0;
+    // Per-field tally, summed across batches — the run is paged, so each batch
+    // only reports its own slice.
+    const filled = {};
     while (guard++ < 40) {
       const r = await sb.functions.invoke('track-sources', {
         body: { playlist_id: pl.id, apply_bpm_key: true, offset: off, limit: BATCH, access_token: accessToken || undefined },
@@ -19850,6 +20091,7 @@ async function raCheckSources(accessToken, skipProbe) {
       if (data.error && !(data.results || []).length) throw new Error(data.error);
       res = res.concat(data.results || []);
       applied += data.applied || 0;
+      for (const [k, v] of Object.entries(data.filled || {})) filled[k] = (filled[k] || 0) + v;
       off += (data.results || []).length || BATCH;
       progress(Math.min(off, data.total || n), data.total || n);
       if (data.done || !(data.results || []).length) break;
@@ -19872,7 +20114,8 @@ async function raCheckSources(accessToken, skipProbe) {
         ? '⚠ That token had already expired when it arrived — grab a fresh one.'
         : 'No Beatport prices or BPM/key below, only Bandcamp — paste a token and run again to get them.') : ''}
       ${data.bandcamp_ok === false ? `<div class="kpi-hint" style="border-left:3px solid var(--amber,#b58900);padding-left:8px;">⚠ Bandcamp didn't answer (they have no official API, so this happens). "Not found" below reflects Beatport only — it does <strong>not</strong> mean the song isn't on Bandcamp.</div>` : ''}
-      <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}${data.applied ? `Filled in BPM/key on <strong>${data.applied}</strong> track${data.applied === 1 ? '' : 's'} that didn't have it. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
+      ${raFilledSummary(filled, res.length)}
+      <div class="kpi-hint">${money ? `Roughly <strong>$${money.toFixed(2)}</strong> to buy the ${onBp} Beatport tracks. ` : ''}Prices and links are saved on each track — the 🛒 icon in the tracklist opens the buy page.</div>
       <div class="hub-list" style="max-height:360px;overflow:auto;border:1px solid var(--border);border-radius:8px;padding:6px 10px;">${rows}</div>
       <div class="kpi-hint" style="margin-top:8px;">To actually fill a cart, run <code>/beatport-cart</code> — it adds the matches to your Beatport cart in one go.</div>`,
       () => closeKpi(), 'Close');
@@ -22267,7 +22510,9 @@ function calRender() {
     </div>
     <div id="calGridWrap">${CAL.view === 'month' ? calGridHtml() : CAL.view === 'week' ? calWeekHtml() : calAgendaHtml()}</div>
     <div id="calDayDetail">${CAL.selDay ? calDayDetailHtml(CAL.selDay) : ''}</div>
-    <div class="hub-sec-bar" style="margin-top:22px;" id="calTasksHead"><h3>✅ Tasks</h3><button class="hub-btn" data-cal-task-add>+ Task / milestone</button></div>
+    <div class="hub-sec-bar" style="margin-top:22px;" id="calTasksHead"><h3>✅ Tasks</h3><span style="display:flex;gap:8px;">
+      <button class="hub-btn" data-cal-email-tasks title="Email exactly what the board is showing — the current filters and sort order">✉ Email task list</button>
+      <button class="hub-btn" data-cal-task-add>+ Task / milestone</button></span></div>
     <div class="cal-board" id="calBoard"></div>`;
   calRenderBoard();
 }
@@ -22375,6 +22620,71 @@ function calDayListHtml(b, mkMax) {
   if ((b.mk || []).length > mkMax) out.push(`<div class="li-sub" style="padding:4px 8px;">…+${b.mk.length - mkMax} more market shows</div>`);
   return `<div class="hub-list">${out.join('')}</div>`;
 }
+// ---- Email the task board (only what the filters currently show) ----
+async function calEmailTasks() {
+  const tasks = calBoardTasks();
+  if (!tasks.length) { toast('Nothing in the current view to send — clear a filter first', 'err'); return; }
+  const staff = await loadStaff();
+  if (!staff.length) { toast('No other admins to send to', 'err'); return; }
+  const words = calFilterWords();
+  const scope = taskScopeLine(CAL.board, words);
+  const filterNote = taskFilterNote(words, tasks.length, CAL.tasks.length);
+  const recipRow = (email, name) =>
+    `<label class="pick-row" style="display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 0;">
+      <input type="checkbox" data-ctrecip data-email="${escapeHtml(email)}" data-name="${escapeHtml(name)}" checked style="width:auto;margin:0;">
+      ${escapeHtml(name)} <span class="li-sub">${escapeHtml(email)}</span></label>`;
+  const preview = () => buildTasksEmailHtml(tasks, {
+    heading: 'Come With — Tasks',
+    subhead: scope,
+    filterNote,
+    note: $('kpiModalBody').querySelector('#ctNote')?.value || '',
+    order: $('kpiModalBody').querySelector('#ctGroup')?.checked ? 'grouped' : 'as-sorted',
+    includeDone: CAL.board.status.includes('done'),
+    showEvent: true,
+  });
+  openKpi('Email task list', `${tasks.length} task${tasks.length === 1 ? '' : 's'} — exactly what the board is showing`, `
+    <div class="kpi-hint" style="margin:-4px 0 10px;max-width:62ch;">${escapeHtml(scope)}</div>
+    <div class="modal-form-row"><label class="modal-label">To</label>
+      <div class="hub-list" style="max-height:150px;overflow:auto;">${staff.map(p => recipRow(p.email, p.full_name || p.email)).join('')}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Subject</label>
+      <input class="modal-input" id="ctSubject" value="Tasks — ${escapeHtml(words.length ? words.join(', ') : 'all open')}"></div>
+    <div class="modal-form-row"><label class="modal-label">Message (goes above the task list)</label>
+      <textarea class="modal-textarea" id="ctNote" rows="3" placeholder="Here's where we stand. Flag anything blocked…"></textarea></div>
+    <label class="modal-label" style="display:flex;gap:8px;align-items:center;"><input type="checkbox" id="ctGroup" style="width:auto;margin:0;"> Group by status instead of the order on screen</label>
+    <div class="modal-form-row" style="margin-top:10px;"><label class="modal-label">Preview</label>
+      <div id="ctPreview" style="max-height:300px;overflow:auto;background:#fff;border-radius:4px;padding:12px;">${preview()}</div></div>`,
+    async () => {
+      const recips = [...$('kpiModalBody').querySelectorAll('[data-ctrecip]:checked')]
+        .map(c => ({ email: c.dataset.email, name: c.dataset.name }));
+      if (!recips.length) throw new Error('Pick at least one recipient');
+      const subject = $('ctSubject').value.trim(); if (!subject) throw new Error('Subject is required');
+      const { data, error } = await sb.functions.invoke('send-actor-email', { body: {
+        recipients: recips, subject, body: preview(), single_thread: true,
+        // Not event-scoped: source_id stays null so Conversations shows no
+        // "Go to source" button rather than a link to one arbitrary event.
+        source: 'Calendar & Tasks', source_kind: 'task_board', source_id: null, visibility: 'team' } });
+      if (error) throw new Error(error.message || 'send failed');
+      closeKpi();
+      const sent = data?.sent || 0;
+      if (data?.conversation_id) {
+        try {
+          let team = CHAT.channels.find(c => c.kind === 'team');
+          if (!team) { await chatLoadChannels(); team = CHAT.channels.find(c => c.kind === 'team'); }
+          if (team) await sb.from('chat_messages').insert({
+            channel_id: team.id, author_id: ME.id, kind: 'email', email_subject: subject,
+            conversation_id: data.conversation_id,
+            body: `Task list (${tasks.length} task${tasks.length === 1 ? '' : 's'}${words.length ? ', filtered' : ''}) — emailed to ${sent} ${sent === 1 ? 'person' : 'people'}. Open the thread for the list; mark ✓ complete when it's handled.`,
+          });
+        } catch (_) { /* notice is best-effort; the email already went out */ }
+      }
+      toast(sent ? `Task list sent (${sent} recipients, one thread) · posted to # Team chat` : 'Send failed', sent ? 'ok' : 'err');
+    }, 'Send task list');
+  setTimeout(() => {
+    const re = () => { $('ctPreview').innerHTML = preview(); };
+    $('kpiModalBody').querySelector('#ctNote')?.addEventListener('input', re);
+    $('kpiModalBody').querySelector('#ctGroup')?.addEventListener('change', re);
+  }, 40);
+}
 // ---- Tasks board (below the grid) ----
 const CAL_PRIO_RANK = { high: 0, medium: 1, low: 2 };
 function calBoardTasks() {
@@ -22437,7 +22747,12 @@ function calRenderBoard() {
       <td style="white-space:nowrap;"><button class="hub-mini" data-tb-edit="${escapeHtml(t.id)}" title="Edit">✎</button> <button class="hub-mini danger" data-tb-del="${escapeHtml(t.id)}" title="Delete">✕</button></td>
     </tr>`;
   }).join('');
-  $('calBoard').innerHTML = `
+  // Typing in the search box re-renders the bar the box lives in, which throws
+  // focus to the body — one character per click unless the caret is put back.
+  const el = $('calBoard');
+  const onQ = document.activeElement && document.activeElement.matches?.('[data-tb-q]');
+  const caret = onQ ? document.activeElement.selectionStart : null;
+  el.innerHTML = `
     <div class="cal-board-bar">
       <input class="modal-input" style="width:180px;padding:5px 8px;font-size:.75rem;" placeholder="Search tasks…" value="${escapeHtml(f.q)}" data-tb-q>
       ${['todo', 'doing', 'blocked', 'done'].map(sChip).join('')}
@@ -22454,6 +22769,7 @@ function calRenderBoard() {
     <table><thead><tr><th>⭐</th>${th('title', 'Task')}${th('event', 'Event')}<th>Assignees</th>${th('priority', 'Priority')}${th('due', 'Due')}${th('status', 'Status')}<th></th></tr></thead>
     <tbody>${rows || `<tr><td colspan="8"><div class="hub-empty">No tasks match these filters.${dirty ? ' <a href="#" data-tb-clear>Clear them</a>.' : ''}</div></td></tr>`}</tbody></table>
     ${f.status.includes('done') ? `<div class="li-sub" style="padding:8px 2px;font-size:.66rem;">Done tasks closed more than ${CAL_DONE_WINDOW} days ago aren't loaded — open work is always complete.</div>` : ''}`;
+  if (onQ) { const inp = el.querySelector('[data-tb-q]'); if (inp) { inp.focus(); try { inp.setSelectionRange(caret, caret); } catch (_) {} } }
 }
 // Shared task editor — used by the Calendar tasks board AND the event hub
 // Tasks section. Core fields save on Submit; assignment add/remove applies
@@ -22911,6 +23227,7 @@ $('panel-calendar').addEventListener('click', async (e) => {
   if (layer) { const k = layer.dataset.calLayer; CAL.layers[k] = !CAL.layers[k]; await loadCalendar(); return; }
   const cell = e.target.closest('.cal-cell[data-cal-day]');
   if (cell) { CAL.selDay = CAL.selDay === cell.dataset.calDay ? null : cell.dataset.calDay; calRefreshViews(); return; }
+  if (e.target.closest('[data-cal-email-tasks]')) { calEmailTasks(); return; }
   if (e.target.closest('[data-cal-task-add]')) { calAddTask(); return; }
   const star = e.target.closest('[data-tb-star]');
   if (star) {

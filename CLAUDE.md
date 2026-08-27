@@ -5,26 +5,6 @@ Broader migration history and architecture live in `ROADMAP.md`.
 
 ## Start of session (read these, in this order)
 
-> ### ⚠ OPEN ITEM — owed since 2026-08-21: the anon sweep
->
-> **On a machine with `SUPABASE_PROD_PUBLISHABLE_KEY` in `.env` (the desktop),
-> run this FIRST, before any other work:**
->
-> ```
-> python scripts/check_anon_exposure.py
-> ```
->
-> Migrations 197-202 added nine planning objects to prod. Their grants are
-> verified in SQL (`has_table_privilege` / `has_function_privilege`: anon has no
-> SELECT and no EXECUTE), but **PostgREST has never been exercised against
-> them** — the machine that built them has no publishable key. A grants query
-> cannot catch a table answering `200` with a body because RLS let a row
-> through, which is precisely LEARNINGS §37.
->
-> **Delete this block once the sweep has run clean**, and record the result in
-> `CARRYOVER.md`. It is repeated at the top of `CARRYOVER.md` with the full
-> reasoning. If the sweep reports rows on any object, treat it as a live leak.
-
 Keith works from **three machines** now (the desktop, `C:\Users\keith\comewith`,
 and Henry's). Claude Code's memory is per-machine and does **not** sync, so
 everything a session needs to resume lives **in the repo**:
@@ -146,6 +126,15 @@ Four Come-With-specific rules on top of whichever variant you run:
     do answer 401. Tables carry an anon grant from 013 and rely on RLS, so they
     answer **200 with a body** — `[]` is correct, rows are a leak. Read the body,
     never the status.
+- **The sweep does NOT check the five financial views. Run
+  `python scripts/check_financial_views.py` as well.** `check_anon_exposure.py`
+  discovers objects from the schema and is the right tool for breadth, but grep its
+  output for `v_event_summary`, `v_kpi_event_financials`, `v_kpi_parties`,
+  `v_kpi_dance_infusion` or `v_kpi_dashboard` and you get nothing — none of the five
+  named in the rule two bullets up are in it. For months the close read its 54 confident
+  lines as satisfying "all five return 401". Prod was fine; the check was decoration.
+  The new script names all five, proves the publishable key works before trusting a
+  single 401, and exits non-zero on any 200. **Both scripts, every close.** LEARNINGS §51.
 - **`revoke ... from anon` on a FUNCTION is a no-op.** Postgres grants `EXECUTE` on a
   new function to **`PUBLIC`**, and `anon` inherits it — revoking from `anon` removes a
   grant it never separately held, and the function stays wide open. Always
@@ -526,6 +515,50 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   event, and inventing one puts a photo session in the events list and the P&L.
 - **`is_public` defaults to FALSE.** The bucket itself is public, so never put
   documents there; publishing an image is a deliberate toggle. LEARNINGS §32.
+
+## Secrets and third-party credentials
+
+- **A Supabase secret is WRITE-ONLY. The Management API returns a SHA-256 DIGEST
+  in the `value` field, not the value.** Every secret reads back as 64 hex
+  characters whatever it holds. So: you cannot rename a secret, cannot copy one to
+  another name, and **cannot judge a credential from what you read back** — length,
+  charset and prefix are all properties of the digest. On 2026-08-25 that misread
+  produced a confident accusation that Keith's eBay keys were "not an eBay keyset"
+  (they were fine), then a test that authenticated with the *digests* and reported
+  eBay's `invalid_client` as proof. **The only legitimate test of a credential is
+  to send it to the system that owns it.** If an inspection contradicts what Keith
+  says he entered, distrust the inspection. LEARNINGS §52.
+- **`401 invalid_client` from eBay usually means the KEYSET IS DISABLED, not that
+  the key is wrong.** eBay disables a production keyset until the account has a
+  working Marketplace Account Deletion endpoint. `supabase/functions/ebay-account-deletion`
+  is that endpoint, deployed **`--no-verify-jwt`** (eBay calls it unauthenticated; a
+  gateway 401 reads to them as a dead host). It answers the challenge with
+  `sha256(challengeCode + verificationToken + endpoint)`, and the endpoint in that
+  hash comes from the `EBAY_DELETION_ENDPOINT` **secret, not `req.url`** — behind a
+  proxy they differ and the mismatch yields a valid-looking hash eBay silently
+  rejects. The shared token lives in `EBAY_VERIFICATION_TOKEN` and in the gitignored
+  `ebay_verification_token.txt`; rotate BOTH sides together or verification breaks.
+- **Supabase edge-function logs are empty on this plan.** `function_edge_logs`
+  returns zero rows for every function, including ones invoked minutes earlier.
+  Never read an empty result there as "it was never called" — run the control
+  query first. §52.
+
+## A source that costs money does not share a button with sources that don't
+
+- **Split manual actions by COST and LATENCY, not by category.** Gear Watch had one
+  "Run scan now" covering four sources. Three are API calls totalling ~6s; Facebook
+  is an Apify scrape that BLOCKS until it finishes, once per target. Four of those
+  never fit the edge runtime's **150s wall clock**, so the button returned 546 — and
+  because the run row is written last, every press since it shipped left **no trace
+  at all**. `manual` is now the free three; `facebook` is its own button behind a
+  confirm naming the price. LEARNINGS §53.
+- **Bound any blocking third-party call** (`AbortSignal.timeout`), leave room after
+  it to finish the work, and **refuse to start one you cannot finish** — that wastes
+  the credit and the wall clock together.
+- **If only part of the list fits, ROTATE and say what you missed.** Starting at
+  item #1 every press means the tail is never processed however often it is pressed
+  — a permanent blind spot reporting itself as a clean run. Name the items skipped,
+  not a count, and make `PARTIAL` its own state that the UI shows as a problem.
 
 ## Scheduled work (pg_cron → edge functions)
 

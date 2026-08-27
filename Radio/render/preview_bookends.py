@@ -53,8 +53,11 @@ def main():
     frames.append((p, 4.0, "song-card"))
 
     # CLOSING beats
-    for i, base in enumerate(R.OUTRO_BEATS):
-        stage = min(i, len(R.OUTRO_BEATS) - 2)
+    # R.outro_beats(), never a local copy — the preview must show exactly what
+    # the render will draw, including a dropped beat when the tease is blank.
+    _beats = R.outro_beats()
+    for i, base in enumerate(_beats):
+        stage = min(i, len(_beats) - 2)
         p = os.path.join(OUT, "outro_%02d.png" % i)
         R.draw_outro(bg, cover_sm, NEXT, stage).save(p)
         frames.append((p, base, "closing-beat-%d" % i))

@@ -27,7 +27,7 @@ are reported and abort, so you never render a half-timed video by accident.
   --mixed-by TEXT  intro credit;  --drop-date / --next-date  YYYY-MM-DD (bookends)
   --no-bookends    skip the intro + closing;  --intro-secs / --outro-secs  retime
 """
-import argparse, csv, os, random, re, subprocess, sys, tempfile
+import argparse, csv, json, os, random, re, subprocess, sys, tempfile
 import sys as _sys
 try:
     _sys.stdout.reconfigure(encoding="utf-8")
@@ -535,6 +535,52 @@ BACKDROPS = {"weekly": make_background,
              "ether": make_background_ether}
 
 
+# ---- the site band -----------------------------------------------------------
+# The strip in the lower third of every track card, telling people what waits at
+# comewith.org/radio. It is on screen for the whole hour, so it stays two quiet
+# lines and never competes with the artist name.
+#
+# GLYPH TRAP: Pillow draws from ONE font file with no emoji fallback, unlike the
+# website. In Consolas only these exist -- everything else renders as tofu:
+#       OK:  ▸ (U+25B8)   ♥ (U+2665)   ↓ (U+2193)   ·   —   $
+#       NO:  ▶  ♡  ⬇  🎟  ★
+# So the card uses ▸ ♥ ↓ where the site's buttons read ▶ ♡ ⬇. Verify any new
+# symbol with a render before trusting it.
+HEADER_Y = 66                     # top of the show-name / NOW PLAYING row
+CONTENT_TOP = HEADER_Y + 40       # first pixel the track block may use
+BAND_Y = 792                      # divider rule; the two lines hang below it
+BAND_URL = "COMEWITH.ORG/RADIO"
+
+# The chosen wording. Line 1 leads with the address; line 2 is the menu of what
+# is actually there, in the same order the page presents it.
+BAND_LEAD  = "  —  THE FULL TRACKLIST"
+BAND_ITEMS = [("▸", "PLAY EVERY TRACK"),
+              ("♥", "SAVE YOURS"),
+              ("↓", "EXPORT WITH BPM + KEY"),
+              ("$",       "TICKETS + PRICES")]
+
+
+def draw_band(d):
+    """Two lines in the lower third: where to go, and what you can do there."""
+    d.line([BAR_X, BAND_Y, W - BAR_X, BAND_Y], fill=LINE, width=2)
+
+    f1 = F_monob(34)
+    x, y = BAR_X, BAND_Y + 30
+    d.text((x, y), BAND_URL, font=f1, fill=LIME)
+    x += d.textlength(BAND_URL, font=f1)
+    d.text((x, y), BAND_LEAD, font=f1, fill=FAINT)
+
+    f2 = F_mono(30)
+    x, y = BAR_X, BAND_Y + 84
+    for i, (glyph, words) in enumerate(BAND_ITEMS):
+        if i:
+            x += 46
+        d.text((x, y), glyph, font=f2, fill=LIME)
+        x += d.textlength(glyph + " ", font=f2)
+        d.text((x, y), words, font=f2, fill=DIM)
+        x += d.textlength(words, font=f2)
+
+
 def chip(draw, x, y, text, fnt, accent=False):
     tw = draw.textlength(text, font=fnt)
     ascent, descent = fnt.getmetrics(); th = ascent + descent
@@ -557,14 +603,18 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     im = bg.copy()
     d = ImageDraw.Draw(im)
     # header
-    d.text((BAR_X, 66), ("%s  ·  %s" % (title_text.upper(), ep_label)).upper(),
+    d.text((BAR_X, HEADER_Y), ("%s  ·  %s" % (title_text.upper(), ep_label)).upper(),
            font=F_mono(30), fill=FAINT)
-    live = "● NOW PLAYING"
+    live = CARD["now_playing"]
     lw = d.textlength(live, font=F_monob(30))
-    d.text((W - BAR_X - lw, 66), live, font=F_monob(30), fill=LIME)
+    d.text((W - BAR_X - lw, HEADER_Y), live, font=F_monob(30), fill=LIME)
 
-    # cover
-    cs = 470; cx, cy = BAR_X, (H - cs) // 2 - 30
+    # cover. The cover is the tallest thing in the block, so centring it centres
+    # the block. Centre it between the header and the band rule -- NOT on the
+    # canvas: half the canvas now belongs to the band, and (H-cs)//2 left the
+    # art hanging low with a gap above it.
+    cs = 470
+    cx, cy = BAR_X, (CONTENT_TOP + BAND_Y - cs) // 2
     im.paste(cover, (cx, cy), cover)
 
     # meta column
@@ -611,6 +661,8 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
         ven = truncate(d, ven, F_mono(34), (mx + mw) - chx - 90)
         chip(d, chx, chy, ven, F_mono(34))
 
+    draw_band(d)
+
     # progress rail + lime fill baked in at this track's position (stepped per
     # track — fast + robust; a per-frame animated bar via ffmpeg geq is far too
     # slow for an hour-long render).
@@ -625,8 +677,8 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
     # what's coming. "LAST TRACK" stays: it gives the ending its shape without
     # revealing a single thing.
     if not nxt:
-        d.text((BAR_X, BAR_Y + 40), "LAST TRACK", font=F_mono(30), fill=FAINT)
-    site = "comewith.org"
+        d.text((BAR_X, BAR_Y + 40), CARD["last_track"], font=F_mono(30), fill=FAINT)
+    site = CARD["footer"]
     sw = d.textlength(site, font=F_mono(30))
     d.text((W - BAR_X - sw, BAR_Y + 40), site, font=F_mono(30), fill=(179, 167, 184))
 
@@ -694,7 +746,43 @@ def _cdivider(d, cx, y, half=210):
 # `outro_a/b`  the two closing body lines
 # `next_label` prefix on the closing date pill
 # `tease`      final closing line; "" hides it
-EDITIONS = {
+# ---- editable copy ----------------------------------------------------------
+# Every word the video draws lives in templates.json next to this file, so the
+# wording can be changed without touching Python. What stays here is only the
+# FALLBACK: if that file goes missing, gets deleted by whoever copied the tool,
+# or picks up a typo, the render still happens with the built-in copy and says
+# so, rather than dying halfway through an episode.
+TEMPLATES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates.json")
+
+
+def load_templates(path=None):
+    """templates.json merged over DEFAULT_COPY. Never raises."""
+    import copy as _copy
+    out = _copy.deepcopy(DEFAULT_COPY)
+    path = path or TEMPLATES_PATH
+    try:
+        with open(path, encoding="utf-8") as f:
+            user = json.load(f)
+    except FileNotFoundError:
+        return out
+    except Exception as ex:
+        print("!! templates.json could not be read (%s) — using the built-in copy." % ex)
+        return out
+    for section in ("card", "band"):
+        if isinstance(user.get(section), dict):
+            out[section].update(user[section])
+    for name, ed in (user.get("editions") or {}).items():
+        if isinstance(ed, dict):
+            out["editions"].setdefault(name, {}).update(ed)
+    # items arrive as [[glyph, words], ...] from JSON; the drawing code wants pairs
+    out["band"]["items"] = [tuple(x)[:2] for x in out["band"]["items"] if len(x) >= 2]
+    return out
+
+
+EDITIONS = None   # set below, once the file has been read
+
+
+DEFAULT_COPY_EDITIONS = {
     "weekly": {
         "brand": "COME WITH RADIO",
         "intro_a": "Every track is an artist playing New York — soon.",
@@ -702,7 +790,10 @@ EDITIONS = {
         "intro_cta": "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN",
         "outro_a": "Tickets to every artist you just heard — plus when &",
         "outro_b": "where they play next, and the mix to replay — at",
-        "next_label": "WE PLUG BACK IN NEXT THURSDAY",
+        # Not "NEXT THURSDAY": the show is not weekly any more. Ep 3 drops 27 Aug and
+        # Ep 4 on 10 Sep, so "next Thursday" beside "SEP 10" contradicts itself.
+        # The date pill carries the specifics; this half just names the day.
+        "next_label": "WE PLUG BACK IN THURSDAY",
         "tease": "SOMETHING ELEMENTAL IS COMING",
     },
     "elements": {
@@ -727,6 +818,18 @@ EDITIONS = {
         "bookend_backdrop": "ether",
     },
 }
+DEFAULT_COPY = {
+    "card": {"now_playing": "● NOW PLAYING", "last_track": "LAST TRACK",
+             "footer": "comewith.org"},
+    "band": {"url": BAND_URL, "lead": BAND_LEAD, "items": list(BAND_ITEMS)},
+    "editions": DEFAULT_COPY_EDITIONS,
+}
+
+T = load_templates()
+BAND_URL, BAND_LEAD, BAND_ITEMS = T["band"]["url"], T["band"]["lead"], T["band"]["items"]
+CARD = T["card"]
+EDITIONS = T["editions"]
+
 ED = EDITIONS["weekly"]          # replaced in main() by --edition
 
 # ---- INTRO: one accumulating "slide" that tells the station's story ----------
@@ -826,11 +929,31 @@ def build_intro(work, bg, cover_sm, ep_label, mixed_by, drop_date, total_secs, h
         out.append((png, max(0.1, dur)))
     return out
 
+def outro_beats():
+    """The closing slide's reveal cadence, for whoever is drawing it.
+
+    ONE definition, because preview_bookends.py draws the same slide and used to
+    keep its own copy of this loop — so the preview and the render could disagree
+    about how many beats there are, and a finished 65-minute video was the first
+    place you'd find out.
+
+    The tease is the last reveal; with it blank that beat would show a slide
+    identical to the one before it, so the beat is dropped rather than held.
+    """
+    if ED.get("tease"):
+        return list(OUTRO_BEATS)
+    return list(OUTRO_BEATS[:-2]) + [OUTRO_BEATS[-1]]
+
+
 def build_outro(work, bg, cover_sm, next_date, total_secs):
-    scale = total_secs / sum(OUTRO_BEATS)
+    # The tease is the last reveal. With it blank that beat would show a slide
+    # identical to the one before it — a couple of seconds where the video looks
+    # frozen — so the beat is dropped rather than held.
+    beats = outro_beats()
+    scale = total_secs / sum(beats)
     out = []
-    for i, base in enumerate(OUTRO_BEATS):
-        stage = min(i, len(OUTRO_BEATS) - 2)      # last beat = hold on the final stage
+    for i, base in enumerate(beats):
+        stage = min(i, len(beats) - 2)            # last beat = hold on the final stage
         png = os.path.join(work, "outro_%02d.png" % i)
         draw_outro(bg, cover_sm, next_date, stage).save(png)
         out.append((png, max(0.1, base * scale)))

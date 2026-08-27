@@ -1,0 +1,105 @@
+{
+  "_readme": [
+    "EVERY WORD THE VIDEO DRAWS LIVES HERE. Edit this file, save it, run the tool.",
+    "There is nothing to rebuild and no Python to touch.",
+    "",
+    "SYMBOLS: the card draws from one font with no emoji fallback.",
+    "  These work:      ▸  ♥  ↓  ·  —  $",
+    "  These do NOT:    ▶  ♡  ⬇  🎟  ★   (they render as empty boxes)",
+    "Always render one card and look at it before trusting a new symbol.",
+    "",
+    "{who} in a line is replaced by whoever mixed the episode (--mixed-by).",
+    "If that is unknown, the matching *_anon line is used instead.",
+    "",
+    "Leave a line as \"\" to hide it. An empty outro 'tease' drops its reveal beat",
+    "rather than holding on an unchanged slide.",
+    "",
+    "If this file is missing or unreadable the tool falls back to built-in copy,",
+    "so a typo here can never stop a render -- it just warns and carries on."
+  ],
+  "card": {
+    "now_playing": "● NOW PLAYING",
+    "last_track": "LAST TRACK",
+    "footer": "comewith.org"
+  },
+  "band": {
+    "url": "COMEWITH.ORG/RADIO",
+    "lead": "  —  THE FULL TRACKLIST",
+    "items": [
+      [
+        "▸",
+        "PLAY EVERY TRACK"
+      ],
+      [
+        "♥",
+        "SAVE YOURS"
+      ],
+      [
+        "↓",
+        "EXPORT WITH BPM + KEY"
+      ],
+      [
+        "$",
+        "TICKETS + PRICES"
+      ]
+    ]
+  },
+  "editions": {
+    "weekly": {
+      "brand": "COME WITH RADIO",
+      "intro_a": "Every track is an artist playing New York — soon.",
+      "intro_b": "Hear who's playing, grab your tickets, go live.",
+      "intro_cta": "TICKETS · WHO'S PLAYING & WHERE · WHERE TO LISTEN",
+      "outro_a": "Tickets to every artist you just heard — plus when &",
+      "outro_b": "where they play next, and the mix to replay — at",
+      "next_label": "WE PLUG BACK IN THURSDAY",
+      "tease": ""
+    },
+    "elements": {
+      "brand": "COME WITH ELEMENTS RADIO",
+      "intro_a": "Every track is a producer playing Elements this weekend.",
+      "intro_b": "Four nights, four episodes. This one is {who}'s run.",
+      "intro_b_anon": "Four nights, four episodes. This is one of them.",
+      "intro_cta": "SET TIMES · WHO'S PLAYING & WHEN · THE FULL RUN",
+      "outro_a": "Every artist you just heard plays Elements this weekend —",
+      "outro_b": "set times, the rest of the run and the mix to replay — at",
+      "next_label": "THE RUN CONTINUES",
+      "tease": "FOUR NIGHTS · FOUR EPISODES · ONE WEEKEND",
+      "bookend_backdrop": "ether"
+    }
+  },
+  "tags": {
+    "_note": [
+      "Static tags go out on EVERY episode, in this order, before the genres.",
+      "YouTube takes 500 characters of comma-separated tags; SoundCloud takes 30",
+      "hashtags separated by spaces — pasting anything else into SoundCloud's field",
+      "makes one giant tag instead of thirty.",
+      "make_tags.py fills the rest with the genres actually played, most common",
+      "first, and tells you if anything had to be cut.",
+      "",
+      "'hashtag_aliases' fixes the tags no rule gets right: R&B would otherwise",
+      "become #RB. Key on the left is matched case-insensitively."
+    ],
+    "static": [
+      "Come With",
+      "Come With Radio",
+      "Come With NYC",
+      "comewithnyc",
+      "NYC nightlife",
+      "New York dance music",
+      "Brooklyn",
+      "DJ mix",
+      "DJ set",
+      "underground dance music",
+      "electronic music",
+      "radio show"
+    ],
+    "hashtag_aliases": {
+      "R&B": "RnB",
+      "Drum & Bass": "DnB",
+      "Hip-hop": "HipHop",
+      "New York dance music": "NewYorkDanceMusic",
+      "NYC nightlife": "NYCNightlife"
+    }
+  }
+}

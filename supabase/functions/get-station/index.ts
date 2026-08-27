@@ -32,7 +32,11 @@ const STATION_COLS = "id, slug, name, note, desc_public, published, published_at
 // sample_url is Beatport's own public preview clip — it lets a track that
 // isn't on SoundCloud still be auditioned, including on the phone via a
 // preview link. energy/comment are private working notes and stay OUT.
-const TRACK_COLS = "title, artist_name, permalink_url, sample_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, sort";
+// release_date is here so the render tool can build a full cues file from this
+// endpoint alone. That is what lets someone with no database credentials make
+// an episode video: an episode token is enough, and nothing else has to be
+// handed out. It is the same year already printed on every track card.
+const TRACK_COLS = "title, artist_name, permalink_url, sample_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, release_date, sort";
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });

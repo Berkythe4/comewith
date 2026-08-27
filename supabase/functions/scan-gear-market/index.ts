@@ -105,13 +105,18 @@ async function fromEbay(query: string, token: string): Promise<Listing[]> {
   }));
 }
 
-async function fromFacebook(query: string): Promise<Listing[]> {
+// budgetMs caps how long this single scrape may block. Apify's run-sync
+// endpoint holds the connection until the actor finishes, and the edge runtime
+// kills the WHOLE request at 150s wall clock — so an unbounded call here takes
+// the function down and nothing is written, not even the run log.
+async function fromFacebook(query: string, budgetMs: number): Promise<Listing[]> {
   const token = Deno.env.get("APIFY_TOKEN");
   if (!token) throw new Error("APIFY_TOKEN not set");
   const actor = Deno.env.get("APIFY_FB_ACTOR") || APIFY_FB_ACTOR_DEFAULT;
   const loc = Deno.env.get("FB_MARKETPLACE_LOCATION") || "nyc";
   const res = await fetch(apifyRunUrl(actor, token), {
     method: "POST",
+    signal: AbortSignal.timeout(budgetMs),
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       startUrls: [{ url: facebookSearchUrl(query, loc) }],
@@ -175,6 +180,16 @@ Deno.serve(async (req) => {
   const startedAt = Date.now();
   const body = await req.json().catch(() => ({}));
   const dryRun = body.dryRun === true;
+  // Three modes, because the sources are not equivalent: Reverb / Craigslist /
+  // eBay are free API calls that finish in seconds, Facebook is a paid scrape
+  // that blocks for minutes. Mixing them made one button that could never
+  // finish. 'manual' is now the free three; 'facebook' is Facebook alone.
+  const mode: "cron" | "manual" | "facebook" =
+    body.trigger === "facebook" ? "facebook" : body.trigger === "manual" ? "manual" : "cron";
+  const freeOn = mode !== "facebook";
+  // Leave room after the last scrape to score, store and write the run row.
+  const FB_DEADLINE = startedAt + 110_000;
+  const FB_MIN_SLICE = 20_000;
 
   const { data: cfg } = await admin.from("gear_watch_config").select("*").eq("id", true).single();
   if (!cfg) return err(500, "gear_watch_config missing — apply migration 146");
@@ -185,11 +200,13 @@ Deno.serve(async (req) => {
 
   // ── collect ───────────────────────────────────────────────────────────────
   const queries = (targets as Target[]).map((t) => `${t.make || ""} ${t.model_tokens[0]}`.trim());
+  // "2 of 4 targets" does not tell you WHICH two are still unsearched.
+  const labels = (targets as Target[]).map((t) => t.label || `${t.make || ""} ${t.model_tokens[0]}`.trim());
   const listings: Listing[] = [];
   const counts: Record<string, number> = { reverb: 0, ebay: 0, craigslist: 0, facebook: 0 };
   const fails: Record<string, string> = {};
 
-  for (const q of queries) {
+  if (freeOn) for (const q of queries) {
     try { const r = await fromReverb(q); listings.push(...r); counts.reverb += r.length; }
     catch (e) { fails.reverb = e instanceof Error ? e.message : String(e); }
   }
@@ -199,7 +216,7 @@ Deno.serve(async (req) => {
   // "eBay still isn't set up" — which is precisely how a reader learns to skim
   // past failure lines, and then misses the one that matters.
   const ebayConfigured = !!(Deno.env.get("EBAY_CLIENT_ID") && Deno.env.get("EBAY_CLIENT_SECRET"));
-  if (ebayConfigured) {
+  if (freeOn && ebayConfigured) {
     try {
       const tok = await ebayToken();
       for (const q of queries) {
@@ -209,7 +226,7 @@ Deno.serve(async (req) => {
     } catch (e) { fails.ebay = e instanceof Error ? e.message : String(e); }
   }
 
-  for (const q of queries) {
+  if (freeOn) for (const q of queries) {
     try { const r = await fromCraigslist(q); listings.push(...r); counts.craigslist += r.length; }
     catch (e) { fails.craigslist = e instanceof Error ? e.message : String(e); }
   }
@@ -221,29 +238,60 @@ Deno.serve(async (req) => {
   // A source that is deliberately skipped says so; it never reports zero.
   const fbConfigured = !!Deno.env.get("APIFY_TOKEN");
   const fbCronOn = (Deno.env.get("FB_ON_CRON") || "").toLowerCase() === "true";
-  const fbOn = fbConfigured && (body.trigger !== "cron" || fbCronOn);
-  if (fbOn) {
-    for (const q of queries) {
-      try { const r = await fromFacebook(q); listings.push(...r); counts.facebook += r.length; }
-      catch (e) { fails.facebook = e instanceof Error ? e.message : String(e); }
+  const fbOn = fbConfigured && (mode === "facebook" || (mode === "cron" && fbCronOn));
+  let fbDone = 0, fbUnreached = 0;
+  const fbCovered: string[] = [], fbMissed: string[] = [];
+  if (fbOn && queries.length) {
+    // Only about two scrapes fit in the wall clock. Always starting at target #1
+    // would mean the last two targets are NEVER searched on Facebook, however
+    // many times the button is pressed — a permanent blind spot that reports
+    // itself as a successful scan. So each Facebook run STARTS where the last
+    // one ran out, walking the whole target list across successive presses.
+    const { count } = await admin.from("gear_watch_runs")
+      .select("id", { count: "exact", head: true }).eq("trigger", "facebook");
+    const start = (count || 0) % queries.length;
+    for (let n = 0; n < queries.length; n++) {
+      const i = (start + n) % queries.length;
+      const q = queries[i], label = labels[i];
+      const left = FB_DEADLINE - Date.now();
+      // Starting a scrape we cannot finish wastes the credit AND the wall clock.
+      if (left < FB_MIN_SLICE) { fbUnreached++; fbMissed.push(label); continue; }
+      try {
+        const r = await fromFacebook(q, left);
+        listings.push(...r); counts.facebook += r.length; fbDone++; fbCovered.push(label);
+      } catch (e) {
+        fbUnreached++; fbMissed.push(label);
+        const m = e instanceof Error ? e.message : String(e);
+        fails.facebook = /timed? ?out|aborted|signal/i.test(m) ? `timed out after ${Math.round((Date.now() - startedAt) / 1000)}s` : m;
+      }
     }
   }
 
   // One line per source, and a source that threw says FAILED — never "0 found".
   const sourceStatus: Record<string, string> = {};
+  const NOT_IN_SCAN = "not in this scan — Facebook-only run";
   for (const k of ["reverb", "craigslist"]) {
-    sourceStatus[k] = fails[k] ? `FAILED: ${fails[k]}` : `ok — ${counts[k]} listing(s) fetched`;
+    sourceStatus[k] = !freeOn ? NOT_IN_SCAN
+      : fails[k] ? `FAILED: ${fails[k]}` : `ok — ${counts[k]} listing(s) fetched`;
   }
-  sourceStatus.ebay = !ebayConfigured
-    ? "NOT CONFIGURED — set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"
-    : (fails.ebay ? `FAILED: ${fails.ebay}` : `ok — ${counts.ebay} listing(s) fetched`);
+  sourceStatus.ebay = !freeOn ? NOT_IN_SCAN
+    : !ebayConfigured
+      ? "NOT CONFIGURED — set EBAY_CLIENT_ID and EBAY_CLIENT_SECRET"
+      : (fails.ebay ? `FAILED: ${fails.ebay}` : `ok — ${counts.ebay} listing(s) fetched`);
   // "Not configured" is its own answer. It is not a failure, and it is certainly
   // not zero results — nobody should read this line as "Facebook has nothing".
+  // Partial coverage is its own answer. "ok — 12 listing(s)" after reaching two
+  // of four targets reads as a clean sweep of everything, which is how you stop
+  // looking for the gear the scan never actually searched for.
   sourceStatus.facebook = !fbConfigured
     ? "NOT CONFIGURED — set APIFY_TOKEN to include Facebook Marketplace"
     : !fbOn
-      ? "skipped on the schedule to control cost — press Run scan now to include it"
-      : (fails.facebook ? `FAILED: ${fails.facebook}` : `ok — ${counts.facebook} listing(s) fetched`);
+      ? "not in this scan — it costs credit; use “Scan Facebook” to run it"
+      : fbDone === 0
+        ? `FAILED: ${fails.facebook || "no target could be searched in the time available"}`
+        : fbUnreached > 0
+          ? `PARTIAL — ${counts.facebook} listing(s); searched ${fbCovered.join(", ")}; NOT searched ${fbMissed.join(", ")}${fails.facebook ? ` (${fails.facebook})` : ""} — press again to continue where this left off`
+          : `ok — ${counts.facebook} listing(s) fetched`;
 
   // ── score ─────────────────────────────────────────────────────────────────
   const scoreCfg = { theft_date: cfg.theft_date, geo_terms: cfg.geo_terms || [] };
@@ -424,7 +472,7 @@ Deno.serve(async (req) => {
   // quietly stopped answering has to be visible in the panel, not something you
   // could only find by reading net._http_response.
   await admin.from("gear_watch_runs").insert({
-    trigger: body.trigger === "cron" ? "cron" : "manual",
+    trigger: mode,
     sources: sourceStatus,
     fetched: listings.length,
     matched: scored.length,

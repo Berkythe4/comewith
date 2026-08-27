@@ -971,7 +971,8 @@ built (024/026) but **no non-admin login is provisioned**.
 
 ### 🐞 Still-open bugs (re-verify when next in that flow)
 - Events Services Agreement (payment-method/recording-rights buttons, fee-total auto-update, client
-  auto-populate); dashboard tabs need filter/sort.
+  auto-populate); dashboard tabs need filter/sort. **Both task boards got filter/sort
+  2026-08-25** — the rest of the tabs have not.
 
 ---
 
@@ -1401,3 +1402,81 @@ is the first item in CARRYOVER and in CLAUDE.md.
 `var(--panel, #fff)` and `--panel` is defined nowhere in the file. Re-toned onto the
 real dark palette, along with the total/profit bands, the payee picker and the
 charge-detail inputs, which carried the same fallback under `color: inherit`.
+
+---
+
+## 2026-08-25 — One task board, and emailing the view you're looking at
+
+**Done.** The event hub's Tasks tab was a stack of rows with the assignee and due
+date buried in a subline. It is now the *same table* as Calendar & Tasks — star,
+task, assignees, priority, due, inline status, edit/delete — with the calendar's
+whole filter bar (search, status chips, assignee, priority, bucket, due horizon,
+milestones-only, unassigned-only, clear-filters, N-of-M count) and sortable
+headers. Only the Event column and filter are dropped: every row on an event hub
+is already that event's.
+
+**Done.** Both boards can now email their list, and both send the **current
+view** — the active filters, in the order on screen — rather than everything.
+Default is a flat list in screen order; a checkbox restores the grouped
+Overdue/In-progress/Blocked/To-do layout. The filter travels with the mail in the
+subject, a scope line and an *N of M* note, because the recipient cannot see your
+filter chips (§50). `buildTasksEmailHtml` and the filter-wording helpers are
+shared by both boards rather than copied.
+
+**Fixed along the way.** A stale assignee filter carried between events and could
+silently empty the board; `hubSetTaskStatus` didn't re-render, so a task marked
+done sat in a list that filters on status; and typing in either board's search
+box threw focus to the body — one character per click, a bug the calendar had
+had unreported because nobody had used the search.
+
+**New:** `scripts/test_task_email.mjs` (30 checks). It runs the real functions
+lifted out of `dashboard.html` rather than grepping their source, so a refactor
+that changes behaviour fails it.
+
+**Open, and the reason the next session starts there:** prod is on migration
+**203**, the repo stops at **202**. `203_plan_line_quantity.sql` was applied from
+the laptop on 2026-08-22 and never committed. Its effect was recovered by
+introspection (`plan_offering_lines.quantity numeric default 1 NOT NULL`) but no
+replacement was authored — a different `sha256` would make the drift permanent
+instead of loud. **Next migration number is 204.**
+
+**Also:** the close has been claiming to verify five financial views that
+`check_anon_exposure.py` does not test (§51). Prod was fine; the check was
+decoration. `scripts/check_financial_views.py` now asserts all five by name, and
+both scripts run at every close.
+
+---
+
+## 2026-08-25 (part two) — Gear Watch: all four sources live
+
+**Done.** eBay now scans automatically 3x/day. It had **never run once** since the
+tool was built — and not because of a bad key. eBay disables a production keyset
+until the account has a working Marketplace Account Deletion endpoint, and a
+disabled keyset answers `401 invalid_client`, byte-for-byte what a wrong password
+returns. New `ebay-account-deletion` edge function (deployed `--no-verify-jwt`)
+answers the challenge hash. Once verified: `NOT CONFIGURED` → `ok — 173
+listing(s)`, and the scan's reach went **173 → 346 listings, 4 → 13 matches**.
+
+**Done.** "Run scan now" had **never succeeded** — 19 runs logged, all cron, zero
+manual. It was the only path that ran Facebook, whose Apify scrape blocks until it
+completes; four targets blew the 150s wall clock and returned 546, and since the
+run row is written last, every press left no trace. Now split: **Run scan now** =
+the free three (6.9s), **Scan Facebook** = its own button, 110s deadline, cost
+confirm. Facebook **rotates** across targets so the tail of the list is not
+permanently unsearched, and reports `PARTIAL` naming the gear it did not reach.
+
+**Found:** 5 new hits from the first real Facebook run, including a score-**80**
+CDJ-3000 "up to 4 available", $2,000, New York NY — **still unreviewed**, and item
+4 at the top of CARRYOVER.
+
+**The correction (§52).** The Supabase Management API returns a **SHA-256 digest**
+in a secret's `value` field. Reading a credential back and judging it by its shape
+judges the digest. That misread produced two wrong rounds of "your keys are
+invalid" before the real cause — the disabled keyset — surfaced. A secret is
+write-only: it can be written and exercised, never inspected, renamed or copied.
+Now a standing rule in CLAUDE.md.
+
+**Open:** two stray secrets (`App ID`, `Cert ID`) nothing reads; eBay pulls in
+parts/accessories (two CDJ-3000 replacement screens scored 65) that may want
+exclude tokens; "Blackview wave8" (a phone) scores 75 against AlphaTheta Wave 8;
+and two targets still have no serial.

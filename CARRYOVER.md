@@ -1,3 +1,263 @@
+# Carryover - 2026-08-25 (part two: Gear Watch - all four sources live - DESKTOP)
+
+**Second close on 2026-08-25.** The task-boards close from earlier today is
+preserved below, unchanged.
+
+## >> START HERE NEXT SESSION
+
+**1. MIGRATION DRIFT, unchanged and still owed by the laptop.** Prod is on
+**203**, the repo stops at **202**. `203_plan_line_quantity.sql` was applied from
+machine `MSI` on 2026-08-22 and never committed. Recovered effect:
+`plan_offering_lines.quantity numeric default 1 NOT NULL`. No replacement file
+has been written on purpose - a different `sha256` from the `bbb8cfbb8894` in
+`applied_migrations` would make the drift permanent instead of loud. **Next
+migration number is 204.**
+
+**2. Planning tab still unopened in a browser.** Carried from 2026-08-21. Six
+offerings still provisional.
+
+**3. Invoice payment details still empty**, `CW-2026-0001` still went out without
+them. Carried from 2026-08-21.
+
+**4. One unreviewed Gear Watch hit worth a look** - score **80**, "CDJ 3000 (UP
+TO 4 AVAILABLE)", **$2,000, New York NY**, found on Facebook. Keith has serials
+for both his CDJ-3000s (`EBMP011913CC`, `DJMP007750CC`). Compare against the
+seller's photos. Do not contact the seller - send it to the detective.
+
+## State summary
+
+- **Prod max migration 203; repo max 202 - DRIFT (item 1).** No migrations
+  written this session.
+- **All 5 financial views return anon 401**, verified through PostgREST with the
+  key proven live first. **54-object anon sweep: 0 FAIL.**
+- **Latest LEARNINGS: §53.** Four added today (§50, §51 this morning; §52, §53 now).
+- Roles unchanged. Git: committed and pushed to master, Netlify deployed.
+- Ran on the **desktop**.
+- **Edge functions deployed this session:** `scan-gear-market` **v17**, and
+  `ebay-account-deletion` **v1 (`--no-verify-jwt`)**.
+
+## This session shipped (part two)
+
+| Commit | What |
+|---|---|
+| `8cc4bfa` | Gear Watch: one button that finishes, and one that costs money |
+| `8b09b22` | An eBay endpoint, and a correction: the secrets API returns digests |
+
+### Gear Watch now has all four sources working, for the first time
+
+| Source | Before | Now |
+|---|---|---|
+| Reverb | auto 3x/day | unchanged |
+| Craigslist | auto 3x/day | unchanged |
+| **eBay** | **never ran, not once** | **auto 3x/day** |
+| Facebook | ran once, 2026-08-19 | its own button, rotating |
+
+**"Run scan now" had never succeeded.** 19 runs in the log, all `cron`, zero
+`manual`. It was the only path that ran Facebook, whose Apify scrape blocks
+until it finishes; four targets blew the 150s wall clock and returned **546**.
+The run row is written last, so every press left no trace - a toast that faded.
+Reproduced at 151.3s before touching anything. Split into `manual` (the free
+three, **6.9s**) and `facebook` (its own button, 110s deadline, cost confirm).
+
+**Facebook rotates.** Only 2-3 scrapes fit, so each run starts where the last
+stopped; otherwise the tail of the target list is never searched however often
+you press. Status names the gear, not a count. A real run covered 3 of 4 targets
+and stored **5 new hits**.
+
+**eBay was never a credentials problem.** eBay disables a production keyset
+until the account has a working Marketplace Account Deletion endpoint, and a
+disabled keyset answers `401 invalid_client` - identical to a wrong password.
+New `ebay-account-deletion` edge function answers the challenge hash; once
+verified, eBay went `NOT CONFIGURED` -> `ok - 173 listing(s)` and the scan's
+reach went **173 -> 346 listings, 4 -> 13 matches**.
+
+### The correction that cost two round trips (§52)
+
+**The Supabase Management API returns a SHA-256 DIGEST in a secret's `value`
+field, not the value.** Everything reads back as 64 hex characters. I read
+Keith's `App ID` / `Cert ID` that way, concluded from the *shape* that they
+"aren't eBay keysets", told him so twice, copied the digests into
+`EBAY_CLIENT_ID` / `EBAY_CLIENT_SECRET`, and tested **the digests** against
+eBay - which returned `invalid_client` and read as confirmation. He was right
+both times.
+
+**A secret is write-only. It can be written and exercised, never inspected, and
+never renamed or copied.** Both digest-valued secrets were deleted so the
+scanner said `NOT CONFIGURED` (true) rather than blaming his keys.
+
+### Loose ends
+
+- **`ebay_verification_token.txt`** in the repo root holds the eBay verification
+  token. **Gitignored**, and it must stay that way. It is the shared secret
+  behind the account-deletion challenge hash; if it is ever rotated, update
+  `EBAY_VERIFICATION_TOKEN` **and** the eBay portal together or the endpoint
+  stops verifying.
+- **Two stray secrets, `App ID` and `Cert ID`**, are still on prod. Nothing reads
+  them. Keith was asked twice about deleting them and hasn't said; they are
+  harmless but they are also the exact confusion that started this.
+- **eBay brings parts and accessories in.** Two replacement CDJ-3000 *screens*
+  scored 65. If they clutter the list, add exclude tokens (`display`, `screen`,
+  `for pioneer`) to the CDJ-3000 target.
+- **A known false positive:** "Blackview wave8" (a phone, $115) scores 75 against
+  **AlphaTheta Wave 8**. The "wave 8" token matches.
+- **Two targets still have no serial** - AlphaTheta Wave 8 and KRK Rokit 5 - so
+  they can never reach the serial-match top score. It was a KRK listing that
+  scored 93, the highest the tool has produced.
+- **Supabase edge-function logs are empty on this plan.** `function_edge_logs`
+  returned zero rows for every function, including ones invoked minutes earlier.
+  Do not read an empty result there as "it was never called".
+
+---
+---
+
+# Carryover - 2026-08-25 (task boards + emailing the view you're looking at - DESKTOP)
+
+## >> START HERE NEXT SESSION
+
+**1. MIGRATION DRIFT: prod is on 203, the repo stops at 202.**
+`203_plan_line_quantity.sql` was applied to prod on **2026-08-22 16:39 UTC by
+machine `MSI`** (the laptop, `C:\Users\keith\comewith`) and **the file was never
+committed.** It is not in the working tree, not on any branch, and not in any
+commit — `git log --all --diff-filter=A -- 'supabase/migrations/203*'` is empty.
+
+What it did, recovered by introspecting prod:
+
+```
+plan_offering_lines.quantity   numeric  default 1  NOT NULL
+```
+
+**The laptop should commit the real file.** A replacement written from this
+description would carry a different `sha256` than the `bbb8cfbb8894` recorded in
+`applied_migrations`, so a future drift check would flag it forever — which is
+why one has deliberately NOT been written here. If the original is genuinely
+lost, write a reconciling `203` **knowing** that is what it is, and say so in the
+file header. Until then the repo cannot rebuild prod from migrations, and the
+next migration number is **204**.
+
+**2. The Planning tab still has not been opened in a browser.** Carried over
+untouched from 2026-08-21 and still the first job — see that carryover below.
+Six offerings are still provisional.
+
+**3. Invoice payment details are still empty**, and `CW-2026-0001` still went out
+with `wire_enabled=true` and no account number on it. Also carried, also
+unresolved.
+
+---
+
+## State summary
+
+- **Prod max migration 203; repo max 202. DRIFT — see item 1.** Everything up to
+  202 matches.
+- **All 5 financial views return anon 401**, verified end to end through
+  PostgREST with a key proven to work first (`v_public_events` → 200 with a body).
+  **Verified by a script that actually checks them, for the first time** —
+  see §51 and item 4 below.
+- **Nothing in `public` is anon-readable except the public site feed** —
+  `check_anon_exposure.py`, 54 objects, 0 FAIL. This also **closes the sweep owed
+  since 2026-08-21** against the nine planning objects: all nine report blocked.
+  The block at the top of `CLAUDE.md` demanding it has been deleted.
+- **Latest LEARNINGS: §51.** Two added today (§50, §51).
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Git: everything committed and pushed to master, Netlify deployed. No parked branches.
+- Ran on the **desktop**. No migrations written, no edge functions touched, no
+  prod data changed — this session was dashboard-only.
+
+## This session shipped
+
+Three commits, one theme: the task list should be the same thing everywhere, and
+what you send should be what you were looking at.
+
+| Commit | What |
+|---|---|
+| `a7c5181` | The event hub's Tasks tab is the calendar's board, minus the Event column |
+| `d6766ac` | "✉ Email task list" on Calendar & Tasks — sends the filtered, sorted view |
+| `4526d2b` | The event hub's ✉ obeys its filters too; filter-wording shared between both |
+
+### The task boards
+
+The hub Tasks tab was a stack of `hub-li` rows with the assignee and due date
+buried in a grey subline, no filters, no sort. It is now the same table as
+Calendar & Tasks — star, task (bucket chip, description, link), assignees,
+priority, due, inline status, edit/delete — with the calendar's whole filter bar:
+search, the four status chips (`done` hidden by default), assignee, priority,
+bucket, due-date horizon, milestones-only, unassigned-only, clear-filters, and
+the "N of M tasks" count. Only the Event column and its filter are dropped: on an
+event hub every row is already that event's.
+
+Attributes are `data-ht-*`, not the calendar's `data-tb-*` — both boards can be
+in the DOM at once and a shared attribute fires the wrong re-render.
+
+Three bugs the filters exposed, all fixed:
+- The assignee filter **persists across events**, so someone who works on the
+  event you just left would have silently emptied the board while the select
+  still read "Anyone". A selection this event cannot show is now dropped.
+- `hubSetTaskStatus` did not re-render, so a task marked `done` sat in a list
+  that filters on status — the rows and the count disagreed.
+- Typing in either board's search box re-rendered the bar the box lives in and
+  threw focus to the body: **one character per click**. The calendar had this
+  too. The caret is put back in both.
+
+### Emailing the view
+
+Both ✉ buttons now send the board's **current view** — active filters, in the
+order on screen — instead of everything. Default layout is a flat list in screen
+order, because "email what I'm looking at" means the sort too; a **Group by
+status** checkbox restores the old sectioned layout (Overdue / In progress /
+Blocked / To do / Done). Flat rows also carry status, and on the calendar the
+event name, neither of which anything else would say.
+
+**The filter travels with the mail** (§50) — subject line, scope line, and an
+italic *N of M* note. An unfiltered send says none of it. The hub's "Include
+completed tasks" checkbox is gone: the `done` chip already decides, and a second
+control that can contradict the first is how you send a list that doesn't match
+what was on screen.
+
+`buildTasksEmailHtml` is now shared and options-based rather than two copies, and
+so are `taskFilterWords` / `taskScopeLine` / `taskFilterNote`.
+
+### 4. The close was checking five views that nothing tested (§51)
+
+Every close is supposed to verify the five financial views return anon 401.
+`check_anon_exposure.py` — the tool the rules name, and say not to hand-roll —
+**checks none of them.** Its output reads as if it does: 54 lines, dozens of
+object names, `v_kpi_targets_current` present, and a confident closing sentence.
+Prod was fine and always has been; the *check* was decoration.
+
+`scripts/check_financial_views.py` now names all five, proves the publishable key
+works before trusting a single 401, and exits non-zero on any 200. **Run both at
+every close** — the sweep for breadth, this one for the five in the rules.
+
+### Tests
+
+`scripts/test_task_email.mjs` is new — **30 checks**, and it lifts the real
+functions out of `dashboard.html` and runs them rather than grepping for their
+source, so a refactor that changes behaviour fails it. It asserts the emailed set
+equals the filtered set, that reversing the board sort reverses the email, that
+grouped regroups and flat does not, that all ten filters are named in words, that
+the hub's words never mention an event while the calendar's do, and that every
+row carries assignee and due date.
+
+Full run at close — all green:
+
+```
+node scripts/test_money_panel.mjs      node scripts/test_content_center.mjs
+node scripts/test_data_health.mjs      node scripts/test_invoice.mjs
+node scripts/test_events_list.mjs      node scripts/test_task_email.mjs
+node scripts/test_recap_publish.mjs
+python scripts/check_anon_exposure.py
+python scripts/check_financial_views.py
+```
+
+## Parked / next
+
+- **The three items at the top of this file** — the 203 drift is the only new one.
+- Nothing was parked on a branch this session.
+
+---
+---
+
+# ↓ Previous carryovers, newest first — nothing below this line was written today.
+
 # Carryover - 2026-08-21 (FP&A: the Planning board - KEITH'S machine)
 
 **Third close on 2026-08-21.** Henry's task-templates close and the desktop's
