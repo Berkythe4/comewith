@@ -463,7 +463,7 @@ async function loadRadioFeature(){
   if(ep){
     const showName=(ep.name&&!/^weekly station$/i.test(ep.name))?' · '+ep.name:'';
     $('#rfTitle').textContent='SHOW '+(ep.station_no??'')+showName;
-    $('#rfMeta').textContent=[ep.mix_by?('Mixed by '+ep.mix_by):'',ep.track_count?(ep.track_count+' tracks'):'',ep.total_min?(ep.total_min+' min'):''].filter(Boolean).join(' · ');
+    $('#rfMeta').textContent=[ep.mix_by?('Mixed by '+ep.mix_by):'',ep.track_count?(ep.track_count+' tracks'):'',ep.mix_min?(ep.mix_min+' min'):''].filter(Boolean).join(' · ');
     const art=ep.cover_url||ep.artwork_url;if(art)$('#rfArt').style.backgroundImage="url('"+art+"')";
     if(ep.slug)el.href='radio.html?s='+encodeURIComponent(ep.slug);
     $('#rfCta').textContent='▶ Listen now';

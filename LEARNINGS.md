@@ -1527,9 +1527,151 @@ and the mismatch yields a valid-looking hash eBay silently rejects. With it
 verified, eBay went from `NOT CONFIGURED` to `ok — 173 listing(s)`, and the
 scan's reach went from 173 listings to 346.
 
+
 ---
 
-## Section 54 — Prove the column is read, not just that nothing broke (2026-08-27)
+## Section 54 — "Is it public?" is two flags in this schema, and one of them is date-scoped (2026-08-27)
+
+`v_artist_gigs` (065) listed a gig on a public artist profile when the event was
+`is_public = true` **or** `status = 'completed'`. The second half was a leak:
+every completed event published its participant list by name, whether or not it
+had ever been announced. Private bookings and anything deliberately left
+unpublished went public the moment somebody marked it complete. Keith spotted it
+from the page, not from the SQL.
+
+The obvious fix was to drop the `completed` half and gate on `is_public` alone.
+That is what migration **204** did — and the pre-apply check is the only reason
+it did not stand. Counting the rows before and after showed gigs falling from
+**60 to 24**, and the list of what vanished included **Dance Infusion #1 and
+#2** — the flagship public shows, gone from every DI artist's page.
+
+**`is_public` is not "this event faces the public". It is "this event is on the
+upcoming-events feed".** 030's own column comment says so, and both consumers
+(`v_public_events` 030, `v_public_events_hero` 064) also filter
+`event_date >= current_date`. Nobody had ever set it on a past event because
+doing so had no effect anywhere. The past-facing flag is a different one:
+**`is_featured`**, which is what puts an event in Recent Rooms on the homepage
+via `v_public_recap` (061/063/184).
+
+**205 gates on `is_public OR is_featured`** — announced upcoming, or publicly
+recapped. In Keith's words when asked which past events should count: *"everything
+that is showing in recent rooms."*
+
+Two things worth keeping:
+
+- **Encode the rule, don't sync the flags.** The alternative was hand-flipping
+  `is_public` on today's featured events. It would have produced the identical
+  result this afternoon and then drifted silently: the next event featured in
+  Recent Rooms would have been missing from its artists' profiles, with nothing
+  on either screen to explain why.
+- **A count before and after is a cheap way to be wrong out loud.** The migration
+  read correctly, dry-ran clean, and would have been a quiet regression on nine
+  public profiles. What caught it was asking how many rows this changes and which
+  ones — before applying, not after. `supabase/checks/pre_apply.sql` exists for
+  exactly this; a view whose whole job is a `where` clause deserves it most.
+
+A side effect worth its own line: the four **Growth & Networking** events
+(Elements, We Belong Here, Hulaween, JunXion) are festivals the team attended to
+network, and they had been listed as **gigs** on artist profiles all along.
+Carrying neither flag, they now correctly do not appear.
+
+---
+
+## Section 55 — Link the name that is printed, not the record it came from (2026-08-27)
+
+Radio episodes now link their "Mixed by <name>" credit to that artist's public
+profile, and each artist's profile lists the episodes back.
+
+An episode has two things that look like the answer: `sc_playlists.mix_by`, free
+text, the name actually rendered on the page; and `assigned_actor_id` (130), a
+real foreign key to `actors`. The FK is the tempting one — it is typed, it
+cannot go stale, it needs no matching.
+
+**It is also the wrong one.** `assigned_actor_id` is whoever was given access to
+*build* the episode. When a guest mixes an episode Keith set up, linking on the
+FK renders "Mixed by \<guest\>" pointing at Keith's profile — a link that is
+confidently, invisibly wrong. Matching on `mix_by` can only ever fail by not
+finding anybody, which renders as plain text and tells no lies. The FK is the
+fallback only when nothing is credited at all, at which point there is no name on
+screen to link anyway.
+
+The same reasoning settles the duplicate case: two public actors sharing a
+display name resolve to **neither**. A 50% chance of pointing a fan at the wrong
+person is not better than no link.
+
+**One rule, used in both directions.** The same `creditedArtist()` decides which
+profile an episode links to and which episodes a profile lists, so the two can
+never disagree — an episode that links to an artist is exactly an episode that
+artist's page lists back.
+
+And the read stayed inside `get-station`. The reverse lookup wanted a list of
+published episodes for an actor, which a small anon view over `sc_playlists`
+would have served — but `sc_playlists` was anon-revoked in 103 precisely so that
+public station reads go through the function, and a new view would have undone
+that quietly. It is a `?artist=<id>` mode instead: published episodes only, and a
+non-public actor gets the same empty answer as an unknown id, so the endpoint
+never confirms that a private profile exists.
+
+
+---
+
+## Section 56 — A derived number that is right by coincidence is still not a measurement (2026-08-27)
+
+Every surface showing an episode's length — homepage card, radio hub, episode
+page, and the artist profile card added the same day — summed
+`sc_playlist_tracks.duration_ms`. That is the total length of the SOURCE TRACKS,
+and it had never been the runtime of the mix. Keith caught it from the profile
+card: *"it shows the incorrect minutes."*
+
+The fix was straightforward once looked for. `sc-connect`'s `mix_stats` action
+already fetched the published mix's own track object from api.soundcloud.com to
+read its play count, and was discarding `duration`. It now stores
+`sc_playlists.mix_duration_ms` (206) and every surface reads that.
+
+**The part worth writing down is what the numbers showed.**
+
+| SHOW | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| real | 61 | 65 | 64 | 60 | 58 | 43 | 56 |
+| summed | 86 | 98 | 65 | 60 | 59 | 43 | 109 |
+
+Four of seven were within a minute. **That is why it survived this long.**
+Anybody sanity-checking the hub would have looked at SHOW 3, 4, 5 or 6, seen a
+plausible hour, and moved on. The wrongness only shows on the episodes whose
+tracks came from SoundCloud at full length, where a DJ set's cutting and
+overlapping makes the sum over-report by nearly double.
+
+And the near-misses are not the calculation partly working. Those four are
+Beatport/Rekordbox episodes whose stored track lengths are **preview clips** —
+averaging 1.8 minutes, as short as 40 seconds. They land near an hour because the
+clips are short and there are roughly as many of them as an hour needs. Two
+unrelated errors cancelling is not a measurement; it is a coincidence that will
+stop holding the moment an episode mixes both sources.
+
+I got this wrong in the first commit, in the confident direction: I wrote that
+SHOW 6's "43 min" was an hour-long mix under-reported by a third, reasoning from
+the preview-clip durations without having the real one to check against. The
+backfill produced 43 minutes. **The claim was written into a migration comment, a
+column comment on prod and two edge functions before the number existed to test
+it against** — and had the backfill not run in the same session, it would have
+sat there as the durable explanation of a bug it described backwards.
+
+Two rules out of it:
+
+- **When replacing a computed value with a measured one, print both, per row,
+  before writing down why the old one was wrong.** The diff is the evidence, and
+  it costs one query.
+- **"Close on most rows" is not partial correctness for a derived quantity.**
+  Either the derivation models the thing or it does not. Ask which rows it is
+  wrong on and why *those*; if the answer is "the ones where the inputs happen to
+  be shaped differently", the agreement everywhere else is luck. Same family as
+  §26 (a placeholder that reaches a computation becomes invented evidence) and
+  §23 (never render a blank as zero): a number on screen is a claim, and it
+  carries no marking to say it was a guess.
+
+---
+
+## Section 57 — Prove the column is read, not just that nothing broke (2026-08-27)
 
 Migration 203 added `quantity` to `plan_offering_lines` so a pricing line could
 say "100 tickets at $25" instead of "$2,500". `quantity` defaults to 1, so the

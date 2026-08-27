@@ -10,7 +10,8 @@ applied to prod from machine `MSI` on 2026-08-22 and never committed. That file 
 now committed, and it is the ORIGINAL - `sha256 bbb8cfbb8894...`, matching
 `applied_migrations` exactly, so this closes the drift rather than papering over it
 with a re-write. The desktop was right not to author a replacement. **Prod max 203,
-repo max 203, no drift. Next migration number is 204.**
+repo max 203, no drift.** (The desktop landed 204-206 in its own close on the same
+day; see its carryover below for their state. **Next free migration number is 207.**)
 
 **The anon sweep is closed too** (it was owed from 2026-08-21). Run clean on this
 laptop on 2026-08-22, and again today: 0 FAIL, all nine planning objects blocked.
@@ -84,7 +85,8 @@ deleting that line; left alone rather than editing your local config unasked.
 - **All 5 financial views return anon 401**, verified through PostgREST with the key
   proven live first (`scripts/check_financial_views.py`, new from the desktop).
 - **Full anon sweep: 0 FAIL**, all nine planning objects blocked.
-- **Latest LEARNINGS: SS54.** One added this session.
+- **Latest LEARNINGS: SS57.** One added this session (SS54-SS56 are the desktop's,
+  from its own 2026-08-27 close; mine renumbered 54 -> 57 on the merge).
 - **CLAUDE.md gained three planning rules** - how `quantity` composes with `basis`,
   the controlled category list, and the half-frozen published round.
 - Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
@@ -135,7 +137,7 @@ views can produce - identical before and after. That check would also have passe
 the views ignored `quantity` entirely, so the dry run additionally doubled one
 quantity and required the cost to rise by exactly that line's amount ($6,557 ->
 $13,114), and a third run required a `pct_revenue` line with quantity 2 to be
-REFUSED. LEARNINGS SS54. Beyond that: `post_apply.sql` all PASS; the JS mirror
+REFUSED. LEARNINGS SS57. Beyond that: `post_apply.sql` all PASS; the JS mirror
 re-implemented in Python from the transcribed functions and agreeing with the SQL
 view on all six offerings; RLS smoke-tested as a real authenticated admin (insert,
 select-back, update, soft delete) with anon refused.
@@ -145,6 +147,148 @@ the definition in 198 - but 199 had quietly replaced that view with two extra
 columns (`has_revenue_model`, `has_cost_model`), and `create or replace view` cannot
 drop columns. The apply would have failed. Reading the repo tells you what was
 written; only prod tells you what the database is.
+
+# Carryover - 2026-08-27 (radio <-> artist profiles - DESKTOP)
+
+**The 2026-08-25 closes are preserved below, unchanged.**
+
+## >> START HERE NEXT SESSION
+
+**1. 32LVS is published but their profile is EMPTY.** `public_profile` was
+flipped true this session at Keith's instruction, and the actor row has no bio,
+no photo and no socials - so the page renders a letter placeholder, and they now
+appear on the homepage collective grid looking blank. Send them their self-edit
+link from the dashboard Artists tab (`artist-edit.html?token=<edit_token>`, no
+login) - `artist-self` writes bio / instagram / soundcloud / tiktok / website +
+photo, which is exactly what `artist.html` renders, so it fills in on the next
+page load with no deploy. `Artist Showcase/Thumbnails/di_bubble_32lvs_final.jpg`
+is sitting untracked locally and looks like the photo for it. To revert instead:
+`SBP_REF=yaytdosxfhcqatmhctzk python db.py "update public.actors set public_profile=false where display_name='32LVS';"`
+
+**2. MIGRATION DRIFT, unchanged and still owed by the laptop.** Prod is now on
+**206**; the repo has 204, 205 and 206 but still stops short of **203**.
+`203_plan_line_quantity.sql` was applied from machine `MSI` on 2026-08-22 and
+never committed. Recovered effect: `plan_offering_lines.quantity numeric default
+1 NOT NULL`. No replacement file has been written on purpose - a different
+`sha256` from the `bbb8cfbb8894` in `applied_migrations` would make the drift
+permanent instead of loud. **Next migration number is 206.**
+
+**3. Planning tab still unopened in a browser.** Carried from 2026-08-21. Six
+offerings still provisional.
+
+**4. Invoice payment details still empty**, `CW-2026-0001` still went out without
+them. Carried from 2026-08-21.
+
+**5. One unreviewed Gear Watch hit worth a look** - score **80**, "CDJ 3000 (UP
+TO 4 AVAILABLE)", **$2,000, New York NY**, found on Facebook. Keith has serials
+for both his CDJ-3000s (`EBMP011913CC`, `DJMP007750CC`). Compare against the
+seller's photos. Do not contact the seller - send it to the detective.
+
+## State summary
+
+- **Prod max migration 206; repo has 204 + 205 + 206 but no 203 - DRIFT (item 2).**
+  Three migrations this session, each dry-run then applied, post-apply checks PASS.
+- **All 5 financial views return anon 401**, verified with `check_financial_views.py`
+  after the key was proven live. **Anon sweep: 0 FAIL.**
+- **Latest LEARNINGS: §56.** Three added today (§54, §55, §56).
+- Roles unchanged. Git: committed and pushed to master, Netlify deployed.
+- Ran on the **desktop**.
+- **Edge functions deployed this session:** `get-station` **v35**
+  (`--no-verify-jwt`), `sc-connect` **v35**.
+- **Prod data touched:** `actors.public_profile = true` for 32LVS (one row), and
+  a `sc-connect mix_stats` backfill across all 7 live episodes (runtimes + play
+  counts, which had been stale since SHOW 1 in July). Triggered server-side with
+  `net.http_post` + the vaulted service-role key, the 146 pattern - there is no
+  service-role key in `.env`, and the dashboard's "refresh mix stats" button does
+  the same thing.
+  Separately, Keith flipped `is_public` on DI #1, DI #2, the DI Artist Showcase
+  and Crossroads from the dashboard mid-session; those were left alone.
+
+## This session shipped
+
+| Commit | What |
+|---|---|
+| `4cc2436` | Radio: an episode credits an artist, and the artist's page shows their episodes |
+| `6bc3188` | A gig shows on an artist profile only if the event is public (204) |
+| (205) | A gig shows if the event faces the public - which is TWO flags, not one |
+| (reorder) | Radio leads an artist's portfolio when they have episodes |
+| (206) | An episode's length is the mix's runtime, not the sum of its source tracks |
+
+### Radio episodes and artist profiles now link both ways
+
+"Mixed by <name>" on `radio.html` - the episode page and every hub card - links
+to `artist.html?id=` when the credit resolves to a collective member with a
+public profile. **6 of 7 published episodes link**: Berky (SHOW 1, 2, 3), KRNeY
+(4, 7), Henry (5); 32LVS (6) works now that item 1 is toggled on.
+
+The reverse is a **`?artist=<id>` mode on `get-station`**, feeding a **Radio**
+section on `artist.html` that **leads the page** when the artist has episodes
+(it is `display:none` until the loader finds any, so an artist without radio
+still opens on Content and there is no reordering in JS). It is a function mode
+rather than a new anon view because `sc_playlists` was anon-revoked in 103 so
+that public station reads go through the function - see LEARNINGS §55.
+
+Matching is on `mix_by`, the name PRINTED on the page, never `assigned_actor_id`,
+which is only who was given access to build the episode. Ambiguous names resolve
+to no link at all. Same rule both directions.
+
+Also fixed while in there: the per-station track aggregate is now paged by
+primary key. It was a bare `select`, and PostgREST truncates at 1000 silently -
+a weekly show crosses that around its fiftieth episode (§18).
+
+### The gigs leak, and the correction that mattered more
+
+`v_artist_gigs` listed every participant of every **completed** event on the
+public profile, announced or not. 204 gated it on `is_public` alone - and the
+pre-apply count showed that taking gigs from **60 to 24**, including **Dance
+Infusion #1 and #2**. `is_public` turns out to be the *upcoming-events* flag
+(both consumers filter `event_date >= current_date`); the past-facing flag is
+`is_featured`, which drives Recent Rooms. **205** gates on `is_public OR
+is_featured` - Keith's rule, in his words: *"everything that is showing in recent
+rooms."* Now **46 gigs across 9 public artists**, 0 events listed that carry
+neither flag. LEARNINGS §54.
+
+Still excluded, and this is the point: **Elements, We Belong Here, Hulaween and
+JunXion** - Growth & Networking festivals the team *attended*, which had been
+listed as **gigs** on artist profiles all along.
+
+### The minutes were wrong on every surface, not just the profile
+
+Keith reported "incorrect minutes" and "invalid date" on the profile radio cards.
+Both were older and wider than that page.
+
+**Invalid date:** `artist.html`'s `fmtDate` appended `'T00:00:00'`
+unconditionally - right for `event_date`, fatal for `published_at`, which is a
+timestamptz that already carries its own time. `radio.html` had already hit this
+and guards on string length. Now shared, and it returns `''` rather than the
+string "Invalid Date" if anything slips through.
+
+**Minutes:** every surface summed `sc_playlist_tracks.duration_ms`, the length of
+the SOURCE TRACKS. A DJ set cuts and overlaps them, so it over-reports - SHOW 7
+read **109 min for a 56-min mix**. `sc-connect mix_stats` was already fetching
+the published mix's own track object to read its play count and discarding
+`duration`; it now stores `sc_playlists.mix_duration_ms` (206) and every surface
+- homepage card, radio hub, episode page, artist profile - reads that.
+
+| SHOW | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| real | 61 | 65 | 64 | 60 | 58 | 43 | 56 |
+| old summed | 86 | 98 | 65 | 60 | 59 | 43 | 109 |
+
+**A correction worth keeping:** the first commit claimed SHOW 6's "43 min" was an
+hour-long mix under-reported from Beatport preview clips. The backfill disproved
+it - SHOW 6 really is 43 minutes and the preview sum was right by coincidence.
+See LEARNINGS §56.
+
+## Parked / next
+
+- Nothing is parked on a branch. Everything this session is on `master` and live.
+- **Radio Phase 1.1/2 unchanged:** YouTube auto-post at finalize; listener
+  "export my saved playlist to my own SoundCloud" (designed, not built).
+- Per-track artist links on an episode were considered and **not built**: radio
+  tracklists are external NYC acts with no `actors` row, so the link would fire
+  on almost nothing. Revisit only if the collective starts appearing in its own
+  tracklists.
 
 ---
 

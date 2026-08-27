@@ -435,6 +435,37 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **Phase 1.1/2 pending:** YouTube auto-post at finalize; listener "export my
   saved playlist to my own SoundCloud" (OAuth per listener — designed, not built).
 
+## Public artist profiles (`artist.html`) — added 2026-08-27
+
+- **"Is this event public?" is TWO flags, and one of them is date-scoped.**
+  `is_public` means *on the upcoming-events feed* — both consumers
+  (`v_public_events` 030, `v_public_events_hero` 064) also filter
+  `event_date >= current_date`, so setting it on a past event does nothing else
+  anywhere. The past-facing flag is **`is_featured`**, which drives Recent Rooms
+  via `v_public_recap`. Any "does the public see this event" gate needs
+  **`is_public OR is_featured`** — `v_artist_gigs` (205) is the worked example.
+  Gating on `is_public` alone took gigs from 60 to 24 and removed Dance Infusion
+  #1 and #2 from every DI artist's page; only a pre-apply row count caught it.
+  **Never gate a gig on `status = 'completed'`** — that was the original leak
+  (065), publishing the lineup of every private booking. LEARNINGS §54.
+- **An episode links on the name PRINTED, `sc_playlists.mix_by`, never on
+  `assigned_actor_id`.** The FK is only whoever was given access to *build* the
+  episode (130); linking on it renders "Mixed by \<guest\>" pointing at somebody
+  else's profile. It is the fallback only when nothing is credited — at which
+  point there is no name on screen anyway. Two public actors sharing a display
+  name resolve to **neither**: no link beats the wrong link. One helper,
+  `creditedArtist()` in `get-station`, decides both directions, so the episodes
+  linking to an artist are exactly the episodes that artist's page lists back.
+  LEARNINGS §55.
+- **A profile page is only ever `public_profile = true`.** Everything public —
+  the collective grid, the gigs list, the radio list, `?artist=` on `get-station`
+  — gates on it, and a non-public actor must get the same empty answer as an
+  unknown id so the endpoint never confirms a private profile exists.
+- **The page is live-read, so a self-edit needs no deploy.** `artist-self`
+  (token = `actors.edit_token`, no login) writes exactly the fields `artist.html`
+  renders — bio / instagram / soundcloud / tiktok / website + photo. It cannot
+  write `display_name` or `public_profile`; publishing stays Keith's toggle.
+
 ## Weekly radio release (see `Radio/NOTES_WEEKLY_RELEASE.md`)
 
 - **A private SoundCloud track will NOT embed.** `oembed` 404s on it, so the site's
