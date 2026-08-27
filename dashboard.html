@@ -15508,6 +15508,7 @@ const planState = {
   ledger: 'come_with', horizon: 6, view: 'board',
   version: null, versions: [],
   offerings: [], lines: [], volumes: {}, overhead: [], overrides: [],
+  cats: { income: [], expense: [] },
   actual: {}, actualEvents: {}, contrib: [],
   pending: new Map(), saveTimer: null, saving: false, saveState: '',
 };
@@ -15528,7 +15529,7 @@ function planEditable() { return !!planState.version && planState.version.status
 
 async function loadPlanning() {
   $('planningBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading the plan…</div>';
-  const [verRes, offRes, lineRes, volRes, ohRes, ovRes, plRes, cbRes] = await Promise.all([
+  const [verRes, offRes, lineRes, volRes, ohRes, ovRes, plRes, cbRes, strRes] = await Promise.all([
     sb.from('plan_versions').select('*').order('created_at', { ascending: false }),
     sb.from('v_plan_offering_unit').select('*').order('sort_order'),
     sb.from('plan_offering_lines').select('*').is('deleted_at', null).order('sort_order'),
@@ -15537,6 +15538,7 @@ async function loadPlanning() {
     sb.from('plan_overrides').select('*'),
     sb.from('v_pl_monthly').select('*'),
     sb.from('v_event_contribution').select('*').order('event_date', { ascending: false }),
+    sb.from('revenue_streams').select('label').eq('active', true).order('display_order'),
   ]);
 
   const notInstalled = [verRes.error, offRes.error, volRes.error]
@@ -15567,10 +15569,26 @@ async function loadPlanning() {
   // Actuals keyed period|ledger|section|category. Presence of the key is what
   // distinguishes "nothing happened" from "no data" — never read the 0.
   planState.actual = {};
+  // The categories the P&L ACTUALLY uses, collected as we go. `category` is the
+  // join key v_plan_vs_actual matches on, so offering a free-text box here is
+  // how you get a line that reports 100% variance forever — that is the exact
+  // bug the legacy budget_lines rows had (LEARNINGS §47). Built from
+  // v_pl_monthly rather than a second round trip, so the list is by definition
+  // the set a plan line can actually join to.
+  const inc = new Set(), exp = new Set();
   (plRes.data || []).forEach(r => {
     const k = r.period + '|' + (r.ledger || 'come_with') + '|' + r.section + '|' + r.category;
     planState.actual[k] = (planState.actual[k] || 0) + Number((r.section === 'revenue' ? r.revenue : r.cost) || 0);
+    if (r.category) (r.section === 'revenue' ? inc : exp).add(r.category);
   });
+  // Revenue streams are a controlled list in their own right; include them even
+  // where nothing has been booked against one yet, because planning a stream you
+  // have not earned from is the normal case, not an error.
+  (strRes.data || []).forEach(s => { if (s.label) inc.add(s.label); });
+  // Never drop a category a line already uses, even if it appears nowhere else —
+  // a select that silently omits the current value rewrites it on the next save.
+  planState.lines.forEach(l => { if (l.category) (l.direction === 'income' ? inc : exp).add(l.category); });
+  planState.cats = { income: [...inc].sort(), expense: [...exp].sort() };
 
   // How many of each offering ACTUALLY happened, per month — the backward half
   // of the levers table. Upcoming events are excluded: they have not happened.
@@ -15598,6 +15616,35 @@ function planLinesFor(offeringId) {
   return planState.lines.filter(l => l.offering_id === offeringId);
 }
 
+// What ONE line costs or earns per unit of the offering — quantity x rate, and
+// x the scale driver as well when the line is priced per head. Mirrors the
+// `case l.basis` in v_plan_monthly / v_plan_offering_unit (migration 203); if
+// you change one, change the other or a typed figure stops matching a reloaded
+// one. pct_revenue is NOT handled here: it needs the revenue total, which only
+// the caller has, and returning 0 for it would read as "this costs nothing".
+function planLineQty(l) {
+  const q = l.quantity == null ? 1 : Number(l.quantity);
+  return Number.isFinite(q) ? q : 0;
+}
+function planLineRate(l, scale) {
+  const per = planLineQty(l) * (Number(l.amount) || 0);
+  return l.basis === 'per_scale' ? per * (Number(scale) || 0) : per;
+}
+// The revenue one unit earns, at this scale — the base every pct_revenue cost
+// is taken from. Same ordering as the SQL: revenue first, percentages after.
+function planUnitRevenue(lines, scale) {
+  return lines.reduce((t, l) =>
+    (l.direction === 'income' && l.basis !== 'pct_revenue') ? t + planLineRate(l, scale) : t, 0);
+}
+// Every line's total for one unit, keyed by line id, with pct_revenue resolved.
+function planLineTotals(lines, scale) {
+  const rev = planUnitRevenue(lines, scale), out = {};
+  lines.forEach(l => {
+    out[l.id] = l.basis === 'pct_revenue' ? (Number(l.amount) || 0) / 100 * rev : planLineRate(l, scale);
+  });
+  return out;
+}
+
 // Returns { 'section|category': amount } for one month of the current ledger.
 function planModelMonth(period) {
   const out = {};
@@ -15617,13 +15664,12 @@ function planModelMonth(period) {
     let rpu = 0;
     lines.forEach(l => {
       if (l.direction !== 'income' || l.basis === 'pct_revenue') return;
-      rpu += l.basis === 'per_scale' ? Number(l.amount) * scale : Number(l.amount);
+      rpu += planLineRate(l, scale);
     });
     lines.forEach(l => {
       let per;
-      if (l.basis === 'per_unit') per = Number(l.amount);
-      else if (l.basis === 'per_scale') per = Number(l.amount) * scale;
-      else per = (Number(l.amount) / 100) * rpu;
+      if (l.basis === 'pct_revenue') per = (Number(l.amount) / 100) * rpu;
+      else per = planLineRate(l, scale);
       add(l.direction === 'income' ? 'revenue' : 'direct', l.category, units * per);
     });
   });
@@ -15976,28 +16022,122 @@ function planBackwardHtml() {
 }
 
 // ---- pricing models ---------------------------------------------------------
+// A line is QUANTITY x RATE = TOTAL, never a lump. "$2,500 of ticket sales" is a
+// number you cannot argue with; "100 tickets at $25" is two numbers you can each
+// disagree with, which is the whole point of writing a model down. Quantity is
+// shown even when it is 1 — "1 production fee at $500" tells a reader it IS one,
+// where a bare $500 might be anything rounded.
+//
+// The totals here are computed by planLineTotals(), the same mirror of
+// v_plan_offering_unit that the board uses (migration 203). The header econ
+// figures come from the VIEW, so if the two ever disagree the view wins and the
+// mirror is wrong — that is the seam LEARNINGS calls out about implementing the
+// maths twice.
+const PLAN_BASIS = [['per_unit', 'per unit'], ['per_scale', 'per unit of scale'], ['pct_revenue', '% of revenue']];
+
+// Trim trailing zeros: a quantity of 2 should read "2", not "2.0000".
+function planNum(n) {
+  const v = Number(n) || 0;
+  return (Math.round(v * 10000) / 10000).toString();
+}
+
+// Category is a CONTROLLED LIST here for the same reason it is on the money tab,
+// and one more besides: it is the key v_plan_vs_actual joins plan to actual on.
+// A typo is not a cosmetic problem, it is a line that reports 100% variance for
+// the rest of its life without ever saying anything is wrong (LEARNINGS §47).
+function planCatOptionsHtml(direction, current) {
+  const list = ((planState.cats || {})[direction === 'income' ? 'income' : 'expense'] || []).slice();
+  if (current && list.indexOf(current) < 0) list.unshift(current);
+  return '<option value="">— pick a category —</option>' +
+    list.map(c => '<option value="' + escapeHtml(c) + '"' + (c === current ? ' selected' : '') + '>' +
+      escapeHtml(c) + '</option>').join('') +
+    '<option value="__new">+ new category…</option>';
+}
+
+function planLineRowHtml(l, o, total) {
+  const ed = planEditable() ? '' : ' disabled';
+  const scale = Number(o.default_scale) || 0;
+  const isPct = l.basis === 'pct_revenue';
+  const qty = planLineQty(l);
+
+  // pct_revenue has no count — the schema pins quantity to 1 rather than let the
+  // maths silently ignore whatever gets typed, so there is nothing to show.
+  const qtyCell = isPct
+    ? '<span class="muted" title="A percentage has no quantity">—</span>'
+    : '<input class="plan-f num plan-qty" type="number" step="0.01" min="0" data-line="' + l.id +
+        '" data-f="quantity" value="' + planNum(qty) + '"' + ed + '>' +
+      '<input class="plan-f plan-unit" data-line="' + l.id + '" data-f="unit_label" value="' +
+        escapeHtml(l.unit_label || '') + '" placeholder="unit" title="What the quantity counts — tickets, DJs, hours"' + ed + '>' +
+      (l.basis === 'per_scale'
+        ? '<div class="plan-eff" data-eff="' + l.id + '">× ' + planNum(scale) + ' ' +
+          escapeHtml((o.scale_label || '').toLowerCase()) + ' = <b>' + planNum(qty * scale) + '</b></div>'
+        : '');
+
+  const rateCell = isPct
+    ? '<input class="plan-f num plan-rate" type="number" step="0.01" min="0" max="100" data-line="' + l.id +
+        '" data-f="amount" value="' + Number(l.amount) + '"' + ed + '><span class="plan-suffix">%</span>'
+    : '<input class="plan-f num plan-rate" type="number" step="0.01" data-line="' + l.id +
+        '" data-f="amount" value="' + Number(l.amount) + '"' + ed + '>';
+
+  return '<tr data-lrow="' + l.id + '">' +
+    '<td><select class="plan-f" data-line="' + l.id + '" data-f="category"' + ed + '>' +
+      planCatOptionsHtml(l.direction, l.category) + '</select>' +
+      (l.needs_review
+        ? '<button class="plan-x ok" data-planreview="' + l.id +
+          '" title="Confirm this line is filed against the right P&L category">✓</button>'
+        : '') + '</td>' +
+    '<td><input class="plan-f" data-line="' + l.id + '" data-f="label" value="' + escapeHtml(l.label || '') +
+      '" placeholder="what it is"' + ed + '></td>' +
+    '<td><select class="plan-f" data-line="' + l.id + '" data-f="basis"' + ed + '>' +
+      // % of revenue is EXPENSE-ONLY by constraint — an income line defined as a
+      // percentage of income is defined in terms of itself. Offering it on a
+      // revenue line would be offering a choice the save is guaranteed to refuse.
+      PLAN_BASIS.filter(b => b[0] !== 'pct_revenue' || l.direction === 'expense')
+        .map(b => '<option value="' + b[0] + '"' + (l.basis === b[0] ? ' selected' : '') + '>' +
+        b[1] + '</option>').join('') + '</select></td>' +
+    '<td class="num plan-qty-c">' + qtyCell + '</td>' +
+    '<td class="num plan-rate-c">' + rateCell + '</td>' +
+    '<td class="num" data-total="' + l.id + '"><b>' + money(total) + '</b></td>' +
+    '<td class="plan-lact">' + (planEditable()
+      ? '<button class="plan-x" data-planrm="' + l.id + '" title="Remove this line">✕</button>' : '') + '</td>' +
+    '</tr>';
+}
+
 function planModelEditorHtml() {
   const offs = planState.offerings.filter(o => o.ledger === planState.ledger);
   if (!offs.length) return '<div class="panel-state info">No offerings on this ledger.</div>';
-  const BASIS = [['per_unit', 'per unit'], ['per_scale', 'per unit of scale'], ['pct_revenue', '% of revenue']];
+  const ed = planEditable();
+
   return '<div class="plan-sec"><div class="plan-sec-t">Pricing models — what one of each is worth</div>' +
+    (ed ? '' : '<div class="plan-frozen-note">This round is frozen. Switch to the live plan to change a price.</div>') +
     offs.map(o => {
       const lines = planLinesFor(o.id);
-      const rows = lines.map(l =>
-        '<tr><td>' + (l.direction === 'income' ? '<span class="pos">income</span>' : '<span class="neg">cost</span>') + '</td>' +
-        '<td><input class="plan-f" data-line="' + l.id + '" data-f="category" value="' + escapeHtml(l.category) + '"' +
-          (planEditable() ? '' : ' disabled') + '></td>' +
-        '<td><input class="plan-f" data-line="' + l.id + '" data-f="label" value="' + escapeHtml(l.label || '') + '"' +
-          (planEditable() ? '' : ' disabled') + '></td>' +
-        '<td><select class="plan-f" data-line="' + l.id + '" data-f="basis"' + (planEditable() ? '' : ' disabled') + '>' +
-          BASIS.map(b => '<option value="' + b[0] + '"' + (l.basis === b[0] ? ' selected' : '') + '>' + b[1] + '</option>').join('') +
-          '</select></td>' +
-        '<td><input class="plan-f num" type="number" step="0.01" data-line="' + l.id + '" data-f="amount" value="' +
-          Number(l.amount) + '"' + (planEditable() ? '' : ' disabled') + '></td>' +
-        '<td>' + (l.needs_review
-          ? '<button class="hub-mini" data-planreview="' + l.id + '" title="Confirm this line is filed against the right P&L category">✓ confirm</button>'
-          : '<span class="muted">confirmed</span>') + '</td></tr>').join('');
-      return '<div class="plan-model">' +
+      const scale = Number(o.default_scale) || 0;
+      const totals = planLineTotals(lines, scale);
+      const income = lines.filter(l => l.direction === 'income');
+      const cost = lines.filter(l => l.direction === 'expense');
+      const sum = (arr) => arr.reduce((t, l) => t + (totals[l.id] || 0), 0);
+      const rev = sum(income), cst = sum(cost);
+      const unit = 'per ' + escapeHtml((o.label || 'unit').toLowerCase());
+
+      // A side with no lines is "not modelled", NOT $0 — those are opposite
+      // claims, and a missing cost side rendered as zero is a confident 100%
+      // margin nobody typed (LEARNINGS §26, §48).
+      const group = (title, rows, kind) =>
+        '<tr class="plan-grp"><td colspan="7">' + title + '</td></tr>' +
+        (rows.length
+          ? rows.map(l => planLineRowHtml(l, o, totals[l.id] || 0)).join('')
+          : '<tr class="plan-none"><td colspan="7">' +
+            (kind === 'income'
+              ? 'Nothing modelled — this offering earns nothing yet.'
+              : 'Nothing modelled — this is not the same as costing nothing.') +
+            '</td></tr>');
+
+      const subRow = (label, val, key, cls) =>
+        '<tr class="plan-sub' + (cls ? ' ' + cls : '') + '"><td colspan="5">' + label + '</td>' +
+        '<td class="num" data-sub="' + key + '|' + o.id + '"><b>' + money(val) + '</b></td><td></td></tr>';
+
+      return '<div class="plan-model" data-model="' + o.id + '">' +
         '<div class="plan-model-h"><b>' + escapeHtml(o.label) + '</b>' +
         (o.provisional ? ' <span class="plan-chip warn">provisional</span>' : '') +
         '<span class="plan-model-econ">' +
@@ -16008,14 +16148,65 @@ function planModelEditorHtml() {
         '</span></div>' +
         '<div class="plan-model-scale">' + escapeHtml(o.scale_label) + ' per unit: ' +
           '<input class="plan-f" type="number" step="0.01" min="0" data-off="' + o.id + '" data-f="default_scale" value="' +
-          Number(o.default_scale) + '"' + (planEditable() ? '' : ' disabled') + '>' +
+          Number(o.default_scale) + '"' + (ed ? '' : ' disabled') + '>' +
           '<span class="muted"> — only moves money on lines priced "per unit of scale"</span></div>' +
-        (rows ? '<table class="data-table pl-table plan-model-t"><thead><tr><th>Kind</th><th>P&L category</th>' +
-          '<th>Label</th><th>Basis</th><th class="num">Amount</th><th>Review</th></tr></thead><tbody>' + rows +
-          '</tbody></table>'
-        : '<div class="panel-state info">No lines yet — this offering forecasts nothing.</div>') +
+        '<table class="data-table pl-table plan-model-t"><thead><tr>' +
+          '<th>P&L category</th><th>Description</th><th>Basis</th>' +
+          '<th class="num">Qty</th><th class="num">Rate</th><th class="num">Total</th><th></th>' +
+        '</tr></thead><tbody>' +
+          group('Revenue', income, 'income') +
+          subRow('Revenue ' + unit, rev, 'income') +
+          group('Costs', cost, 'expense') +
+          subRow('Cost ' + unit, cst, 'expense') +
+          subRow('Contribution ' + unit, rev - cst, 'contrib', 'plan-tot') +
+        '</tbody></table>' +
+        (ed ? '<div class="plan-add">' +
+          '<button class="hub-mini" data-planadd="income|' + o.id + '">+ revenue line</button>' +
+          '<button class="hub-mini" data-planadd="expense|' + o.id + '">+ cost line</button>' +
+        '</div>' : '') +
         '</div>';
     }).join('') + '</div>';
+}
+
+// Repaint one offering's totals from what is CURRENTLY TYPED, without saving and
+// without a re-render. Reading the DOM rather than planState is deliberate: the
+// state only catches up on change (blur), and a total that waits for blur to
+// agree with the quantity above it reads as a bug every single time.
+function planRepaintModel(offeringId) {
+  const box = document.querySelector('[data-model="' + offeringId + '"]');
+  if (!box) return;
+  const off = planState.offerings.find(o => o.id === offeringId);
+  const scaleEl = box.querySelector('[data-f="default_scale"]');
+  const scale = scaleEl ? (Number(scaleEl.value) || 0) : Number(off && off.default_scale) || 0;
+
+  const live = planLinesFor(offeringId).map(l => {
+    const row = box.querySelector('[data-lrow="' + l.id + '"]');
+    if (!row) return l;
+    const val = (f) => { const el = row.querySelector('[data-f="' + f + '"]'); return el ? el.value : null; };
+    const q = val('quantity'), a = val('amount'), b = val('basis');
+    return Object.assign({}, l, {
+      quantity: q == null ? l.quantity : Number(q) || 0,
+      amount: a == null ? l.amount : Number(a) || 0,
+      basis: b || l.basis,
+    });
+  });
+
+  const totals = planLineTotals(live, scale);
+  let rev = 0, cst = 0;
+  live.forEach(l => {
+    const t = totals[l.id] || 0;
+    if (l.direction === 'income') rev += t; else cst += t;
+    const cell = box.querySelector('[data-total="' + l.id + '"]');
+    if (cell) cell.innerHTML = '<b>' + money(t) + '</b>';
+    const eff = box.querySelector('[data-eff="' + l.id + '"]');
+    if (eff) eff.innerHTML = '× ' + planNum(scale) + ' ' +
+      escapeHtml(((off && off.scale_label) || '').toLowerCase()) + ' = <b>' + planNum(planLineQty(l) * scale) + '</b>';
+  });
+  const put = (key, v) => {
+    const el = box.querySelector('[data-sub="' + key + '|' + offeringId + '"]');
+    if (el) el.innerHTML = '<b>' + money(v) + '</b>';
+  };
+  put('income', rev); put('expense', cst); put('contrib', rev - cst);
 }
 
 // ---- writes -----------------------------------------------------------------
@@ -16095,6 +16286,36 @@ async function planSaveField(table, id, field, value) {
   return true;
 }
 
+// A new line is created EMPTY and flagged for review rather than pre-filled with
+// a plausible category. A guessed category is invisible once saved and joins to
+// the wrong actuals forever; an empty one is visibly unfinished and holds the
+// offering at "provisional" until a human picks (LEARNINGS §26, §47).
+async function planAddLine(offeringId, direction) {
+  if (!planEditable()) { toast('That round is frozen. Switch to the live plan to edit it.', 'err'); return; }
+  const mine = planLinesFor(offeringId);
+  const next = mine.reduce((m, l) => Math.max(m, Number(l.sort_order) || 0), 90) + 10;
+  const { error } = await sb.from('plan_offering_lines').insert({
+    offering_id: offeringId, direction, category: '', label: '',
+    basis: 'per_unit', amount: 0, quantity: 1, needs_review: true, sort_order: next,
+  });
+  if (error) { toast('Could not add the line: ' + error.message, 'err'); return; }
+  await loadPlanning();
+}
+
+// Soft delete: the row carries deleted_at and every planning view filters on it,
+// so a line removed by mistake is recoverable in SQL rather than gone.
+async function planRemoveLine(lineId) {
+  if (!planEditable()) { toast('That round is frozen. Switch to the live plan to edit it.', 'err'); return; }
+  const l = planState.lines.find(x => x.id === lineId);
+  const name = (l && (l.label || l.category)) || 'this line';
+  if (!confirm('Remove "' + name + '" from the model?\n\nThe forecast will change. It is a soft delete, so it can be restored in SQL.')) return;
+  const { error } = await sb.from('plan_offering_lines')
+    .update({ deleted_at: new Date().toISOString() }).eq('id', lineId);
+  if (error) { toast('Could not remove the line: ' + error.message, 'err'); return; }
+  toast('Line removed');
+  await loadPlanning();
+}
+
 async function planPublish() {
   const label = prompt('Name this round (leave blank for today’s date):', '');
   if (label === null) return;
@@ -16142,18 +16363,67 @@ function planWire() {
     inp.onblur = () => { inp.value = Math.max(0, Math.round(Number(inp.value) || 0)); };
   });
 
+  // Totals follow what is TYPED, not what is saved. `input` repaints the row,
+  // the subtotals and the contribution straight away; `change` (blur) is what
+  // actually writes. Without this the quantity says 100 while the total still
+  // says the old number until you click away, which reads as a broken sum.
+  const ownerOf = (el) => {
+    const box = el.closest('[data-model]');
+    return box ? box.dataset.model : null;
+  };
+  body.querySelectorAll('.plan-model .plan-f').forEach(el => {
+    el.oninput = () => { const id = ownerOf(el); if (id) planRepaintModel(id); };
+  });
+
   body.querySelectorAll('.plan-f').forEach(el => {
     el.onchange = async () => {
       const isLine = !!el.dataset.line;
       const table = isLine ? 'plan_offering_lines' : 'plan_offerings';
       const id = isLine ? el.dataset.line : el.dataset.off;
       const f = el.dataset.f;
-      const value = (f === 'amount' || f === 'default_scale') ? Number(el.value) || 0 : el.value;
+
+      // "+ new category…" is a real answer, not a value — ask for it rather than
+      // saving the sentinel. Cancelling puts the select back where it was.
+      if (f === 'category' && el.value === '__new') {
+        const line = planState.lines.find(x => x.id === id);
+        const name = (prompt('New P&L category name:', '') || '').trim();
+        if (!name) { el.value = (line && line.category) || ''; return; }
+        el.value = name;
+      }
+
+      let value;
+      if (f === 'amount' || f === 'default_scale' || f === 'quantity') value = Number(el.value) || 0;
+      else if (f === 'unit_label') value = el.value.trim() || null;   // null, not '' — no noun is not an empty noun
+      else value = el.value;
+
+      // Switching a line onto "% of revenue" has to carry quantity back to 1 in
+      // the SAME write: a percentage has no count and the schema pins it, so
+      // sending the basis alone fails the check constraint and surfaces a raw
+      // Postgres error against a change the user is entitled to make.
+      if (isLine && f === 'basis' && value === 'pct_revenue') {
+        const { error } = await sb.from('plan_offering_lines')
+          .update({ basis: 'pct_revenue', quantity: 1 }).eq('id', id);
+        if (error) { toast('Could not save: ' + error.message, 'err'); return; }
+        toast('Saved — quantity reset to 1, a percentage has no count');
+        await loadPlanning();
+        return;
+      }
+
       if (await planSaveField(table, id, f, value)) { toast('Saved'); await loadPlanning(); }
     };
   });
 
+  body.querySelectorAll('[data-planadd]').forEach(b => b.onclick = () => {
+    const [direction, offeringId] = b.dataset.planadd.split('|');
+    planAddLine(offeringId, direction);
+  });
+  body.querySelectorAll('[data-planrm]').forEach(b => b.onclick = () => planRemoveLine(b.dataset.planrm));
+
   body.querySelectorAll('[data-planreview]').forEach(b => b.onclick = async () => {
+    // Confirming means "this is filed against the right category". There is no
+    // right category to have confirmed while the box is empty.
+    const l = planState.lines.find(x => x.id === b.dataset.planreview);
+    if (!l || !l.category) { toast('Pick a P&L category first — that is what you would be confirming.', 'err'); return; }
     if (await planSaveField('plan_offering_lines', b.dataset.planreview, 'needs_review', false)) {
       toast('Confirmed'); await loadPlanning();
     }
@@ -25063,6 +25333,31 @@ input.plan-f,select.plan-f{font:inherit;font-size:12px;padding:4px 6px;border:1p
   border-radius:5px;background:var(--surface-2);color:inherit;max-width:180px}
 input.plan-f.num{text-align:right;max-width:110px}
 input.plan-f:disabled,select.plan-f:disabled{opacity:.5}
+
+/* ---- pricing model rows: quantity x rate = total (203) ---- */
+/* Every colour here is a token. The P&L stylesheet shipped with var(--panel,#fff)
+   fallbacks against a token defined nowhere, so half these boxes rendered white
+   on the dark board — do not reintroduce a literal colour fallback. */
+input.plan-f.plan-qty{max-width:64px}
+input.plan-f.plan-rate{max-width:88px}
+input.plan-f.plan-unit{max-width:74px;font-size:11px;margin-left:4px;color:var(--mid)}
+.plan-suffix{margin-left:3px;color:var(--mid);font-size:11px}
+.plan-eff{font-size:10.5px;color:var(--mid);margin-top:2px;font-variant-numeric:tabular-nums}
+.plan-qty-c,.plan-rate-c{white-space:nowrap}
+.plan-model-t td,.plan-model-t th{vertical-align:top}
+.plan-grp td{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--mid);
+  padding-top:9px;border-bottom:1px solid var(--border)}
+.plan-none td{font-size:11.5px;color:var(--mid);font-style:italic}
+.plan-sub td{font-size:12px;border-top:1px solid var(--border)}
+.plan-sub td:first-child{text-align:right;color:var(--mid)}
+.plan-tot td{border-top:1px solid var(--border-strong)}
+.plan-tot td:first-child{color:inherit}
+.plan-add{margin-top:8px;display:flex;gap:6px}
+.plan-x{background:none;border:1px solid var(--border-strong);border-radius:5px;color:var(--mid);
+  font:inherit;font-size:11px;line-height:1;padding:3px 6px;cursor:pointer;margin-left:4px}
+.plan-x:hover{color:var(--ink);border-color:var(--ink)}
+.plan-x.ok{color:var(--amber);border-color:rgba(233,185,73,.5)}
+.plan-lact{white-space:nowrap;text-align:right}
 .plan-sec .pos,.plan-lever .pos{color:var(--green)}
 .plan-sec .neg,.plan-lever .neg{color:var(--red-dk)}
 
