@@ -80,8 +80,11 @@
 </div></header>
 
 <div class="wrap">
-  <section><h2 class="sec">Content</h2><div id="content"></div></section>
+  <!-- Radio leads the portfolio when there is one. It stays display:none until the
+       loader finds episodes, and a hidden section takes no space — so an artist
+       with no episodes still opens on Content, with no reordering to do in JS. -->
   <section id="radioSec" style="display:none"><h2 class="sec">Radio</h2><div id="radio"></div></section>
+  <section><h2 class="sec">Content</h2><div id="content"></div></section>
   <section><h2 class="sec">Gigs</h2><div id="gigs"></div></section>
 </div>
 
