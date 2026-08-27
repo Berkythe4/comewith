@@ -1394,9 +1394,11 @@ other half of the ask.
 (`v_cash_position` already has what it needs), and charting forecast drift across frozen
 rounds (`plan_publish_round()` stores the history; nothing reads it yet).
 
-**Open risk.** The anon REST sweep has **not** run against the nine new objects — the
-build machine has no publishable key. Grants are verified in SQL; PostgREST is not. It
-is the first item in CARRYOVER and in CLAUDE.md.
+**~~Open risk~~ CLOSED 2026-08-22.** The anon REST sweep had not run against the nine
+new objects, because the build machine had no publishable key. It turned out not to be
+a machine constraint at all: the key is public by design and ships inside
+`dashboard.html`. Added to `.env`, swept, **0 FAIL — all nine blocked (401)**, with the
+key proved live first.
 
 **Also done.** The P&L's KPI cards were rendering white-on-cream: the stylesheet used
 `var(--panel, #fff)` and `--panel` is defined nowhere in the file. Re-toned onto the
@@ -1480,3 +1482,65 @@ Now a standing rule in CLAUDE.md.
 parts/accessories (two CDJ-3000 replacement screens scored 65) that may want
 exclude tokens; "Blackview wave8" (a phone) scores 75 against AlphaTheta Wave 8;
 and two targets still have no serial.
+
+---
+
+## 2026-08-27 — Pricing models: a line is quantity × rate, and you can add one
+
+**The ask.** Keith opened the Planning board and could see *"$2,500 of ticket sales"*
+but not *"100 tickets at $25"*. He wanted quantity → amount → total on every line,
+revenue and cost alike, including where the quantity is 1 ("1 production fee at $500 =
+$500"). And he could find no way to add or remove a line at all, so the model was
+whatever the seed had guessed.
+
+**Done.** Migration **203** adds `quantity` (default 1) and `unit_label` to
+`plan_offering_lines` and recomputes `v_plan_offering_unit` / `v_plan_monthly` through
+it. The composition with `basis` is the design: `per_unit` is qty × rate; `per_scale`
+is qty × rate × scale, so quantity is a multiplier **on top of** the scale driver ("2
+drinks a head") while the ordinary qty-1 case still reads as "$25 a head" and stays live
+to the attendance lever; `pct_revenue` pins quantity to 1 **by constraint**, because a
+percentage has no count and a field the maths silently drops is worse than one you
+cannot fill in wrong.
+
+The tab now reads as a unit-economics statement — revenue lines, revenue per unit, cost
+lines, cost per unit, contribution — with qty × rate = total on every row and totals
+that repaint **as you type** rather than on blur. Add and remove are per offering;
+removal is a soft delete.
+
+**Decision — a new line is created empty and flagged, never pre-filled.** A guessed
+category is invisible once saved and joins to the wrong actuals forever; an empty one is
+visibly unfinished and holds the offering at `provisional`. The category box is a
+**controlled list** built from `v_pl_monthly` + `revenue_streams` — the set a plan line
+can actually join to — because `category` is the key `v_plan_vs_actual` matches on and
+free text there is precisely how the legacy `budget_lines` rows reported 100% variance
+in silence (§47).
+
+**Decision — the UI does not offer what the schema refuses.** "% of revenue" no longer
+appears on income lines (expense-only by constraint), and switching a line onto a
+percentage sends `quantity: 1` in the same write instead of surfacing a raw check
+violation at the user.
+
+**Method note (LEARNINGS §54).** The migration is meant to be inert, and a
+before/after fingerprint over every number the planning views produce confirmed it —
+but that same evidence is what a column nobody reads looks like. It took a deliberate
+perturbation (double one quantity, cost must rise by exactly that line's amount) and a
+deliberate violation (a `pct_revenue` line with quantity 2 must be refused) before the
+fingerprint meant anything. The dry run separately caught that 199 had replaced
+`v_plan_offering_unit` with two extra columns that 198 never defined, which would have
+failed the apply.
+
+**Parked — a published round is only HALF frozen.** `plan_publish_round()` snapshots
+volumes, overrides and overhead but **not `plan_offering_lines`**, and both views join
+lines live with no version filter. Editing a price therefore changes what a *published*
+round says it forecast — exactly what the freeze exists to prevent. Found here, not
+introduced here; harmless only while nothing is published, and this session's work makes
+it far likelier to bite. Fixing it means versioning the lines, which changes the shape
+of the planner's core table, so it is scoped and waiting on Keith.
+
+**Parked.** Offerings themselves still cannot be created or retired from the UI — this
+session did lines only, which is what was asked for.
+
+**Still parked from 2026-08-21.** Nobody has opened the Planning tab in a browser; six
+offerings remain provisional; parties have no per-head ticket price (no paid `ticketing`
+row exists against any `party` event, and none was invented); Equipment Rental books no
+event.

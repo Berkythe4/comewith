@@ -293,6 +293,27 @@ Four Come-With-specific rules on top of whichever variant you run:
   missing side renders as "no cost" instead of a confident 100% margin - a `$0`
   line asserts "this costs nothing", which is a different claim from "not
   modelled yet". LEARNINGS §26, §48.
+- **A pricing line is `quantity x rate`, and `quantity` composes with `basis` (203).**
+  `per_unit` -> qty x amount ("2 DJs at $200"). `per_scale` -> qty x amount x scale,
+  i.e. quantity is a multiplier ON TOP of the scale driver ("2 drinks a head"), and
+  the ordinary case of qty 1 still reads as "$25 a head". `pct_revenue` -> quantity is
+  **pinned to 1 by constraint**, because a percentage has no count; the UI must not
+  offer a quantity box there, and switching a line onto `pct_revenue` has to send
+  `quantity: 1` in the same write or the save fails a check constraint. `pct_revenue`
+  is also expense-only, so **never offer it on an income line** - the schema refuses
+  every save. `unit_label` ("tickets", "DJs") is display only; nothing computes from it.
+- **The category box on a pricing line is a CONTROLLED LIST**, built from
+  `v_pl_monthly` plus `revenue_streams` - the set a plan line can actually join to.
+  Free text there is how a line reports 100% variance for its whole life without ever
+  saying anything is wrong. A new line is created with an EMPTY category and
+  `needs_review = true` rather than a plausible guess, and the confirm tick refuses to
+  clear the flag while the category is blank.
+- **`plan_offering_lines` is NOT versioned, so a published round is only half frozen.**
+  `plan_publish_round()` snapshots volumes, overrides and overhead; the views join
+  lines live with no version filter. Editing a price today therefore changes what a
+  PUBLISHED round says it forecast - the exact thing the freeze exists to prevent.
+  Known and open as of 2026-08-27; see CARRYOVER. Do not build anything new that
+  relies on a published round's numbers being stable until it is fixed.
 - **The forecast maths is implemented TWICE - in SQL (`v_plan_monthly`) and in JS
   (`planModelMonth`)** - because a lever that needs a round trip before it shows
   the answer is a form, not a lever. The view is the source of truth and is what

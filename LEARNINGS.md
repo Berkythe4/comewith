@@ -1526,3 +1526,63 @@ comes from a secret rather than `req.url`, because behind a proxy those differ
 and the mismatch yields a valid-looking hash eBay silently rejects. With it
 verified, eBay went from `NOT CONFIGURED` to `ok — 173 listing(s)`, and the
 scan's reach went from 173 listings to 346.
+
+---
+
+## Section 54 — Prove the column is read, not just that nothing broke (2026-08-27)
+
+Migration 203 added `quantity` to `plan_offering_lines` so a pricing line could
+say "100 tickets at $25" instead of "$2,500". `quantity` defaults to 1, so the
+whole change is meant to be **inert**: every existing line must compute exactly
+what it computed before.
+
+The obvious check is a before/after comparison, and it was done properly — a
+single fingerprint over every number the two planning views can produce
+(`v_plan_offering_unit`, `v_plan_monthly`, `v_event_contribution`, and the lines
+themselves), captured against prod, then recomputed inside the dry-run
+transaction. Identical, all four.
+
+**And it would have been identical if the views had ignored `quantity`
+completely.** That is the trap. "Nothing changed" is exactly what a column
+nobody reads looks like, and it is also exactly what a correct migration looks
+like — the same evidence supports both, so on its own it distinguishes nothing.
+An inertness check can only ever tell you the change is *harmless*; it cannot
+tell you the change is *there*.
+
+So the dry run also doubled the quantity on one `per_unit` cost line and asserted
+the offering's cost per unit rose by exactly that line's amount. It did
+($6,557 → $13,114). Only then did the fingerprint mean what it appeared to mean:
+not "nothing happened", but "the column is wired in and reads as 1 today".
+
+A third run inserted a `pct_revenue` line with `quantity = 2` and required it to
+FAIL, because a percentage has no count and the constraint pinning it to 1 is
+load-bearing rather than decorative. It failed with `23514`, as intended.
+
+**The shape of the lesson.** §49 said verify the verifier when it agrees with
+you. This is its sibling: when an expected result is "no change", a passing check
+is indistinguishable from a check pointed at nothing. Pair every inertness proof
+with a deliberate perturbation that MUST move the number, and a deliberate
+violation that MUST be refused. Three runs, not one.
+
+**Two other things fell out of the same session, both of them checks lying:**
+
+- **The dry run caught a schema fact reading the repo could not.** 203 rebuilt
+  `v_plan_offering_unit` from the definition in 198 — but 199 had quietly
+  replaced that view with two extra columns (`has_revenue_model`,
+  `has_cost_model`). `create or replace view` refuses to drop columns, so the
+  apply would have failed. Reading your own migration history tells you what was
+  *written*; only prod tells you what the database *is* (§45 again, from the
+  other direction).
+
+- **An RLS negative control erased its own evidence.** The probe checked that
+  `anon` could not insert a pricing line by attempting the insert inside a
+  plpgsql `BEGIN … EXCEPTION` block and raising `'PROBLEM: anon inserted'` if it
+  succeeded. That block is a **subtransaction** — the raise rolls back the very
+  insert it is reporting, so the follow-up count finds nothing and the probe
+  passes whatever the database does. Record outcomes in a variable and return
+  them as rows; never `raise` to report a failure you are trying to observe.
+  (The first run also leaked the admin's JWT claims into the anon block, because
+  `set_config(..., true)` is transaction-local, not block-local: `auth.uid()`
+  still returned Keith, `is_admin()` still passed, and the "anon" test was the
+  admin test wearing a different role name. Clear the claims before switching
+  role, or you are testing nothing.)

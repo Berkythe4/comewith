@@ -1,3 +1,153 @@
+# Carryover - 2026-08-27 (pricing models: quantity x rate - LAPTOP)
+
+**Work done 2026-08-22, closed 2026-08-27.** The desktop's two closes from
+2026-08-25 are preserved below, unchanged.
+
+## >> RESOLVED FROM THE DESKTOP'S LIST
+
+**Migration drift is closed.** The desktop's item 1 was `203_plan_line_quantity.sql`
+applied to prod from machine `MSI` on 2026-08-22 and never committed. That file is
+now committed, and it is the ORIGINAL - `sha256 bbb8cfbb8894...`, matching
+`applied_migrations` exactly, so this closes the drift rather than papering over it
+with a re-write. The desktop was right not to author a replacement. **Prod max 203,
+repo max 203, no drift. Next migration number is 204.**
+
+**The anon sweep is closed too** (it was owed from 2026-08-21). Run clean on this
+laptop on 2026-08-22, and again today: 0 FAIL, all nine planning objects blocked.
+The blocker was never the machine - `SUPABASE_PROD_PUBLISHABLE_KEY` was simply
+missing from `.env`, and that key is public by design (it ships inside
+`dashboard.html` for the browser). It is now in this machine's `.env` along with
+`SUPABASE_PROD_URL`. **Note the script reads `.env` DIRECTLY and ignores the process
+environment**, so passing the key inline on the command line does nothing - it has
+to be in the file. Henry's machine can be unblocked the same way.
+
+## >> START HERE NEXT SESSION
+
+**1. Still nobody has opened the Planning tab in a browser.** Carried since
+2026-08-21 and now more load-bearing, because this session rewrote the whole
+Pricing models surface and none of it has been clicked. No dashboard login exists
+on this laptop. **Open Finance -> Planning -> Pricing models.** Check: a qty and a
+rate multiply to the total shown; typing in either moves the total, the subtotals
+and the contribution row immediately (not on blur); `+ revenue line` / `+ cost
+line` create an empty flagged row; the `x` removes one; and the numbers survive a
+reload. If a total disagrees with the header econ figures, **the header (the SQL
+view) is right and the JS mirror is wrong** - that is the documented seam.
+
+**2. A PUBLISHED ROUND IS ONLY HALF FROZEN. Design hole, found this session, not
+introduced by it.** `plan_publish_round()` snapshots volumes, overrides and
+overhead - but **not `plan_offering_lines`**. Both planning views join lines live
+with no version filter, so **editing a price today silently changes what a
+published round says it forecast**. That is precisely what the freeze exists to
+prevent, and "actual vs forecast" is meaningless while it holds. It has been
+harmless so far because nothing has been published; it stops being harmless the
+moment a round is. Making line editing easy and detailed (this session) makes it
+much likelier to bite. The fix is to version the lines - snapshot them into the
+round the way volumes already are. **Scoped but not built; ask Keith before
+building, it changes the shape of the planner's core table.**
+
+**3. Six offerings are still provisional.** Carried from 2026-08-21, and now much
+faster to fix: the category box is a real dropdown built from the P&L's own
+categories, so it is picking from a list rather than typing. Splitting the $1,200
+"Come With Party #1" lump into venue / talent / marketing is the whole job.
+
+**4. Two model gaps still want a decision, not a default.** Both carried unchanged
+from 2026-08-21: parties have **no per-head ticket price** (there is not one paid
+`ticketing` row against any event of type `party` - priced tickets exist only for
+Dance Infusion), so "avg attendance" is a lever that moves no money; and
+**Equipment Rental books no event** (`creates_event = false`) when you said rentals
+should be mergeable into an event. Nothing was seeded to "make the lever work" -
+that would be invented evidence feeding every forecast figure.
+
+**5. Offerings themselves still cannot be added or removed from the UI.** This
+session did LINES only, which is what was asked for. There is no way to create a
+new offering or retire an old one without SQL.
+
+**6. `anon` holds table-level INSERT / UPDATE / DELETE on the planning tables**
+(`plan_offerings`, `plan_offering_lines`, `plan_volumes`) - inherited from the 013
+default privileges; 198 revoked only SELECT. **RLS blocks it, verified live** with
+claims cleared. This is the same posture as every other table in the schema, so it
+is not a new problem and not a leak - but worth knowing that `check_anon_exposure.py`
+only ever tests READS. There is no write-side sweep.
+
+**7. `.env` on this laptop still has a bare `SBP_REF=yaytdosxfhcqatmhctzk`** - i.e.
+prod. CLAUDE.md says not to have one, precisely so the target project is visible in
+the command being approved. Every `db.py` call this session passed the literal
+anyway, but a bare `python db.py x.sql` here silently hits production. Recommend
+deleting that line; left alone rather than editing your local config unasked.
+
+---
+
+## State summary
+
+- **Prod max migration 203, repo max 203 - NO DRIFT** (was drifting; this close is
+  what fixed it). 203 dry-run against prod before applying, per the rule.
+- **All 5 financial views return anon 401**, verified through PostgREST with the key
+  proven live first (`scripts/check_financial_views.py`, new from the desktop).
+- **Full anon sweep: 0 FAIL**, all nine planning objects blocked.
+- **Latest LEARNINGS: SS54.** One added this session.
+- **CLAUDE.md gained three planning rules** - how `quantity` composes with `basis`,
+  the controlled category list, and the half-frozen published round.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Ran on the **laptop** (`C:\Users\keith\comewith`). No edge functions touched.
+- Git: merged origin/master (the desktop's 2026-08-25 Radio + Gear Watch work) and
+  pushed. No parked branches.
+- **No JS runtime on this machine still** - `node`, `deno`, `bun`, `npx` all absent.
+  The syntax check was esprima with the module downlevelled and top-level `await`
+  wrapped in an async IIFE, run three ways (control / subject / negative). The
+  downlevel+wrap recipe is in the session review; installing Node would restore the
+  documented `node --check` loop.
+
+## This session shipped
+
+### Pricing models: quantity x rate = total, and lines you can add or remove
+
+Keith could see "$2,500 of ticket sales" but not "100 tickets at $25". Those are
+the same number and a different amount of knowledge - the first cannot be argued
+with, the second is two figures you can each disagree with. And there was no way to
+add or remove a line at all, so the model was whatever the seed happened to guess.
+
+**Migration 203** adds `quantity` (default 1) and `unit_label` to
+`plan_offering_lines` and recomputes both views through it. How it composes with
+`basis` is the part worth getting right: `per_unit` is qty x rate; `per_scale` is
+qty x rate x scale, so quantity is a multiplier ON TOP of the attendance driver
+("2 drinks a head") while the ordinary case of qty 1 still reads as "$25 a head";
+`pct_revenue` is **pinned to quantity 1 by constraint**, because a percentage has
+no count and a field the maths silently drops is worse than one you cannot fill in
+wrong.
+
+**The dashboard** now reads as a unit-economics statement - revenue lines, revenue
+per unit, cost lines, cost per unit, contribution - with qty x rate = total on every
+row and totals that repaint **as you type** rather than on blur. Add and remove are
+per offering; removal is a soft delete. A new line is created EMPTY and flagged for
+review instead of pre-filled with a plausible category, and the category box is a
+controlled list built from `v_pl_monthly` plus `revenue_streams`, because `category`
+is the key `v_plan_vs_actual` joins on and free text there is exactly how the legacy
+`budget_lines` rows reported 100% variance in silence for their whole life.
+
+Two places the UI offered what the schema refuses, fixed while wiring: "% of
+revenue" no longer appears on income lines (expense-only by constraint), and
+switching a line onto a percentage sends `quantity: 1` in the same write instead of
+surfacing a raw check violation at the user.
+
+**How it was verified, since none of it was clicked.** The migration is meant to be
+inert, and inertness was proved with a fingerprint over every number the planning
+views can produce - identical before and after. That check would also have passed if
+the views ignored `quantity` entirely, so the dry run additionally doubled one
+quantity and required the cost to rise by exactly that line's amount ($6,557 ->
+$13,114), and a third run required a `pct_revenue` line with quantity 2 to be
+REFUSED. LEARNINGS SS54. Beyond that: `post_apply.sql` all PASS; the JS mirror
+re-implemented in Python from the transcribed functions and agreeing with the SQL
+view on all six offerings; RLS smoke-tested as a real authenticated admin (insert,
+select-back, update, soft delete) with anon refused.
+
+**The dry run earned its keep on its own.** 203 rebuilt `v_plan_offering_unit` from
+the definition in 198 - but 199 had quietly replaced that view with two extra
+columns (`has_revenue_model`, `has_cost_model`), and `create or replace view` cannot
+drop columns. The apply would have failed. Reading the repo tells you what was
+written; only prod tells you what the database is.
+
+---
+
 # Carryover - 2026-08-25 (part two: Gear Watch - all four sources live - DESKTOP)
 
 **Second close on 2026-08-25.** The task-boards close from earlier today is
