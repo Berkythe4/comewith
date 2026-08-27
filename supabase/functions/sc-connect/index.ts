@@ -127,6 +127,13 @@ Deno.serve(async (req) => {
       const num = (v: unknown) => (v == null ? null : Number(v));
       await admin.from("sc_playlists").update({
         mix_sc_plays: num(j.playback_count),
+        // The episode's real runtime, which nothing else can supply. Every page
+        // used to sum sc_playlist_tracks.duration_ms instead — source-track
+        // lengths, and for source='dj' tracks those are Beatport PREVIEW clips
+        // (SHOW 6 read "43 min" for an hour-long mix). `full_duration` is the
+        // untrimmed length where SoundCloud reports one; `duration` is what the
+        // player actually plays, so prefer it. 206.
+        mix_duration_ms: num(j.duration ?? j.full_duration),
         // The API has moved from favoritings_count to likes_count and still
         // returns the old name on some tracks; take whichever is present.
         mix_sc_likes: num(j.likes_count ?? j.favoritings_count),

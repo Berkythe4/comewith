@@ -32,7 +32,7 @@ const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }),
 // the theme and to show the number the AUDIENCE knows — Elements Ep1, not SHOW 3.
 // Still no sc_playlist_url here: listeners get the final mix, not the source
 // playlist. That omission is deliberate, see the note above.
-const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_sc_track_id, mix_youtube_url, cover_url, mix_by, edition_name, edition_seq, assigned_actor_id";
+const STATION_COLS = "id, slug, name, note, desc_public, published, published_at, status, station_no, drop_date, mix_sc_track_url, mix_sc_track_id, mix_youtube_url, cover_url, mix_by, edition_name, edition_seq, assigned_actor_id, mix_duration_ms";
 // sample_url is Beatport's own public preview clip — it lets a track that
 // isn't on SoundCloud still be auditioned, including on the phone via a
 // preview link. energy/comment are private working notes and stay OUT.
@@ -41,6 +41,15 @@ const STATION_COLS = "id, slug, name, note, desc_public, published, published_at
 // an episode video: an episode token is enough, and nothing else has to be
 // handed out. It is the same year already printed on every track card.
 const TRACK_COLS = "title, artist_name, permalink_url, sample_url, duration_ms, playback_count, artwork_url, show_date, show_venue, show_cost, show_url, bpm, song_key, camelot, genres, release_date, sort";
+
+// The episode's runtime, from the published mix itself (206). Every surface used
+// to sum sc_playlist_tracks.duration_ms, which is the length of the SOURCE
+// TRACKS: a DJ set overlaps them so the sum over-reports, and a track added via
+// the Beatport/Rekordbox route stores its PREVIEW CLIP, so SHOW 6's 24 tracks
+// summed to "43 min" for an hour-long mix. total_min is still sent — it is a
+// truthful "total length of the source tracks" — but it is NOT the runtime and
+// no page may render it as one.
+const mixMin = (ms: unknown) => (ms == null ? null : Math.round(Number(ms) / 60000));
 
 const norm = (s: unknown) => String(s ?? "").trim().toLowerCase();
 
@@ -139,6 +148,7 @@ Deno.serve(async (req) => {
           // Who "Mixed by <name>" points at on the hub card. Null = the credit is
           // somebody outside the collective, and the name stays plain text.
           mix_by_id: creditedArtist({ ...p, assigned_actor_id }, pa),
+          mix_min: mixMin(p.mix_duration_ms),
           track_count: agg[id]?.n || 0,
           total_min: Math.round((agg[id]?.ms || 0) / 60000),
           // Episode cover -> SHOW artwork -> a track's cover, in that order. Track
@@ -175,6 +185,7 @@ Deno.serve(async (req) => {
           slug: p.slug, name: p.name, station_no: p.station_no,
           edition_name: p.edition_name, edition_seq: p.edition_seq,
           published_at: p.published_at, mix_by: p.mix_by,
+          mix_min: mixMin(p.mix_duration_ms),
           track_count: agg[p.id]?.n || 0,
           total_min: Math.round((agg[p.id]?.ms || 0) / 60000),
           // Same fallback order as the hub: the episode's own cover, then the
@@ -198,7 +209,8 @@ Deno.serve(async (req) => {
     const { id: _id, assigned_actor_id, ...station } = pl;
     return new Response(JSON.stringify({
       station: { ...station, station_artwork: stationArt,
-                 mix_by_id: creditedArtist({ ...station, assigned_actor_id }, pa) },
+                 mix_by_id: creditedArtist({ ...station, assigned_actor_id }, pa),
+                 mix_min: mixMin(pl.mix_duration_ms) },
       tracks: tracks || [],
     }), { headers: JH });
   } catch (e) {

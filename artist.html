@@ -99,7 +99,10 @@ const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_Iki
 const $=s=>document.querySelector(s);const TINTS={cream:'#EDE4D3',lime:'#a7e02e',white:'#ffffff',plum:'#5b2746'};
 const qs=new URLSearchParams(location.search);const AID=qs.get('id')||'';
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
-function fmtDate(s){if(!s)return'';return new Date(s+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
+// Takes a date (event_date, 'YYYY-MM-DD') OR a full timestamp (published_at).
+// The bare +'T00:00:00' produced "Invalid Date" on every radio card, because a
+// timestamptz already carries its own time. Same guard radio.html uses.
+function fmtDate(s){if(!s)return'';const d=new Date(String(s).length>10?s:(s+'T00:00:00'));return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}
 function ytId(u){if(!u)return null;const m=String(u).match(/(?:youtu\.be\/|v=|embed\/|shorts\/)([\w-]{11})/);return m?m[1]:(/^[\w-]{11}$/.test(u)?u:null);}
 function mediaKind(u){if(!u)return null;const s=String(u);if(ytId(s))return 'youtube';if(/soundcloud\.com|snd\.sc/i.test(s))return 'soundcloud';return null;}
 function scEmbed(u){return 'https://w.soundcloud.com/player/?url='+encodeURIComponent(u)+'&color=%23a7e02e&auto_play=true&hide_related=true&show_comments=false&show_user=true&visual=true';}
@@ -157,7 +160,7 @@ function setFavicon(url){
     if(eps.length){
       $('#radioSec').style.display='';
       $('#radio').innerHTML='<div class="rgrid">'+eps.map(function(e){
-        const m=[e.station_no!=null?('SHOW '+e.station_no):'',e.track_count?(e.track_count+' tracks'):'',e.total_min?(e.total_min+' min'):'',e.published_at?fmtDate(e.published_at):''].filter(Boolean).join(' · ');
+        const m=[e.station_no!=null?('SHOW '+e.station_no):'',e.track_count?(e.track_count+' tracks'):'',e.mix_min?(e.mix_min+' min'):'',e.published_at?fmtDate(e.published_at):''].filter(Boolean).join(' · ');
         return '<a class="ritem" href="radio.html?s='+encodeURIComponent(e.slug||'')+'"><div class="th"'+(e.artwork_url?(' style="background-image:url(&quot;'+esc(e.artwork_url)+'&quot;)"'):'')+'></div><div class="cb"><div class="rt">'+esc(e.name||'')+'</div><div class="rm">'+esc(m)+'</div></div></a>';
       }).join('')+'</div>';
     }
