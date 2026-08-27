@@ -17,7 +17,7 @@ rem      the mix        any .wav / .mp3 / .m4a  -- the recorded set
 rem      the tracklist  "Track List ....txt"    -- typed by hand, with times
 rem      (artwork)      square image with "artwork" in the name; optional
 rem
-rem  Full instructions: Radio\HOW_TO_MAKE_THE_MP4.md
+rem  Full instructions: Radio\RUN_SHEET.html  (double-click it)
 rem ===========================================================================
 cd /d "%~dp0"
 rem The repo root is whichever folder contains Radio\render. This file works

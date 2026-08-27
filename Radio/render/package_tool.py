@@ -50,7 +50,6 @@ TOOL = [
 ]
 ALSO = [
     ("Radio/Make Radio MP4.bat", "Make Radio MP4.bat"),
-    ("Radio/HOW_TO_MAKE_THE_MP4.md", "Radio/HOW_TO_MAKE_THE_MP4.md"),
     # The visual one. Double-click it — it is the first thing to read.
     ("Radio/RUN_SHEET.html", "RUN_SHEET.html"),
     ("Radio/Artwork/Radio_Thumbnail.jpg", "Radio/Artwork/Radio_Thumbnail.jpg"),
@@ -94,8 +93,7 @@ Then: double-click `Make Radio MP4.bat` and type the episode number.
 Everything it needs is already in the `Radio\\Episode N` folder that came with
 this zip. It works completely offline — no logins, no database, no accounts.
 
-The full guide, including how to change any of the wording, is in
-Radio\\HOW_TO_MAKE_THE_MP4.md.
+RUN_SHEET.html is the full guide, including how to change the wording.
 
 
 CHANGING THE WORDING
