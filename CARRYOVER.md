@@ -16,7 +16,7 @@ is sitting untracked locally and looks like the photo for it. To revert instead:
 `SBP_REF=yaytdosxfhcqatmhctzk python db.py "update public.actors set public_profile=false where display_name='32LVS';"`
 
 **2. MIGRATION DRIFT, unchanged and still owed by the laptop.** Prod is now on
-**205**; the repo has 204 and 205 but still stops short of **203**.
+**206**; the repo has 204, 205 and 206 but still stops short of **203**.
 `203_plan_line_quantity.sql` was applied from machine `MSI` on 2026-08-22 and
 never committed. Recovered effect: `plan_offering_lines.quantity numeric default
 1 NOT NULL`. No replacement file has been written on purpose - a different
@@ -36,15 +36,21 @@ seller's photos. Do not contact the seller - send it to the detective.
 
 ## State summary
 
-- **Prod max migration 205; repo has 204 + 205 but no 203 - DRIFT (item 2).**
-  Two migrations this session, both dry-run then applied, post-apply checks PASS.
+- **Prod max migration 206; repo has 204 + 205 + 206 but no 203 - DRIFT (item 2).**
+  Three migrations this session, each dry-run then applied, post-apply checks PASS.
 - **All 5 financial views return anon 401**, verified with `check_financial_views.py`
   after the key was proven live. **Anon sweep: 0 FAIL.**
-- **Latest LEARNINGS: §55.** Two added today (§54, §55).
+- **Latest LEARNINGS: §56.** Three added today (§54, §55, §56).
 - Roles unchanged. Git: committed and pushed to master, Netlify deployed.
 - Ran on the **desktop**.
-- **Edge functions deployed this session:** `get-station` **v33** (`--no-verify-jwt`).
-- **Prod data touched:** `actors.public_profile = true` for 32LVS (one row).
+- **Edge functions deployed this session:** `get-station` **v35**
+  (`--no-verify-jwt`), `sc-connect` **v35**.
+- **Prod data touched:** `actors.public_profile = true` for 32LVS (one row), and
+  a `sc-connect mix_stats` backfill across all 7 live episodes (runtimes + play
+  counts, which had been stale since SHOW 1 in July). Triggered server-side with
+  `net.http_post` + the vaulted service-role key, the 146 pattern - there is no
+  service-role key in `.env`, and the dashboard's "refresh mix stats" button does
+  the same thing.
   Separately, Keith flipped `is_public` on DI #1, DI #2, the DI Artist Showcase
   and Crossroads from the dashboard mid-session; those were left alone.
 
@@ -56,6 +62,7 @@ seller's photos. Do not contact the seller - send it to the detective.
 | `6bc3188` | A gig shows on an artist profile only if the event is public (204) |
 | (205) | A gig shows if the event faces the public - which is TWO flags, not one |
 | (reorder) | Radio leads an artist's portfolio when they have episodes |
+| (206) | An episode's length is the mix's runtime, not the sum of its source tracks |
 
 ### Radio episodes and artist profiles now link both ways
 
@@ -94,6 +101,34 @@ neither flag. LEARNINGS §54.
 Still excluded, and this is the point: **Elements, We Belong Here, Hulaween and
 JunXion** - Growth & Networking festivals the team *attended*, which had been
 listed as **gigs** on artist profiles all along.
+
+### The minutes were wrong on every surface, not just the profile
+
+Keith reported "incorrect minutes" and "invalid date" on the profile radio cards.
+Both were older and wider than that page.
+
+**Invalid date:** `artist.html`'s `fmtDate` appended `'T00:00:00'`
+unconditionally - right for `event_date`, fatal for `published_at`, which is a
+timestamptz that already carries its own time. `radio.html` had already hit this
+and guards on string length. Now shared, and it returns `''` rather than the
+string "Invalid Date" if anything slips through.
+
+**Minutes:** every surface summed `sc_playlist_tracks.duration_ms`, the length of
+the SOURCE TRACKS. A DJ set cuts and overlaps them, so it over-reports - SHOW 7
+read **109 min for a 56-min mix**. `sc-connect mix_stats` was already fetching
+the published mix's own track object to read its play count and discarding
+`duration`; it now stores `sc_playlists.mix_duration_ms` (206) and every surface
+- homepage card, radio hub, episode page, artist profile - reads that.
+
+| SHOW | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| real | 61 | 65 | 64 | 60 | 58 | 43 | 56 |
+| old summed | 86 | 98 | 65 | 60 | 59 | 43 | 109 |
+
+**A correction worth keeping:** the first commit claimed SHOW 6's "43 min" was an
+hour-long mix under-reported from Beatport preview clips. The backfill disproved
+it - SHOW 6 really is 43 minutes and the preview sum was right by coincidence.
+See LEARNINGS §56.
 
 ## Parked / next
 

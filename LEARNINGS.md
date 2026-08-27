@@ -1611,3 +1611,60 @@ public station reads go through the function, and a new view would have undone
 that quietly. It is a `?artist=<id>` mode instead: published episodes only, and a
 non-public actor gets the same empty answer as an unknown id, so the endpoint
 never confirms that a private profile exists.
+
+
+---
+
+## Section 56 — A derived number that is right by coincidence is still not a measurement (2026-08-27)
+
+Every surface showing an episode's length — homepage card, radio hub, episode
+page, and the artist profile card added the same day — summed
+`sc_playlist_tracks.duration_ms`. That is the total length of the SOURCE TRACKS,
+and it had never been the runtime of the mix. Keith caught it from the profile
+card: *"it shows the incorrect minutes."*
+
+The fix was straightforward once looked for. `sc-connect`'s `mix_stats` action
+already fetched the published mix's own track object from api.soundcloud.com to
+read its play count, and was discarding `duration`. It now stores
+`sc_playlists.mix_duration_ms` (206) and every surface reads that.
+
+**The part worth writing down is what the numbers showed.**
+
+| SHOW | 1 | 2 | 3 | 4 | 5 | 6 | 7 |
+|---|---|---|---|---|---|---|---|
+| real | 61 | 65 | 64 | 60 | 58 | 43 | 56 |
+| summed | 86 | 98 | 65 | 60 | 59 | 43 | 109 |
+
+Four of seven were within a minute. **That is why it survived this long.**
+Anybody sanity-checking the hub would have looked at SHOW 3, 4, 5 or 6, seen a
+plausible hour, and moved on. The wrongness only shows on the episodes whose
+tracks came from SoundCloud at full length, where a DJ set's cutting and
+overlapping makes the sum over-report by nearly double.
+
+And the near-misses are not the calculation partly working. Those four are
+Beatport/Rekordbox episodes whose stored track lengths are **preview clips** —
+averaging 1.8 minutes, as short as 40 seconds. They land near an hour because the
+clips are short and there are roughly as many of them as an hour needs. Two
+unrelated errors cancelling is not a measurement; it is a coincidence that will
+stop holding the moment an episode mixes both sources.
+
+I got this wrong in the first commit, in the confident direction: I wrote that
+SHOW 6's "43 min" was an hour-long mix under-reported by a third, reasoning from
+the preview-clip durations without having the real one to check against. The
+backfill produced 43 minutes. **The claim was written into a migration comment, a
+column comment on prod and two edge functions before the number existed to test
+it against** — and had the backfill not run in the same session, it would have
+sat there as the durable explanation of a bug it described backwards.
+
+Two rules out of it:
+
+- **When replacing a computed value with a measured one, print both, per row,
+  before writing down why the old one was wrong.** The diff is the evidence, and
+  it costs one query.
+- **"Close on most rows" is not partial correctness for a derived quantity.**
+  Either the derivation models the thing or it does not. Ask which rows it is
+  wrong on and why *those*; if the answer is "the ones where the inputs happen to
+  be shaped differently", the agreement everywhere else is luck. Same family as
+  §26 (a placeholder that reaches a computation becomes invented evidence) and
+  §23 (never render a blank as zero): a number on screen is a claim, and it
+  carries no marking to say it was a guess.
