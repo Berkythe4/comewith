@@ -44,9 +44,10 @@ const TRACK_COLS = "title, artist_name, permalink_url, sample_url, duration_ms, 
 
 // The episode's runtime, from the published mix itself (206). Every surface used
 // to sum sc_playlist_tracks.duration_ms, which is the length of the SOURCE
-// TRACKS: a DJ set overlaps them so the sum over-reports, and a track added via
-// the Beatport/Rekordbox route stores its PREVIEW CLIP, so SHOW 6's 24 tracks
-// summed to "43 min" for an hour-long mix. total_min is still sent — it is a
+// TRACKS: a DJ set cuts and overlaps them, so the sum over-reports — SHOW 7 read
+// 109 min for a 56-min mix. (Beatport-sourced episodes sum from PREVIEW CLIPS
+// and land near the truth by coincidence, which is not a measurement either.)
+// total_min is still sent — it is a
 // truthful "total length of the source tracks" — but it is NOT the runtime and
 // no page may render it as one.
 const mixMin = (ms: unknown) => (ms == null ? null : Math.round(Number(ms) / 60000));

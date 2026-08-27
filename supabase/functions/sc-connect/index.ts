@@ -129,8 +129,8 @@ Deno.serve(async (req) => {
         mix_sc_plays: num(j.playback_count),
         // The episode's real runtime, which nothing else can supply. Every page
         // used to sum sc_playlist_tracks.duration_ms instead — source-track
-        // lengths, and for source='dj' tracks those are Beatport PREVIEW clips
-        // (SHOW 6 read "43 min" for an hour-long mix). `full_duration` is the
+        // lengths, which a DJ set cuts and overlaps — SHOW 7 read "109 min" for
+        // a 56-min mix. `full_duration` is the
         // untrimmed length where SoundCloud reports one; `duration` is what the
         // player actually plays, so prefer it. 206.
         mix_duration_ms: num(j.duration ?? j.full_duration),
