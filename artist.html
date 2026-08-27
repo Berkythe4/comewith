@@ -46,6 +46,13 @@
   .citem .th{aspect-ratio:16/9;background:linear-gradient(135deg,#2a1640,#1f4d52);background-size:cover;background-position:center;display:flex;align-items:center;justify-content:center}
   .citem .th .pl{width:54px;height:54px;border-radius:50%;background:var(--lime);color:#180c12;display:flex;align-items:center;justify-content:center;font-size:1.3rem}
   .citem .cb{padding:13px 15px}.citem .ct{font-weight:700}.citem .cm{font-family:'DM Mono';font-size:.73rem;color:var(--dim);margin-top:3px}
+  .rgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:16px}
+  .ritem{border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--panel);transition:.2s;display:block}
+  .ritem:hover{transform:translateY(-3px);border-color:var(--hot)}
+  .ritem .th{aspect-ratio:1/1;background:linear-gradient(135deg,#2a1640,#1f4d52);background-size:cover;background-position:center}
+  .ritem .cb{padding:12px 14px}
+  .ritem .rt{font-family:'Archivo';font-weight:700;text-transform:uppercase;font-size:.98rem;line-height:1.1}
+  .ritem .rm{font-family:'DM Mono';font-size:.72rem;color:var(--dim);margin-top:5px}
   .empty{border:1px dashed var(--line);border-radius:14px;padding:26px;text-align:center;color:var(--dim)}
   footer{padding:40px 0;border-top:1px solid var(--line);margin-top:30px}footer .wrap{display:flex;justify-content:space-between;flex-wrap:wrap;gap:14px}footer .dim{color:var(--dim);font-family:'DM Mono';font-size:.82rem}
   .lb{position:fixed;inset:0;background:rgba(10,5,12,.92);display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
@@ -74,6 +81,7 @@
 
 <div class="wrap">
   <section><h2 class="sec">Content</h2><div id="content"></div></section>
+  <section id="radioSec" style="display:none"><h2 class="sec">Radio</h2><div id="radio"></div></section>
   <section><h2 class="sec">Gigs</h2><div id="gigs"></div></section>
 </div>
 
@@ -135,6 +143,22 @@ function setFavicon(url){
   const content=await api('v_artist_content?actor_id=eq.'+encodeURIComponent(AID)+'&order=event_date.desc');
   $('#content').innerHTML=content.length?('<div class="cgrid">'+content.map(function(c){const id=ytId(c.url);const k=mediaKind(c.url);const thumb=id?('https://img.youtube.com/vi/'+id+'/hqdefault.jpg'):'';
     return '<article class="citem" data-media="'+esc(c.url)+'"><div class="th"'+(thumb?(' style="background-image:url(\''+thumb+'\')"'):'')+'><div class="pl">'+(k==='soundcloud'?'♪':'▶')+'</div></div><div class="cb"><div class="ct">'+esc(c.label||'Watch')+'</div><div class="cm">'+esc(c.event_name||'')+(c.event_date?(' · '+fmtDate(c.event_date)):'')+'</div></div></article>';}).join('')+'</div>'):'<div class="empty">No content tagged yet.</div>';
+  // Radio: the episodes this artist mixed. get-station is the ONLY public read of
+  // sc_playlists (anon-revoked in 103), so this goes through the function rather
+  // than a REST view, and it returns published episodes only — an unlisted preview
+  // stays behind its token. A radio outage must not take the rest of the profile
+  // down, hence the try/catch and the section staying hidden.
+  try{
+    const rr=await fetch(CWURL+'/functions/v1/get-station?artist='+encodeURIComponent(AID),{headers:CWH});
+    const eps=(rr.ok?(await rr.json()):{}).stations||[];
+    if(eps.length){
+      $('#radioSec').style.display='';
+      $('#radio').innerHTML='<div class="rgrid">'+eps.map(function(e){
+        const m=[e.station_no!=null?('SHOW '+e.station_no):'',e.track_count?(e.track_count+' tracks'):'',e.total_min?(e.total_min+' min'):'',e.published_at?fmtDate(e.published_at):''].filter(Boolean).join(' · ');
+        return '<a class="ritem" href="radio.html?s='+encodeURIComponent(e.slug||'')+'"><div class="th"'+(e.artwork_url?(' style="background-image:url(&quot;'+esc(e.artwork_url)+'&quot;)"'):'')+'></div><div class="cb"><div class="rt">'+esc(e.name||'')+'</div><div class="rm">'+esc(m)+'</div></div></a>';
+      }).join('')+'</div>';
+    }
+  }catch(_){}
   // Gigs
   const gigs=await api('v_artist_gigs?actor_id=eq.'+encodeURIComponent(AID)+'&order=event_date.desc');
   $('#gigs').innerHTML=gigs.length?('<div class="gigs">'+gigs.map(function(g){return '<div class="gig"><div><div class="n">'+esc(g.event_name||'')+'</div><div class="m">'+fmtDate(g.event_date)+(g.venue_name?(' · '+esc(g.venue_name)):'')+'</div></div>'+(g.role?'<div class="r">'+esc(g.role)+'</div>':'')+'</div>';}).join('')+'</div>'):'<div class="empty">No gigs listed yet.</div>';
