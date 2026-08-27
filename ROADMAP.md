@@ -1480,3 +1480,54 @@ Now a standing rule in CLAUDE.md.
 parts/accessories (two CDJ-3000 replacement screens scored 65) that may want
 exclude tokens; "Blackview wave8" (a phone) scores 75 against AlphaTheta Wave 8;
 and two targets still have no serial.
+
+
+---
+
+## 2026-08-27 — Radio episodes and artist profiles, linked both ways
+
+**Done.** "Mixed by \<name\>" on `radio.html` — the episode page and every hub
+card — links to that artist's public profile. **6 of 7 published episodes**
+resolve: Berky (SHOW 1, 2, 3), KRNeY (4, 7), Henry (5), and 32LVS (6) once their
+profile was published. A credit that resolves to nobody stays plain text, so a
+link always goes somewhere real.
+
+**Done.** The reverse: a **Radio** section on `artist.html`, which **leads** the
+page when the artist has episodes. Served by a new `?artist=<id>` mode on
+`get-station` rather than a new anon view — `sc_playlists` was anon-revoked in
+103 precisely so public station reads go through the function. Published
+episodes only; a non-public actor gets the same empty answer as an unknown id.
+
+**Matching rule (§55).** On `sc_playlists.mix_by`, the name PRINTED, never
+`assigned_actor_id` — the FK is only who was given access to build the episode
+and would point "Mixed by \<guest\>" at somebody else's page. Ambiguous names
+link nowhere. One helper serves both directions, so they cannot disagree.
+
+**Fixed — a public leak on artist profiles.** `v_artist_gigs` (065) listed the
+participants of every **completed** event by name, announced or not: private
+bookings and unpublished work went public the moment somebody marked them done.
+**204** closed it.
+
+**Corrected — and this was the real find (§54).** 204 gated on `is_public`
+alone, which read correctly and dry-ran clean and would have taken gigs from
+**60 to 24**, removing **Dance Infusion #1 and #2** from every DI artist's page.
+`is_public` is the *upcoming-events* flag (both consumers filter
+`event_date >= current_date`); the past-facing flag is `is_featured`, which
+drives Recent Rooms. **205** gates on `is_public OR is_featured` — Keith's rule:
+*"everything that is showing in recent rooms."* Now **46 gigs across 9 public
+artists**, 0 listed that carry neither flag. Only a pre-apply row count caught it.
+
+**Side effect worth keeping.** The four **Growth & Networking** events (Elements,
+We Belong Here, Hulaween, JunXion) are festivals the team *attended* to network,
+and had been listed as **gigs** on artist profiles all along. They carry neither
+flag and no longer appear.
+
+**Also.** The per-station track aggregate in `get-station` is now paged by
+primary key — it was a bare select against PostgREST's silent 1000-row cap, which
+a weekly show crosses around its fiftieth episode (§18).
+
+**Open:** 32LVS is published with an **empty** profile (no bio, photo or socials)
+and renders as a placeholder on the homepage collective until they use their
+self-edit link — item 1 in CARRYOVER. Per-track artist links on an episode were
+considered and not built: radio tracklists are external NYC acts with no `actors`
+row.
