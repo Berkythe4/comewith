@@ -14859,7 +14859,8 @@ function linkItemHtml(it, i) {
       <button class="lk-x" data-li-del title="Remove this link">✕</button>
     </div>
     ${isHeader ? '' : `<div class="lk-more">
-      ${it.style === 'social' ? '' : linkField(`item.${it.id}.subtitle`, 'Small line under it', it.subtitle, { ph: 'optional' })}
+      ${it.style === 'social' ? '' : `<div><label class="modal-label">Small line under it</label>
+        <input class="modal-input" data-li-f="subtitle" value="${escapeHtml(it.subtitle || '')}" placeholder="optional"></div>`}
       ${it.style === 'feature' ? `<div><label class="modal-label">Card image</label>
         <input class="modal-input" data-li-f="thumb_url" value="${escapeHtml(it.thumb_url || '')}" placeholder="paste a URL, or upload →">
         <input class="modal-input" type="file" accept="image/*" data-li-thumb style="margin-top:6px"></div>` : ''}
@@ -15038,9 +15039,17 @@ function linksTouch(structural) {
   if (structural) renderLinks();
   linksPushPreview();
 }
+// Only these land on the page row. The list is the point: `data-lk` used to
+// accept anything, so a per-link field mistakenly rendered with `data-lk`
+// instead of `data-li-f` wrote to a junk key on the page object and was dropped
+// at save with no error anywhere — which is exactly how link subtitles went
+// missing. A per-link field MUST use data-li-f.
+const LINK_PAGE_FIELDS = new Set(['title', 'slug', 'tagline', 'avatar_url',
+  'footer_note', 'seo_description', 'og_image_url', 'is_published']);
 function linksSetPath(path, val) {
-  if (path.startsWith('theme.')) linksState.page.theme[path.slice(6)] = val;
-  else linksState.page[path] = val;
+  if (path.startsWith('theme.')) { linksState.page.theme[path.slice(6)] = val; return; }
+  if (LINK_PAGE_FIELDS.has(path)) { linksState.page[path] = val; return; }
+  console.warn('[links] ignoring unknown page field "' + path + '" — a per-link field needs data-li-f');
 }
 function linksNewItem(style) {
   const id = (crypto.randomUUID ? crypto.randomUUID()

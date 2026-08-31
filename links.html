@@ -80,8 +80,11 @@
 
   .socials{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
   .wrap.center .socials{justify-content:center}
+  /* Social glyphs use the accent, same as the icon on a link row and a feature
+     card, so the icons across the page read as one set rather than two. */
   .soc{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
-       background-color:var(--card);display:inline-flex;align-items:center;justify-content:center;
+       background-color:var(--card);color:var(--accent);
+       display:inline-flex;align-items:center;justify-content:center;
        transition:transform .15s,border-color .15s,background-color .15s}
   .soc:hover{transform:translateY(-2px);border-color:var(--accent)}
   .soc svg{width:19px;height:19px}
@@ -127,10 +130,18 @@
 
   footer{margin-top:22px;color:var(--dim);font-size:.82rem;display:flex;
          flex-direction:column;gap:12px;align-items:inherit;width:100%}
-  .share{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;
-         border:1px solid var(--line);background-color:transparent;color:var(--dim);
-         font-family:inherit;font-size:.8rem;cursor:pointer;align-self:inherit}
-  .share:hover{border-color:var(--accent);color:var(--text)}
+  /* The home link and the copy button are the same pill. Both are chrome the
+     page always has, not rows Keith edits, so they read as a set. */
+  .pill{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;
+        border:1px solid var(--line);background-color:transparent;color:var(--dim);
+        font-family:inherit;font-size:.8rem;line-height:1;cursor:pointer;text-decoration:none}
+  .pill:hover{border-color:var(--accent);color:var(--text)}
+  .pill svg{width:15px;height:15px;color:var(--accent);flex:none}
+  .wrap.center .pill{align-self:center}
+  .wrap.left   .pill{align-self:flex-start}
+  /* The way back to the site. First thing in the column so it reads as a header
+     rather than as one more link in the list. */
+  .home{margin-bottom:10px}
   .state{color:var(--dim);text-align:center;padding:60px 0;font-size:.95rem}
   .skel{width:100%;height:56px;border-radius:var(--radius);background-color:var(--card);
         opacity:.5;animation:pulse 1.3s ease-in-out infinite}
@@ -327,29 +338,48 @@
     var av = page.avatar_url
       ? '<img class="avatar ' + shape + '" src="' + esc(page.avatar_url) + '" alt="' + esc(page.title) + '">'
       : '<div class="avatar ' + shape + '">' + esc(initials(page.title)) + '</div>';
-    var html = '<div class="hd">' + av +
+    var html =
+      '<a class="pill home" href="/" data-track="home">' + iconHtml('web') + ' comewith.org</a>' +
+      '<div class="hd">' + av +
       '<h1>' + esc(page.title) + '</h1>' +
       (page.tagline ? '<p class="tagline">' + esc(page.tagline) + '</p>' : '') + '</div>' +
       renderItems(items || [], btnStyle) +
       '<footer>' +
         (page.footer_note ? '<div>' + esc(page.footer_note) + '</div>' : '') +
-        '<button class="share" type="button" id="shareBtn" data-track="share">' +
-          iconHtml('link') + ' Share this page</button>' +
+        '<button class="pill" type="button" id="shareBtn" data-track="copy-link">' +
+          iconHtml('link') + ' <span id="shareTx">Copy link</span></button>' +
       '</footer>';
     $('body').innerHTML = html;
     document.title = page.title + ' — Links';
     var d = document.querySelector('meta[name="description"]');
     if (d && page.seo_description) d.setAttribute('content', page.seo_description);
+    // Copy, and say so. No native share sheet: on a phone that opens an OS
+    // dialog that hides the page and takes an extra tap, and the answer to
+    // "did that work?" is then somewhere else entirely.
     var btn = $('shareBtn');
     if (btn) btn.addEventListener('click', function () {
-      var url = location.href;
-      if (navigator.share) { navigator.share({ title: page.title, url: url }).catch(function () {}); return; }
-      if (navigator.clipboard) {
-        navigator.clipboard.writeText(url).then(function () {
-          btn.innerHTML = iconHtml('link') + ' Link copied';
-          setTimeout(function () { btn.innerHTML = iconHtml('link') + ' Share this page'; }, 1800);
-        }).catch(function () {});
+      var url = location.href, tx = $('shareTx');
+      function say(msg) {
+        if (!tx) return;
+        tx.textContent = msg;
+        setTimeout(function () { tx.textContent = 'Copy link'; }, 1800);
       }
+      function fallback() {
+        // execCommand is deprecated but is the only thing that works outside a
+        // secure context. Never report success without knowing it copied.
+        try {
+          var t = document.createElement('textarea');
+          t.value = url; t.setAttribute('readonly', '');
+          t.style.position = 'fixed'; t.style.top = '-1000px';
+          document.body.appendChild(t); t.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(t);
+          say(ok ? 'Link copied' : 'Copy failed');
+        } catch (e) { say('Copy failed'); }
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(function () { say('Link copied'); }).catch(fallback);
+      } else { fallback(); }
     });
   }
   function state(msg) { $('body').innerHTML = '<div class="state">' + esc(msg) + '</div>'; }

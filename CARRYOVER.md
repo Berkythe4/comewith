@@ -6,14 +6,27 @@ touch.
 
 ## >> START HERE NEXT SESSION
 
-**1. NOTHING HERE HAS BEEN CLICKED.** Same as the planner: there is still no
-dashboard login on this laptop, and no way to open a `file://` page in the Browser
-pane. Open **Team HQ -> Links Page**. Check, in this order: the page picker lists
-"Come With - /main (hidden)"; the phone preview on the right renders (it is an
-iframe of `links.html?preview=1`, so if it is blank the postMessage handshake is
-the thing to look at, not the layout); typing in "Name shown at the top" moves the
-preview immediately; dragging a row by the grip reorders it in the preview; a
-preset click repaints the colours; Save reports "Saved (page is still hidden)".
+**1. KEITH HAS NOW CLICKED IT, and the first pass found a real bug.** Adding a
+link and typing its "Small line under it" saved nothing: the field was rendered
+with `data-lk="item.<id>.subtitle"`, and the input handler routes every `data-lk`
+to the PAGE object, so the text landed on a junk key and was dropped at save with
+no error anywhere. Seeded links kept their subtitles only because migration 207
+inserted them directly, which is exactly what made it look like a rendering
+problem rather than a save problem. Fixed to `data-li-f="subtitle"` like every
+other per-link field, and `linksSetPath` now refuses any key not in
+`LINK_PAGE_FIELDS` and console-warns instead of silently absorbing it. **Any
+subtitles typed before this fix were never stored and need re-typing.**
+
+Same pass: social glyphs now use `--accent` so they match the link-row and
+feature-card icons; the share button always copies and reports "Link copied"
+(no native share sheet - on a phone it hides the page behind an OS dialog and
+puts the answer to "did that work?" somewhere else), with an `execCommand`
+fallback that says "Copy failed" rather than lying; and every page now carries a
+built-in `comewith.org` pill at the top, which is chrome rather than an editable
+row.
+
+Still unclicked from here: dragging to reorder, the presets, image upload, and
+Save on a page that has never been saved.
 
 **2. `/links` IS LIVE BUT THE PAGE IS NOT PUBLISHED, deliberately.** `link_pages`
 holds one row - slug `main`, six links seeded from what the site already says
