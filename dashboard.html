@@ -1808,6 +1808,16 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
       <div class="panel" id="panel-conversations"><div id="conversationsBody"></div></div>
       <div class="panel" id="panel-vendors"><div id="vendorsBody"></div></div>
       <div class="panel" id="panel-site-editor"><div id="siteEditorBody"></div></div>
+      <!-- The preview iframe lives OUTSIDE #linksBody on purpose: re-rendering the
+           editor must not touch it, because re-parenting or replacing an iframe
+           reloads it, and a preview that blinks on every keystroke is useless. -->
+      <div class="panel" id="panel-links">
+        <div id="linksBar"></div>
+        <div class="lk-cols">
+          <div id="linksBody"></div>
+          <div class="lk-prev" id="linksPreview"></div>
+        </div>
+      </div>
       <div class="panel" id="panel-site-review"><div id="siteReviewBody"></div></div>
       <div class="panel" id="panel-data-health"><div id="dataHealthBody"></div></div>
       <div class="panel" id="panel-invoices"><div id="invoicesBody"></div></div>
@@ -2231,6 +2241,10 @@ async function renderNav() {
   if (!MODULES.some(m => m.key === 'invoices')) MODULES.push({ key: 'invoices', label: '🧾 Invoices', nav_group: 'Finance', sort_order: 12, built: true, signed_off: true, master_only: false, default_roles: ['operations', 'full'] });
   // Planning sits immediately after the P&L: the same statement read forward.
   if (!MODULES.some(m => m.key === 'planning')) MODULES.push({ key: 'planning', label: '📈 Planning', nav_group: 'Finance', sort_order: 16, built: true, signed_off: false, master_only: true, default_roles: [] });
+  // Links Page sits next to Site Editor — the other surface that edits what the
+  // public sees. Fallback for the same reason as the rest: migration 207 may not
+  // have reached this environment yet.
+  if (!MODULES.some(m => m.key === 'links')) MODULES.push({ key: 'links', label: '🔗 Links Page', nav_group: 'Team HQ', sort_order: 55, built: true, signed_off: true, master_only: false, default_roles: ['marketing', 'full'] });
   MY_OVERRIDES = {};
   (ov.data || []).forEach(r => { MY_OVERRIDES[r.module_key] = r.access; });
 
@@ -4954,6 +4968,7 @@ async function loadTab(tab, { highlightFirst = false } = {}) {
   if (tab === 'conversations') { await loadConversations(); return; } // custom (email threads)
   if (tab === 'vendors') { await loadVendors(); return; } // custom (categorized vendor manager)
   if (tab === 'site-editor') { await loadSiteEditor(); return; } // custom (public-site CMS)
+  if (tab === 'links') { await loadLinks(); return; } // custom (link-in-bio pages + live preview)
   if (tab === 'site-review') { await loadSiteReview(); return; } // custom (audit log under Site Editor)
   if (tab === 'data-health') { await loadDataHealth(); return; } // master-only (link audit + auto-link)
   if (tab === 'invoices') { await loadInvoices(); return; } // custom (billing the accrued revenue)
@@ -14698,6 +14713,547 @@ async function saveSiteContent() {
   } catch (e) { toast(e.message || String(e), 'err'); if (btn) { btn.disabled = false; btn.textContent = 'Save all changes'; } }
 }
 $('panel-site-editor').addEventListener('click', e => { if (e.target.closest('[data-site-save]')) saveSiteContent(); });
+
+// ---- Links Page (link-in-bio pages over link_pages / link_items, migration 207) ----
+// Every /links/<slug> page is edited here: its chrome, its theme, and its
+// ordered links. Two things are deliberate and worth not undoing:
+//
+//   1. THE PREVIEW IS THE REAL PAGE. It is an iframe of links.html in preview
+//      mode, fed the unsaved form state over postMessage. There is no second
+//      renderer in this file, because the moment there are two the preview stops
+//      being evidence about what the public will actually see.
+//   2. NOTHING SAVES UNTIL "Save changes". Reordering, retheming and retyping are
+//      all local until then, so a half-built page is never live — which is also
+//      why publishing is its own toggle rather than a side effect of editing.
+const LINK_PRESETS = {
+  comewith: { label: 'Come With',      bg: '#140a17', bg2: '#1d0f22', card: '#241229', line: '#3a2640', text: '#EDE4D3', dim: '#b3a7b8', accent: '#a7e02e', accent_text: '#140a17', btn_style: 'solid',   font: 'archivo' },
+  infusion: { label: 'Dance Infusion', bg: '#1a0d20', bg2: '#3d1030', card: '#2a1230', line: '#4a2246', text: '#F6ECF3', dim: '#c4a8bd', accent: '#ff5ca8', accent_text: '#1a0d20', btn_style: 'solid',   font: 'archivo' },
+  midnight: { label: 'Midnight',       bg: '#070b14', bg2: '#0e1626', card: '#131c2e', line: '#22304a', text: '#E8EDF5', dim: '#93a1b8', accent: '#4dd4ff', accent_text: '#070b14', btn_style: 'glass',   font: 'dmsans' },
+  paper:    { label: 'Paper',          bg: '#F6F2EA', bg2: '#EDE6D8', card: '#FFFFFF', line: '#DCD2C0', text: '#1E1A16', dim: '#6B6154', accent: '#1E1A16', accent_text: '#F6F2EA', btn_style: 'outline', font: 'serif' },
+  neon:     { label: 'Neon',           bg: '#0a0a0f', bg2: '#150a1f', card: '#17111f', line: '#332a45', text: '#F2EEFF', dim: '#9d94b5', accent: '#c8ff2e', accent_text: '#0a0a0f', btn_style: 'outline', font: 'mono' },
+  sunset:   { label: 'Sunset',         bg: '#20110f', bg2: '#42191b', card: '#2e1715', line: '#523029', text: '#FFF0E6', dim: '#c8a698', accent: '#ff9f45', accent_text: '#20110f', btn_style: 'accent',  font: 'dmsans' },
+};
+const LINK_COLORS = [
+  ['bg', 'Background'], ['bg2', 'Background fade'], ['card', 'Button fill'], ['line', 'Borders'],
+  ['text', 'Text'], ['dim', 'Muted text'], ['accent', 'Accent'], ['accent_text', 'Text on accent'],
+];
+const LINK_STYLES = { button: 'Link button', feature: 'Feature card', header: 'Section heading', social: 'Social icon' };
+const linksState = { pages: [], page: null, items: [], removed: [], stats: {}, dirty: false, ready: false, icons: [] };
+
+// A preset's own display name is not a theme value, so it never lands in the row.
+function linkPresetTheme(key) {
+  const q = LINK_PRESETS[key] || LINK_PRESETS.comewith;
+  const out = { preset: key };
+  Object.keys(q).forEach(k => { if (k !== 'label') out[k] = q[k]; });
+  return out;
+}
+function linksSlugify(s) {
+  return String(s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '').slice(0, 40);
+}
+function linkPageUrl(slug) { return location.origin + '/links' + (slug === 'main' ? '' : '/' + slug); }
+
+async function loadLinks() {
+  $('linksBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading link pages…</div>';
+  const { data, error } = await sb.from('link_pages').select('*').order('sort_order').order('slug');
+  if (error) { $('linksBody').innerHTML = `<div class="panel-state err">${escapeHtml(error.message)}</div>`; return; }
+  linksState.pages = data || [];
+  if (!linksState.pages.length) { linksState.page = null; linksState.items = []; renderLinks(); return; }
+  const keep = linksState.page && linksState.pages.find(p => p.id === linksState.page.id);
+  await selectLinkPage((keep || linksState.pages[0]).id);
+}
+
+async function selectLinkPage(id) {
+  const page = linksState.pages.find(p => p.id === id);
+  if (!page) return;
+  linksState.page = JSON.parse(JSON.stringify(page));       // edit a copy; Save writes it back
+  linksState.page.theme = linksState.page.theme || {};
+  // NOT resetting linksState.ready: the preview iframe outlives a page switch, so
+  // clearing it here would freeze the preview on the page you just left.
+  linksState.removed = []; linksState.dirty = false;
+  const [items, stats] = await Promise.all([
+    sb.from('link_items').select('*').eq('page_id', id).order('sort_order').order('created_at'),
+    sb.from('v_link_click_stats').select('link_id,clicks_30d,clicks_all').eq('page_slug', page.slug),
+  ]);
+  linksState.items = items.data || [];
+  linksState.stats = {};
+  (stats.data || []).forEach(r => { linksState.stats[r.link_id] = r; });
+  renderLinks();
+}
+
+const LINKS_CSS = `<style>
+  .lk-bar{position:sticky;top:0;z-index:6;display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:var(--bg);padding:6px 0 12px;border-bottom:1px solid var(--border);margin-bottom:12px}
+  .lk-bar select{max-width:220px}
+  .lk-live{font-family:'Inconsolata',monospace;font-size:.72rem;letter-spacing:.06em;display:inline-flex;align-items:center;gap:7px}
+  .lk-live.on{color:var(--green)}.lk-live.off{color:var(--mid)}
+  .lk-cols{display:grid;grid-template-columns:minmax(0,1fr) 400px;gap:20px;align-items:start}
+  @media (max-width:1180px){.lk-cols{grid-template-columns:minmax(0,1fr)}}
+  .lk-sec{border:1px solid var(--border);border-radius:10px;margin-bottom:12px;background:var(--surface);overflow:hidden}
+  .lk-sec>summary{cursor:pointer;padding:12px 15px;font-family:'Bebas Neue',sans-serif;letter-spacing:.05em;font-size:1.05rem;list-style:none;display:flex;align-items:center;gap:9px}
+  .lk-sec>summary::-webkit-details-marker{display:none}
+  .lk-sec>summary::before{content:'▸';color:var(--mid);font-size:.8rem;transition:transform .15s}
+  .lk-sec[open]>summary::before{transform:rotate(90deg)}
+  .lk-sec>summary .lk-count{margin-left:auto;font-family:'Inconsolata',monospace;font-size:.66rem;letter-spacing:.1em;color:var(--mid);text-transform:uppercase}
+  .lk-body{padding:4px 15px 16px}
+  .lk-presets{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+  .lk-preset{border:1px solid var(--border-strong);border-radius:9px;padding:8px 11px;background:var(--surface-2);cursor:pointer;display:flex;align-items:center;gap:8px;font-size:.82rem;color:var(--fg)}
+  .lk-preset:hover{border-color:var(--accent,#5b7fb3)}
+  .lk-sw{width:15px;height:15px;border-radius:4px;flex:none;border:1px solid rgba(255,255,255,.18)}
+  .lk-colors{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+  .lk-col{display:flex;align-items:center;gap:8px}
+  .lk-col input[type=color]{width:34px;height:32px;padding:2px;border-radius:7px;border:1px solid var(--border-strong);background:var(--surface-2);cursor:pointer;flex:none}
+  .lk-col .lk-hex{width:88px;font-family:'Inconsolata',monospace;font-size:.78rem}
+  .lk-col span{font-size:.78rem;color:var(--mid)}
+  .lk-row{border:1px solid var(--border);border-radius:10px;background:var(--surface-2);margin-bottom:9px}
+  .lk-row.off{opacity:.55}
+  .lk-row.drag{border-color:var(--accent,#5b7fb3);opacity:.4}
+  .lk-head{display:flex;align-items:center;gap:9px;padding:9px 11px}
+  .lk-grip{cursor:grab;color:var(--mid);font-size:1rem;user-select:none;flex:none}
+  .lk-main{display:grid;grid-template-columns:110px 90px minmax(0,1.1fr) minmax(0,1.4fr);gap:8px;flex:1;min-width:0}
+  @media (max-width:900px){.lk-main{grid-template-columns:1fr 1fr}}
+  .lk-main input,.lk-main select{font-size:.82rem;padding:6px 8px}
+  .lk-clicks{font-family:'Inconsolata',monospace;font-size:.7rem;color:var(--mid);white-space:nowrap;flex:none}
+  .lk-x{background:none;border:none;color:var(--mid);cursor:pointer;font-size:1rem;padding:2px 5px;flex:none}
+  .lk-x:hover{color:var(--red,#d66)}
+  .lk-more{padding:0 11px 11px 40px;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:9px}
+  .lk-adds{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .lk-prev{position:sticky;top:56px}
+  .lk-phone{border:1px solid var(--border-strong);border-radius:26px;overflow:hidden;background:#000;box-shadow:0 12px 40px rgba(0,0,0,.35)}
+  .lk-phone iframe{display:block;width:100%;height:720px;border:0;background:#140a17}
+  .lk-prev .kpi-hint{margin:8px 2px 0}
+  .lk-empty{border:1px dashed var(--border);border-radius:10px;padding:26px;text-align:center;color:var(--mid)}
+</style>`;
+
+function linkField(key, label, val, opts) {
+  opts = opts || {};
+  const tag = opts.area
+    ? `<textarea class="modal-textarea" rows="2" data-lk="${key}" ${opts.ph ? `placeholder="${escapeHtml(opts.ph)}"` : ''}>${escapeHtml(val || '')}</textarea>`
+    : `<input class="modal-input" data-lk="${key}" value="${escapeHtml(val || '')}" ${opts.ph ? `placeholder="${escapeHtml(opts.ph)}"` : ''}>`;
+  return `<div${opts.wide ? ' style="grid-column:1/-1"' : ''}><label class="modal-label">${escapeHtml(label)}</label>${tag}
+    ${opts.hint ? `<div class="kpi-hint">${escapeHtml(opts.hint)}</div>` : ''}</div>`;
+}
+function linkColorHtml(key, label, val, dflt) {
+  const v = val || dflt;
+  return `<div class="lk-col"><input type="color" data-lk="theme.${key}" value="${escapeHtml(v)}">
+    <input class="modal-input lk-hex" data-lk="theme.${key}" value="${escapeHtml(v)}"><span>${escapeHtml(label)}</span></div>`;
+}
+function linkItemHtml(it, i) {
+  const st = linksState.stats[it.id];
+  const clicks = st && st.clicks_all
+    ? `<span class="lk-clicks" title="${st.clicks_all} clicks all time">↗ ${st.clicks_30d} / 30d</span>` : '';
+  const isHeader = it.style === 'header';
+  const sel = Object.keys(LINK_STYLES).map(k =>
+    `<option value="${k}"${it.style === k ? ' selected' : ''}>${escapeHtml(LINK_STYLES[k])}</option>`).join('');
+  return `<div class="lk-row${it.is_active ? '' : ' off'}" data-li="${escapeHtml(it.id)}" draggable="true">
+    <div class="lk-head">
+      <span class="lk-grip" title="Drag to reorder">⠿</span>
+      <input type="checkbox" data-li-f="is_active" ${it.is_active ? 'checked' : ''} title="Show this link" style="width:auto;margin:0;flex:none">
+      <div class="lk-main">
+        <select class="modal-select" data-li-f="style">${sel}</select>
+        <input class="modal-input" data-li-f="icon" value="${escapeHtml(it.icon || '')}" list="cwLinkIcons" placeholder="icon">
+        <input class="modal-input" data-li-f="label" value="${escapeHtml(it.label || '')}" placeholder="${isHeader ? 'Heading text' : 'Button text'}">
+        ${isHeader ? '<span class="lk-clicks" style="align-self:center">no link — a divider</span>'
+                   : `<input class="modal-input" data-li-f="url" value="${escapeHtml(it.url || '')}" placeholder="https://… or /radio.html">`}
+      </div>
+      ${clicks}
+      <button class="lk-x" data-li-del title="Remove this link">✕</button>
+    </div>
+    ${isHeader ? '' : `<div class="lk-more">
+      ${it.style === 'social' ? '' : linkField(`item.${it.id}.subtitle`, 'Small line under it', it.subtitle, { ph: 'optional' })}
+      ${it.style === 'feature' ? `<div><label class="modal-label">Card image</label>
+        <input class="modal-input" data-li-f="thumb_url" value="${escapeHtml(it.thumb_url || '')}" placeholder="paste a URL, or upload →">
+        <input class="modal-input" type="file" accept="image/*" data-li-thumb style="margin-top:6px"></div>` : ''}
+      <div><label class="modal-label">Show from</label>
+        <input class="modal-input" type="datetime-local" data-li-f="starts_at" value="${escapeHtml(linkDtLocal(it.starts_at))}"></div>
+      <div><label class="modal-label">Hide after</label>
+        <input class="modal-input" type="datetime-local" data-li-f="ends_at" value="${escapeHtml(linkDtLocal(it.ends_at))}">
+        <div class="kpi-hint">Leave both empty to keep it up permanently.</div></div>
+    </div>`}
+  </div>`;
+}
+// datetime-local wants local wall-clock with no zone; the DB holds timestamptz.
+function linkDtLocal(iso) {
+  if (!iso) return '';
+  const d = new Date(iso); if (isNaN(d)) return '';
+  const p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
+// Which <details> are open is UI state, not page state — it has to survive the
+// re-render that follows adding a link or clicking a preset, or the section you
+// are working in closes underneath you.
+function linksOpenState() {
+  const seen = document.querySelectorAll('#panel-links details[data-sec]');
+  if (!seen.length) return { links: true, page: true, look: false };
+  const out = {};
+  seen.forEach(d => { out[d.dataset.sec] = d.open; });
+  return out;
+}
+function renderLinks() {
+  const p = linksState.page;
+  if (!p) {
+    $('linksBar').innerHTML = LINKS_CSS;
+    $('linksBody').innerHTML = `<div class="lk-empty">No link pages yet.<br><br>
+      <button class="hub-btn" data-lk-new>+ Create the first page</button></div>`;
+    $('linksPreview').innerHTML = '';
+    return;
+  }
+  const open = linksOpenState();
+  const t = p.theme || {}, D = LINK_PRESETS.comewith;
+  const opts = linksState.pages.map(x =>
+    `<option value="${escapeHtml(x.id)}"${x.id === p.id ? ' selected' : ''}>${escapeHtml(x.title)} — /${escapeHtml(x.slug)}${x.is_published ? '' : ' (hidden)'}</option>`).join('');
+  const url = linkPageUrl(p.slug);
+  $('linksBar').innerHTML = LINKS_CSS + `
+  <div class="lk-bar">
+    <select class="modal-select" id="lkPageSel">${opts}</select>
+    <button class="hub-btn" data-lk-new>+ New page</button>
+    <label class="lk-live ${p.is_published ? 'on' : 'off'}" style="cursor:pointer">
+      <input type="checkbox" data-lk="is_published" ${p.is_published ? 'checked' : ''} style="width:auto;margin:0">
+      ${p.is_published ? '● Published' : 'Hidden — not published'}</label>
+    <span class="lk-clicks">${escapeHtml(url)}</span>
+    <button class="hub-btn" data-lk-copy>Copy link</button>
+    <a class="hub-btn" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open ↗</a>
+    <button class="hub-btn" data-lk-save style="margin-left:auto">Save changes</button>
+    <button class="lk-x" data-lk-delpage title="Delete this page">🗑</button>
+  </div>
+  <datalist id="cwLinkIcons">${linksState.icons.map(i => `<option value="${escapeHtml(i)}">`).join('')}</datalist>`;
+
+  $('linksBody').innerHTML = `
+    <div class="lk-edit">
+
+      <details class="lk-sec" data-sec="links"${open.links ? ' open' : ''}><summary>Links<span class="lk-count">${linksState.items.length} row${linksState.items.length === 1 ? '' : 's'}</span></summary>
+        <div class="lk-body">
+          <div id="lkList">${linksState.items.map(linkItemHtml).join('') ||
+            '<div class="lk-empty">No links yet — add one below.</div>'}</div>
+          <div class="lk-adds">
+            <button class="hub-btn" data-lk-add="button">+ Link button</button>
+            <button class="hub-btn" data-lk-add="feature">+ Feature card</button>
+            <button class="hub-btn" data-lk-add="header">+ Section heading</button>
+            <button class="hub-btn" data-lk-add="social">+ Social icon</button>
+          </div>
+          <div class="kpi-hint">Drag ⠿ to reorder. The tick hides a link without deleting it; "Show from / Hide after" schedules one so a ticket link can take itself down.</div>
+        </div></details>
+
+      <details class="lk-sec" data-sec="page"${open.page ? ' open' : ''}><summary>Page<span class="lk-count">who you are</span></summary>
+        <div class="lk-body"><div class="modal-grid2" style="max-width:860px">
+          ${linkField('title', 'Name shown at the top', p.title)}
+          ${linkField('slug', 'Web address (/links/…)', p.slug, { hint: 'Changing this breaks links already in your bio.' })}
+          ${linkField('tagline', 'One line under the name', p.tagline, { area: true, wide: true })}
+          <div style="grid-column:1/-1"><label class="modal-label">Profile photo</label>
+            <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+              ${p.avatar_url ? `<img src="${escapeHtml(p.avatar_url)}" alt="" style="width:52px;height:52px;border-radius:50%;object-fit:cover">` : '<span class="li-sub">None yet</span>'}
+              <input class="modal-input" type="file" accept="image/*" id="lkAvatarFile" style="max-width:300px">
+              ${p.avatar_url ? '<button class="hub-btn" data-lk-clear="avatar_url">Remove</button>' : ''}
+            </div></div>
+          ${linkField('footer_note', 'Footer note', p.footer_note, { ph: '© Come With NYC' })}
+          ${linkField('seo_description', 'Search description', p.seo_description, { ph: 'Shown in search results' })}
+        </div></div></details>
+
+      <details class="lk-sec" data-sec="look"${open.look ? ' open' : ''}><summary>Look<span class="lk-count">colours, buttons, type</span></summary>
+        <div class="lk-body">
+          <div class="lk-presets">${Object.keys(LINK_PRESETS).map(k => {
+            const q = LINK_PRESETS[k];
+            return `<button class="lk-preset" data-lk-preset="${k}">
+              <span class="lk-sw" style="background:${q.bg}"></span><span class="lk-sw" style="background:${q.accent}"></span>
+              ${escapeHtml(q.label)}</button>`;
+          }).join('')}</div>
+          <div class="kpi-hint" style="margin-top:-6px">A preset just fills the boxes below — change anything after picking one.</div>
+          <div class="lk-colors" style="margin:14px 0">
+            ${LINK_COLORS.map(([k, lb]) => linkColorHtml(k, lb, t[k], D[k])).join('')}
+          </div>
+          <div class="modal-grid2" style="max-width:860px">
+            <div><label class="modal-label">Button style</label>
+              <select class="modal-select" data-lk="theme.btn_style">
+                ${[['solid', 'Filled'], ['outline', 'Outline'], ['glass', 'Frosted glass'], ['accent', 'Accent colour']]
+                  .map(([v, lb]) => `<option value="${v}"${(t.btn_style || 'solid') === v ? ' selected' : ''}>${lb}</option>`).join('')}
+              </select></div>
+            <div><label class="modal-label">Corner roundness — ${t.btn_radius == null ? 14 : t.btn_radius}px</label>
+              <input type="range" min="0" max="28" step="2" data-lk="theme.btn_radius" value="${t.btn_radius == null ? 14 : t.btn_radius}" style="width:100%"></div>
+            <div><label class="modal-label">Typeface</label>
+              <select class="modal-select" data-lk="theme.font">
+                ${[['archivo', 'Archivo (Come With)'], ['dmsans', 'DM Sans'], ['mono', 'DM Mono'], ['serif', 'Playfair serif'], ['system', 'System default']]
+                  .map(([v, lb]) => `<option value="${v}"${(t.font || 'archivo') === v ? ' selected' : ''}>${lb}</option>`).join('')}
+              </select></div>
+            <div><label class="modal-label">Alignment</label>
+              <select class="modal-select" data-lk="theme.align">
+                ${[['center', 'Centred'], ['left', 'Left']].map(([v, lb]) => `<option value="${v}"${(t.align || 'center') === v ? ' selected' : ''}>${lb}</option>`).join('')}
+              </select></div>
+            <div><label class="modal-label">Photo shape</label>
+              <select class="modal-select" data-lk="theme.avatar_shape">
+                ${[['circle', 'Circle'], ['rounded', 'Rounded square'], ['square', 'Square']].map(([v, lb]) => `<option value="${v}"${(t.avatar_shape || 'circle') === v ? ' selected' : ''}>${lb}</option>`).join('')}
+              </select></div>
+            <div style="grid-column:1/-1"><label class="modal-label">Background photo (optional)</label>
+              <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                <input class="modal-input" type="file" accept="image/*" id="lkBgFile" style="max-width:300px">
+                ${t.bg_image ? '<button class="hub-btn" data-lk-clear="theme.bg_image">Remove photo</button>' : ''}
+              </div></div>
+            ${t.bg_image ? `<div style="grid-column:1/-1"><label class="modal-label">Darken the photo — ${t.bg_dim == null ? 55 : t.bg_dim}%</label>
+              <input type="range" min="0" max="95" step="5" data-lk="theme.bg_dim" value="${t.bg_dim == null ? 55 : t.bg_dim}" style="width:100%">
+              <div class="kpi-hint">Text has to stay readable over it.</div></div>` : ''}
+          </div>
+        </div></details>
+    </div>`;
+
+  // Built once and then left alone. Re-creating it here would reload links.html
+  // on every keystroke — and moving an existing iframe in the DOM reloads it too,
+  // so the fix is to never put it in the re-rendered markup at all.
+  if (!$('lkPreview')) {
+    $('linksPreview').innerHTML = `
+      <div class="lk-phone"><iframe id="lkPreview" src="links.html?preview=1" title="Live preview"></iframe></div>
+      <div class="kpi-hint">Live preview — this is links.html itself, not a mock-up. It shows unsaved edits; the public sees them after Save, and only if the page is published.</div>`;
+    linksState.ready = false;
+    $('lkPreview').addEventListener('load', () => {
+      linksState.ready = true; linksPushPreview(); linksPullIcons();
+    });
+  } else {
+    linksPushPreview();
+  }
+}
+
+// The icon names come from links.html itself (same origin), so the editor never
+// keeps a second list that can fall behind the renderer's.
+function linksPullIcons() {
+  try {
+    const w = $('lkPreview').contentWindow;
+    const list = (w && w.CW_LINK_ICONS) || [];
+    if (!list.length || linksState.icons.length === list.length) return;
+    linksState.icons = list;
+    const dl = $('cwLinkIcons');
+    if (dl) dl.innerHTML = list.map(i => `<option value="${escapeHtml(i)}">`).join('');
+  } catch (e) { /* free-text icons still work; the suggestions are a convenience */ }
+}
+function linksPushPreview() {
+  if (!linksState.ready || !linksState.page) return;
+  const fr = $('lkPreview'); if (!fr || !fr.contentWindow) return;
+  // Preview what a VISITOR would see: inactive and out-of-window rows are what
+  // the public view filters out, so showing them here would flatter the page.
+  const now = Date.now();
+  const items = linksState.items.filter(i => i.is_active
+    && (!i.starts_at || new Date(i.starts_at) <= now)
+    && (!i.ends_at || new Date(i.ends_at) >= now));
+  fr.contentWindow.postMessage({ cw: 'links-preview', page: linksState.page, items }, location.origin);
+}
+function linksTouch(structural) {
+  linksState.dirty = true;
+  if (structural) renderLinks();
+  linksPushPreview();
+}
+function linksSetPath(path, val) {
+  if (path.startsWith('theme.')) linksState.page.theme[path.slice(6)] = val;
+  else linksState.page[path] = val;
+}
+function linksNewItem(style) {
+  const id = (crypto.randomUUID ? crypto.randomUUID()
+    : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+        const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }));
+  return { id, page_id: linksState.page.id, label: '', url: style === 'header' ? null : '',
+           subtitle: null, icon: null, thumb_url: null, style, is_active: true,
+           starts_at: null, ends_at: null, sort_order: (linksState.items.length + 1) * 10, _new: true };
+}
+async function linksUploadImage(file, prefix) {
+  const small = await downscaleImage(file, prefix === 'avatar' ? 640 : 1600, 0.85);
+  const safe = small.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const path = `site/links/${prefix}_${Date.now()}_${safe}`;
+  const { error } = await sb.storage.from('event-photos').upload(path, small, { contentType: small.type, upsert: true });
+  if (error) throw new Error('Upload failed: ' + error.message);
+  return sb.storage.from('event-photos').getPublicUrl(path).data.publicUrl;
+}
+
+$('panel-links').addEventListener('input', e => {
+  const el = e.target, p = linksState.page; if (!p) return;
+  if (el.dataset.lk) {
+    const key = el.dataset.lk;
+    const val = el.type === 'checkbox' ? el.checked : (el.type === 'range' ? +el.value : el.value);
+    linksSetPath(key, key === 'slug' ? linksSlugify(val) : val);
+    // A colour has two inputs bound to it (swatch + hex). Keep the sibling in
+    // step without a re-render, or typing a hex would fight the cursor.
+    document.querySelectorAll(`#panel-links [data-lk="${CSS.escape(key)}"]`).forEach(o => {
+      if (o !== el && o.value !== String(val)) o.value = val;
+    });
+    // The publish toggle carries its own label ("● Published" / "Hidden"), so it
+    // has to re-render — a switch whose caption disagrees with it is worse than
+    // no caption.
+    linksTouch(key === 'is_published');
+    return;
+  }
+  const row = el.closest('[data-li]');
+  if (row && el.dataset.liF) {
+    const it = linksState.items.find(x => x.id === row.dataset.li); if (!it) return;
+    const f = el.dataset.liF;
+    it[f] = el.type === 'checkbox' ? el.checked
+      : (f === 'starts_at' || f === 'ends_at') ? (el.value ? new Date(el.value).toISOString() : null)
+      : el.value;
+    if (f === 'is_active') row.classList.toggle('off', !el.checked);
+    linksTouch(false);
+  }
+});
+
+$('panel-links').addEventListener('change', async e => {
+  const el = e.target;
+  if (el.id === 'lkPageSel') { if (await linksConfirmLeave()) selectLinkPage(el.value); else renderLinks(); return; }
+  if (el.dataset.liF === 'style') {                       // changes which fields apply
+    const row = el.closest('[data-li]'); const it = linksState.items.find(x => x.id === row.dataset.li);
+    if (it) { it.style = el.value; if (it.style === 'header') it.url = null; linksTouch(true); }
+    return;
+  }
+  try {
+    if (el.id === 'lkAvatarFile' && el.files[0]) {
+      linksState.page.avatar_url = await linksUploadImage(el.files[0], 'avatar'); linksTouch(true);
+    } else if (el.id === 'lkBgFile' && el.files[0]) {
+      linksState.page.theme.bg_image = await linksUploadImage(el.files[0], 'bg');
+      if (linksState.page.theme.bg_dim == null) linksState.page.theme.bg_dim = 55;
+      linksTouch(true);
+    } else if (el.dataset.liThumb != null && el.files[0]) {
+      const row = el.closest('[data-li]'); const it = linksState.items.find(x => x.id === row.dataset.li);
+      if (it) { it.thumb_url = await linksUploadImage(el.files[0], 'card'); linksTouch(true); }
+    }
+  } catch (err) { toast(err.message || String(err), 'err'); }
+});
+
+$('panel-links').addEventListener('click', async e => {
+  const t = e.target;
+  const add = t.closest('[data-lk-add]');
+  if (add) { linksState.items.push(linksNewItem(add.dataset.lkAdd)); linksTouch(true); return; }
+  const del = t.closest('[data-li-del]');
+  if (del) {
+    const row = del.closest('[data-li]'); const it = linksState.items.find(x => x.id === row.dataset.li);
+    if (it && (!it.label || confirm(`Remove "${it.label}"?`))) {
+      if (!it._new) linksState.removed.push(it.id);
+      linksState.items = linksState.items.filter(x => x.id !== it.id);
+      linksTouch(true);
+    }
+    return;
+  }
+  const pre = t.closest('[data-lk-preset]');
+  if (pre) {
+    const q = LINK_PRESETS[pre.dataset.lkPreset];
+    // A preset sets colours and type only. It must not wipe a background photo
+    // or a radius the user chose — replacing more than was asked for is how a
+    // "just try it" click becomes an undo problem.
+    Object.keys(q).forEach(k => { if (k !== 'label') linksState.page.theme[k] = q[k]; });
+    linksState.page.theme.preset = pre.dataset.lkPreset;
+    linksTouch(true);
+    return;
+  }
+  const clr = t.closest('[data-lk-clear]');
+  if (clr) { linksSetPath(clr.dataset.lkClear, null); linksTouch(true); return; }
+  if (t.closest('[data-lk-copy]')) {
+    try { await navigator.clipboard.writeText(linkPageUrl(linksState.page.slug)); toast('Link copied', 'ok'); }
+    catch (_) { toast('Copy failed — select the address instead', 'err'); }
+    return;
+  }
+  if (t.closest('[data-lk-save]')) { saveLinks(); return; }
+  if (t.closest('[data-lk-new]')) { newLinkPage(); return; }
+  if (t.closest('[data-lk-delpage]')) { deleteLinkPage(); return; }
+});
+
+// Drag to reorder. Order is positional in linksState.items; sort_order is only
+// written at save time, so a drag never touches the database.
+let lkDragId = null;
+$('panel-links').addEventListener('dragstart', e => {
+  const row = e.target.closest('[data-li]'); if (!row) return;
+  lkDragId = row.dataset.li; row.classList.add('drag');
+  e.dataTransfer.effectAllowed = 'move';
+});
+$('panel-links').addEventListener('dragend', e => {
+  const row = e.target.closest('[data-li]'); if (row) row.classList.remove('drag');
+  lkDragId = null;
+});
+$('panel-links').addEventListener('dragover', e => {
+  if (!lkDragId) return;
+  const over = e.target.closest('[data-li]'); if (!over || over.dataset.li === lkDragId) return;
+  e.preventDefault();
+  const from = linksState.items.findIndex(x => x.id === lkDragId);
+  const to = linksState.items.findIndex(x => x.id === over.dataset.li);
+  if (from < 0 || to < 0) return;
+  const [moved] = linksState.items.splice(from, 1);
+  linksState.items.splice(to, 0, moved);
+  const list = $('lkList');
+  const el = list.querySelector(`[data-li="${CSS.escape(lkDragId)}"]`);
+  const ref = list.querySelector(`[data-li="${CSS.escape(over.dataset.li)}"]`);
+  if (el && ref) list.insertBefore(el, from < to ? ref.nextSibling : ref);
+  linksState.dirty = true; linksPushPreview();
+});
+
+async function linksConfirmLeave() {
+  return !linksState.dirty || confirm('You have unsaved changes on this page. Discard them?');
+}
+
+async function newLinkPage() {
+  if (!(await linksConfirmLeave())) return;
+  const title = prompt('Name for the new links page (e.g. "Dance Infusion")');
+  if (!title) return;
+  let slug = linksSlugify(prompt('Web address — /links/…', linksSlugify(title)) || '');
+  if (!slug) { toast('A page needs a web address', 'err'); return; }
+  if (linksState.pages.some(p => p.slug === slug)) { toast(`/links/${slug} already exists`, 'err'); return; }
+  const { data, error } = await sb.from('link_pages')
+    .insert({ slug, title, theme: linkPresetTheme('comewith'), is_published: false, updated_by: ME.id || null })
+    .select().single();
+  if (error) { toast(error.message, 'err'); return; }
+  toast('Page created — hidden until you publish it', 'ok');
+  linksState.pages.push(data);
+  await selectLinkPage(data.id);
+}
+
+async function deleteLinkPage() {
+  const p = linksState.page; if (!p) return;
+  if (!confirm(`Delete "${p.title}" and all its links? Anyone who has /links/${p.slug} in their bio will hit a dead page.`)) return;
+  const { error } = await sb.from('link_pages').delete().eq('id', p.id);
+  if (error) { toast(error.message, 'err'); return; }
+  toast('Page deleted', 'ok');
+  linksState.page = null;
+  await loadLinks();
+}
+
+async function saveLinks() {
+  const p = linksState.page; if (!p) return;
+  const btn = document.querySelector('[data-lk-save]');
+  // Check what the database would reject anyway, but name the offending row —
+  // a constraint violation surfaced raw reads as "something is broken".
+  if (!p.title.trim()) { toast('The page needs a name', 'err'); return; }
+  if (!linksSlugify(p.slug)) { toast('The page needs a web address', 'err'); return; }
+  for (const it of linksState.items) {
+    if (!String(it.label || '').trim()) { toast('Every row needs text on it — one is still blank', 'err'); return; }
+    if (it.style !== 'header' && !String(it.url || '').trim()) { toast(`"${it.label}" has no link yet`, 'err'); return; }
+    if (it.starts_at && it.ends_at && new Date(it.ends_at) < new Date(it.starts_at)) {
+      toast(`"${it.label}" hides before it shows`, 'err'); return;
+    }
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const { error: pe } = await sb.from('link_pages').update({
+      slug: linksSlugify(p.slug), title: p.title.trim(), tagline: p.tagline || null,
+      avatar_url: p.avatar_url || null, footer_note: p.footer_note || null,
+      seo_description: p.seo_description || null, og_image_url: p.og_image_url || null,
+      theme: p.theme || {}, is_published: !!p.is_published, updated_by: ME.id || null,
+    }).eq('id', p.id);
+    if (pe) throw pe;
+    if (linksState.removed.length) {
+      const { error } = await sb.from('link_items').delete().in('id', linksState.removed);
+      if (error) throw error;
+    }
+    if (linksState.items.length) {
+      const rows = linksState.items.map((it, i) => ({
+        id: it.id, page_id: p.id, label: it.label.trim(),
+        url: it.style === 'header' ? null : it.url.trim(),
+        subtitle: it.subtitle || null, icon: it.icon || null, thumb_url: it.thumb_url || null,
+        style: it.style, is_active: !!it.is_active,
+        starts_at: it.starts_at || null, ends_at: it.ends_at || null, sort_order: (i + 1) * 10,
+      }));
+      const { error } = await sb.from('link_items').upsert(rows, { onConflict: 'id' });
+      if (error) throw error;
+    }
+    linksState.dirty = false; linksState.removed = [];
+    toast(p.is_published ? 'Saved — live now' : 'Saved (page is still hidden)', 'ok');
+    const { data } = await sb.from('link_pages').select('*').order('sort_order').order('slug');
+    linksState.pages = data || [];
+    await selectLinkPage(p.id);
+  } catch (e) {
+    toast(e.message || String(e), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  }
+}
 
 // ---- Site Review (audit log — sits under Site Editor in the nav) ----
 // Findings from full-site reviews live in site_review_items so triage happens

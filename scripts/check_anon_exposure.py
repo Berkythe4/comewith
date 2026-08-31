@@ -32,10 +32,22 @@ PUBLIC_OK = {
     "v_public_events", "v_public_recap", "v_public_artists", "v_public_event_photos",
     "v_public_impact_report", "v_public_survey", "v_artist_gigs", "v_artist_content",
     "site_content", "module_registry",
+    # 207 - the link-in-bio pages. Both are meant to answer 200; what keeps a
+    # DRAFT page out of them is the is_published filter inside the view, not the
+    # grant, so seeing 200 here is the correct result and not a leak.
+    "v_public_link_pages", "v_public_link_items",
 }
 
+# THESE TWO LISTS ARE THE WHOLE SWEEP. Nothing is discovered from the schema -
+# an object that is named in neither list is never requested at all, and the
+# "Nothing is exposed" line at the end says nothing whatsoever about it. This
+# comment used to claim the opposite, which is the same trap as the financial
+# views in LEARNINGS §51: a confident report over an object it never touched.
+# ADD EVERY NEW TABLE AND VIEW TO ONE OF THESE LISTS IN THE SAME MIGRATION THAT
+# CREATES IT.
+#
 # The ones worth naming explicitly, so a failure reads as a sentence rather than
-# a table name. Everything else discovered from the schema is checked too.
+# a table name.
 MUST_BE_EMPTY = [
     ("expenses", "the expense ledger - payees, amounts, dates"),
     ("income", "the income ledger"),
@@ -89,6 +101,12 @@ MUST_BE_EMPTY = [
     ("v_plan_monthly", "the whole forward forecast"),
     ("v_plan_vs_actual", "forecast against actuals"),
     ("v_event_contribution", "what every event actually contributed"),
+    # --- link-in-bio pages (207) ---
+    # The tables hold DRAFT pages - a slug and a set of links Keith has not
+    # published yet. v_link_click_stats is how each link is performing.
+    ("link_pages", "unpublished link-in-bio pages"),
+    ("link_items", "links on unpublished pages, including scheduled ones"),
+    ("v_link_click_stats", "how many people click each link"),
 ]
 
 

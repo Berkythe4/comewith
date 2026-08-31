@@ -19,7 +19,10 @@
   // Page identity = pathname + only the params that name a THING. Keeping
   // ?s=<episode> means episode pages count separately; dropping everything else
   // means a hundred utm variants don't shatter one page into a hundred rows.
-  var KEEP = ['s', 'slug', 'id', 'e', 'a'];
+  // 'p' names a links page. links.html normalises itself to /links/<slug>, so
+  // this only matters for the ?p= fallback form (a bio link written before the
+  // rewrite existed) — without it those visits would all collapse into one row.
+  var KEEP = ['s', 'slug', 'id', 'e', 'a', 'p'];
   function pagePath() {
     try {
       var q = new URLSearchParams(location.search), keep = [];

@@ -11,7 +11,7 @@
 -- to "is this additive or a rewrite?"
 
 with targets(name) as (
-  values ('notes'), ('tasks')     -- <-- EDIT ME
+  values ('link_pages'), ('link_items'), ('v_public_link_pages'), ('v_public_link_items'), ('module_registry')     -- <-- EDIT ME
 )
 
 select 'a_object' as kind, c.relname as name,

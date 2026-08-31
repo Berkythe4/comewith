@@ -1,0 +1,5 @@
+# Pretty URLs for the link-in-bio pages (links.html reads the slug from the path).
+# 200 = rewrite, not a redirect: the address bar keeps /links/<slug>, which is
+# what goes in a bio, and the query string is preserved.
+/links      /links.html   200
+/links/*    /links.html   200

@@ -1,0 +1,406 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Links — Come With</title>
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<meta name="description" content="Every Come With link in one place.">
+<meta property="og:title" content="Come With">
+<meta property="og:description" content="Every Come With link in one place.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://yaytdosxfhcqatmhctzk.supabase.co/storage/v1/object/public/event-photos/site/logo_1782482714674_Come_With.jpg">
+<meta name="twitter:card" content="summary">
+<script>
+/* Canonical URL is /links/<slug> (and /links for the main page). _redirects
+ * rewrites both to this file. ?p=<slug> still works — an old bio link, or a
+ * host without the rewrite — but is normalised here, BEFORE the deferred
+ * beacon runs, so one page never records itself under two different paths. */
+(function () {
+  try {
+    var q = new URLSearchParams(location.search), p = q.get('p');
+    if (p && /^\/links(\/|$)/.test(location.pathname)) {
+      q.delete('p');
+      var rest = q.toString();
+      history.replaceState(null, '', '/links/' + p + (rest ? '?' + rest : '') + location.hash);
+    }
+  } catch (e) { /* a tidy URL is never worth a blank page */ }
+})();
+</script>
+<style>
+  /* Theme is applied as CSS variables written by JS. The values here are the
+     Come With palette and are what renders when a page's theme is empty — a
+     missing key must fall back to something on-brand, never to nothing. */
+  :root{
+    --bg:#140a17;--bg2:#1d0f22;--card:#241229;--line:#3a2640;
+    --text:#EDE4D3;--dim:#b3a7b8;--accent:#a7e02e;--accent-text:#140a17;
+    --radius:14px;--fh:'Archivo',system-ui,sans-serif;--fb:'DM Sans',system-ui,sans-serif;
+    --shade:0;                      /* background-image dimmer, 0–1 */
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    min-height:100vh;min-height:100dvh;color:var(--text);
+    font-family:var(--fb);line-height:1.55;
+    background-color:var(--bg);
+    background-image:linear-gradient(160deg,var(--bg) 0%,var(--bg2) 100%);
+    background-attachment:fixed;
+  }
+  /* A photo background is its own layer so the gradient above stays the
+     fallback while the image loads, and the dimmer can move without touching
+     either. Never the `background:` shorthand here — it would reset size and
+     position and the photo would tile. */
+  body.hasphoto::before{
+    content:'';position:fixed;inset:0;z-index:-2;
+    background-image:var(--bgimg);background-size:cover;background-position:center;
+  }
+  body.hasphoto::after{
+    content:'';position:fixed;inset:0;z-index:-1;
+    background-color:var(--bg);opacity:var(--shade);
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{width:100%;max-width:620px;margin:0 auto;padding:44px 20px 60px;
+        display:flex;flex-direction:column;gap:14px}
+  .wrap.left{text-align:left;align-items:stretch}
+  .wrap.center{text-align:center;align-items:center}
+  .wrap.center .hd{align-items:center}
+
+  .hd{display:flex;flex-direction:column;gap:12px;margin-bottom:6px}
+  .avatar{width:112px;height:112px;object-fit:cover;border:2px solid var(--line);
+          background-color:var(--card);display:flex;align-items:center;justify-content:center;
+          font-family:var(--fh);font-weight:900;font-size:2.4rem;color:var(--accent);flex:none}
+  .avatar.circle{border-radius:50%}
+  .avatar.rounded{border-radius:22px}
+  .avatar.square{border-radius:4px}
+  h1{font-family:var(--fh);font-weight:900;letter-spacing:-.02em;line-height:1.02;
+     font-size:clamp(1.7rem,7vw,2.4rem);text-transform:uppercase}
+  .tagline{color:var(--dim);font-size:1rem;max-width:46ch}
+  .wrap.center .tagline{margin:0 auto}
+
+  .socials{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
+  .wrap.center .socials{justify-content:center}
+  .soc{width:42px;height:42px;border-radius:50%;border:1px solid var(--line);
+       background-color:var(--card);display:inline-flex;align-items:center;justify-content:center;
+       transition:transform .15s,border-color .15s,background-color .15s}
+  .soc:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .soc svg{width:19px;height:19px}
+  .soc .emo{font-size:1.05rem;line-height:1}
+
+  .links{display:flex;flex-direction:column;gap:12px;width:100%;margin-top:8px}
+  .row{display:flex;align-items:center;gap:13px;width:100%;padding:16px 18px;
+       border-radius:var(--radius);border:1px solid var(--line);
+       transition:transform .15s,border-color .15s,box-shadow .15s;position:relative}
+  .row:hover{transform:translateY(-2px);border-color:var(--accent)}
+  .row:active{transform:translateY(0)}
+  /* The three button treatments. Each sets only what it needs so the shared
+     .row rules (radius, padding, motion) stay in one place. */
+  .row.solid{background-color:var(--card)}
+  .row.outline{background-color:transparent}
+  .row.glass{background-color:rgba(255,255,255,.07);backdrop-filter:blur(9px);-webkit-backdrop-filter:blur(9px)}
+  .row.accent{background-color:var(--accent);border-color:var(--accent);color:var(--accent-text)}
+  .row.accent .ic,.row.accent .ar{color:var(--accent-text)}
+  .row.accent .sb{color:var(--accent-text);opacity:.75}
+  .row.accent:hover{border-color:var(--text)}
+  .row .ic{flex:none;width:24px;display:flex;align-items:center;justify-content:center;color:var(--accent)}
+  .row .ic svg{width:21px;height:21px}
+  .row .ic .emo{font-size:1.2rem;line-height:1}
+  .row .tx{flex:1;min-width:0}
+  .row .lb{font-family:var(--fh);font-weight:700;font-size:1.02rem;letter-spacing:.01em;
+           overflow-wrap:anywhere}
+  .row .sb{color:var(--dim);font-size:.84rem;margin-top:2px;overflow-wrap:anywhere}
+  .row .ar{flex:none;color:var(--dim);font-size:.95rem;transition:transform .15s}
+  .row:hover .ar{transform:translateX(3px);color:var(--accent)}
+  .wrap.center .row .tx{text-align:center}
+  /* Centred text should be centred against the ROW, not against what is left
+     after the icon — so the arrow reserves the icon's width back on the right. */
+  .wrap.center .row .ar{width:24px}
+
+  .feat{display:block;width:100%;padding:0;overflow:hidden;text-align:left}
+  .feat .th{width:100%;aspect-ratio:16/9;background-color:var(--bg2);
+            background-size:cover;background-position:center;display:block}
+  .feat .fb{display:flex;align-items:center;gap:13px;padding:15px 18px}
+  .feat .lb{font-size:1.12rem}
+
+  .hdr{font-family:var(--fh);font-weight:700;text-transform:uppercase;letter-spacing:.14em;
+       font-size:.76rem;color:var(--dim);padding:14px 2px 2px;width:100%}
+
+  footer{margin-top:22px;color:var(--dim);font-size:.82rem;display:flex;
+         flex-direction:column;gap:12px;align-items:inherit;width:100%}
+  .share{display:inline-flex;align-items:center;gap:8px;padding:9px 15px;border-radius:999px;
+         border:1px solid var(--line);background-color:transparent;color:var(--dim);
+         font-family:inherit;font-size:.8rem;cursor:pointer;align-self:inherit}
+  .share:hover{border-color:var(--accent);color:var(--text)}
+  .state{color:var(--dim);text-align:center;padding:60px 0;font-size:.95rem}
+  .skel{width:100%;height:56px;border-radius:var(--radius);background-color:var(--card);
+        opacity:.5;animation:pulse 1.3s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.35}50%{opacity:.6}}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<main class="wrap center" id="wrap">
+  <div id="body">
+    <div class="links"><div class="skel"></div><div class="skel"></div><div class="skel"></div></div>
+  </div>
+</main>
+
+<script>
+(function () {
+  'use strict';
+  var CWURL = 'https://yaytdosxfhcqatmhctzk.supabase.co',
+      CWKEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi',
+      CWH   = { apikey: CWKEY, Authorization: 'Bearer ' + CWKEY };
+
+  // Preview mode: the dashboard editor embeds this page in an iframe and posts
+  // unsaved form state to it. That is deliberate — the editor must NOT own a
+  // second copy of this layout, or the preview and the real page drift apart the
+  // first time one of them is changed. In preview we never touch the database
+  // and never load the beacon.
+  var PREVIEW = new URLSearchParams(location.search).get('preview') === '1';
+
+  var $ = function (id) { return document.getElementById(id); };
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+
+  /* ---- Icons -------------------------------------------------------------
+   * A link's `icon` is free text. A known keyword renders as a real glyph;
+   * anything else renders literally, so typing an emoji into the editor just
+   * works and nobody is limited to this list. */
+  var P = {
+    instagram: '<rect x="2.5" y="2.5" width="19" height="19" rx="5.5"/><circle cx="12" cy="12" r="4.2"/><circle cx="17.4" cy="6.6" r="1.1" fill="currentColor" stroke="none"/>',
+    soundcloud:'<path d="M3 17v-5M6 17v-7M9 17V8M12 17V6.5"/><path d="M15 17V7.5a4.5 4.5 0 0 1 8.3 2.4"/><path d="M15 17h5.6a2.7 2.7 0 0 0 0-5.4"/>',
+    youtube:   '<rect x="2" y="4.5" width="20" height="15" rx="4.5"/><path d="M10 8.8v6.4l5.4-3.2z" fill="currentColor" stroke="none"/>',
+    tiktok:    '<path d="M14 3v11.6a3.6 3.6 0 1 1-3.1-3.57"/><path d="M14 3c.4 2.6 2 4.2 4.7 4.5"/>',
+    spotify:   '<circle cx="12" cy="12" r="9.5"/><path d="M7.2 9.4c3.2-.9 6.6-.6 9.4 1M7.9 12.7c2.6-.7 5.3-.4 7.6.8M8.6 15.8c2-.5 4-.3 5.8.6"/>',
+    bandcamp:  '<path d="M3.5 17.5 8 6.5h12.5l-4.5 11z"/>',
+    mixcloud:  '<path d="M4 16v-4M8 16V9M12 16V6.5M16 16v-5M20 16v-3"/>',
+    facebook:  '<path d="M14.5 21v-8h2.7l.5-3.2h-3.2V7.7c0-.9.3-1.6 1.7-1.6h1.7V3.2A22 22 0 0 0 15.4 3C13 3 11.3 4.5 11.3 7.3v2.5H8.5V13h2.8v8z"/>',
+    x:         '<path d="M3.5 3.5h4l13 17h-4z"/><path d="M20 3.5 4.2 20.5"/>',
+    linkedin:  '<rect x="2.5" y="2.5" width="19" height="19" rx="3.5"/><path d="M7 10.5V17M7 7.3v.1M11 17v-3.6a2.2 2.2 0 0 1 4.4 0V17"/>',
+    whatsapp:  '<path d="M3.5 20.5 5 16.4A8.2 8.2 0 1 1 8.2 19.6z"/><path d="M9 9c.4 2.6 3.4 5.6 6 6l1.2-1.7-2.1-1-1 1a7 7 0 0 1-2.4-2.4l1-1-1-2.1z" fill="currentColor" stroke="none"/>',
+    telegram:  '<path d="M21 4 2.8 11.2l5.3 1.7L19 6.4l-8.6 8.4.3 5 3-3.6 4.4 3.2z"/>',
+    discord:   '<path d="M8 6.5C10.6 5.8 13.4 5.8 16 6.5c2 2.2 3.2 5.2 3.2 9-1.4 1.4-3 2.2-4.4 2.5l-1-1.6M8 6.5C6 8.7 4.8 11.7 4.8 15.5c1.4 1.4 3 2.2 4.4 2.5l1-1.6"/><circle cx="9.3" cy="13" r="1.2" fill="currentColor" stroke="none"/><circle cx="14.7" cy="13" r="1.2" fill="currentColor" stroke="none"/>',
+    radio:     '<rect x="2.5" y="8.5" width="19" height="12" rx="3"/><path d="m7 8.5 11-5"/><circle cx="16" cy="14.5" r="3"/><path d="M6 12.5h4M6 16.5h4"/>',
+    play:      '<circle cx="12" cy="12" r="9.5"/><path d="M10 8.4v7.2l6-3.6z" fill="currentColor" stroke="none"/>',
+    music:     '<path d="M9 18V5.5l11-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="17.5" cy="15.5" r="2.5"/>',
+    ticket:    '<path d="M3 8.5a2 2 0 0 0 2-2h14a2 2 0 0 0 2 2v2a2 2 0 0 0 0 3v2a2 2 0 0 0-2 2H5a2 2 0 0 0-2-2v-2a2 2 0 0 0 0-3z"/><path d="M12 6.5v11" stroke-dasharray="2 2.6"/>',
+    calendar:  '<rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/>',
+    mail:      '<rect x="2.5" y="4.5" width="19" height="15" rx="3"/><path d="m3.5 7 8.5 6 8.5-6"/>',
+    phone:     '<path d="M7 3.5h3l1.5 4-2 1.5a12 12 0 0 0 5.5 5.5l1.5-2 4 1.5v3c0 1-.8 1.8-1.8 1.7C10.7 18.2 5.8 13.3 5.3 5.3 5.2 4.3 6 3.5 7 3.5z"/>',
+    map:       '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.6"/>',
+    cart:      '<circle cx="9.5" cy="19.5" r="1.6"/><circle cx="17.5" cy="19.5" r="1.6"/><path d="M2.5 3.5h2.6l2.4 11h11l2-8H6"/>',
+    heart:     '<path d="M12 20.5S3.5 15.2 3.5 9.4A4.9 4.9 0 0 1 12 6.3a4.9 4.9 0 0 1 8.5 3.1c0 5.8-8.5 11.1-8.5 11.1z"/>',
+    star:      '<path d="m12 3.5 2.7 5.6 6.1.8-4.5 4.2 1.2 6-5.5-3-5.5 3 1.2-6-4.5-4.2 6.1-.8z"/>',
+    download:  '<path d="M12 3.5v11M7.5 10.5 12 15l4.5-4.5M4 17.5v2a1.5 1.5 0 0 0 1.5 1.5h13a1.5 1.5 0 0 0 1.5-1.5v-2"/>',
+    web:       '<circle cx="12" cy="12" r="9.5"/><path d="M2.5 12h19M12 2.5c5 5.6 5 13.4 0 19-5-5.6-5-13.4 0-19z"/>',
+    link:      '<path d="M10 13.5a4 4 0 0 0 5.7 0l2.8-2.8a4 4 0 0 0-5.7-5.7l-1.4 1.4"/><path d="M14 10.5a4 4 0 0 0-5.7 0l-2.8 2.8a4 4 0 0 0 5.7 5.7l1.4-1.4"/>'
+  };
+  var ALIAS = { ig: 'instagram', insta: 'instagram', sc: 'soundcloud', yt: 'youtube',
+                twitter: 'x', email: 'mail', site: 'web', website: 'web', shop: 'cart',
+                store: 'cart', tickets: 'ticket', location: 'map', venue: 'map' };
+  function iconHtml(name) {
+    if (!name) return '';
+    var k = ALIAS[String(name).trim().toLowerCase()] || String(name).trim().toLowerCase();
+    if (P[k]) {
+      return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+             'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + P[k] + '</svg>';
+    }
+    return '<span class="emo" aria-hidden="true">' + esc(name) + '</span>';   // an emoji, or anything else
+  }
+  // The editor offers these by name; exported so there is one list, not two.
+  window.CW_LINK_ICONS = Object.keys(P);
+
+  /* ---- Theme -------------------------------------------------------------- */
+  var FONTS = {
+    archivo: { head: "'Archivo',system-ui,sans-serif", body: "'DM Sans',system-ui,sans-serif",
+               css: 'Archivo:wght@700;900&family=DM+Sans:wght@400;500;700' },
+    dmsans:  { head: "'DM Sans',system-ui,sans-serif", body: "'DM Sans',system-ui,sans-serif",
+               css: 'DM+Sans:wght@400;500;700' },
+    mono:    { head: "'DM Mono',ui-monospace,monospace", body: "'DM Mono',ui-monospace,monospace",
+               css: 'DM+Mono:wght@400;500' },
+    serif:   { head: "'Playfair Display',Georgia,serif", body: "'DM Sans',system-ui,sans-serif",
+               css: 'Playfair+Display:wght@700;900&family=DM+Sans:wght@400;500' },
+    system:  { head: 'system-ui,-apple-system,Segoe UI,sans-serif',
+               body: 'system-ui,-apple-system,Segoe UI,sans-serif', css: null }
+  };
+  var loadedFont = null;
+  function loadFont(key) {
+    var f = FONTS[key] || FONTS.archivo;
+    if (!f.css || loadedFont === key) return;
+    loadedFont = key;
+    var l = document.createElement('link');
+    l.rel = 'stylesheet';
+    l.href = 'https://fonts.googleapis.com/css2?family=' + f.css + '&display=swap';
+    document.head.appendChild(l);
+  }
+  // Every default lives here. A theme key that is absent falls back to the Come
+  // With palette rather than to nothing — a half-set theme still renders.
+  var D = { bg: '#140a17', bg2: '#1d0f22', card: '#241229', line: '#3a2640',
+            text: '#EDE4D3', dim: '#b3a7b8', accent: '#a7e02e', accent_text: '#140a17',
+            btn_style: 'solid', btn_radius: 14, font: 'archivo', align: 'center',
+            avatar_shape: 'circle', bg_image: '', bg_dim: 55 };
+  function applyTheme(t) {
+    t = t || {};
+    var g = function (k) { return (t[k] === undefined || t[k] === null || t[k] === '') ? D[k] : t[k]; };
+    var r = document.documentElement.style;
+    r.setProperty('--bg', g('bg'));   r.setProperty('--bg2', g('bg2'));
+    r.setProperty('--card', g('card')); r.setProperty('--line', g('line'));
+    r.setProperty('--text', g('text')); r.setProperty('--dim', g('dim'));
+    r.setProperty('--accent', g('accent')); r.setProperty('--accent-text', g('accent_text'));
+    r.setProperty('--radius', parseInt(g('btn_radius'), 10) + 'px');
+    var f = FONTS[g('font')] || FONTS.archivo;
+    loadFont(FONTS[g('font')] ? g('font') : 'archivo');
+    r.setProperty('--fh', f.head); r.setProperty('--fb', f.body);
+    var img = g('bg_image');
+    document.body.classList.toggle('hasphoto', !!img);
+    if (img) {
+      r.setProperty('--bgimg', 'url("' + String(img).replace(/"/g, '%22') + '")');
+      r.setProperty('--shade', Math.max(0, Math.min(100, +g('bg_dim'))) / 100);
+    }
+    var w = $('wrap');
+    w.className = 'wrap ' + (g('align') === 'left' ? 'left' : 'center');
+    return g;
+  }
+
+  /* ---- Render ------------------------------------------------------------- */
+  function safeUrl(u) {
+    // Anything that is not http(s)/mailto/tel is dropped rather than rendered:
+    // the editor is admin-only, but a link page is the one public surface where
+    // a pasted javascript: URL would be handed straight to a visitor.
+    var s = String(u || '').trim();
+    return /^(https?:|mailto:|tel:|\/|#)/i.test(s) ? s : '';
+  }
+  function rowAttrs(it) {
+    var href = safeUrl(it.url);
+    if (!href) return null;
+    var ext = /^https?:/i.test(href);
+    // data-track carries the link's id, so the beacon records an exact identity
+    // that survives the URL being edited (see v_link_click_stats, migration 207).
+    return ' href="' + esc(href) + '" data-track="link:' + esc(it.id || '') + '"' +
+           (ext ? ' target="_blank" rel="noopener"' : '');
+  }
+  function renderItems(items, btnStyle) {
+    var socials = items.filter(function (i) { return i.style === 'social'; });
+    var main    = items.filter(function (i) { return i.style !== 'social'; });
+    var html = '';
+    if (socials.length) {
+      html += '<div class="socials">' + socials.map(function (it) {
+        var a = rowAttrs(it); if (!a) return '';
+        return '<a class="soc"' + a + ' title="' + esc(it.label) + '" aria-label="' + esc(it.label) + '">' +
+               (iconHtml(it.icon) || iconHtml('link')) + '</a>';
+      }).join('') + '</div>';
+    }
+    if (main.length) {
+      html += '<div class="links">' + main.map(function (it) {
+        if (it.style === 'header') return '<div class="hdr">' + esc(it.label) + '</div>';
+        var a = rowAttrs(it); if (!a) return '';
+        var ic = iconHtml(it.icon), sb = it.subtitle ? '<div class="sb">' + esc(it.subtitle) + '</div>' : '';
+        if (it.style === 'feature') {
+          var th = it.thumb_url
+            ? '<span class="th" style="background-image:url(\'' + esc(String(it.thumb_url).replace(/'/g, '%27')) + '\')"></span>'
+            : '';
+          return '<a class="row feat ' + btnStyle + '"' + a + '>' + th +
+                 '<span class="fb">' + (ic ? '<span class="ic">' + ic + '</span>' : '') +
+                 '<span class="tx"><span class="lb">' + esc(it.label) + '</span>' + sb + '</span>' +
+                 '<span class="ar">&rarr;</span></span></a>';
+        }
+        return '<a class="row ' + btnStyle + '"' + a + '>' +
+               (ic ? '<span class="ic">' + ic + '</span>' : '') +
+               '<span class="tx"><span class="lb">' + esc(it.label) + '</span>' + sb + '</span>' +
+               '<span class="ar">&rarr;</span></a>';
+      }).join('') + '</div>';
+    }
+    return html;
+  }
+  function initials(name) {
+    return String(name || '?').trim().split(/\s+/).slice(0, 2)
+      .map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+  }
+  function render(page, items) {
+    var g = applyTheme(page.theme);
+    var btnStyle = ['solid', 'outline', 'glass', 'accent'].indexOf(g('btn_style')) >= 0 ? g('btn_style') : 'solid';
+    var shape = ['circle', 'rounded', 'square'].indexOf(g('avatar_shape')) >= 0 ? g('avatar_shape') : 'circle';
+    var av = page.avatar_url
+      ? '<img class="avatar ' + shape + '" src="' + esc(page.avatar_url) + '" alt="' + esc(page.title) + '">'
+      : '<div class="avatar ' + shape + '">' + esc(initials(page.title)) + '</div>';
+    var html = '<div class="hd">' + av +
+      '<h1>' + esc(page.title) + '</h1>' +
+      (page.tagline ? '<p class="tagline">' + esc(page.tagline) + '</p>' : '') + '</div>' +
+      renderItems(items || [], btnStyle) +
+      '<footer>' +
+        (page.footer_note ? '<div>' + esc(page.footer_note) + '</div>' : '') +
+        '<button class="share" type="button" id="shareBtn" data-track="share">' +
+          iconHtml('link') + ' Share this page</button>' +
+      '</footer>';
+    $('body').innerHTML = html;
+    document.title = page.title + ' — Links';
+    var d = document.querySelector('meta[name="description"]');
+    if (d && page.seo_description) d.setAttribute('content', page.seo_description);
+    var btn = $('shareBtn');
+    if (btn) btn.addEventListener('click', function () {
+      var url = location.href;
+      if (navigator.share) { navigator.share({ title: page.title, url: url }).catch(function () {}); return; }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(url).then(function () {
+          btn.innerHTML = iconHtml('link') + ' Link copied';
+          setTimeout(function () { btn.innerHTML = iconHtml('link') + ' Share this page'; }, 1800);
+        }).catch(function () {});
+      }
+    });
+  }
+  function state(msg) { $('body').innerHTML = '<div class="state">' + esc(msg) + '</div>'; }
+
+  /* ---- Which page? --------------------------------------------------------
+   * /links/<slug>, or ?p=<slug>, or the main page. A slug that does not exist
+   * and an UNPUBLISHED slug are the same answer on purpose — the views only
+   * return published rows, so this page can never confirm a draft exists. */
+  function slugFromUrl() {
+    var m = location.pathname.match(/^\/links\/([A-Za-z0-9-]{1,40})\/?$/);
+    if (m) return m[1].toLowerCase();
+    var q = new URLSearchParams(location.search).get('p');
+    return (q || 'main').toLowerCase().slice(0, 40);
+  }
+  function api(path) {
+    return fetch(CWURL + '/rest/v1/' + path, { headers: CWH })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); });
+  }
+  function load() {
+    var slug = slugFromUrl();
+    var enc = encodeURIComponent(slug);
+    Promise.all([
+      api('v_public_link_pages?slug=eq.' + enc + '&select=*&limit=1'),
+      api('v_public_link_items?page_slug=eq.' + enc + '&select=*&order=sort_order.asc,created_at.asc&limit=200')
+    ]).then(function (res) {
+      var page = (res[0] || [])[0];
+      if (!page) { state('This page is not available.'); return; }
+      render(page, res[1] || []);
+      // The beacon is loaded only once there is a real page — a 404 is not a visit.
+      var s = document.createElement('script');
+      s.src = '/assets/track.js'; s.defer = true; document.body.appendChild(s);
+    }).catch(function () {
+      state('Could not load this page. Please try again.');
+    });
+  }
+
+  if (PREVIEW) {
+    // Dashboard preview. Same origin only, and the payload is data the editor
+    // already holds — nothing here is executed, only rendered.
+    state('Preview');
+    window.addEventListener('message', function (e) {
+      if (e.origin !== location.origin) return;
+      var d = e.data;
+      if (!d || d.cw !== 'links-preview') return;
+      try { render(d.page || { title: 'Untitled' }, d.items || []); } catch (err) {}
+    });
+    if (window.parent !== window) window.parent.postMessage({ cw: 'links-preview-ready' }, location.origin);
+  } else {
+    load();
+  }
+})();
+</script>
+</body>
+</html>
