@@ -1728,3 +1728,89 @@ violation that MUST be refused. Three runs, not one.
   still returned Keith, `is_admin()` still passed, and the "anon" test was the
   admin test wearing a different role name. Clear the claims before switching
   role, or you are testing nothing.)
+
+---
+
+## Section 58 — A sweep that walks a hand-written list is a list, not a sweep (2026-08-31)
+
+`scripts/check_anon_exposure.py` was written to answer one question: is anything
+readable by the public that should not be? It ends with the line **"Nothing is
+exposed that should not be."** and a zero exit code, and it has been run at the
+close of most sessions since it was written.
+
+Line 38 of that file said:
+
+> The ones worth naming explicitly, so a failure reads as a sentence rather than
+> a table name. **Everything else discovered from the schema is checked too.**
+
+The second sentence was not true. There is no schema query anywhere in the file.
+`main()` iterates `MUST_BE_EMPTY`, then iterates `PUBLIC_OK`, and stops. An object
+in neither list is **never requested at all** — no row is printed for it, and the
+closing "Nothing is exposed" says nothing whatsoever about it.
+
+This surfaced when migration 207 added two tables and three views and a full run
+came back clean without ever mentioning them. It is the identical failure to the
+five financial views in §51, in a different file: a check whose *output* was read
+as covering something its *code* never touched. §51 caught it in what the script
+omitted; this is the same trap one level up, in a comment that stated the
+opposite of the code directly above it.
+
+Two things were wrong and both are now fixed. The comment says, in capitals, that
+the two lists **are** the whole sweep and that every new table and view must be
+added to one of them in the same migration that creates it. And the 207 objects
+are named: `link_pages`, `link_items` and `v_link_click_stats` under
+`MUST_BE_EMPTY`, `v_public_link_pages` and `v_public_link_items` under
+`PUBLIC_OK`.
+
+The general rule, now stated three times in this document under three different
+disguises: **a green check proves something about the objects it names, and
+nothing at all about the objects it does not.** When a check reports confidently,
+grep its output for the thing you actually care about before believing it. If the
+name is not there, the check did not run — however clean the summary line looks.
+
+An honest comment would have made this visible years earlier than an audit did.
+A comment that describes behaviour the code does not have is worse than no
+comment: it is a claim, read as evidence, that nobody re-derives.
+
+---
+
+## Section 59 — A preview that is not the page is not evidence (2026-08-31)
+
+The links-page editor needed a live preview: change a colour, drag a row, see it.
+The obvious build is a small renderer inside `dashboard.html` that draws
+approximately what `links.html` draws. That was rejected, and the reason is
+already written down elsewhere in this repo at some cost.
+
+The planner implements its forecast maths **twice** — in SQL (`v_plan_monthly`)
+and in JS (`planModelMonth`) — because a lever that needs a round trip before it
+shows a number is a form, not a lever. That was the right call there, and it is
+paid for with a standing rule in CLAUDE.md: *if you change one, change the other,
+or the number you type against stops matching the number you reload into.* A rule
+like that is a permanent tax, and it is only worth paying when there is no way to
+have one implementation.
+
+Here there was a way. `links.html` accepts `?preview=1`; in that mode it does not
+touch the database and does not load the beacon, it waits for a same-origin
+`postMessage` carrying `{page, items}` and renders that through the exact code
+path a visitor gets. The dashboard embeds it in an iframe and posts the unsaved
+form state on every keystroke. One renderer. The preview cannot drift from the
+page, because it **is** the page — a layout change is visible in the editor
+without anybody remembering to mirror it.
+
+Two details that make it honest rather than merely convenient:
+
+- **The preview filters like the public view does.** Inactive rows and rows
+  outside their `starts_at` / `ends_at` window are dropped before posting, because
+  those are exactly what `v_public_link_items` removes. A preview that shows more
+  than the visitor will see flatters the page, which is the one thing a preview
+  must never do.
+- **The icon list is read out of the iframe** (`CW_LINK_ICONS`, same origin)
+  rather than copied into the editor. If the renderer learns a new glyph the
+  editor offers it, with nothing to keep in step. Where the read fails, the icon
+  field stays free text and still works — the suggestions were only ever a
+  convenience, so their absence degrades rather than breaks.
+
+The general shape: **when a second surface has to show what a first surface
+produces, embedding the first one costs less than reimplementing it — and unlike
+a reimplementation, it cannot be wrong.** Reach for the duplicate only when the
+two surfaces genuinely cannot share a runtime, as SQL and the browser cannot.

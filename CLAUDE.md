@@ -135,6 +135,13 @@ Four Come-With-specific rules on top of whichever variant you run:
   lines as satisfying "all five return 401". Prod was fine; the check was decoration.
   The new script names all five, proves the publishable key works before trusting a
   single 401, and exits non-zero on any 200. **Both scripts, every close.** LEARNINGS §51.
+- **`check_anon_exposure.py` DISCOVERS NOTHING — its two lists ARE the whole sweep.**
+  Its own comment claimed "everything else discovered from the schema is checked too";
+  there is no schema query in the file. An object named in neither `MUST_BE_EMPTY` nor
+  `PUBLIC_OK` is never requested, and the closing "Nothing is exposed that should not
+  be" says nothing about it. **Every migration that creates a table or view adds it to
+  one of those lists in the same commit.** Grep the sweep's output for your new object
+  before believing the summary line. LEARNINGS §58.
 - **`revoke ... from anon` on a FUNCTION is a no-op.** Postgres grants `EXECUTE` on a
   new function to **`PUBLIC`**, and `anon` inherits it — revoking from `anon` removes a
   grant it never separately held, and the function stays wide open. Always
@@ -465,6 +472,40 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   (token = `actors.edit_token`, no login) writes exactly the fields `artist.html`
   renders — bio / instagram / soundcloud / tiktok / website + photo. It cannot
   write `display_name` or `public_profile`; publishing stays Keith's toggle.
+
+## Link-in-bio pages (`links.html`, `/links/<slug>`) — added 2026-08-31
+
+- **The renderer is `links.html` and there is exactly one of it.** The dashboard
+  editor's live preview is that same file in an iframe (`?preview=1`), fed unsaved
+  form state over same-origin `postMessage`. **Never add a second renderer to
+  `dashboard.html` "just for the preview"** — the planner already carries one
+  deliberate duplicate (`v_plan_monthly` vs `planModelMonth`) and pays a standing
+  change-both-or-drift tax for it; here there is no reason to. LEARNINGS §59.
+- **The preview must show LESS than the editor holds, never more.** Inactive rows
+  and rows outside their `starts_at`/`ends_at` window are dropped before posting,
+  because that is what `v_public_link_items` does. A preview that flatters the page
+  is worse than no preview.
+- **`is_published` is a deliberate toggle and defaults false.** Publishing is never
+  a side effect of editing, and an unknown slug and an unpublished slug return the
+  same empty answer — the endpoint must not confirm a draft exists.
+- **The schedule window is enforced in the VIEW, not the browser.** A link that
+  should be gone must not ship to the page and get hidden by CSS.
+- **Every rendered link carries `data-track="link:<uuid>"`.** The beacon then
+  records the link's IDENTITY, not its URL, which is what `v_link_click_stats`
+  matches on. Match on `link_url` instead and an edited URL silently inherits the
+  old one's history, while a relative internal path never matches at all.
+- **`link_pages.theme` is jsonb on purpose** — a new theme knob is a UI change, not
+  a migration, which is the whole point of "customisable without Claude". Every
+  key falls back to the Come With palette when absent, so a half-set theme still
+  renders. A preset **fills the boxes and nothing else**: it must not wipe a
+  background photo or a radius the user chose.
+- **`_redirects` exists solely for these pages.** `/links` and `/links/*` rewrite
+  (200) to `links.html`. Adding rules there affects the whole site — check it
+  before assuming it is a links-only file.
+- **Social link previews are still generic** (client-side render; crawlers do not
+  run JS). `og_image_url` / `seo_description` exist on the row with nowhere to go
+  until something server-renders the `<head>`. Do not add a per-page OG field to
+  the editor before that exists — it would be a control that changes nothing.
 
 ## Weekly radio release (see `Radio/NOTES_WEEKLY_RELEASE.md`)
 

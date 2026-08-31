@@ -1,11 +1,11 @@
 ---
 name: reference-machine-toolchain
-description: "This machine cannot run node --check; the anon sweep now works here, and .env still points db.py at prod by default"
+description: "This machine cannot run node --check, Bash heredocs are not quote-safe, the anon sweep works here, and .env still points db.py at prod by default"
 metadata:
   node_type: memory
   type: reference
   originSessionId: 9285a14c-2927-4aa5-9b36-c63f3a5610ad
-  modified: 2026-08-27T20:51:40.531Z
+  modified: 2026-08-31T00:00:00.000Z
 ---
 
 Machine configuration for `C:\Users\keith\comewith` (the laptop). Verify each
@@ -32,6 +32,15 @@ before relying on it — this is config, and config gets fixed.
   being approved. Until it is removed, a bare `python db.py file.sql` silently
   targets production. Pass the literal `SBP_REF=yaytdosxfhcqatmhctzk python db.py …`
   anyway — it is also the form Henry's allowlist prefix matches.
+- **A `<<'EOF'` heredoc in the Bash tool is NOT literal — an apostrophe in the
+  body breaks the whole command** with ``unexpected EOF while looking for matching
+  `'``, pointing at a line number inside the heredoc. The command looks like it is
+  wrapped in outer single quotes, so quoted-heredoc semantics do not protect the
+  body. It bites on ordinary prose (`Keith's`, `the page's`) and on SQL comments,
+  and it bites *after* nothing has been written. Balanced quotes (`', '` in SQL)
+  are fine, which is why some heredocs work and hide the rule. **Write prose and
+  comment-heavy files with the Write tool**, and keep heredocs for
+  apostrophe-free content. Verified 2026-08-31 on two separate failures.
 - **`git fetch` failed once with `libcurl-4.dll` blocked by an Application
   Control policy**, then succeeded on retry; `git ls-remote` worked throughout.
   If a fetch dies that way, retry before concluding the remote is unreachable.

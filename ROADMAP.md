@@ -1594,3 +1594,62 @@ session did lines only, which is what was asked for.
 offerings remain provisional; parties have no per-head ticket price (no paid `ticketing`
 row exists against any `party` event, and none was invented); Equipment Rental books no
 event.
+
+---
+
+## 2026-08-31 — Link-in-bio pages: a linktree we own, editable without Claude
+
+**Migration 207.** `link_pages` + `link_items`, addressed by slug: `/links`,
+`/links/di`, `/links/keith`. A page carries its own title, tagline, avatar, footer
+and theme; a link carries a label, URL, optional subtitle, icon and thumbnail, one
+of four styles (button / feature card / section heading / social icon), an on-off
+switch and an optional `starts_at` / `ends_at` window. The public reads two views
+— `v_public_link_pages`, `v_public_link_items` — which filter to published pages
+and active, in-window links; both tables are anon-revoked and admin-RLS-d, the 030
+pattern. An admin-only `v_link_click_stats` reports 30-day and all-time clicks per
+link.
+
+**Multiple pages was the deliberate choice** over a single page. Come With, Dance
+Infusion and Keith-as-a-DJ point different audiences at different links, and a
+fourth page is now a row Keith adds himself rather than a migration.
+
+**The dashboard preview IS `links.html`** — the same file, in an iframe, in preview
+mode, fed unsaved form state over `postMessage`. No second renderer exists, so the
+preview cannot drift from the page. It also filters exactly as the public view does,
+so it never shows more than a visitor will see. LEARNINGS §59.
+
+**Theming is full-custom with presets on top**, as asked: eight colours, four button
+treatments, corner roundness, five typefaces, alignment, avatar shape, optional
+background photo with a dimmer. A preset fills the boxes and nothing more.
+
+**Clicks were free.** The existing beacon already counts every link click; each
+rendered link is stamped `data-track="link:<uuid>"` so a click is attributed to the
+link's identity rather than its URL, and survives the URL being edited.
+
+**`_redirects` is new to the repo** — `/links` and `/links/*` rewrite (200) to
+`links.html`, so the bio link is the pretty one.
+
+**Found along the way: `scripts/check_anon_exposure.py` discovers nothing.** Its
+comment claimed the schema was swept; it walks two hand-written lists. A full run
+came back "Nothing is exposed that should not be" without ever requesting the five
+new objects. Comment corrected, objects named, and CLAUDE.md now requires every new
+table or view to join one of those lists in the same commit. LEARNINGS §58.
+
+**Parked — social link previews are generic.** The page renders client-side and
+crawlers do not run JS, so a pasted `/links/di` shows the site-wide og:image and
+title rather than that page's own. `og_image_url` and `seo_description` exist on the
+row with nowhere to go until an edge function server-renders the `<head>`. That is
+roughly an hour of work and worth doing before the pages are used in anger, since
+being pasted into a bio is the entire job — scoped, waiting on Keith.
+
+**Parked — `sw.js` serves `/dashboard.html` for any navigation when offline.** Not
+new and not introduced here (it applies to `index.html` and `radio.html` equally),
+but a links page is opened from Instagram on a weak connection, so it is likelier to
+bite here. Left alone because the service worker is what makes the PWA installable.
+
+**Nothing has been clicked.** No dashboard login exists on this laptop and the
+Browser pane cannot open `file://`, so verification was: dry run against prod, all
+post-apply checks PASS, anon REST sweep end-to-end (tables 401, public views 200,
+zero pages visible while `main` is unpublished), and esprima on the extracted
+dashboard block with a control run against `HEAD`. The `main` page is seeded and
+deliberately **unpublished**.

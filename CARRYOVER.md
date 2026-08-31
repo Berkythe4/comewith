@@ -1,3 +1,139 @@
+# Carryover - 2026-08-31 (link-in-bio pages: /links/<slug> - LAPTOP)
+
+**Work done and closed 2026-08-31.** Everything from 2026-08-27 and earlier is
+preserved below, unchanged - including its open list, which this session did not
+touch.
+
+## >> START HERE NEXT SESSION
+
+**1. NOTHING HERE HAS BEEN CLICKED.** Same as the planner: there is still no
+dashboard login on this laptop, and no way to open a `file://` page in the Browser
+pane. Open **Team HQ -> Links Page**. Check, in this order: the page picker lists
+"Come With - /main (hidden)"; the phone preview on the right renders (it is an
+iframe of `links.html?preview=1`, so if it is blank the postMessage handshake is
+the thing to look at, not the layout); typing in "Name shown at the top" moves the
+preview immediately; dragging a row by the grip reorders it in the preview; a
+preset click repaints the colours; Save reports "Saved (page is still hidden)".
+
+**2. `/links` IS LIVE BUT THE PAGE IS NOT PUBLISHED, deliberately.** `link_pages`
+holds one row - slug `main`, six links seeded from what the site already says
+(radio, events, watch, book us, plus Instagram and the contact email pulled from
+`site_content`). `is_published` is **false**, so `comewith.org/links` answers
+"This page is not available." until Keith flips the toggle. That is the same
+posture as `photos.is_public` and `actors.public_profile`, not an oversight.
+
+**3. LINK PREVIEWS ON SOCIAL ARE GENERIC, and this is the one real gap.** The page
+renders client-side, and Instagram / iMessage / Slack crawlers do not run JS, so
+pasting `comewith.org/links/di` anywhere shows the generic Come With og:image and
+title from the static `<head>` - not that page own avatar and name. The DB already
+carries `og_image_url` and `seo_description` per page with nowhere to put them.
+Fixing it properly means an edge function that server-renders the `<head>` (the
+`get-station` pattern), which is maybe an hour. Worth doing before this is used in
+anger, since being pasted into a bio is the entire job. **Scoped, not built - ask
+Keith first.**
+
+**4. `sw.js` serves `/dashboard.html` for ANY navigation when offline.** Not new,
+not introduced here, and it applies to `index.html` and `radio.html` today just as
+much. But a links page is opened from Instagram on a phone with one bar, so it is
+more likely to bite here than anywhere else: a failed fetch renders the dashboard
+shell instead of the links page. Left alone because touching the service worker
+risks the PWA install prompt (that is what v3 -> v4 was about). Worth a decision.
+
+**5. The 2026-08-27 list below is still open** - in particular the planner has
+still never been opened in a browser, and **a published planning round is still
+only half frozen** (`plan_publish_round()` does not version `plan_offering_lines`).
+Neither was touched today.
+
+## State summary
+
+- **Prod max migration 207, repo max 207 - NO DRIFT.** 207 dry-run against prod
+  before applying, per the rule; `applied_migrations` reports max 207, 61 rows.
+- **All 5 financial views return anon 401**, verified through PostgREST with the
+  key proven live first (`scripts/check_financial_views.py`).
+- **Full anon sweep: 0 FAIL** - and it now actually names the new objects, which it
+  would not have done on its own (see LEARNINGS SS58).
+- **Latest LEARNINGS: SS59.** Two added this session.
+- **CLAUDE.md gained a "Link-in-bio pages" section.**
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Ran on the **laptop** (`C:\Users\keith\comewith`). No edge functions touched.
+- Git: `master`, in sync with origin at session start; **committed, NOT pushed** -
+  pushing publishes the site, and none of this has been clicked yet.
+- **No JS runtime on this machine still** - `node`, `deno`, `bun`, `npx`, `tsc` all
+  absent. New dashboard code checked with esprima on the extracted block in
+  isolation (517 lines, PARSE OK), plus the control comparison against
+  `git show HEAD:dashboard.html`: both fail at the same pre-existing optional-chain
+  and the reported line moved by exactly the 4 lines added above it, so nothing
+  earlier was introduced. `links.html` and `track.js` parse clean end to end.
+
+## This session shipped
+
+### A linktree, owned by us, editable without Claude
+
+**Migration 207** adds `link_pages` + `link_items` and the two public views the site
+reads (`v_public_link_pages`, `v_public_link_items`), plus an admin-only
+`v_link_click_stats`. Pages are addressed by slug, so a fourth page is a row Keith
+adds himself - `/links`, `/links/di`, `/links/keith` - which is what "several pages"
+meant when he picked it over a single page.
+
+**Why a table and not `site_content`.** The CMS is a flat key/value store, which is
+right for "the hero headline" and wrong for an ordered, growing list with an on/off
+switch and a schedule window. A link `starts_at` / `ends_at` are applied **inside the
+view**, not in the browser - a link that should be gone must not ship to the page and
+get hidden by CSS.
+
+**`links.html` is the only renderer, and the dashboard preview is that same file.**
+The editor embeds `links.html?preview=1` in an iframe and posts unsaved form state to
+it over `postMessage`. There is deliberately no second copy of the layout in
+`dashboard.html`: the planner already carries one duplicated implementation on purpose
+(`v_plan_monthly` vs `planModelMonth`) and pays for it with a standing "if you change
+one, change the other" rule. A preview that is not the real page stops being evidence
+the first time either side changes. LEARNINGS SS59.
+
+**Full theming plus presets**, as asked: eight colours, four button treatments
+(filled / outline / frosted / accent), corner roundness, five typefaces, alignment,
+avatar shape, and an optional background photo with a dimmer. Six presets (Come With,
+Dance Infusion, Midnight, Paper, Neon, Sunset) **fill the boxes and nothing more** - a
+preset click does not wipe a background photo or a radius that was chosen
+deliberately.
+
+**Clicks are already counted, exactly.** Every rendered link carries
+`data-track="link:<uuid>"`, so the existing beacon records the link identity rather
+than its URL - a link whose URL is edited keeps its own history instead of inheriting
+the old one. `v_link_click_stats` surfaces 30-day and all-time counts next to each row
+in the editor. `assets/track.js` gained `p` in its KEEP list for the `?p=` fallback
+form; the page normalises itself to `/links/<slug>` before the beacon runs, so one
+page never records under two paths.
+
+**`_redirects` is new** (there was none): `/links` and `/links/*` rewrite to
+`links.html` with a 200, so the bio link is the pretty one and the query string
+survives.
+
+**Security shape is the 030 pattern.** Both tables are anon-revoked and admin-RLS-d;
+the public reads only the two views, which filter to published pages and active,
+in-window links. An unknown slug and an unpublished slug give the same answer, so the
+endpoint cannot confirm a draft exists. Verified end to end through PostgREST: tables
+and the stats view 401, the two public views 200, and zero pages visible to the public
+while `main` is unpublished.
+
+### The anon sweep was not checking what its own comment claimed
+
+`scripts/check_anon_exposure.py` says "everything else discovered from the schema is
+checked too". It does not. It walks two hand-written lists and never asks the schema
+anything - so the new tables were absent from a run that ended "Nothing is exposed
+that should not be." Same failure as the five financial views in SS51, one file over.
+The comment now says the opposite in capitals, and the five new objects are named.
+LEARNINGS SS58.
+
+## Parked / next
+
+- **Server-rendered `<head>` for link previews** - scoped in item 3 above, not built.
+- **Per-page OG image** - the column exists (`link_pages.og_image_url`) and there is
+  no UI for it, because until the head is server-rendered it would do nothing. A field
+  that changes nothing is worse than a missing one.
+- **Publishing `/links`** is Keith toggle, not a task.
+
+---
+
 # Carryover - 2026-08-27 (pricing models: quantity x rate - LAPTOP)
 
 **Work done 2026-08-22, closed 2026-08-27.** The desktop's two closes from

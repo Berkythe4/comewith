@@ -5,4 +5,4 @@ desktop lives in the repo at `DEV_DOCS/claude-memory/` — read that too.
 
 - [Keith's FP&A background](user-fpa-background.md) — Maersk; expects CEO-level forecast vs actual, levers not reports.
 - [Planning tool is deliberately generic](project-fpa-planning-tool.md) — the SKU/fashion build is the next product; don't collapse the abstraction.
-- [This machine's toolchain gaps](reference-machine-toolchain.md) — no JS runtime (esprima workaround); anon sweep works now; bare SBP_REF points at prod.
+- [This machine's toolchain gaps](reference-machine-toolchain.md) — no JS runtime (esprima workaround); Bash heredocs are not quote-safe; anon sweep works now; bare SBP_REF points at prod.
