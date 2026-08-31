@@ -56,8 +56,11 @@ Neither was touched today.
 - **CLAUDE.md gained a "Link-in-bio pages" section.**
 - Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
 - Ran on the **laptop** (`C:\Users\keith\comewith`). No edge functions touched.
-- Git: `master`, in sync with origin at session start; **committed, NOT pushed** -
-  pushing publishes the site, and none of this has been clicked yet.
+- Git: `master`, **pushed** on Keith-s say-so at the end of the session, so the
+  site and dashboard are deployed. Note what that does and does not mean: the
+  Links Page tab is live in the dashboard and `/links` resolves, but the `main`
+  page is still `is_published = false`, so the public sees "This page is not
+  available." Nothing was clicked before the push.
 - **No JS runtime on this machine still** - `node`, `deno`, `bun`, `npx`, `tsc` all
   absent. New dashboard code checked with esprima on the extracted block in
   isolation (517 lines, PARSE OK), plus the control comparison against
