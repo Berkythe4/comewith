@@ -1814,3 +1814,46 @@ The general shape: **when a second surface has to show what a first surface
 produces, embedding the first one costs less than reimplementing it — and unlike
 a reimplementation, it cannot be wrong.** Reach for the duplicate only when the
 two surfaces genuinely cannot share a runtime, as SQL and the browser cannot.
+
+---
+
+## Section 60 — Prefer the foreign key, but not when almost nothing has one (2026-09-01)
+
+Auto-assigning the DJ to the radio week's production tasks looked like a
+one-liner: `sc_playlists.assigned_actor_id` is a real FK to `actors`, and
+`task_assignments` already takes an `actor_id`. Join them and ship.
+
+Counting first is what stopped that. On prod, `assigned_actor_id` is set on
+**one** of ten stations. `mix_by` — free text, the DJ's name — is set on **nine**.
+The column with referential integrity is the one nobody fills in; the column that
+is actually maintained is the one holding a string. A feature built only on the FK
+would have done nothing on nine episodes out of ten, including the one currently
+being built, and would have looked like a bug rather than like missing data.
+
+So the resolution order is: **`assigned_actor_id` when set** — it is explicit and
+unambiguous — then `mix_by` matched by name. All four names in use today
+(`Berky`, `KRNeY`, `Henry`, `32LVS`) resolve to exactly one live actor, so the
+fallback is what makes the feature work at all.
+
+Note this is the mirror image of §55, not a contradiction of it. There, an episode
+credit must link on the **printed name** (`mix_by`) and never on
+`assigned_actor_id`, because the FK records who was given access to *build* the
+episode and rendering it as the credit points a visitor at the wrong artist. Here
+the question is who should *do the work*, and the FK — when it is set — is exactly
+the right answer. Same two columns, opposite precedence, because the question is
+different. Anyone "tidying" one of these to match the other will break the other.
+
+The guard is the same in both places, and it is the part that must not be dropped:
+**zero matches and two matches both assign nobody, and say why.** A task on the
+wrong person's board is worse than a task on nobody's — and worse here than in
+§55, because `tasks` carries an "Actors can read assigned tasks" policy, so
+assigning does not merely label a row, it *shows that row to that person*. A bad
+name match is an unintended disclosure, not just a wrong label.
+
+Two smaller things the same change is careful about. Which steps count as "the
+DJ's" is a **default, not a decision** — every row is a ticked-or-unticked
+checkbox in the confirm modal, showing the name it will land on, so the split is
+visible before anything is written rather than encoded invisibly in a constant.
+And the returned rows are mapped back to steps **by title, not by position**:
+assuming an insert returns in payload order is exactly the sort of assumption that
+fails silently and puts the wrong task on someone's board.

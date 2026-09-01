@@ -4,6 +4,29 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-01 ADDENDUM (same laptop, no migration)
+
+**The radio week generator now auto-assigns the DJ.** 🗓 Generate week's production
+tasks resolves the episode's DJ and pre-ticks the four steps that are the DJ's own
+work (playlist v1, playlist v2 / practice mix, record the set, the 3 highlights
+Janelle uses) - following the workflow page's own split, where phase 2 is "the DJ
+part". Posting the episode and the following week's recap post are left unticked.
+Every row is a checkbox showing the name it will land on, so the split is a default
+you can change per run, not a decision baked into a constant.
+
+**The DJ is resolved FK-first, name-second, and that order matters** -
+`assigned_actor_id` is set on ONE of ten stations while `mix_by` is set on nine, so
+an FK-only implementation would have done nothing on nine episodes and read as a
+bug. All four names in use resolve to exactly one live actor. Zero or two matches
+assign nobody and say why: `tasks` carries an "Actors can read assigned tasks"
+policy, so a bad name match is an unintended disclosure, not just a wrong label.
+**This is the mirror of LEARNINGS SS55, not a contradiction** - a public credit
+links on `mix_by` and never the FK; assignment prefers the FK. Same two columns,
+opposite precedence, different question. LEARNINGS SS60.
+
+Still unverified: nobody has pressed the button yet. `task_assignments` already
+existed, so there is no migration - prod max is still 207.
+
 ## >> START HERE NEXT SESSION
 
 **1. KEITH HAS NOW CLICKED IT, and the first pass found a real bug.** Adding a

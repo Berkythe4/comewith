@@ -19375,14 +19375,54 @@ function raEpisodeReady(s) {
 // the calendar chip opens the episode page (tracklist + copy) for Janelle. The
 // "send to Janelle" step and the "Post" step both get it — the two moments she
 // needs the page.
+// `dj: true` = the DJ's own work, pre-ticked for auto-assignment. It follows the
+// workflow page's own split: phase 2 ("the DJ part") is buying, arranging and
+// recording, so the playlist steps, the record day and the highlights the DJ
+// hands to Janelle are theirs. Posting the episode and the following week's
+// recap post are not — those are the dashboard and marketing. Every row is a
+// checkbox in the modal, so this is a default rather than a decision.
 const RADIO_CADENCE = [
-  { off: -4, day: 'Sat', title: 'Playlist v1 ready' },
-  { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle', ms: true, ep: true },
-  { off: 0, day: 'Wed', title: 'Record the set', ms: true },
+  { off: -4, day: 'Sat', title: 'Playlist v1 ready', dj: true },
+  { off: -2, day: 'Mon', title: 'Playlist v2 / practice mix — tracklist FINAL, then send to Janelle', ms: true, ep: true, dj: true },
+  { off: 0, day: 'Wed', title: 'Record the set', ms: true, dj: true },
   { off: 1, day: 'Thu', title: 'Post the episode', ms: true, ep: true },
-  { off: 1, day: 'Thu', title: '3 highlights recap due — for THIS week\'s episode (Janelle uses it in the Thursday post)' },
+  { off: 1, day: 'Thu', title: '3 highlights recap due — for THIS week\'s episode (Janelle uses it in the Thursday post)', dj: true },
   { off: 6, day: 'Tue', title: 'Recap post (following week)' },
 ];
+
+// Who is the DJ on this episode?
+//
+// `assigned_actor_id` is the explicit answer and is trusted first — but it is set
+// on ONE of the ten stations on prod, while `mix_by` is set on nine. mix_by is
+// the field that is actually kept up to date, so it is the working fallback, and
+// it holds a NAME rather than an id.
+//
+// Name matching is only safe when it is unambiguous. Zero matches or two matches
+// both assign NOBODY and say why: a task on the wrong person's board is worse
+// than a task on nobody's, and assigning also makes the task visible to that
+// actor through the "Actors can read assigned tasks" policy. This is the same
+// rule creditedArtist() follows in get-station — no link beats the wrong link.
+async function raResolveDj(pl) {
+  if (!pl) return { actor: null, why: 'no episode is loaded' };
+  if (pl.assigned_actor_id) {
+    const { data } = await sb.from('actors').select('id,display_name').eq('id', pl.assigned_actor_id).maybeSingle();
+    if (data) return { actor: data, src: 'assigned to build this episode' };
+  }
+  const nm = String(pl.mix_by || '').trim();
+  if (!nm) return { actor: null, why: 'this episode has no DJ yet — set one in ✎ Details' };
+  let hits = (await sb.from('actors').select('id,display_name').eq('display_name', nm).is('deleted_at', null)).data || [];
+  if (!hits.length) {
+    // Widen once for case/spacing, then decide on an exact comparison HERE rather
+    // than trusting the pattern — a name containing % or _ would otherwise match
+    // people it should not.
+    const res = await sb.from('actors').select('id,display_name')
+      .ilike('display_name', nm.replace(/([%_\\])/g, '\\$1')).is('deleted_at', null);
+    hits = (res.data || []).filter(a => String(a.display_name).trim().toLowerCase() === nm.toLowerCase());
+  }
+  if (hits.length === 1) return { actor: hits[0], src: `matched the episode's DJ, “${nm}”` };
+  if (!hits.length) return { actor: null, why: `nobody on file is called “${nm}” — add them under People & Orgs, or pick the DJ in ✎ Details` };
+  return { actor: null, why: `more than one person is called “${nm}” — pick the DJ explicitly in ✎ Details` };
+}
 // Nearest upcoming Wednesday (today counts as Wednesday), as YYYY-MM-DD.
 function raNextWednesday() {
   const d = new Date(); d.setHours(12, 0, 0, 0);
@@ -19393,14 +19433,26 @@ function raDatePlus(isoWed, off) {
   const d = new Date(isoWed + 'T12:00:00'); d.setDate(d.getDate() + off);
   return d.toISOString().slice(0, 10);
 }
-function raOpenGenWeek() {
+async function raOpenGenWeek() {
   const pl = raState.playlist;
   const wed = raNextWednesday();
-  const preview = RADIO_CADENCE.map(s => `<div class="hub-li" style="padding:4px 0;"><div class="li-main"><strong>${escapeHtml(s.title)}</strong><div class="li-sub">${s.day} · <span data-gw-date="${s.off}">${escapeHtml(fmtDate(raDatePlus(wed, s.off)))}</span></div></div></div>`).join('');
+  const dj = await raResolveDj(pl);
+  raState.genWeekDj = dj.actor || null;   // raGenWeekRun reads it back
+  const who = dj.actor ? escapeHtml(dj.actor.display_name) : '';
+  const preview = RADIO_CADENCE.map((s, i) => `<div class="hub-li" style="padding:5px 0;display:flex;align-items:flex-start;gap:10px;">
+      <div class="li-main" style="flex:1;min-width:0;"><strong>${escapeHtml(s.title)}</strong>
+        <div class="li-sub">${s.day} · <span data-gw-date="${s.off}">${escapeHtml(fmtDate(raDatePlus(wed, s.off)))}</span></div></div>
+      ${dj.actor ? `<label class="li-sub" style="display:flex;align-items:center;gap:6px;white-space:nowrap;cursor:pointer;" title="Assign this task to ${who}">
+        <input type="checkbox" data-gw-dj="${i}"${s.dj ? ' checked' : ''} style="width:auto;margin:0;"> ${who}</label>` : ''}
+    </div>`).join('');
+  const asgNote = dj.actor
+    ? `<div class="kpi-hint" style="margin:8px 0;">Ticked rows are assigned to <strong>${who}</strong> — ${escapeHtml(dj.src || '')}. Assigning also puts the task on their own DJ link, so untick anything they should not see.</div>`
+    : `<div class="kpi-hint" style="margin:8px 0;color:var(--amber);">⚠ No DJ assigned — ${escapeHtml(dj.why || 'the DJ could not be identified')}. The tasks are still created; they just land on nobody.</div>`;
   openKpi('🗓 Generate week\'s production tasks', `SHOW ${pl?.station_no ?? '—'} · anchored on the record day`, `
     <label class="modal-label">Record day (Wednesday)</label>
     <input class="modal-input" type="date" name="gw_wed" value="${wed}" data-ra-genweek-date style="max-width:200px;">
     <div class="kpi-hint" style="margin:8px 0;">Six tasks land on the shared board, bucketed <strong>Radio</strong>, dated off this Wednesday. Record + Post are milestones (they show on the calendar).</div>
+    ${asgNote}
     <div class="hub-list" id="gwPreview">${preview}</div>
     <div class="kpi-hint" style="margin-top:8px;color:var(--amber);">⚠ Confirm the “3 highlights recap” — is it for the episode this week, or the previous week's? Tell me and I'll relabel it.</div>`,
     raGenWeekRun, 'Create 6 tasks');
@@ -19434,10 +19486,36 @@ async function raGenWeekRun() {
     station_id: pl?.id || null,   // scope the task to this episode for the Control Center
     due_date: raDatePlus(wed, s.off),
   }));
-  const { error } = await sb.from('tasks').insert(rows);
+  // .select() to get the ids back for assignment. The admin policy on tasks is
+  // is_admin() rather than anything row-local, so INSERT..RETURNING is safe here
+  // (see the 097 note in CLAUDE.md for when it is not).
+  const { data: made, error } = await sb.from('tasks').insert(rows).select('id,title');
   if (error) throw error;
+
+  // Map returned rows by TITLE, not by position. The six titles are unique, and
+  // relying on the insert order coming back unchanged is an assumption that
+  // would fail silently and put the wrong task on someone's board.
+  const dj = raState.genWeekDj;
+  const byTitle = new Map((made || []).map(r => [r.title, r.id]));
+  const asg = [];
+  document.querySelectorAll('[data-gw-dj]').forEach(cb => {
+    if (!cb.checked || !dj) return;
+    const id = byTitle.get(RADIO_CADENCE[Number(cb.dataset.gwDj)]?.title);
+    if (id) asg.push({ task_id: id, actor_id: dj.id, role: 'doer' });
+  });
+  if (asg.length) {
+    const { error: ae } = await sb.from('task_assignments').insert(asg);
+    // The tasks exist either way. Say so plainly rather than throwing, which
+    // would read as "nothing happened" and invite a second run.
+    if (ae) {
+      closeKpi();
+      toast(`6 tasks created, but assigning ${dj.display_name} failed: ${ae.message}`, 'err');
+      return;
+    }
+  }
   closeKpi();
-  toast(`6 production tasks created for the week of ${fmtDate(wed)}`, 'ok');
+  toast(`6 production tasks created for the week of ${fmtDate(wed)}`
+        + (asg.length ? ` — ${asg.length} assigned to ${dj.display_name}` : ''), 'ok');
 }
 // Player lives in #raDock (OUTSIDE the re-rendered body) so it keeps playing while
 // you add tracks / follow / scan — those rebuild raMarketBody, not the dock.
