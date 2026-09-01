@@ -17737,7 +17737,7 @@ async function loadMarket() {
   raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
   // Full artist pool (city/partner) + scan cache so Buzz/NYC work here even if the radio tab hasn't loaded.
   if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue,city,is_partner,source').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
-  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
+  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs,ok'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
   if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
   await raLoadWatch();
   await ensureRadioArtists();
@@ -17770,15 +17770,20 @@ function scArtistData() {
   evs.forEach(e => (e.lineup || []).forEach(la => {
     const nm = (la.name || '').trim(); if (!nm) return;
     const k = nm.toLowerCase();
-    const c = cand[k] || (cand[k] = { name: nm, demand: 0, editorial: false, nextDate: null, venue: '', genres: new Set(), raFollowers: 0, soundcloud: la.soundcloud || null, shows: [], venues: new Set(), platforms: new Set() });
-    c.demand = Math.max(c.demand, Number(e.attending) || 0);
+    const c = cand[k] || (cand[k] = { name: nm, demand: 0, demandKnown: false, editorial: false, nextDate: null, venue: '', genres: new Set(), raFollowers: 0, soundcloud: la.soundcloud || null, shows: [], venues: new Set(), platforms: new Set() });
+    // Keep "nobody has RSVP'd" apart from "this platform does not publish RSVPs".
+    // DICE and Ticketmaster return attending = null on EVERY event (263 and 48 of
+    // them on prod, none with a number); RA populates all 941. Coercing that null
+    // to 0 made demand — the heaviest input — score an artist on which ticketing
+    // platform their show happens to be sold through.
+    if (e.attending != null) { c.demandKnown = true; c.demand = Math.max(c.demand, Number(e.attending) || 0); }
     if (e.is_pick) c.editorial = true;
     (e.genres || []).forEach(g => c.genres.add(g));
     c.raFollowers = Math.max(c.raFollowers, Number(la.follower_count) || 0);
     if (la.soundcloud && !c.soundcloud) c.soundcloud = la.soundcloud;
     if (e.venue_name) c.venues.add(e.venue_name);
     c.platforms.add(e.source || 'ra');
-    c.shows.push({ date: e.event_date, venue: e.venue_name || '', platform: e.source || 'ra', attending: Number(e.attending) || 0, url: e.content_url, pick: e.is_pick });
+    c.shows.push({ date: e.event_date, venue: e.venue_name || '', platform: e.source || 'ra', attending: e.attending == null ? null : Number(e.attending) || 0, url: e.content_url, pick: e.is_pick });
     if (e.event_date && (!c.nextDate || e.event_date < c.nextDate)) { c.nextDate = e.event_date; c.venue = e.venue_name || ''; }
   }));
   Object.values(cand).forEach(c => {
@@ -17792,11 +17797,29 @@ function scArtistData() {
     (a?.genres || []).forEach(g => c.genres.add(g));
     const cache = c.soundcloud ? raState.cache[raKey(c.soundcloud)] : null;
     if (cache?.city && !c.city) c.city = cache.city;
-    c.scanned = !!cache; c.isProducer = !!cache?.is_producer;
-    c.songCount = Number(cache?.song_count) || 0;
-    c.scFollowers = Number(cache?.followers) || 0;
+    // A cache row with ok = false is a scan that FAILED, not an artist with
+    // nothing. 191 rows on prod are in that state, and `ok` was not even being
+    // selected — so a failed scan read as "0 songs, 0 followers" and scored like
+    // an artist with no music. Anything derived from the scan is unknown here.
+    c.scanned = !!cache; c.scanOk = !!(cache && cache.ok !== false);
+    c.isProducer = !!cache?.is_producer;
+    const songs = Array.isArray(cache?.songs) ? cache.songs : [];
+    c.songCount = c.scanOk ? (Number(cache?.song_count) || 0) : 0;
+    c.scFollowers = c.scanOk ? (Number(cache?.followers) || 0) : 0;
     c.reach = Math.max(c.raFollowers, c.scFollowers);
-    c.recent = !!(cache?.songs || []).some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
+    // Top track by plays. Every one of the 57,291 cached songs carries
+    // playback_count, so this needs no new scan — the number was already here and
+    // the score simply ignored it. reduce() rather than Math.max(...spread): the
+    // catalogue length is whatever an artist has uploaded, and that is not a
+    // number to hand to the argument stack.
+    c.topTrack = songs.reduce((best, s) =>
+      (Number(s.playback_count) || 0) > (Number(best?.playback_count) || -1) ? s : best, null);
+    c.topPlays = Number(c.topTrack?.playback_count) || 0;
+    // The median track is context, not score: it is what separates a catalogue
+    // that performs from one viral upload next to forty that nobody played.
+    const plays = songs.map(s => Number(s.playback_count) || 0).sort((a, b) => a - b);
+    c.medPlays = plays.length ? plays[Math.floor(plays.length / 2)] : 0;
+    c.recent = !!songs.some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
     c.nyc = NYC_RE.test(c.city || '');
     c.onRadio = radioSet.has(c.name.toLowerCase());
     c.genresArr = [...c.genres]; c.venuesArr = [...c.venues]; c.platformsArr = [...c.platforms];
@@ -17804,21 +17827,82 @@ function scArtistData() {
     c.shows.sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   });
   const list = Object.values(cand);
-  const lg = x => Math.log1p(Math.max(0, x));
-  const maxD = Math.max(1e-9, ...list.map(c => lg(c.demand)));
-  const maxR = Math.max(1e-9, ...list.map(c => lg(c.reach)));
-  const maxC = Math.max(1e-9, ...list.map(c => lg(c.songCount)));
-  list.forEach(c => {
-    c.sDemand = Math.round(100 * lg(c.demand) / maxD);
-    c.sReach = Math.round(100 * lg(c.reach) / maxR);
-    c.sCatalog = Math.round(100 * lg(c.songCount) / maxC);
-    let s = 0.40 * c.sDemand + 0.35 * c.sReach + 0.15 * c.sCatalog + (c.editorial ? 10 : 0);
-    if (c.recent) s = Math.min(100, s + 4);
-    c.buzz = Math.round(s);
-  });
+  list.forEach(scScoreArtist);
   raState._scArtSig = sig; raState._scArtData = list;
   return list;
 }
+
+// ── Buzz ────────────────────────────────────────────────────────────────────
+// Four inputs, each mapped 0–100 against a FIXED anchor, weighted, and — the
+// part that matters — dropped entirely when the input is unknown, with the
+// remaining weights renormalised over what was actually measurable.
+//
+// WHY FIXED ANCHORS. The old score scaled every input against the current pool's
+// maximum, so an artist's buzz moved when somebody else was scanned or a bigger
+// name entered the list. "72 last week, 68 now" said nothing about the artist.
+// Anchors are absolute, so the number means the same thing every week — the same
+// reason v_kpi_prior refuses to compare a metric against the latest reading.
+//
+// WHY UNKNOWN IS NOT ZERO. Scoring a missing input as 0 is invented evidence
+// (§26): it says "we measured this and it was nothing" when nothing was measured.
+// It penalised two whole groups invisibly — artists whose shows are only on DICE
+// or Ticketmaster (neither publishes RSVPs), and artists whose SoundCloud scan
+// failed. Both now shrink the DENOMINATOR instead of the numerator, and the
+// coverage they were scored on is shown next to the number.
+const BUZZ_W = { plays: 0.30, reach: 0.30, demand: 0.25, catalog: 0.15 };
+// lo scores 0, hi scores 100, log-spaced between. Chosen off the real prod
+// spread: top-track plays run p50 18k / p90 900k / p99 13.5M, followers
+// p50 1.5k / p90 44k / p99 445k, RA attending has a median of 5.
+const BUZZ_ANCHOR = {
+  plays:   [1000, 10000000],
+  reach:   [100, 1000000],
+  demand:  [2, 1000],
+  catalog: [1, 200],
+};
+function buzzAnchor(kind, x) {
+  const [lo, hi] = BUZZ_ANCHOR[kind];
+  const v = Number(x) || 0;
+  if (v <= lo) return 0;
+  return Math.max(0, Math.min(100, Math.round(100 * Math.log(v / lo) / Math.log(hi / lo))));
+}
+function scScoreArtist(c) {
+  c.sPlays = buzzAnchor('plays', c.topPlays);
+  c.sReach = buzzAnchor('reach', c.reach);
+  c.sDemand = buzzAnchor('demand', c.demand);
+  c.sCatalog = buzzAnchor('catalog', c.songCount);
+  // A successful scan makes the CATALOGUE known even at zero — "we looked, they
+  // upload nothing" is a real answer, and for a radio show that plays records it
+  // is the answer that matters.
+  //
+  // PLAYS is different: the plays of a catalogue that does not exist is not zero,
+  // it is undefined, and scoring it 0 punishes an artist twice for one fact. It
+  // buries precisely the people buzz should surface — the selector DJs who play
+  // other artists' records and upload none of their own. Measured on prod: Ben UFO
+  // (109k followers, 2,010 RSVPs, no uploads) scores 56 if the missing plays count
+  // as zero and 76 if they are left out. Craig Richards, Joseph Capriati and Jyoty
+  // all move the same way. 393 scanned artists have no tracks at all.
+  c.kPlays = c.scanOk && c.topTrack != null;
+  c.kCatalog = c.scanOk;
+  c.kReach = c.scanOk || c.raFollowers > 0;
+  c.kDemand = !!c.demandKnown;
+  const parts = [
+    ['plays', c.kPlays, c.sPlays], ['reach', c.kReach, c.sReach],
+    ['demand', c.kDemand, c.sDemand], ['catalog', c.kCatalog, c.sCatalog],
+  ].filter(p => p[1]);
+  const wsum = parts.reduce((a, p) => a + BUZZ_W[p[0]], 0);
+  c.coverage = Math.round(wsum * 100);
+  if (!wsum) {
+    // Nothing measurable at all. A 0 here would rank this artist below one we
+    // know to be small, which is a claim the data does not support.
+    c.buzz = null;
+    return;
+  }
+  let s = parts.reduce((a, p) => a + BUZZ_W[p[0]] * p[2], 0) / wsum;
+  if (c.editorial) s += 8;   // RA editorial pick
+  if (c.recent) s += 5;      // released something in the last 6 months
+  c.buzz = Math.max(0, Math.min(100, Math.round(s)));
+}
+const buzzSort = b => (b == null ? -1 : b);   // unknown ranks below a known zero
 // Buzz-by-name, memoized on (events, cache) size, so Come With Radio can sort by it too.
 function raBuzzMap() {
   const sig = (raState.events || []).length + ':' + Object.keys(raState.cache || {}).length;
@@ -17914,20 +17998,21 @@ function renderScArtists() {
   if (f.aHasSc) list = list.filter(c => c.soundcloud);
   if (f.aSearch) { const q = f.aSearch.toLowerCase(); list = list.filter(c => c.name.toLowerCase().includes(q) || c.venuesArr.some(v => v.toLowerCase().includes(q))); }
   const key = f.aSort || 'buzz', dir = f.aDir ?? -1;
-  const val = c => ({ name: c.name.toLowerCase(), buzz: c.buzz, demand: c.demand, reach: c.reach, songs: c.songCount, shows: c.showCount, next: c.nextDate || '9999-99' }[key]);
+  const val = c => ({ name: c.name.toLowerCase(), buzz: buzzSort(c.buzz), plays: c.topPlays, demand: c.demand, reach: c.reach, songs: c.songCount, shows: c.showCount, next: c.nextDate || '9999-99' }[key]);
   list.sort((a, b) => { const va = val(a), vb = val(b); return (va < vb ? -1 : va > vb ? 1 : 0) * dir; });
   const rows = list.slice(0, 250).map(c => {
     const exp = f.aExpand === c.name;
     const tags = [c.nyc ? `<span class="role-chip" style="background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.53rem;padding:0 5px;">NYC</span>` : '', c.isPartner ? `<span class="role-chip" style="background:var(--green,#1f7a1f);color:#fff;font-size:.53rem;padding:0 5px;">partner</span>` : '', c.isProducer ? `<span class="role-chip" style="background:#2a1c36;color:var(--lime,#a7e02e);font-size:.53rem;padding:0 5px;">🎛</span>` : ''].filter(Boolean).join(' ');
     return `<tr data-sc-aexpand="${escapeHtml(c.name)}" style="cursor:pointer;border-top:1px solid var(--border);${exp ? 'background:var(--hover,rgba(255,255,255,.04));' : ''}">
       <td style="padding:6px 8px;"><strong>${escapeHtml(c.name)}</strong> ${platTag(c.source)} ${tags}${c.genresArr.length ? `<div class="li-sub" style="font-size:.64rem;">${escapeHtml(c.genresArr.slice(0, 2).join(', '))}</div>` : ''}</td>
-      <td style="padding:6px 8px;text-align:center;"><span class="role-chip" style="background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;">${c.buzz}</span></td>
-      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.demand ? fmtNum(c.demand) : '—'}</td>
+      <td style="padding:6px 8px;text-align:center;">${buzzChipHtml(c)}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.kPlays ? fmtNum(c.topPlays) : `<span class="li-sub" title="${c.scanOk ? 'No tracks uploaded — plays are not applicable, not zero' : (c.scanned ? 'The SoundCloud scan failed — not measured' : 'Not scanned yet')}">·</span>`}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.kDemand ? fmtNum(c.demand) : `<span class="li-sub" title="${escapeHtml(c.platformsArr.map(p => platformOf(p).s).join('/') || 'this platform')} does not publish RSVP counts — not measured">·</span>`}</td>
       <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.reach ? fmtNum(c.reach) : '—'}</td>
-      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.scanned ? c.songCount : '<span class="li-sub" title="not scanned yet">·</span>'}</td>
+      <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.kCatalog ? c.songCount : `<span class="li-sub" title="${c.scanned ? 'The SoundCloud scan failed — not measured' : 'Not scanned yet'}">·</span>`}</td>
       <td style="padding:6px 8px;text-align:right;font-variant-numeric:tabular-nums;">${c.showCount}</td>
       <td style="padding:6px 8px;white-space:nowrap;">${c.nextDate ? fmtDate(c.nextDate) + `<div class="li-sub" style="font-size:.64rem;">${escapeHtml(c.venue || '')}</div>` : '—'}</td>
-    </tr>${exp ? `<tr><td colspan="7" style="padding:2px 10px 12px;">${scArtistExpand(c)}</td></tr>` : ''}`;
+    </tr>${exp ? `<tr><td colspan="8" style="padding:2px 10px 12px;">${scArtistExpand(c)}</td></tr>` : ''}`;
   }).join('');
   const opt = (v, l, cur) => `<option value="${escapeHtml(v)}"${cur === v ? ' selected' : ''}>${escapeHtml(l)}</option>`;
   const toggle = (attr, on, label, col) => `<button class="hub-btn ghost" data-${attr} style="${on ? `background:${col};color:#1a0a12;` : ''}">${label}</button>`;
@@ -17944,24 +18029,56 @@ function renderScArtists() {
       <table style="width:100%;border-collapse:collapse;font-size:.86rem;">
         <thead><tr>
           ${scSortHead('Artist', 'name', key, dir, 'sc-asort')}
-          <th style="padding:7px 8px;text-align:center;position:sticky;top:0;background:var(--card,#20142a);cursor:pointer;" data-sc-asort="buzz" title="Blended popularity">Buzz${key === 'buzz' ? (dir < 0 ? ' ▾' : ' ▴') : '<span style="opacity:.3"> ⇅</span>'}</th>
+          <th style="padding:7px 8px;text-align:center;position:sticky;top:0;background:var(--card,#20142a);cursor:pointer;" data-sc-asort="buzz" title="Blended popularity 0–100, on fixed scales so it is comparable week to week. A dot means that input was never measured, not that it was zero.">Buzz${key === 'buzz' ? (dir < 0 ? ' ▾' : ' ▴') : '<span style="opacity:.3"> ⇅</span>'}</th>
+          ${scSortHead('Top track', 'plays', key, dir, 'sc-asort', true)}
           ${scSortHead('RSVP', 'demand', key, dir, 'sc-asort', true)}
           ${scSortHead('Reach', 'reach', key, dir, 'sc-asort', true)}
           ${scSortHead('Songs', 'songs', key, dir, 'sc-asort', true)}
           ${scSortHead('Shows', 'shows', key, dir, 'sc-asort', true)}
           ${scSortHead('Next', 'next', key, dir, 'sc-asort')}
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="7" style="padding:16px;text-align:center;" class="li-sub">No artists match — clear a filter, or hit “↻ Pull shows”.</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="8" style="padding:16px;text-align:center;" class="li-sub">No artists match — clear a filter, or hit “↻ Pull shows”.</td></tr>'}</tbody>
       </table></div>`;
+}
+// The buzz chip. Null means nothing was measurable and renders as a dash — never
+// as 0, which would rank an unmeasured artist below one known to be small. Below
+// full coverage the chip is outlined rather than filled, so a number standing on
+// half the inputs does not look as solid as one standing on all four.
+function buzzChipHtml(c) {
+  if (c.buzz == null) {
+    return `<span class="li-sub" title="Nothing measurable yet — no successful scan, no follower count, and no platform that publishes RSVPs">—</span>`;
+  }
+  const full = c.coverage >= 100;
+  const style = full
+    ? 'background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;'
+    : 'background:transparent;border:1px solid var(--lime,#a7e02e);color:var(--lime,#a7e02e);font-weight:700;';
+  const t = full ? 'Scored on all four inputs' : `Scored on ${c.coverage}% of the inputs — the rest were not measured`;
+  return `<span class="role-chip" style="cursor:default;${style}" title="${escapeHtml(t)}">${c.buzz}${full ? '' : '<span style="opacity:.7">*</span>'}</span>`;
 }
 function scArtistExpand(c) {
   const bar = (l, v) => `<div style="display:flex;align-items:center;gap:8px;font-size:.78rem;"><span style="width:64px;color:var(--mid,#888)">${l}</span><span style="flex:1;height:6px;background:#2a1c36;border-radius:4px;overflow:hidden;"><i style="display:block;height:100%;width:${v}%;background:var(--lime,#a7e02e)"></i></span><span style="width:28px;text-align:right;font-variant-numeric:tabular-nums;">${v}</span></div>`;
+  // An input nobody could measure gets a greyed row saying so. Drawing it as an
+  // empty bar would read as "measured, and it is zero" — the exact confusion the
+  // score itself was fixed to stop making.
+  const gap = (l, why) => `<div style="display:flex;align-items:center;gap:8px;font-size:.78rem;opacity:.55;"><span style="width:64px;color:var(--mid,#888)">${l}</span><span style="flex:1;border-top:1px dashed var(--mid,#888);"></span><span style="text-align:right;font-size:.68rem;color:var(--mid,#888);">${escapeHtml(why)}</span></div>`;
+  const row = (l, known, v, why) => known ? bar(l, v) : gap(l, why);
+  const platNames = c.platformsArr.map(p => platformOf(p).s).join('/') || 'this platform';
+  const scanWhy = c.scanned ? 'scan failed' : 'not scanned';
   const shows = c.shows.slice(0, 10).map(s => `<div class="li-sub">${fmtDate(s.date)} · ${s.venue ? `<span data-sc-govenue="${escapeHtml(s.venue)}" style="cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px;" title="Open this venue">${escapeHtml(s.venue)}</span>` : 'NYC'} ${platTag(s.platform)}${s.attending ? ' · ' + fmtNum(s.attending) + ' RSVP' : ''}${s.pick ? ' · ⭐' : ''}${s.url ? ` · <a href="${escapeHtml(s.url)}" target="_blank" rel="noopener">tickets ↗</a>` : ''}</div>`).join('');
   return `<div style="display:grid;grid-template-columns:minmax(220px,320px) 1fr;gap:16px;padding-top:8px;align-items:start;">
     <div style="display:grid;gap:5px;">
-      <div class="li-sub" style="font-weight:700;">Buzz ${c.buzz} — how it's built</div>
-      ${bar('Demand', c.sDemand)}${bar('Reach', c.sReach)}${bar('Catalog', c.sCatalog)}
-      <div class="li-sub" style="min-height:1em;">${[c.editorial ? '⭐ +10 RA pick' : '', c.recent ? '🆕 +4 recent release' : '', c.city ? '📍 ' + escapeHtml(c.city) : ''].filter(Boolean).join(' · ')}</div>
+      <div class="li-sub" style="font-weight:700;">Buzz ${c.buzz == null ? '—' : c.buzz} — how it's built</div>
+      ${row('Plays', c.kPlays, c.sPlays, c.scanOk ? 'no tracks uploaded' : scanWhy)}
+      ${row('Reach', c.kReach, c.sReach, scanWhy)}
+      ${row('RSVP', c.kDemand, c.sDemand, platNames + ' has no RSVPs')}
+      ${row('Catalog', c.kCatalog, c.sCatalog, scanWhy)}
+      <div class="li-sub" style="font-size:.68rem;">${c.buzz == null
+        ? 'Nothing measurable yet — the score is withheld rather than shown as zero.'
+        : (c.coverage >= 100 ? 'Scored on all four inputs.' : `Scored on ${c.coverage}% of the inputs; the rest are not counted against them.`)}</div>
+      ${c.kPlays && c.topTrack ? `<div class="li-sub" style="font-size:.7rem;">▶ Top track: ${c.topTrack.permalink_url
+          ? `<a href="${escapeHtml(c.topTrack.permalink_url)}" target="_blank" rel="noopener">${escapeHtml(String(c.topTrack.title || 'untitled').slice(0, 46))}</a>`
+          : escapeHtml(String(c.topTrack.title || 'untitled').slice(0, 46))} · <strong>${fmtNum(c.topPlays)}</strong> plays${c.songCount > 1 ? ` · typical track ${fmtNum(c.medPlays)}` : ''}</div>` : ''}
+      <div class="li-sub" style="min-height:1em;">${[c.editorial ? '⭐ +8 RA pick' : '', c.recent ? '🆕 +5 recent release' : '', c.city ? '📍 ' + escapeHtml(c.city) : ''].filter(Boolean).join(' · ')}</div>
       <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;">${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a>` : ''}${c.instagram && igUrl(c.instagram) ? `<a class="hub-mini" href="${escapeHtml(igUrl(c.instagram))}" target="_blank" rel="noopener">📷 IG</a>` : ''}${watchBtn('artist', c.name, c.name, {})}</div>
     </div>
     <div><div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows (${c.showCount})</div>${shows || '<div class="li-sub">—</div>'}</div>
@@ -18046,14 +18163,14 @@ function renderMarket() {
     ${content}`;
 }
 function scOverviewRow(c) {
-  return `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(c.name)}</strong> <span class="role-chip" style="cursor:default;background:var(--lime,#a7e02e);color:#0f0814;font-weight:700;">${c.buzz}</span>${c.nyc ? ' <span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.53rem;padding:0 5px;">NYC</span>' : ''}${platTag(c.source)}
+  return `<div class="hub-li"><div class="li-main"><strong>${escapeHtml(c.name)}</strong> ${buzzChipHtml(c)}${c.nyc ? ' <span class="role-chip" style="cursor:default;background:var(--hot,#ff5ca8);color:#1a0a12;font-size:.53rem;padding:0 5px;">NYC</span>' : ''}${platTag(c.source)}
     <div class="li-sub">${c.nextDate ? fmtDate(c.nextDate) + ' · ' + escapeHtml(c.venue || '') : ''}${c.demand ? ' · ' + fmtNum(c.demand) + ' RSVP' : ''}${c.reach ? ' · ' + fmtNum(c.reach) + ' reach' : ''}</div></div>
     <span>${c.soundcloud ? `<a class="hub-mini" href="${escapeHtml(c.soundcloud)}" target="_blank" rel="noopener" title="SoundCloud">☁</a>` : ''}${watchBtn('artist', c.name, c.name, { sublabel: c.venue || '' })}</span></div>`;
 }
 function renderScOverview() {
   const evs = raState.events;
   const dowM = DOW.map((d, i) => { const met = nightMetrics(evs.filter(e => new Date(e.event_date + 'T00:00:00').getDay() === i)); return { d, i, ...met, score: nightScore(met, i) }; });
-  const top = scArtistData().slice().sort((a, b) => b.buzz - a.buzz);
+  const top = scArtistData().slice().sort((a, b) => buzzSort(b.buzz) - buzzSort(a.buzz));
   const topBuzz = top.slice(0, 6);
   const nycTop = top.filter(c => c.nyc).slice(0, 6);
   return `
@@ -18490,7 +18607,7 @@ async function loadSceneMap() {
       raState.events = ev.data || raState.events || []; raState.venues = ven.data || []; raState._scVenSig = null;
     }
     if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
-    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
+    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs,ok'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
     await ensureRadioArtists();
     await ensureLeaflet();
   } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }

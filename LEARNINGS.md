@@ -1857,3 +1857,62 @@ visible before anything is written rather than encoded invisibly in a constant.
 And the returned rows are mapped back to steps **by title, not by position**:
 assuming an insert returns in payload order is exactly the sort of assumption that
 fails silently and puts the wrong task on someone's board.
+
+---
+
+## Section 61 — A missing input is not a zero, and a zero is not always a measurement (2026-09-01)
+
+The Buzz score ranks NYC artists for radio. It blended three inputs — RSVP demand
+(0.40), follower reach (0.35), catalogue size (0.15) — each scaled against the
+current pool's maximum, plus flat bonuses. Asked to add top-track plays, the
+honest answer was that the plays were the smallest of four problems, and every one
+of them was invisible in the output.
+
+**1. The heaviest input was scoring a ticketing platform, not an artist.** RA
+publishes an attending count on all 941 of its future events. DICE publishes it on
+none of its 263, Ticketmaster on none of its 48. `Number(e.attending) || 0` turned
+that absence into a zero, so an artist whose shows happen to be sold through DICE
+lost 40% of their score for a fact about the vendor. Galantis scored **47**. Icona
+Pop, 45. Both are now in the top four. The score was not measuring buzz; it was
+measuring who sells through Resident Advisor.
+
+**2. Scaling against the pool maximum makes the number incomparable with itself.**
+Every component was `100 * log1p(x) / max(log1p(x))` across the current list, so an
+artist's score moved when somebody *else* was scanned or a bigger name appeared on
+a lineup. "72 last week, 68 now" said nothing about the artist. It also compressed
+everything: the old scores ran p25 28 to p90 59 and **nobody ever exceeded 81**,
+because the weights summed to 0.90 and the last ten points needed an RA editorial
+pick. Fixed anchors — lo scores 0, hi scores 100, log-spaced, chosen off the real
+prod spread — make the number mean the same thing every week, for the same reason
+`v_kpi_prior` refuses to compare a metric against its own latest reading (§20).
+
+**3. A failed scan looked exactly like an artist with no music.** 191 cache rows
+have `ok = false`. The dashboard was not even selecting `ok`, so a scan that failed
+contributed `0 songs, 0 followers` and scored as fact.
+
+The fix for all three is the same shape, and it is the general lesson: **an input
+that could not be measured is dropped from the weighted average and shrinks the
+DENOMINATOR, instead of entering the numerator as a zero.** What is left is a score
+over what was actually knowable, with the coverage shown next to it — 100% for
+710 artists, 70% for 381, 55% for 316. 27 artists have nothing measurable at all
+and are now shown as "—", because ranking them 0 would place them below artists we
+know to be small, which is a claim the data does not support (§26 again).
+
+**Then the part that nearly shipped wrong.** Having decided a successful scan makes
+plays "known", zero uploads made plays a known zero. That is defensible — until you
+look at who it demotes. **Ben UFO**: 109,333 followers, 2,010 RSVPs, no original
+uploads, scored **56**. Craig Richards, Joseph Capriati, Jyoty all the same. 393
+scanned artists have no tracks. These are selector DJs who play other people's
+records, and they are precisely who a radio show wants to book.
+
+The error was treating one fact as two independent measurements. **The plays of a
+catalogue that does not exist are not zero, they are undefined.** Catalogue size
+already records "uploads nothing" — counting it again as "nothing gets played"
+punishes the same fact twice. Gating plays on having at least one track puts Ben UFO
+at **76**, which is obviously right. So: `catalog = 0` is a real measurement,
+`plays` on an empty catalogue is not, and the two live one line apart.
+
+The distinction is not "is the number zero" but **"did anybody look, and was there
+anything there to look at"**. Three different absences — the platform never
+publishes it, the scan failed, there is nothing to measure — all arrive as `0` in
+JavaScript and must not all be scored as one.

@@ -4,6 +4,37 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-01 ADDENDUM #2 — Buzz score rebuilt (no migration)
+
+**Top-track plays are now in the score, and they were already in the database** -
+all 57,291 cached songs carry `playback_count`; the score simply ignored it. No
+scan, no migration.
+
+**Revisiting it found three things worse than the missing plays**, all invisible
+in the output. (1) `attending` is published by RA on all 941 future events and by
+**DICE and Ticketmaster on none** of their 311 - and it was the heaviest input at
+0.40, coerced from null to 0, so an artist was scored on which ticketing platform
+sells their show. Galantis scored 47, Icona Pop 45; both are now top four. (2)
+Every input was scaled against the **current pool maximum**, so a score moved when
+somebody else got scanned - and nobody could exceed 81, because the weights summed
+to 0.90. (3) 191 cache rows are **failed scans** and `ok` was not even being
+selected, so a failure read as "no music".
+
+**The new shape:** plays .30 / reach .30 / RSVP .25 / catalogue .15, each on a
+FIXED log anchor so the number is comparable week to week, and **any input that
+could not be measured is dropped with the weights renormalised** rather than
+entered as a zero. Coverage rides next to the score (100% for 710 artists, 70% for
+381, 55% for 316); 27 artists with nothing measurable show "-" instead of 0.
+
+**The bit that nearly shipped wrong:** counting zero uploads as zero plays scored
+**Ben UFO at 56** (109k followers, 2,010 RSVPs, no original tracks) - along with
+Craig Richards, Joseph Capriati and Jyoty, i.e. exactly the selector DJs a radio
+show wants. Plays on an empty catalogue are **undefined, not zero**; catalogue size
+already records "uploads nothing". Gated properly he scores 76. LEARNINGS SS61.
+
+Verified by recomputing both scores in Python over all 1,548 real artists pulled
+from prod, not by reading the diff. Still unclicked - Best Nights -> Artists.
+
 ## >> 2026-09-01 ADDENDUM (same laptop, no migration)
 
 **The radio week generator now auto-assigns the DJ.** 🗓 Generate week's production

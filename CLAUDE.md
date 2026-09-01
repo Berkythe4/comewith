@@ -383,6 +383,19 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   table-level anon grants since 079 (RLS was blocking the rows, so an anon GET
   returned `200 []`, never data; now it's `401`). Public station reads are
   function-only through `get-station` (service role).
+- **Buzz is scored on what could be MEASURED, and the denominator moves.** Four
+  inputs — top-track plays (.30), reach (.30), RSVP demand (.25), catalogue (.15) —
+  each mapped 0–100 against a **fixed** anchor, never against the pool maximum: a
+  pool-relative score changes when somebody else is scanned, so it cannot be
+  compared week to week. An input that could not be measured is **dropped and the
+  remaining weights renormalised**, never entered as 0, and the coverage % rides
+  next to the number. Three absences look identical in JS and must not be conflated:
+  **DICE and Ticketmaster publish no `attending` at all** (RA populates every one),
+  a scan with `ok = false` **failed** (select `ok`, or a failure reads as "no
+  music"), and **plays on an empty catalogue are undefined, not zero** — gating
+  that wrong buries the selector DJs who upload nothing, which is who a radio show
+  most wants (Ben UFO scores 56 vs 76). Catalogue size already records "uploads
+  nothing"; do not charge an artist twice for it. LEARNINGS §61.
 - **Rekordbox is the arrangement tool, not SoundCloud** (decided 2026-07-22).
   The set is bought and arranged in Rekordbox because SoundCloud isn't
   record-quality. The ① test push to SoundCloud + ↺ sync-back still exist for the
