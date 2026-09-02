@@ -383,6 +383,20 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   table-level anon grants since 079 (RLS was blocking the rows, so an anon GET
   returned `200 []`, never data; now it's `401`). Public station reads are
   function-only through `get-station` (service role).
+- **RA, DICE and Ticketmaster are all MARKETPLACES — three of one kind, not three
+  kinds.** An artist selling direct (own site, AXS, Tixr, Shotgun, Eventbrite,
+  See) is invisible to all of them, and a fourth marketplace buys catalogue, not
+  coverage. Measured: of 23 watchlisted artists only 9 had any upcoming NYC record
+  and **all 9 came from RA** — DICE and TM contributed nobody on the watchlist.
+  The kind that would close it is **artist-first** (Bandsintown / Songkick), which
+  matches the watchlist because that is already a list of artists. LEARNINGS §65.
+- **A show the feeds miss goes in by hand: `source='manual'`.** It is a normal
+  `ra_events` row (`ra_id = 'man:<slug>'`) so it flows through the window, venue
+  filter, artist pool and buzz with no special cases, and every puller scopes its
+  delete by `source`, so a refresh never wipes it. **Leave `attending` NULL** — we
+  have no RSVP number and a 0 reads as "nobody is going". A brand-new artist also
+  needs an `ra_artists` row or they never enter the pool; an artist already tracked
+  picks the show up through the lineup index on their own.
 - **Venue identity lives in the DATABASE now (208), in two mechanisms with
   different authority.** `public.normalize_venue_name()` folds accents, case,
   `&`/`and`, punctuation and whitespace — that is applied **automatically**,

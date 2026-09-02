@@ -2056,3 +2056,50 @@ any UI control whose widget type differs from the stored type. Grep for the
 neighbouring column's name — `is_active` here — and visit every hit. An
 `insert`/`upsert` with an explicit list is the dangerous one, because omitting a
 column there does not preserve it; it resets it, quietly, on the next save.
+
+---
+
+## Section 65 — Three sources of the same KIND is one source (2026-09-02)
+
+Lane 8 plays NYC in late September and the tool has never heard of him: no artist
+row, no lineup entry, no event title. The instinct is "add another feed". The
+instinct is wrong, and the reason is worth keeping.
+
+RA, DICE and Ticketmaster are all **ticketing marketplaces**. They differ in
+catalogue, not in kind. An artist who sells direct — their own site, their own
+label's platform, or a promoter on AXS / Tixr / Shotgun / Eventbrite / See — never
+enters ANY of them, so adding a fourth marketplace does not close the gap, it
+narrows one slice of it and leaves the shape of the hole exactly as it was.
+
+The measurement that settles it: of the **23 artists on Keith's own watchlist,
+only 9 had any upcoming NYC record at all — and all 9 came from RA.** DICE and
+Ticketmaster, two of the three integrations, contributed **nobody** he is actually
+watching. In the default four-week window it is 5 of 23. Charlotte de Witte,
+Artbat, Kaytranada, Adriatique, Claptone and Damian Lazarus are all watched and
+all invisible.
+
+There are two genuinely different kinds of source, and the tool only had one:
+
+* **Marketplace-first** — ask "what is on sale in this city". Complete for
+  whoever sells there, blind to everyone else, and no number of them adds up to
+  coverage.
+* **Artist-first** — ask "where is this artist playing". Bandsintown and Songkick
+  index the artist's own posted dates, so they see a show regardless of who sells
+  the ticket. That is the shape that matches the watchlist, which is already a
+  list of artists rather than a list of rooms.
+
+What shipped now is the substrate rather than the integration: a show can be
+entered **by hand** as a normal `ra_events` row with `source='manual'`, so it
+flows through the window, the venue filter, the artist pool and buzz with no
+special cases — and every puller scopes its delete by source, so a refresh can
+never wipe it. `attending` stays **null**, not 0, because we have no RSVP number
+and a zero would be read as "nobody is going" (§61).
+
+And the gap now reports itself. The watchlist used to be a list of names that
+never answered back; it now says "5 of 23 have a show in this window" and will
+name the other 18. **A blind spot that is counted stops being a blind spot** — it
+becomes a work queue, and the fix for each row is one click away.
+
+The general rule: when adding a source, ask what KIND it is. If it answers the
+same question the existing ones answer, it buys catalogue. Only a source that asks
+a different question buys coverage.

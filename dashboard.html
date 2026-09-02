@@ -18583,7 +18583,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccmixfind],[data-ra-detmixfind],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-addshow],[data-ra-addshow-for],[data-ra-watchtoggle],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccmixfind],[data-ra-detmixfind],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = scrollPos(); raState.stationOpen = !raState.stationOpen; renderRaMarket(); scrollToPos(y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -18649,6 +18649,9 @@ document.addEventListener('click', async (e) => {
   if (t.closest('[data-ra-noscoggle]')) { raState.showNoSc = !raState.showNoSc; renderRaMarket(); return; }
   if (t.closest('[data-ra-nyctoggle]')) { raState.nycOnly = !raState.nycOnly; renderRaMarket(); return; }
   if (t.closest('[data-ra-addentity]')) { raAddOpen(); return; }
+  if (t.closest('[data-ra-watchtoggle]')) { raState.watchOpen = !raState.watchOpen; renderRaMarket(); return; }
+  const shf = t.closest('[data-ra-addshow-for]'); if (shf) { raAddShowOpen(shf.dataset.raAddshowFor); return; }
+  if (t.closest('[data-ra-addshow]')) { raAddShowOpen(''); return; }
   const rn = t.closest('[data-ra-rename]'); if (rn) return raSetPlaylistName();
   const pp = t.closest('[data-ra-play]'); if (pp) { raPlay(pp.dataset.raPlay, pp.dataset.raName); return; }
   const sg = t.closest('[data-ra-songs]'); if (sg) { raToggleSongs(sg.dataset.raSongs); return; }
@@ -19119,6 +19122,7 @@ function renderRaRadio() {
     <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${raState.sourceFilter
       ? `${list.length} from ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()}`
       : `${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}`}</span></h3></div>
+    ${renderWatchCoverage()}
     ${(venueNote || hiddenNote) ? `<div class="kpi-hint" style="margin:0 0 7px;">${[venueNote, hiddenNote].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>` : ''}
     <div class="hub-list ra-zebra" id="raArtistList">${cards || `<div class="hub-empty">${raState.sourceFilter ? `No ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()} shows in this window — widen the window above or hit “↻ Pull shows”.` : raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
@@ -20210,6 +20214,117 @@ async function raAddSave() {
     toast(`Saved venue ${name} — it'll anchor the heat-map`, 'ok');
     closeKpi();
   }
+}
+// ── Shows the feeds cannot see ──────────────────────────────────────────────
+// Every source we pull is a TICKETING MARKETPLACE — RA, DICE, Ticketmaster. An
+// artist who sells direct, or through a platform we do not read (AXS, Tixr,
+// Shotgun, Eventbrite, See), is invisible to all three and always will be, no
+// matter how many marketplaces get added. Measured on prod: of 23 watchlisted
+// artists only 9 had any upcoming NYC record, and every one of those 9 came from
+// RA — DICE and Ticketmaster contributed nobody Keith is actually watching.
+//
+// So there has to be a way to enter a show we know about by hand. It writes a
+// normal ra_events row with source='manual', which means it flows through
+// everything downstream for free — the window, the venue filter, the artist
+// pool, buzz. All three pullers scope their delete by source, so nothing here is
+// ever wiped by a refresh.
+function raAddShowOpen(prefillArtist) {
+  const today = new Date().toISOString().slice(0, 10);
+  openKpi('🎫 Add a show we know about',
+    'For gigs our three feeds miss — an artist selling direct, or a platform we do not read',
+    `<div class="modal-form-row"><label for="shArtists">Artist(s) *</label>
+       <input class="modal-input" id="shArtists" value="${escapeHtml(prefillArtist || '')}" placeholder="Lane 8, support act">
+       <div class="kpi-hint">Separate several with commas — they all go on the bill.</div></div>
+     <div class="modal-grid2">
+       <div><label class="modal-label">Date *</label><input class="modal-input" type="date" id="shDate" value="${today}"></div>
+       <div><label class="modal-label">Venue *</label><input class="modal-input" id="shVenue" placeholder="Brooklyn Mirage" list="shVenueList">
+         <datalist id="shVenueList">${(raState.venues || []).map(v => `<option value="${escapeHtml(v.name)}">`).join('')}</datalist></div>
+     </div>
+     <div class="modal-form-row"><label for="shUrl">Ticket link</label>
+       <input class="modal-input" id="shUrl" type="url" placeholder="https://…"></div>
+     <div class="modal-form-row"><label for="shTitle">Event name</label>
+       <input class="modal-input" id="shTitle" placeholder="optional — defaults to the artist name"></div>
+     <div class="kpi-hint">Saved as a <b>manual</b> show. A refresh never overwrites it, and it behaves like any other
+       show from here: it counts in the window, under its venue, and in the artist pool.</div>`,
+    raAddShowSave, 'Add the show');
+}
+async function raAddShowSave() {
+  const v = (id) => ($(id)?.value || '').trim();
+  const artists = v('shArtists').split(',').map(s => s.trim()).filter(Boolean);
+  const date = v('shDate'), venue = v('shVenue');
+  if (!artists.length) throw new Error('Name at least one artist');
+  if (!date) throw new Error('Pick the date');
+  if (!venue) throw new Error('Name the venue');
+  const url = v('shUrl');
+  const title = v('shTitle') || artists.join(', ');
+  const slug = (date + '-' + artists[0] + '-' + venue).toLowerCase().replace(/[^a-z0-9]+/g, '-').slice(0, 60);
+  const row = {
+    ra_id: 'man:' + slug, title, event_date: date, venue_name: venue,
+    // attending stays NULL on purpose — we have no RSVP number, and a 0 would be
+    // read as "nobody is going" by the buzz score.
+    lineup: artists.map(n => ({ name: n })),
+    source: 'manual', content_url: url || null, is_ticketed: !!url,
+    fetched_at: new Date().toISOString(),
+  };
+  const { error } = await sb.from('ra_events').upsert(row, { onConflict: 'ra_id' });
+  if (error) throw error;
+  // An artist with no ra_artists row never enters the pool, however many bills
+  // they are on — raWindowPool() iterates that table. One is created only when
+  // the name is new; an artist we already track keeps their existing row and
+  // simply picks this show up through the lineup index.
+  const known = new Set((raState.artists || []).map(a => (a.name || '').trim().toLowerCase()));
+  const fresh = artists.filter(n => !known.has(n.toLowerCase()));
+  if (fresh.length) {
+    const rows = fresh.map(n => ({
+      ra_id: 'man_' + n.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+      name: n, source: 'manual', is_partner: false,
+      next_event_date: date, next_venue: venue, next_event_title: title,
+      next_event_url: url || null, fetched_at: new Date().toISOString(),
+    }));
+    const { error: ae } = await sb.from('ra_artists').upsert(rows, { onConflict: 'ra_id' });
+    if (ae) throw new Error('Show saved, but the artist row failed: ' + ae.message);
+  }
+  closeKpi();
+  toast(`Added ${title} — ${fresh.length ? fresh.length + ' new artist(s) now in the pool' : 'on the existing artists'}`, 'ok');
+  await loadRaMarket();
+}
+
+// Who we said we care about, against what the feeds actually found. A watchlist
+// that never reports back is a list of names; this is what makes it a check.
+function raWatchCoverage() {
+  const { start, cut } = raWindow();
+  const idx = raShowIndex();
+  const dated = new Set();
+  raWindowPool().forEach(a => {
+    if (a.next_event_date && a.next_event_date >= start && a.next_event_date <= cut) {
+      dated.add((a.name || '').trim().toLowerCase());
+    }
+  });
+  return (raState.watchList || [])
+    .filter(w => w.kind === 'artist' && !w.archived && (w.label || '').trim())
+    .map(w => {
+      const k = (w.label || '').trim().toLowerCase();
+      const shows = (idx[k] || []).filter(s => s.date >= start && s.date <= cut);
+      return { label: w.label, found: shows.length > 0 || dated.has(k), next: shows[0] || null };
+    })
+    .sort((a, b) => (a.found === b.found ? a.label.localeCompare(b.label) : (a.found ? 1 : -1)));
+}
+function renderWatchCoverage() {
+  const cov = raWatchCoverage();
+  if (!cov.length) return '';
+  const missing = cov.filter(c => !c.found);
+  const open = raState.watchOpen;
+  return `<div class="kpi-hint" style="margin:0 0 8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <span>👁 <b>${cov.length - missing.length} of ${cov.length}</b> watchlisted artists have a show in this window${missing.length ? ` · <span style="color:var(--gold,#B5791F)">${missing.length} with none found</span>` : ''}</span>
+      ${missing.length ? `<button class="hub-mini" data-ra-watchtoggle>${open ? 'hide' : 'who?'}</button>` : ''}
+      <button class="hub-mini" data-ra-addshow title="Enter a gig our feeds cannot see">🎫 add a show</button>
+    </div>
+    ${open && missing.length ? `<div class="hub-list ra-zebra" style="margin-bottom:10px;">
+      <div class="li-sub" style="padding:6px 0;">No record of these in the next ${raState.radioWeeks} weeks. That can mean they are not playing NYC — or that they sell through a platform we do not read (AXS, Tixr, Shotgun, Eventbrite, or their own site). If you know they are playing, add the show.</div>
+      ${missing.map(m => `<div class="hub-li" style="display:flex;align-items:center;gap:8px;padding:5px 0;">
+        <strong style="flex:1;">${escapeHtml(m.label)}</strong>
+        <button class="hub-mini" data-ra-addshow-for="${escapeHtml(m.label)}">🎫 add their show</button></div>`).join('')}
+    </div>` : ''}`;
 }
 // Dropping a song = considered and PASSED → permanent song memory (marks it when
 // researching later + auto-carries it into the next station at finalize). Shared

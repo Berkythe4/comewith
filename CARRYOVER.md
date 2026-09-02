@@ -4,6 +4,39 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #6 — Capture gap: Lane 8 (no migration)
+
+**Lane 8 is genuinely absent** - no `ra_artists` row, no lineup entry, no event
+title. Only trace is a July Qrion event whose TITLE mentions "This Never Happened".
+
+**The cause is structural, not a bug.** RA, DICE and Ticketmaster are all
+**ticketing marketplaces** - three of one KIND. An artist selling direct is
+invisible to all three, and a fourth marketplace would not change that.
+**Of the 23 artists on the watchlist, only 9 have ANY upcoming NYC record, and all
+9 came from RA** - DICE and Ticketmaster contributed nobody Keith watches. In the
+default 4-week window it is **5 of 23**. Missing: Charlotte de Witte, Artbat,
+Kaytranada, Adriatique, Claptone, Damian Lazarus, Sammy Virji and others (some of
+those simply may not be playing NYC - the tool cannot tell the difference, which
+is the point).
+
+**Shipped now, no external dependency:**
+1. **🎫 Add a show** in the radio tab - artists / date / venue / ticket link, saved
+   as a normal `ra_events` row with `source='manual'` and `ra_id='man:<slug>'`. It
+   flows through the window, the venue filter, the artist pool and buzz with no
+   special cases; all three pullers scope their delete by `source`, so a refresh
+   never wipes it. `attending` stays NULL, never 0. A brand-new name also gets an
+   `ra_artists` row (without one they never enter the pool); an artist already
+   tracked picks the show up through the lineup index.
+2. **Watchlist coverage strip** - "5 of 23 watchlisted artists have a show in this
+   window", expandable to name the rest, each with a one-click "add their show".
+   The watchlist used to be a list of names that never answered back.
+
+**NOT built, needs a decision (needs an API key + an edge-function deploy):** an
+**artist-first** source - Bandsintown or Songkick - keyed to the watchlist. That is
+the only kind of source that closes the class, because it indexes the artist's own
+posted dates regardless of who sells the ticket. Recommended; ask Keith.
+LEARNINGS SS65.
+
 ## >> 2026-09-02 ADDENDUM #5 — Links page socials (MIGRATIONS 209 + 210)
 
 **Prod max migration is now 210.** `/links` is **PUBLISHED and live** and Keith has
