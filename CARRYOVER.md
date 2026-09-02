@@ -4,6 +4,29 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #8 — Lane 8 watched, and a way to watch anyone
+
+**Lane 8 is on the watchlist** (`kind='artist'`, `ref='lane 8'`, reason
+`personal`, with a note saying why). That is a prod DATA row, not a migration -
+watchlist entries are user data. **Watchlist artists: 24.** `sublabel` was left
+NULL rather than guessing a SoundCloud URL.
+
+**You can now watch an artist who is NOT in the pool.** The ☆ button only ever
+existed on artists a feed had already found, which is exactly backwards for what
+this list now does - the point of the watchlist is the artists our feeds CANNOT
+see, and Lane 8 could not be added from anywhere in the UI. New **＋ watch an
+artist** button in the radio tab: name, why, optional link. `(kind, ref)` is
+unique so re-adding someone un-archives them instead of throwing a duplicate-key
+error at the user.
+
+**The tooltip carries the explanation** (`WATCH_HOWTO`, one constant used on the
+button, in the modal, and echoed on the tour button): the watchlist is who
+Bandsintown gets asked about, and it is the only thing keeping that check
+electronic, because Bandsintown does not report genre.
+
+The strip also renders on an EMPTY watchlist - otherwise the only way to add the
+first artist would be a button that does not appear until you have added one.
+
 ## >> 2026-09-02 ADDENDUM #7 — Bandsintown, the first artist-first source
 
 **`pull-bandsintown` is DEPLOYED to prod (version 1, verify_jwt on) and is a
