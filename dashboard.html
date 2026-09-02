@@ -17489,7 +17489,21 @@ let _raShowIdx = null, _raShowIdxSrc = null;
 //
 // Group and filter on the KEY; show the label. Punctuation folds too, or
 // "No. 9" and "No.9" stay apart.
-const venueKey = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// MIRRORS public.normalize_venue_name() (migration 208) — accents folded, lower,
+// & -> and, punctuation and whitespace collapsed. The SQL one is the source of
+// truth: it is what resolves ra_events.venue_id and what the alias table is keyed
+// on. This copy exists only to group spellings the database has NOT resolved yet.
+// If you change one, change the other.
+const VENUE_ACCENTS = { à: 'a', á: 'a', â: 'a', ã: 'a', ä: 'a', å: 'a', ç: 'c', è: 'e', é: 'e', ê: 'e', ë: 'e', ì: 'i', í: 'i', î: 'i', ï: 'i', ñ: 'n', ò: 'o', ó: 'o', ô: 'o', õ: 'o', ö: 'o', ø: 'o', ù: 'u', ú: 'u', û: 'u', ü: 'u', ý: 'y', ÿ: 'y' };
+const venueKey = (v) => String(v || '').toLowerCase()
+  .replace(/[àáâãäåçèéêëìíîïñòóôõöøùúûüýÿ]/g, c => VENUE_ACCENTS[c] || c)
+  .replace(/&/g, ' and ')
+  .replace(/[^a-z0-9]+/g, ' ').trim();
+// The grouping identity for a show's room: the venue the DATABASE resolved when
+// it has one, falling back to the folded name for spellings still in the review
+// queue. Preferring venue_id means an alias Keith rules on takes effect here too,
+// without the browser having to know the rule.
+const venueIdent = (e) => (e && e.venue_id) ? 'v:' + e.venue_id : venueKey(e && e.venue_name);
 // The spelling to display for a key: whichever is most common, preferring one
 // that is not shouted when it is a tie — feeds like DICE upper-case everything.
 function venueLabelPicker() {
@@ -17617,7 +17631,7 @@ async function loadRaMarket() {
     sbAll(() => sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
     sbAll(() => sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'), 'soundcloud'),
     sbAll(() => sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true), 'id'),
-    sbAll(() => sb.from('ra_events').select('ra_id,event_date,venue_name,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
+    sbAll(() => sb.from('ra_events').select('ra_id,event_date,venue_name,venue_id,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
   ]);
   raState.events = ev.data || [];
   if (ar.error) { $('raMarketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ar.error.message)}</div>`; return; }
@@ -17777,9 +17791,9 @@ const nightScore = (met, dow) => met.opp * (DOW_WEIGHT[dow] ?? 0.5);
 async function loadMarket() {
   $('marketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading market…</div>';
   const [ev, mine, ven] = await Promise.all([
-    sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
+    sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,venue_id,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
     sb.from('events').select('name,event_date,total_attendance').not('total_attendance', 'is', null),
-    sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
+    sb.from('venues').select('id,name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
   ]);
   if (ev.error) { $('marketBody').innerHTML = `<div class="panel-state err">${escapeHtml(ev.error.message)}</div>`; return; }
   raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
@@ -17976,6 +17990,12 @@ function scVenueData() {
   const sig = evs.length + ':' + (raState.venues || []).length + ':' + radioSet.size;
   if (raState._scVenSig === sig && raState._scVenData) return raState._scVenData;
   const vByName = {}; (raState.venues || []).forEach(v => vByName[venueKey(v.name)] = v);
+  const vById = {}; (raState.venues || []).forEach(v => { if (v.id) vById[v.id] = v; });
+  // When the database resolved the room, IT names the row — that is the whole
+  // point of a canonical venue, and it is the only way an alias Keith ruled on
+  // ("Westlight Rooftop at The William Vale" -> its venue) shows up here at all.
+  const identLabel = (e) => (e.venue_id && vById[e.venue_id])
+    ? vById[e.venue_id].name : vlabel.label(venueKey(e.venue_name));
   const v = {};
   // Keyed canonically, not by the raw string: "Refuge" / "REFUGE" / "REFUGE "
   // are one room, and keying on the literal split it into three rows holding a
@@ -17985,8 +18005,8 @@ function scVenueData() {
   evs.forEach(e => { if (e.venue_name) vlabel.add(e.venue_name); });
   evs.forEach(e => {
     const raw = (e.venue_name || '').trim(); if (!raw) return;
-    const nm = venueKey(raw); if (!nm) return;
-    const x = v[nm] || (v[nm] = { name: vlabel.label(nm), key: nm, shows: 0, demandSum: 0, demandMax: 0, genres: {}, platforms: new Set(), artists: new Set(), picks: 0, ticketed: 0, nextDate: null, showList: [] });
+    const nm = venueIdent(e); if (!nm) return;
+    const x = v[nm] || (v[nm] = { name: identLabel(e), key: nm, venueId: e.venue_id || null, shows: 0, demandSum: 0, demandMax: 0, genres: {}, platforms: new Set(), artists: new Set(), picks: 0, ticketed: 0, nextDate: null, showList: [] });
     x.shows++; const at = Number(e.attending) || 0;
     x.demandSum += at; x.demandMax = Math.max(x.demandMax, at);
     (e.genres || []).forEach(g => x.genres[g] = (x.genres[g] || 0) + 1);
@@ -18005,7 +18025,7 @@ function scVenueData() {
     x.radioArtists = [...x.artists].filter(a => radioSet.has(a.toLowerCase()));
     x.onRadio = x.radioArtists.length > 0;
     x.showList.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const rec = vByName[x.key];
+    const rec = x.venueId ? (vById[x.venueId] || vByName[x.key]) : vByName[x.key];
     x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
     x.ra_url = rec?.ra_url || null; x.ticket_url = rec?.ticket_url || null;
     x.lat = rec?.lat ?? null; x.lng = rec?.lng ?? null;
@@ -18151,6 +18171,113 @@ function scArtistExpand(c) {
     <div><div class="li-sub" style="font-weight:700;margin-bottom:2px;">Upcoming shows (${c.showCount})</div>${shows || '<div class="li-sub">—</div>'}</div>
   </div>`;
 }
+// ── Venue name review (migration 208) ───────────────────────────────────────
+// Deterministic folds are already applied in the database and need no review.
+// What lands here is the judgement: a spelling with no canonical room. The
+// suggestion is trigram similarity and is NEVER applied on its own — "green room"
+// and "green room 42" score 0.87 and are different venues.
+async function loadVenueReview() {
+  const [q, h, v] = await Promise.all([
+    sb.from('v_venue_name_review').select('*').order('events', { ascending: false }).limit(60),
+    sb.from('v_venue_link_health').select('*').maybeSingle(),
+    sb.from('venues').select('id,name').is('deleted_at', null).order('name'),
+  ]);
+  marketState.vrQueue = q.data || [];
+  marketState.vrHealth = h.data || null;
+  marketState.vrVenues = v.data || [];
+  marketState.vrErr = q.error ? q.error.message : '';
+  renderMarket();
+}
+function renderVenueReview() {
+  const q = marketState.vrQueue, h = marketState.vrHealth;
+  if (marketState.vrErr) return `<div class="panel-state err">${escapeHtml(marketState.vrErr)}</div>`;
+  if (!q) return `<div style="margin-bottom:10px;"><button class="hub-btn" data-vr-load>🏷 Check venue names</button>
+    <span class="li-sub" style="margin-left:8px;">Find misspelled and duplicate venue names, and link them to one room.</span></div>`;
+  const pct = h && h.events_with_a_name ? Math.round(100 * h.events_linked / h.events_with_a_name) : 0;
+  const opts = (marketState.vrVenues || []).map(v => `<option value="${escapeHtml(v.id)}">${escapeHtml(v.name)}</option>`).join('');
+  const rows = q.map(r => {
+    const sug = r.suggest_venue_id
+      ? `<button class="hub-mini" data-vr-link="${escapeHtml(r.example_raw)}" data-vr-venue="${escapeHtml(r.suggest_venue_id)}" title="Link this spelling to ${escapeHtml(r.suggest_venue_name)} and re-point its ${r.events} event(s)">→ ${escapeHtml(r.suggest_venue_name)} <span style="opacity:.6">${Math.round(r.suggest_score * 100)}%</span></button>`
+      : '<span class="li-sub" style="font-size:.68rem;">no close match</span>';
+    return `<div class="hub-li" style="display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:6px 0;">
+      <div style="flex:1 1 220px;min-width:0;"><strong>${escapeHtml(r.example_raw)}</strong>
+        <div class="li-sub" style="font-size:.68rem;">${r.events} event${r.events === 1 ? '' : 's'} · ${escapeHtml(r.sources || '')} · ${escapeHtml(String(r.first_seen || '').slice(0, 10))} → ${escapeHtml(String(r.last_seen || '').slice(0, 10))}</div></div>
+      ${sug}
+      <select class="modal-select" data-vr-pick="${escapeHtml(r.example_raw)}" style="max-width:170px;font-size:.76rem;padding:4px 6px;"><option value="">link to…</option>${opts}</select>
+      <button class="hub-mini" data-vr-new="${escapeHtml(r.example_raw)}" title="Create this as a new venue and link its events">+ new venue</button>
+      <button class="hub-mini" data-vr-ignore="${escapeHtml(r.example_raw)}" title="Not a venue — stop showing it here">not a venue</button>
+    </div>`;
+  }).join('');
+  return `<details class="lk-sec" style="margin-bottom:12px;" open><summary>🏷 Venue names<span class="lk-count">${h ? `${h.events_linked} of ${h.events_with_a_name} events linked · ${h.spellings_unresolved} to review` : ''}</span></summary>
+    <div class="lk-body">
+      <div class="kpi-hint" style="margin:2px 0 10px;">
+        Spellings that differ only by case, accents, punctuation or spacing are merged automatically and never appear here.
+        These are the ones that need a decision. The <b>%</b> is how similar the name is — a suggestion, not a rule:
+        <i>Green Room</i> and <i>Green Room 42</i> are 87% similar and are different venues.
+        Linking one re-points every past event that used that spelling.
+        ${h ? `<br><b>${pct}%</b> of events with a venue name are linked to a room.` : ''}
+      </div>
+      <div class="hub-list ra-zebra">${rows || '<div class="hub-empty">Every venue name is linked. Nothing to review.</div>'}</div>
+      <div style="margin-top:8px;"><button class="hub-mini" data-vr-load>↻ refresh</button></div>
+    </div></details>`;
+}
+async function vrApply(fn, okMsg) {
+  try {
+    const n = await fn();
+    // The ruling re-pointed rows in the database; the copy in the browser still
+    // holds the old venue_id, so re-read the events or the tab keeps showing the
+    // grouping that was just corrected.
+    const { data } = await sbAll(() => sb.from('ra_events')
+      .select('ra_id,title,event_date,venue_name,venue_id,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at')
+      .gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id');
+    if (data) raState.events = data;
+    raState._scVenSig = null; raState._scArtSig = null; raState._buzzSig = null;
+    const { data: vs } = await sb.from('venues').select('id,name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null);
+    if (vs) raState.venues = vs;
+    toast(okMsg(n), 'ok');
+    await loadVenueReview();
+  } catch (e) { toast(e.message || String(e), 'err'); }
+}
+$('panel-market').addEventListener('click', async (e) => {
+  const t = e.target;
+  if (t.closest('[data-vr-load]')) { await loadVenueReview(); return; }
+  const lk = t.closest('[data-vr-link]');
+  if (lk) {
+    const raw = lk.dataset.vrLink, vid = lk.dataset.vrVenue;
+    await vrApply(async () => {
+      const { data, error } = await sb.rpc('link_venue_alias', { p_alias_raw: raw, p_venue_id: vid });
+      if (error) throw error; return data;
+    }, n => `Linked — ${n} event${n === 1 ? '' : 's'} re-pointed`);
+    return;
+  }
+  const nw = t.closest('[data-vr-new]');
+  if (nw) {
+    const raw = nw.dataset.vrNew;
+    if (!confirm(`Create "${raw}" as a new venue and link its events to it?`)) return;
+    await vrApply(async () => {
+      const { error } = await sb.rpc('create_venue_from_name', { p_name: raw });
+      if (error) throw error; return raw;
+    }, () => 'Venue created and linked');
+    return;
+  }
+  const ig = t.closest('[data-vr-ignore]');
+  if (ig) {
+    const raw = ig.dataset.vrIgnore;
+    await vrApply(async () => {
+      const { error } = await sb.rpc('link_venue_alias', { p_alias_raw: raw, p_venue_id: null, p_note: 'not a venue' });
+      if (error) throw error; return 0;
+    }, () => `"${raw}" marked as not a venue`);
+  }
+});
+$('panel-market').addEventListener('change', async (e) => {
+  const pick = e.target.closest('[data-vr-pick]');
+  if (!pick || !pick.value) return;
+  const raw = pick.dataset.vrPick, vid = pick.value;
+  await vrApply(async () => {
+    const { data, error } = await sb.rpc('link_venue_alias', { p_alias_raw: raw, p_venue_id: vid });
+    if (error) throw error; return data;
+  }, n => `Linked — ${n} event${n === 1 ? '' : 's'} re-pointed`);
+});
 function renderScVenues() {
   const f = marketState;
   const full = scVenueData();
@@ -18173,7 +18300,7 @@ function renderScVenues() {
     </tr>${exp ? `<tr><td colspan="7" style="padding:2px 10px 12px;">${scVenueExpand(x)}</td></tr>` : ''}`;
   }).join('');
   const opt = (v, l, cur) => `<option value="${escapeHtml(v)}"${cur === v ? ' selected' : ''}>${escapeHtml(l)}</option>`;
-  return `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
+  return renderVenueReview() + `<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px;">
       <input class="modal-input" data-sc-vsearch placeholder="🔎 Venue or genre…" value="${escapeHtml(f.vSearch)}" style="flex:1 1 200px;min-width:160px;">
       <select class="modal-select" data-sc-vplatform style="max-width:160px;"><option value="">All platforms</option>${['ra', 'dice', 'tm'].map(s => opt(s, platformOf(s).l, f.vPlatform)).join('')}</select>
     </div>
@@ -18668,8 +18795,8 @@ async function loadSceneMap() {
   try {
     if (!raState.events?.length || !(raState.venues || []).some(v => v.lat != null)) {
       const [ev, ven] = await Promise.all([
-        raState.events?.length ? Promise.resolve({ data: raState.events }) : sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
-        sb.from('venues').select('name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
+        raState.events?.length ? Promise.resolve({ data: raState.events }) : sbAll(() => sb.from('ra_events').select('ra_id,title,event_date,venue_name,venue_id,attending,is_ticketed,is_pick,genres,content_url,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
+        sb.from('venues').select('id,name,area,capacity,ra_url,ticket_url,is_partner,lat,lng').is('deleted_at', null),
       ]);
       raState.events = ev.data || raState.events || []; raState.venues = ven.data || []; raState._scVenSig = null;
     }

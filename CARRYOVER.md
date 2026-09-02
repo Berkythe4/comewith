@@ -4,6 +4,41 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #4 — Venue normalization (MIGRATION 208, applied)
+
+**Prod max migration is now 208.** Venue identity moved into the database, in two
+mechanisms with deliberately different authority:
+
+- **Deterministic folds apply automatically.** `normalize_venue_name()` folds
+  accents, case, `&`/`and`, punctuation, whitespace. It merged the 5 duplicate
+  rows inside `venues` itself (incl. `'Acoustik Garden Lounge'` entered twice -
+  survivors chosen by linked events, then curated detail, then age; `events` and
+  `venue_contacts` re-pointed, losers soft-deleted) and **linked 2,745 of 3,217
+  historical events** on apply. `venues.name_norm` is a generated column with a
+  unique index over live rows, so a duplicate cannot come back.
+- **Fuzzy similarity only SUGGESTS.** `v_venue_name_review` (pg_trgm) lists the
+  203 unresolved spellings heaviest-first with the closest room and a score.
+  **No threshold separates `randall s island`/`randalls island` (0.97, same) from
+  `green room`/`green room 42` (0.87, different)**, so nothing auto-applies.
+
+**`ra_events.venue_name` still holds exactly what the feed sent**; the new
+`venue_id` is the resolved room, set by a trigger on write. Never normalise in
+place. `link_venue_alias()` writes the alias AND re-points every historical event
+with that spelling in ONE transaction; `create_venue_from_name()` does both plus
+the venue. `venue_aliases.status = 'ignored'` is how `TBA` / `listen` stop coming
+back to the top of the queue.
+
+**Deliberately NOT folded:** a leading "The", and the feeds' `TBA - ` prefix.
+Both plausible, neither a real collision in the data - a fold ahead of evidence
+merges rooms that differ. LEARNINGS SS63.
+
+**UI:** Best Nights -> Venues now opens with a 🏷 Venue names panel - queue,
+suggestion with %, link / + new venue / not a venue, and a header saying how much
+of the history is linked. **Unclicked.** The RPCs were verified end to end inside
+the dry-run transaction as a real admin (creating a venue from "Westlight Rooftop
+at The William Vale" re-pointed its 34 events), and all four new functions answer
+anon **401**.
+
 ## >> 2026-09-02 ADDENDUM #3 — Venue filter audit (no migration)
 
 Keith: "when I isolate refuge and industry city I only see one artist." **Three

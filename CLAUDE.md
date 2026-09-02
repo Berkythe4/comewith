@@ -383,6 +383,27 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   table-level anon grants since 079 (RLS was blocking the rows, so an anon GET
   returned `200 []`, never data; now it's `401`). Public station reads are
   function-only through `get-station` (service role).
+- **Venue identity lives in the DATABASE now (208), in two mechanisms with
+  different authority.** `public.normalize_venue_name()` folds accents, case,
+  `&`/`and`, punctuation and whitespace — that is applied **automatically**,
+  because two names equal after it are the same room by construction.
+  Trigram similarity **only ever suggests**, in `v_venue_name_review`: no cutoff
+  separates `randall s island`/`randalls island` (0.97, same) from `green room`/
+  `green room 42` (0.87, different), so a person rules and `venue_aliases` stores
+  the decision. **Never auto-apply a fuzzy match** — a wrong merge rewrites
+  history, which is what this exists to prevent. LEARNINGS §63.
+- **`ra_events.venue_name` keeps what the feed sent; `venue_id` is the room.**
+  Never normalise in place — the raw string is the only evidence of what the
+  source said, and the only way to re-derive a ruling that turns out wrong.
+  `link_venue_alias()` writes the alias AND re-points the history in one
+  transaction; do not split it into two client calls.
+- **Do not invent new folds.** A leading "The" and the feeds' "TBA - " prefix are
+  plausible and are deliberately NOT folded — neither is a real collision in the
+  data, and a fold ahead of evidence merges rooms that differ, silently.
+- **`venueKey()` in `dashboard.html` MIRRORS `normalize_venue_name()`** and is only
+  for spellings the database has not resolved. The SQL is the source of truth;
+  change one, change the other. Prefer `venueIdent(e)` (the resolved `venue_id`
+  when present) for grouping.
 - **Venue names are FREE TEXT from three feeds — always group on `venueKey()`.**
   Prod holds `'Refuge'`, `'REFUGE'` and `'REFUGE '` (trailing space) as three
   strings; 155 of them are 149 real rooms (also Alphaville/ALPHAVILLE, Drom/DROM,

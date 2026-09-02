@@ -1967,3 +1967,58 @@ Before trusting "there is only one artist here", check whether the key matched,
 whether the projection could represent the answer, whether a default filter ate it,
 and whether the source data was ever collected. Here all four were wrong at once,
 and each alone would have looked like a quiet, plausible truth.
+
+---
+
+## Section 63 — Two mechanisms, because no single threshold separates them (2026-09-02)
+
+Asked to auto-match misspelled venue names to one canonical room, the tempting
+build is one similarity score and a cutoff. The data refuses it. On prod:
+
+    randall s island   <->  randalls island        0.97   same room
+    hotel 50 bowery    <->  hotel 50 bowery ny     0.91   same room
+    green room         <->  green room 42          0.87   DIFFERENT venues
+    314 scholes        <->  314 scholes st         0.88   same room
+    brooklyn army terminal <-> … pier 4            0.86   different spaces
+
+There is no cutoff that keeps the first four and rejects the third. A score is a
+measure of *string* similarity and the question is about *places*, so similarity
+can raise the question but must never answer it.
+
+So the feature is **two mechanisms with different authority**:
+
+**Deterministic folds apply automatically, with no review.** `normalize_venue_name()`
+folds accents, case, `&`/`and`, punctuation and whitespace. Two names equal after
+that are the same room by construction — there is no judgement in it, so asking a
+human to confirm it would be theatre. This alone merged `'Refuge'`/`'REFUGE'`/
+`'REFUGE '`, `'Crossroads Cafe'`/`'Crossroads Café'`, `'telos.haus'`/`'Telos Haus'`,
+`'Dead Letter No. 9'`/`'No.9'`, five duplicate rows inside the `venues` table
+itself (including `'Acoustik Garden Lounge'` entered twice), and linked **2,745 of
+3,217 historical events** on the spot.
+
+**Fuzzy similarity only ever suggests.** It fills a review queue ordered by how
+many events each spelling holds, shows the closest room with its score, and waits.
+A wrong merge here silently rewrites history — which is the exact thing the
+feature exists to protect — so the cost of a bad automatic decision is far higher
+than the cost of a click.
+
+**What is deliberately NOT folded is as important as what is.** A leading "The"
+and the feeds' "TBA - " prefix are both plausible rules, and neither appears as a
+real collision in the data today. A fold invented ahead of evidence is
+indistinguishable from a bug: it merges rooms that differ and leaves nothing
+behind to show it happened. They stay suggestions.
+
+**Keep the raw string; add a resolved id.** `ra_events.venue_name` still holds
+exactly what the feed sent, and `venue_id` is the room it resolves to. Normalising
+in place would have destroyed the only record of what the source actually said,
+and left no way to re-derive a ruling that turns out wrong. The alias table is the
+same idea: every judgement is a row, so it can be read, changed, or disagreed with
+later. "Not a venue" (`status = 'ignored'`) is a stored decision too — otherwise
+`TBA` and `listen` climb back to the top of the queue every week and the queue
+teaches you to ignore it.
+
+**The alias and the back-link must happen together.** `link_venue_alias()` writes
+the alias *and* re-points every historical event with that spelling, in one
+transaction. As two client calls it eventually fails halfway and leaves a venue
+with a correct alias and 34 events still pointing at nothing — a state nobody
+would think to look for.

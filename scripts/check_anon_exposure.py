@@ -104,6 +104,11 @@ MUST_BE_EMPTY = [
     # --- link-in-bio pages (207) ---
     # The tables hold DRAFT pages - a slug and a set of links Keith has not
     # published yet. v_link_click_stats is how each link is performing.
+    # --- venue normalisation (208) ---
+    ("venue_aliases", "which venue spellings map to which room"),
+    ("v_venue_name_review", "the venue names still awaiting a ruling"),
+    ("v_venue_link_health", "how much of the event history is linked"),
+    # --- link-in-bio pages (207) ---
     ("link_pages", "unpublished link-in-bio pages"),
     ("link_items", "links on unpublished pages, including scheduled ones"),
     ("v_link_click_stats", "how many people click each link"),
