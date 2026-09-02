@@ -17477,6 +17477,40 @@ function raWindow() {
 // ra_events hold every date, so index those. Memoized on the events array, which
 // a pull replaces wholesale.
 let _raShowIdx = null, _raShowIdxSrc = null;
+// ── Venue identity ──────────────────────────────────────────────────────────
+// Venue names arrive as free text from three ticketing feeds and are NOT
+// consistent. On prod today the artist pool holds "Refuge", "REFUGE" and
+// "REFUGE " (trailing space) as three separate strings — so the venue dropdown
+// listed three Refuges, two of them rendering identically, holding 23, 1 and 1
+// artists. Picking one of the look-alikes is how a room with two dozen artists
+// shows exactly one. Same story for Alphaville/ALPHAVILLE, Drom/DROM, H0l0/H0L0,
+// public records/Public Records and "Dead Letter No. 9"/"Dead Letter No.9":
+// 161 stored strings for ~155 real rooms.
+//
+// Group and filter on the KEY; show the label. Punctuation folds too, or
+// "No. 9" and "No.9" stay apart.
+const venueKey = (v) => String(v || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+// The spelling to display for a key: whichever is most common, preferring one
+// that is not shouted when it is a tie — feeds like DICE upper-case everything.
+function venueLabelPicker() {
+  const seen = {};
+  return {
+    add(raw) {
+      const k = venueKey(raw); if (!k) return;
+      const s = String(raw).trim(); if (!s) return;
+      const m = seen[k] || (seen[k] = {});
+      m[s] = (m[s] || 0) + 1;
+    },
+    label(k) {
+      const m = seen[k]; if (!m) return k;
+      return Object.keys(m).sort((a, b) =>
+        (m[b] - m[a]) ||
+        ((a === a.toUpperCase() ? 1 : 0) - (b === b.toUpperCase() ? 1 : 0)) ||
+        a.localeCompare(b))[0];
+    },
+    keys() { return Object.keys(seen); },
+  };
+}
 function raShowIndex() {
   if (_raShowIdx && _raShowIdxSrc === raState.events) return _raShowIdx;
   const idx = {};
@@ -17514,10 +17548,24 @@ function raWindowPool() {
     if (!s && !a.is_partner) continue;      // partners always show, even with no upcoming date
     const k = a.soundcloud ? raKey(a.soundcloud) : 'n:' + (a.name || '').toLowerCase();
     if (seen.has(k)) continue; seen.add(k);
+    // EVERY venue they play inside the window, not just the pinned one. The
+    // filter used to compare `next_venue`, which is the artist's SOONEST show —
+    // so an artist playing Nowadays on the 5th and Refuge on the 20th was a
+    // Nowadays artist and Refuge never showed them. Measured on prod: Bossa Nova
+    // had 82 artists on its bills and the filter offered 62; Dead Letter No.9,
+    // 29 and 4.
+    const inWin = (raShowIndex()[(a.name || '').trim().toLowerCase()] || [])
+      .filter(x => x.date >= start && x.date <= cut);
+    const venueKeys = new Set();
+    inWin.forEach(x => { const vk = venueKey(x.venue); if (vk) venueKeys.add(vk); });
+    if (s && s.venue) venueKeys.add(venueKey(s.venue));
+    const ownVk = venueKey(a.next_venue);
+    if (ownVk && a.next_event_date >= start && a.next_event_date <= cut) venueKeys.add(ownVk);
     out.push({
       ...a, key: k, c: a.soundcloud ? (raState.cache[k] || null) : null,
       next_event_date: s ? s.date : a.next_event_date,
       next_venue: s ? (s.venue || a.next_venue) : a.next_venue,
+      venueKeys, windowShows: inWin,
       genres: (s && s.genres.length) ? [...new Set([...(a.genres || []), ...s.genres])] : (a.genres || []),
     });
   }
@@ -17765,6 +17813,8 @@ function scArtistData() {
   const sig = evs.length + ':' + Object.keys(raState.cache || {}).length + ':' + (raState.artists || []).length + ':' + radioSet.size;
   if (raState._scArtSig === sig && raState._scArtData) return raState._scArtData;
   const artByName = {}; (raState.artists || []).forEach(a => { artByName[(a.name || '').toLowerCase()] = a; });
+  // One spelling per room, so an artist is not listed at both "Refuge" and "REFUGE".
+  const vlabel = venueLabelPicker(); evs.forEach(e => { if (e.venue_name) vlabel.add(e.venue_name); });
   const sixMo = Date.now() - 1000 * 60 * 60 * 24 * 182;
   const cand = {};
   evs.forEach(e => (e.lineup || []).forEach(la => {
@@ -17822,7 +17872,9 @@ function scArtistData() {
     c.recent = !!songs.some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
     c.nyc = NYC_RE.test(c.city || '');
     c.onRadio = radioSet.has(c.name.toLowerCase());
-    c.genresArr = [...c.genres]; c.venuesArr = [...c.venues]; c.platformsArr = [...c.platforms];
+    c.genresArr = [...c.genres];
+    c.venuesArr = [...new Set([...c.venues].map(v => vlabel.label(venueKey(v))))];
+    c.platformsArr = [...c.platforms];
     c.showCount = c.shows.length;
     c.shows.sort((x, y) => (x.date || '').localeCompare(y.date || ''));
   });
@@ -17910,16 +17962,31 @@ function raBuzzMap() {
   const m = {}; scArtistData().forEach(c => { m[c.name.toLowerCase()] = c.buzz; });
   raState._buzzSig = sig; raState._buzzMap = m; return m;
 }
+// A raw venue string from anywhere (an artist's show row, the scene map) resolved
+// to the spelling the Venues table actually groups under — otherwise clicking
+// "REFUGE" on an artist tries to open a row that is filed as "Refuge".
+function scVenueName(raw) {
+  const k = venueKey(raw);
+  const hit = scVenueData().find(v => v.key === k);
+  return hit ? hit.name : String(raw || '');
+}
 function scVenueData() {
   const evs = raState.events || [];
   const radioSet = raState.radioArtists || new Set();
   const sig = evs.length + ':' + (raState.venues || []).length + ':' + radioSet.size;
   if (raState._scVenSig === sig && raState._scVenData) return raState._scVenData;
-  const vByName = {}; (raState.venues || []).forEach(v => vByName[(v.name || '').toLowerCase()] = v);
+  const vByName = {}; (raState.venues || []).forEach(v => vByName[venueKey(v.name)] = v);
   const v = {};
+  // Keyed canonically, not by the raw string: "Refuge" / "REFUGE" / "REFUGE "
+  // are one room, and keying on the literal split it into three rows holding a
+  // slice of the shows each. Same for Alphaville/ALPHAVILLE, Drom/DROM,
+  // H0l0/H0L0, public records/Public Records, Dead Letter No. 9/No.9.
+  const vlabel = venueLabelPicker();
+  evs.forEach(e => { if (e.venue_name) vlabel.add(e.venue_name); });
   evs.forEach(e => {
-    const nm = (e.venue_name || '').trim(); if (!nm) return;
-    const x = v[nm] || (v[nm] = { name: nm, shows: 0, demandSum: 0, demandMax: 0, genres: {}, platforms: new Set(), artists: new Set(), picks: 0, ticketed: 0, nextDate: null, showList: [] });
+    const raw = (e.venue_name || '').trim(); if (!raw) return;
+    const nm = venueKey(raw); if (!nm) return;
+    const x = v[nm] || (v[nm] = { name: vlabel.label(nm), key: nm, shows: 0, demandSum: 0, demandMax: 0, genres: {}, platforms: new Set(), artists: new Set(), picks: 0, ticketed: 0, nextDate: null, showList: [] });
     x.shows++; const at = Number(e.attending) || 0;
     x.demandSum += at; x.demandMax = Math.max(x.demandMax, at);
     (e.genres || []).forEach(g => x.genres[g] = (x.genres[g] || 0) + 1);
@@ -17938,7 +18005,7 @@ function scVenueData() {
     x.radioArtists = [...x.artists].filter(a => radioSet.has(a.toLowerCase()));
     x.onRadio = x.radioArtists.length > 0;
     x.showList.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-    const rec = vByName[x.name.toLowerCase()];
+    const rec = vByName[x.key];
     x.capacity = rec?.capacity || null; x.isPartner = !!rec?.is_partner; x.area = rec?.area || null;
     x.ra_url = rec?.ra_url || null; x.ticket_url = rec?.ticket_url || null;
     x.lat = rec?.lat ?? null; x.lng = rec?.lng ?? null;
@@ -18695,7 +18762,7 @@ $('panel-scene-map').addEventListener('click', (e) => {
   if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
   if (e.target.closest('[data-sm-radio]')) { sceneState.onRadio = !sceneState.onRadio; renderSceneMap(); return; }
   const sv = e.target.closest('[data-sm-venue]'); if (sv) { sceneSelect(sv.dataset.smVenue); return; }
-  const oa = e.target.closest('[data-sm-openvenue]'); if (oa) { const n = oa.dataset.smOpenvenue; activateTab('market'); setTimeout(() => { marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; renderMarket(); }, 140); return; }
+  const oa = e.target.closest('[data-sm-openvenue]'); if (oa) { const n = scVenueName(oa.dataset.smOpenvenue); activateTab('market'); setTimeout(() => { marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; renderMarket(); }, 140); return; }
   const sa = e.target.closest('[data-sm-artist]'); if (sa) { const n = sa.dataset.smArtist; activateTab('market'); setTimeout(() => { marketState.tab = 'artists'; marketState.aExpand = n; marketState.aSearch = n; marketState.aSrc = ''; marketState.aGenre = ''; renderMarket(); }, 140); return; }
 });
 $('panel-scene-map').addEventListener('change', (e) => {
@@ -18711,7 +18778,7 @@ $('panel-market').addEventListener('click', (e) => {
   const sct = e.target.closest('[data-sc-tab]'); if (sct) { marketState.tab = sct.dataset.scTab; marketState.aExpand = null; marketState.vExpand = null; renderMarket(); return; }
   if (e.target.closest('[data-sc-golocal]')) { marketState.tab = 'artists'; marketState.aNyc = true; renderMarket(); return; }
   // Cross-navigation: jump between an artist and a venue (the data web).
-  const gv = e.target.closest('[data-sc-govenue]'); if (gv) { const n = gv.dataset.scGovenue; marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; marketState.vPlatform = ''; renderMarket(); return; }
+  const gv = e.target.closest('[data-sc-govenue]'); if (gv) { const n = scVenueName(gv.dataset.scGovenue); marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; marketState.vPlatform = ''; renderMarket(); return; }
   const ga = e.target.closest('[data-sc-goartist]'); if (ga) { const n = ga.dataset.scGoartist; marketState.tab = 'artists'; marketState.aExpand = n; marketState.aSearch = n; marketState.aSrc = ''; marketState.aGenre = ''; marketState.aNyc = false; marketState.aProd = false; marketState.aHasSc = false; renderMarket(); return; }
   const sas = e.target.closest('[data-sc-asort]'); if (sas) { const k = sas.dataset.scAsort; if (marketState.aSort === k) marketState.aDir = -marketState.aDir; else { marketState.aSort = k; marketState.aDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
   const svt = e.target.closest('[data-sc-vsort]'); if (svt) { const k = svt.dataset.scVsort; if (marketState.vSort === k) marketState.vDir = -marketState.vDir; else { marketState.vSort = k; marketState.vDir = (k === 'name' || k === 'next') ? 1 : -1; } renderMarket(); return; }
@@ -18750,20 +18817,32 @@ $('panel-market').addEventListener('input', (e) => {
 function raRadioList() {
   let out = raWindowPool();
   if (raState.genre) out = out.filter(a => (a.genres || []).includes(raState.genre));
-  if (raState.venue) out = out.filter(a => a.next_venue === raState.venue);
+  // Match on the canonical key against EVERY venue they play in the window.
+  // Falls back to the pinned venue for partners and manual adds, which have no
+  // event row in the index at all.
+  if (raState.venue) out = out.filter(a => (a.venueKeys && a.venueKeys.has(raState.venue))
+    || venueKey(a.next_venue) === raState.venue);
   // Source filter (RA / DICE / TM). DICE & Ticketmaster artists carry no
   // SoundCloud, so picking a source shows EVERYONE from it (bypasses the
   // producers-only filter below) — that's how you actually see DICE shows.
   if (raState.sourceFilter) out = out.filter(a => (a.source || 'ra') === raState.sourceFilter);
   if (raState.nycOnly) out = out.filter(a => isNyc(a));
   const ql = raState.search.toLowerCase();
-  if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql) || (a.next_venue || '').toLowerCase().includes(ql));
+  // Search every venue they play in the window too, for the same reason the
+  // filter does — typing a room's name should find everyone on its bills.
+  if (ql) out = out.filter(a => (a.name || '').toLowerCase().includes(ql)
+    || (a.next_venue || '').toLowerCase().includes(ql)
+    || (a.windowShows || []).some(s => (s.venue || '').toLowerCase().includes(ql)));
   // Producers-only means "hide DJs who only post sets". An artist with NO
   // SoundCloud has been PROVEN nothing — 339 of 1,465 RA artists have no link at
   // all, and they were dropped here silently. They're now opt-in via 🛒, and
   // Beatport (keyed on name) is how you check what they've actually released.
   // Skipped entirely when a source is explicitly chosen (see above).
+  // Record what this filter removes. Hiding 15 of 37 artists without saying so
+  // reads as "that is all there is" — the same failure as a silent cap (§18).
+  const beforeProducers = out.length;
   if (raState.producersOnly && !raState.sourceFilter) out = out.filter(a => a.is_partner || (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
+  raState._hiddenByProducers = beforeProducers - out.length;
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
   // Venue sort groups the room together (who else is on that bill / that week),
   // so a venue with no name sinks instead of heading the list, and inside a
@@ -18790,7 +18869,21 @@ function renderRaRadio() {
   const unscanned = windowArtists.length - scanned;
   const producers = windowArtists.filter(a => raState.cache[a.key]?.is_producer).length;
   const genreSet = [...new Set(raState.artists.flatMap(a => a.genres || []))].sort();
-  const venueSet = [...new Set(windowArtists.map(a => a.next_venue).filter(Boolean))].sort();
+  // Built from every venue with a bill in the window, keyed canonically, with a
+  // headcount. It used to list each artist's PINNED venue only, and only for
+  // artists who had a SoundCloud — so rooms whose bills were all unlinked never
+  // appeared at all (161 stored strings against 231 rooms actually hosting).
+  const vpick = venueLabelPicker();
+  const vCount = {};
+  raWindowPool().forEach(a => {
+    const keys = new Set(a.venueKeys || []);
+    const own = venueKey(a.next_venue); if (own) keys.add(own);
+    (a.windowShows || []).forEach(s => { if (s.venue) vpick.add(s.venue); });
+    if (a.next_venue) vpick.add(a.next_venue);
+    keys.forEach(k => { vCount[k] = (vCount[k] || 0) + 1; });
+  });
+  const venueSet = Object.keys(vCount)
+    .sort((a, b) => vpick.label(a).localeCompare(vpick.label(b)));
   // Which sources actually pulled in artists (so the filter only offers real ones).
   const srcCounts = {}; for (const a of raState.artists) { const s = a.source || 'ra'; srcCounts[s] = (srcCounts[s] || 0) + 1; }
   const srcSet = Object.keys(srcCounts).sort((a, b) => srcCounts[b] - srcCounts[a]);
@@ -18802,6 +18895,22 @@ function renderRaRadio() {
   const lastBy = {}; for (const e of (raState.events || [])) { const s = e.source || 'ra'; if (e.event_date && (!lastBy[s] || e.event_date > lastBy[s])) lastBy[s] = e.event_date; }
   const poolLast = Object.values(lastBy).sort().pop() || '';
   const coverNote = Object.keys(lastBy).sort().map(s => `${(RA_SOURCE[s]?.l || s.toUpperCase())} ${lastBy[s]}`).join(' · ');
+
+  // When a room is isolated, say what the room actually has. An event whose
+  // lineup was never pulled can contribute nobody, and without this the filter
+  // gets blamed for a gap that is upstream in the pull: on prod 35% of future RA
+  // events and 61% of DICE ones carry no lineup at all.
+  let venueNote = '';
+  if (raState.venue) {
+    const vevs = (raState.events || []).filter(e => venueKey(e.venue_name) === raState.venue
+      && e.event_date >= wStart && e.event_date <= wCut);
+    const withLineup = vevs.filter(e => Array.isArray(e.lineup) && e.lineup.length).length;
+    const missing = vevs.length - withLineup;
+    venueNote = `${escapeHtml(vpick.label(raState.venue))}: ${vevs.length} show${vevs.length === 1 ? '' : 's'} in this window, ${withLineup} with a lineup`
+      + (missing ? ` · <span style="color:var(--gold,#B5791F)">${missing} with none pulled yet, so nobody from ${missing === 1 ? 'it' : 'them'} can appear here</span>` : '');
+  }
+  const hiddenNote = raState._hiddenByProducers
+    ? `<span title="Turn off 🎛 Producers only to see them">🎛 ${raState._hiddenByProducers} more on these bills, hidden by <b>Producers only</b></span>` : '';
 
   const weekBtn = (w) => `<button class="hub-btn ghost" data-ra-weeks="${w}" style="${raState.radioWeeks === w ? 'background:var(--accent,#5b7fb3);color:#fff;' : ''}">${w}w</button>`;
   const sortOpt = (v, l) => `<option value="${v}"${raState.sort === v ? ' selected' : ''}>${l}</option>`;
@@ -18856,7 +18965,7 @@ function renderRaRadio() {
         </div>
         <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('buzz', '🔥 Buzz')}${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
         <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
-        <select class="modal-select" data-ra-venue style="max-width:160px;" title="Filter by venue"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(v)}</option>`).join('')}</select>
+        <select class="modal-select" data-ra-venue style="max-width:190px;" title="Filter by venue — everyone on a bill there inside the window, not just artists whose next show happens to be there"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(vpick.label(v))} · ${vCount[v]}</option>`).join('')}</select>
         ${srcSet.length > 1 ? `<select class="modal-select" data-ra-source style="max-width:150px;" title="Show only shows pulled from one source. DICE/Ticketmaster artists have no SoundCloud, so pick the source to see them all."><option value="">All sources</option>${srcSet.map(s => `<option value="${s}"${raState.sourceFilter === s ? ' selected' : ''}>${(RA_SOURCE[s]?.l || s.toUpperCase())} · ${srcCounts[s]}</option>`).join('')}</select>` : ''}
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:8px;">
@@ -18877,6 +18986,7 @@ function renderRaRadio() {
     <div class="hub-sec-bar" style="margin-top:6px;"><h3>📻 Incoming artists <span class="li-sub" style="font-weight:normal;">· ${raState.sourceFilter
       ? `${list.length} from ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()}`
       : `${list.length}${list.length !== windowArtists.length ? ' of ' + windowArtists.length : ''} shown · ${producers} producers${unscanned ? ` · ${unscanned} unscanned` : ''}`}</span></h3></div>
+    ${(venueNote || hiddenNote) ? `<div class="kpi-hint" style="margin:0 0 7px;">${[venueNote, hiddenNote].filter(Boolean).join(' &nbsp;·&nbsp; ')}</div>` : ''}
     <div class="hub-list ra-zebra" id="raArtistList">${cards || `<div class="hub-empty">${raState.sourceFilter ? `No ${RA_SOURCE[raState.sourceFilter]?.l || raState.sourceFilter.toUpperCase()} shows in this window — widen the window above or hit “↻ Pull shows”.` : raState.producersOnly && !producers ? 'No producers found yet — hit “Scan for producers”.' : 'No artists match — widen the window or clear filters.'}</div>`}</div>`;
 }
 function raRenderArtistTracks(key) {

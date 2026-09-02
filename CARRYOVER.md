@@ -4,6 +4,35 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #3 — Venue filter audit (no migration)
+
+Keith: "when I isolate refuge and industry city I only see one artist." **Three
+defects stacked**, all reproduced against prod:
+
+1. **`'Refuge'`, `'REFUGE'` and `'REFUGE '` are three strings** - the last differs
+   only by a trailing space (hex ...474520). The dropdown listed all three, two
+   rendering identically, holding **23 / 1 / 1** artists. Picking a look-alike is
+   literally how a two-dozen-artist room showed one. Also Alphaville/ALPHAVILLE,
+   Drom/DROM, H0l0/H0L0, public records/Public Records, `Dead Letter No. 9`/`No.9`.
+   **155 strings = 149 rooms.** Now grouped on `venueKey()` (case + punctuation +
+   whitespace folded) with `venueLabelPicker()` choosing the display spelling.
+2. **The filter compared `next_venue`, which is the artist's SOONEST show.** An
+   artist playing Nowadays on the 5th and Refuge on the 20th was a Nowadays artist.
+   Bossa Nova: 82 artists on its bills, filter offered 62. Dead Letter No.9: 29 and
+   4. Now matches `venueKeys` - every room they play in the window.
+   **1,228 -> 1,499 artist-venue pairs reachable (+22%).**
+3. **`Producers only` is ON by default and removed a third of each room silently**
+   (Industry City 38 -> 23). It now reports what it hid.
+
+**Plus the ceiling that is NOT a UI bug: 35% of future RA events and 61% of DICE
+ones have no lineup at all** (Industry City: 9 shows, 3 lineups). Isolating a room
+now prints its own coverage so the filter is not blamed for a gap in the pull.
+**Refuge now reads 24 in one entry; Industry City 38.** LEARNINGS SS62.
+
+Unverified in a browser as usual. If Industry City still looks thin, check the
+📍 NYC toggle - only 5 of its 38 have an NYC profile city, and 3 survive NYC +
+Producers together. That is a real filter doing its job, not a bug.
+
 ## >> 2026-09-01 ADDENDUM #2 — Buzz score rebuilt (no migration)
 
 **Top-track plays are now in the score, and they were already in the database** -

@@ -1916,3 +1916,54 @@ The distinction is not "is the number zero" but **"did anybody look, and was the
 anything there to look at"**. Three different absences — the platform never
 publishes it, the scan failed, there is nothing to measure — all arrive as `0` in
 JavaScript and must not all be scored as one.
+
+---
+
+## Section 62 — A filter is a claim about the world, and this one was three claims short (2026-09-02)
+
+"When I isolate Refuge and Industry City I only see one artist." Refuge had two
+dozen artists on its bills. Three separate defects stacked to produce that one,
+and none of them announced itself.
+
+**1. The venue dimension is free text from three feeds, and it is not consistent.**
+The artist pool held `'Refuge'`, `'REFUGE'` and `'REFUGE '` — three distinct
+strings, the last differing only by a trailing space (hex `…474520`). The dropdown
+listed all three; two rendered identically. They held 23, 1 and 1 artists. Picking
+either look-alike is exactly how a busy room shows one name. The same fragmentation
+hit Alphaville/ALPHAVILLE, Drom/DROM, H0l0/H0L0, public records/Public Records and
+`'Dead Letter No. 9'`/`'Dead Letter No.9'` — **155 stored strings for 149 real
+rooms**. Group on a canonical key (case, punctuation and whitespace folded); show
+the most common spelling. A `Set` of raw strings deduplicates nothing when the
+strings disagree about capitalisation.
+
+**2. Each artist was pinned to ONE show, so a venue filter could only ever see the
+artists whose FIRST show in the window happened to be there.** `raWindowPool()`
+re-points every artist at their soonest show and stores a single `next_venue`;
+`raRadioList()` then compared `a.next_venue === venue`. An artist playing Nowadays
+on the 5th and Refuge on the 20th was a Nowadays artist, and Refuge never showed
+them. Measured across the window: Bossa Nova had 82 artists on its bills and the
+filter offered 62; Dead Letter No.9, 29 and 4; Signal, 59 and 41. In total
+**1,228 of 1,499 artist-venue pairs were reachable** — the filter was quietly
+answering a different question than the one being asked.
+
+A one-row-per-entity projection is fine for "when do they next play". It is wrong
+the moment it backs a filter over a dimension the entity has *many* of. The clue is
+that the field is singular (`next_venue`) while the question is plural.
+
+**3. `Producers only` is on by default and was removing a third of the room in
+silence** — Industry City 38 → 23, Refuge 24 → 19. The filter is wanted; its
+silence was not. It now reports what it hid, the same rule as any other cap (§18):
+a number with no note reads as "that is all there is".
+
+**And the ceiling nobody could see.** 35% of future RA events and 61% of DICE ones
+carry **no lineup at all**; Industry City had 9 shows and 3 lineups. No filter can
+show artists that were never pulled, so isolating a room now states its own
+coverage — "9 shows in this window, 3 with a lineup" — because otherwise the
+filter is blamed for a gap that lives upstream in the pull.
+
+The general lesson is the one that keeps recurring in this repo under new costumes:
+**an empty result is a claim, and it is usually the least likely of several.**
+Before trusting "there is only one artist here", check whether the key matched,
+whether the projection could represent the answer, whether a default filter ate it,
+and whether the source data was ever collected. Here all four were wrong at once,
+and each alone would have looked like a quiet, plausible truth.

@@ -383,6 +383,23 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   table-level anon grants since 079 (RLS was blocking the rows, so an anon GET
   returned `200 []`, never data; now it's `401`). Public station reads are
   function-only through `get-station` (service role).
+- **Venue names are FREE TEXT from three feeds — always group on `venueKey()`.**
+  Prod holds `'Refuge'`, `'REFUGE'` and `'REFUGE '` (trailing space) as three
+  strings; 155 of them are 149 real rooms (also Alphaville/ALPHAVILLE, Drom/DROM,
+  H0l0/H0L0, public records/Public Records, `Dead Letter No. 9`/`No.9`). A `Set`
+  of raw names dedupes nothing, and a dropdown then lists the same room three
+  times with the artists split between them — which is how a busy room showed
+  **one** artist. Fold case, punctuation and whitespace for the key; display the
+  commonest spelling via `venueLabelPicker()`.
+- **`next_venue` is ONE show. Never filter a venue on it.** `raWindowPool()` pins
+  each artist to their soonest show in the window, so matching `next_venue` shows
+  only artists whose *first* show is at that room — it hid 271 of 1,499
+  artist-venue pairs. Filter on `venueKeys` (every room they play in the window).
+  The tell is a singular field backing a plural question. LEARNINGS §62.
+- **A filter that is on by default must say what it removed.** `Producers only`
+  silently dropped a third of every room (Industry City 38 → 23). And when a room
+  is isolated, show its lineup coverage — 35% of future RA events and 61% of DICE
+  ones carry no lineup, so the filter gets blamed for a gap that is upstream.
 - **Buzz is scored on what could be MEASURED, and the denominator moves.** Four
   inputs — top-track plays (.30), reach (.30), RSVP demand (.25), catalogue (.15) —
   each mapped 0–100 against a **fixed** anchor, never against the pool maximum: a
