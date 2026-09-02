@@ -390,6 +390,20 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   and **all 9 came from RA** — DICE and TM contributed nobody on the watchlist.
   The kind that would close it is **artist-first** (Bandsintown / Songkick), which
   matches the watchlist because that is already a list of artists. LEARNINGS §65.
+- **`pull-bandsintown` is the artist-first source, and its genre policy IS the
+  watchlist.** Bandsintown returns **no genre**, so any genre rule on the response
+  would be invented. Electronic-only is guaranteed by *who we ask about* — the
+  watchlist / partners / the existing pool. Charli XCX cannot arrive because we
+  never ask about her. **Never add a genre filter on the response**, and never
+  widen the input silently: widening the input IS the decision. A support act on
+  someone's bill is stored on the show but does **not** enter `ra_artists`.
+- **`pull-bandsintown` upserts and never deletes by window.** It reads a rotating
+  subset of artists, so a delete keyed to the date range would throw away shows
+  for every artist that run did not ask about. Only past rows are pruned. Secret:
+  `BANDSINTOWN_APP_ID` — a static id, no OAuth, no expiry; missing = a documented
+  no-op with a reason. It is **its own button**, not part of "↻ Pull shows" (§53:
+  one HTTP call per artist is a different latency from three bulk pulls), and it
+  reports `PARTIAL` by NAMING who it did not reach.
 - **A show the feeds miss goes in by hand: `source='manual'`.** It is a normal
   `ra_events` row (`ra_id = 'man:<slug>'`) so it flows through the window, venue
   filter, artist pool and buzz with no special cases, and every puller scopes its

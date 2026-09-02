@@ -4,6 +4,43 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #7 — Bandsintown, the first artist-first source
+
+**`pull-bandsintown` is DEPLOYED to prod (version 1, verify_jwt on) and is a
+documented NO-OP until `BANDSINTOWN_APP_ID` is set.** Anon gets 401.
+
+**The genre policy is the watchlist, and that is the whole design.** Bandsintown's
+event payload carries **no genre**, so any genre rule on the response would be
+invented. Electronic-only is guaranteed by *who we ask about* - the function only
+ever queries the watchlist (or `partners` / `pool` if asked). **Charli XCX cannot
+arrive because we never ask about her.** Widening the input is therefore an
+explicit decision, not a threshold. A support act on someone else's bill is stored
+on the show but does NOT enter `ra_artists`.
+
+**NYC is matched by COORDINATES, not city name** (bbox 40.45-40.95 / -74.30--73.65,
+falling back to city+region when a venue has no lat/lng). That is the Ticketmaster
+lesson: matching "New York" literally returned Manhattan only.
+
+**It upserts and never deletes by window** - it reads a ROTATING subset of
+artists, so a delete keyed to the date range would throw away shows for every
+artist that run did not ask about. Only past rows are pruned. Rotation offset is
+kept in localStorage; `PARTIAL` names who it did not reach rather than counting
+them. It is **its own button** (🎤 Check watchlist tours), not part of
+"↻ Pull shows" - one HTTP call per artist is a different latency from three bulk
+pulls (SS53).
+
+**SETUP, still owed by Keith (one time, no OAuth, no expiry):**
+1. Get an `app_id` from Bandsintown (they ask you to register one for the public
+   artist-events API; any existing id you hold works).
+2. Supabase dashboard -> Project Settings -> Edge Functions -> Secrets ->
+   `BANDSINTOWN_APP_ID`.
+3. Radio tab -> **🎤 Check watchlist tours**. A rejected id is reported as such,
+   not as "no shows" - the function validates the PAYLOAD, not the status, because
+   Bandsintown answers 200 with an error object for both a bad id and an unknown
+   artist.
+4. **Lane 8 is not on the watchlist yet** - add him first (👁 on any artist, or the
+   watchlist), or he still will not be asked about.
+
 ## >> 2026-09-02 ADDENDUM #6 — Capture gap: Lane 8 (no migration)
 
 **Lane 8 is genuinely absent** - no `ra_artists` row, no lineup entry, no event
