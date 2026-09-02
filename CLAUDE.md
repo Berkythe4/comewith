@@ -526,6 +526,19 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 
 ## Link-in-bio pages (`links.html`, `/links/<slug>`) — added 2026-08-31
 
+- **Socials are the point of a links page — `emphasis = 'primary'` makes one big.**
+  A primary social renders as a branded tile under the bio (platform colour, name,
+  and its action verb: YouTube → Subscribe, SoundCloud/Instagram → Follow);
+  everything else stays a small pill and drops to the footer with the contact
+  links. Which platform matters is **per link, not hardcoded** — Come With grows on
+  YouTube and SoundCloud, but `/links/keith` may want Bandcamp. A link's own
+  `subtitle` overrides the verb.
+- **Adding a column to `link_items` is FOUR changes, not one.** The table, then
+  `v_public_link_items` (an explicit column list — the page reads nothing else, so
+  a column missing there is set-but-invisible), then `saveLinks()`'s upsert field
+  list (**omitting it does not preserve it — the upsert resets it to the default on
+  the next Save**), then the editor control if its widget type differs from the
+  stored type. LEARNINGS §64.
 - **The renderer is `links.html` and there is exactly one of it.** The dashboard
   editor's live preview is that same file in an iframe (`?preview=1`), fed unsaved
   form state over same-origin `postMessage`. **Never add a second renderer to

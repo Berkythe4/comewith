@@ -4,6 +4,38 @@
 preserved below, unchanged - including its open list, which this session did not
 touch.
 
+## >> 2026-09-02 ADDENDUM #5 — Links page socials (MIGRATIONS 209 + 210)
+
+**Prod max migration is now 210.** `/links` is **PUBLISHED and live** and Keith has
+built it out himself since - he added the YouTube and SoundCloud socials, three DI
+/ Bike MS feature cards, and switched off Upcoming events / Watch / Book us. The
+migration therefore only PROMOTES his existing rows; it never rewrites his labels
+or ordering.
+
+**`link_items.emphasis` ('normal' | 'primary').** A primary social renders as a
+branded tile directly under the bio - the platform's own colour, its name, and the
+action being asked for (YouTube -> Subscribe, SoundCloud / Instagram -> Follow) -
+instead of a 42px circle. Everything else stays a pill and moves DOWN to the
+footer with the contact links, so email no longer sits level with the growth
+targets. YouTube, SoundCloud and Instagram are primary on `main`; Email is not.
+
+**Per link, not hardcoded by platform** - the renderer could have decided
+youtube/soundcloud/instagram are always big, which is right for Come With today
+and wrong for `/links/keith`. The editor has a **★ feature** checkbox on every
+social row.
+
+**210 exists because 209 was incomplete**: `emphasis` was set on prod but not
+selected in `v_public_link_items`, which is the only thing `links.html` reads - a
+column nobody can see is the same as no column. Separate migration, not an edit to
+an applied one. `saveLinks()` also had to learn the field: its upsert uses an
+explicit list, so the FIRST Save would have silently reset every promotion back to
+'normal'. LEARNINGS SS64.
+
+**Considered and rejected:** live subscriber counts as social proof. The data is
+there (`youtube.subscribers` = 450, refreshed daily) but 450 is a number that
+argues against clicking, and it would mean a new public exposure of an internal
+metric. Say the word if you want it once it is bigger.
+
 ## >> 2026-09-02 ADDENDUM #4 — Venue normalization (MIGRATION 208, applied)
 
 **Prod max migration is now 208.** Venue identity moved into the database, in two

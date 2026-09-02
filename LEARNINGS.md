@@ -2022,3 +2022,37 @@ the alias *and* re-points every historical event with that spelling, in one
 transaction. As two client calls it eventually fails halfway and leaves a venue
 with a correct alias and 34 events still pointing at nothing — a state nobody
 would think to look for.
+
+---
+
+## Section 64 — A new column has to be taught to every layer that already exists (2026-09-02)
+
+`link_items.emphasis` is one nullable-with-default column. Adding it took three
+migrations' worth of places, and two of them were missed on the first pass — both
+in ways that fail silently rather than loudly.
+
+**The view.** 209 added the column and set it on prod. `links.html` reads
+`v_public_link_items`, which selects an explicit column list, so the flag was set
+and *invisible*. A column the only consumer cannot see is the same as no column,
+and nothing errors — the page just renders as though every link were normal. Fixed
+in 210 as its own migration: 209 was already applied and its sha recorded, and
+rewriting an applied file is precisely the drift the apply discipline exists to
+prevent.
+
+**The writer.** `saveLinks()` upserts an explicit field list. A column absent from
+that list is not "left alone" — the upsert writes the row without it and Postgres
+supplies the DEFAULT, so **the first time Keith pressed Save, every promotion
+would have silently reverted to 'normal'.** He would have reported it as "the big
+icons keep turning off", days later, with no error anywhere to point at.
+
+**The type.** The editor renders emphasis as a checkbox, but the schema holds an
+enum. `el.checked` sends `true`, which fails a check constraint at save time with a
+raw Postgres error in a toast. Caught by reading the handler, not by running it.
+
+The general rule: **a new column is not one change, it is one change per layer
+that enumerates columns.** In this repo that means the table, every view that
+projects it, every `select('a,b,c')` in the dashboard, every upsert field list, and
+any UI control whose widget type differs from the stored type. Grep for the
+neighbouring column's name — `is_active` here — and visit every hit. An
+`insert`/`upsert` with an explicit list is the dangerous one, because omitting a
+column there does not preserve it; it resets it, quietly, on the next save.

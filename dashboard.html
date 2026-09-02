@@ -14855,6 +14855,9 @@ function linkItemHtml(it, i) {
         ${isHeader ? '<span class="lk-clicks" style="align-self:center">no link — a divider</span>'
                    : `<input class="modal-input" data-li-f="url" value="${escapeHtml(it.url || '')}" placeholder="https://… or /radio.html">`}
       </div>
+      ${it.style === 'social' ? `<label class="lk-clicks" style="display:flex;align-items:center;gap:5px;cursor:pointer;white-space:nowrap;"
+        title="Feature it: a big branded tile under the bio with the platform's colour and its action word, instead of a small icon. For the accounts you actually want people to follow.">
+        <input type="checkbox" data-li-f="emphasis" ${it.emphasis === 'primary' ? 'checked' : ''} style="width:auto;margin:0;"> ★ feature</label>` : ''}
       ${clicks}
       <button class="lk-x" data-li-del title="Remove this link">✕</button>
     </div>
@@ -15056,7 +15059,7 @@ function linksNewItem(style) {
     : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
         const r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16); }));
   return { id, page_id: linksState.page.id, label: '', url: style === 'header' ? null : '',
-           subtitle: null, icon: null, thumb_url: null, style, is_active: true,
+           subtitle: null, icon: null, thumb_url: null, style, is_active: true, emphasis: 'normal',
            starts_at: null, ends_at: null, sort_order: (linksState.items.length + 1) * 10, _new: true };
 }
 async function linksUploadImage(file, prefix) {
@@ -15089,7 +15092,10 @@ $('panel-links').addEventListener('input', e => {
   if (row && el.dataset.liF) {
     const it = linksState.items.find(x => x.id === row.dataset.li); if (!it) return;
     const f = el.dataset.liF;
-    it[f] = el.type === 'checkbox' ? el.checked
+    // emphasis is a checkbox in the UI but an enum in the schema — sending true
+    // would fail the check constraint at save with a raw Postgres error.
+    it[f] = f === 'emphasis' ? (el.checked ? 'primary' : 'normal')
+      : el.type === 'checkbox' ? el.checked
       : (f === 'starts_at' || f === 'ends_at') ? (el.value ? new Date(el.value).toISOString() : null)
       : el.value;
     if (f === 'is_active') row.classList.toggle('off', !el.checked);
@@ -15246,7 +15252,7 @@ async function saveLinks() {
         id: it.id, page_id: p.id, label: it.label.trim(),
         url: it.style === 'header' ? null : it.url.trim(),
         subtitle: it.subtitle || null, icon: it.icon || null, thumb_url: it.thumb_url || null,
-        style: it.style, is_active: !!it.is_active,
+        style: it.style, is_active: !!it.is_active, emphasis: it.emphasis || 'normal',
         starts_at: it.starts_at || null, ends_at: it.ends_at || null, sort_order: (i + 1) * 10,
       }));
       const { error } = await sb.from('link_items').upsert(rows, { onConflict: 'id' });

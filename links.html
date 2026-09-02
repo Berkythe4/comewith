@@ -78,6 +78,26 @@
   .tagline{color:var(--dim);font-size:1rem;max-width:46ch}
   .wrap.center .tagline{margin:0 auto}
 
+  /* Primary socials. These are the point of the page — the growth targets — so
+     they get area, the platform's own colour, its name and the action being
+     asked for, instead of a 42px circle that reads as decoration. --b is the
+     brand colour, --bt the same colour at low alpha so the tile stays inside the
+     page's theme rather than shouting over it. */
+  .stiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(102px,1fr));
+          gap:10px;width:100%;margin-top:6px}
+  .stile{display:flex;flex-direction:column;align-items:center;justify-content:center;
+         gap:7px;padding:16px 8px 13px;border-radius:var(--radius);
+         border:1px solid var(--b);background-color:var(--bt);
+         transition:transform .15s,box-shadow .15s,background-color .15s}
+  .stile:hover{transform:translateY(-3px);box-shadow:0 10px 26px var(--bt)}
+  .stile:active{transform:translateY(0)}
+  .stile .sic{color:var(--b);display:flex;align-items:center;justify-content:center}
+  .stile .sic svg{width:30px;height:30px}
+  .stile .sic .emo{font-size:1.7rem;line-height:1}
+  .stile .snm{font-family:var(--fh);font-weight:700;font-size:.92rem;line-height:1.05;
+              letter-spacing:.01em;text-align:center;overflow-wrap:anywhere}
+  .stile .svb{font-family:var(--fb);font-size:.66rem;letter-spacing:.1em;
+              text-transform:uppercase;color:var(--dim);line-height:1}
   .socials{display:flex;gap:10px;flex-wrap:wrap;margin-top:2px}
   .wrap.center .socials{justify-content:center}
   /* Social glyphs use the accent, same as the icon on a link row and a feature
@@ -294,17 +314,66 @@
     return ' href="' + esc(href) + '" data-track="link:' + esc(it.id || '') + '"' +
            (ext ? ' target="_blank" rel="noopener"' : '');
   }
+  /* Platform identity. The colour is the platform's own, so the tile is
+   * recognisable before it is read; the verb is the action being asked for,
+   * because "Instagram" is a noun and "Follow" is a request. A link's own
+   * subtitle overrides the verb — the page owner gets the last word. */
+  var BRAND = {
+    youtube:   { c: '#FF0033', verb: 'Subscribe' },
+    soundcloud:{ c: '#FF5500', verb: 'Follow' },
+    instagram: { c: '#E1306C', verb: 'Follow' },
+    tiktok:    { c: '#FF0050', verb: 'Follow' },
+    spotify:   { c: '#1DB954', verb: 'Follow' },
+    bandcamp:  { c: '#1DA0C3', verb: 'Listen' },
+    mixcloud:  { c: '#5000FF', verb: 'Follow' },
+    facebook:  { c: '#1877F2', verb: 'Follow' },
+    linkedin:  { c: '#0A66C2', verb: 'Connect' },
+    discord:   { c: '#5865F2', verb: 'Join' },
+    telegram:  { c: '#26A5E4', verb: 'Join' },
+    whatsapp:  { c: '#25D366', verb: 'Message' },
+    music:     { c: '#FA2D48', verb: 'Listen' },
+    x:         { c: null,      verb: 'Follow' },
+    mail:      { c: null,      verb: 'Email' },
+    web:       { c: null,      verb: 'Visit' },
+    link:      { c: null,      verb: 'Open' }
+  };
+  function brandOf(icon) {
+    var k = ALIAS[String(icon || '').trim().toLowerCase()] || String(icon || '').trim().toLowerCase();
+    return BRAND[k] || { c: null, verb: 'Open' };
+  }
+  // Brand colour at low alpha for the tile fill. Falls back to the theme accent
+  // when the platform has no colour of its own (mail, website, X).
+  function tint(hex, alpha) {
+    if (!hex) return 'color-mix(in srgb, var(--accent) ' + Math.round(alpha * 100) + '%, transparent)';
+    var m = /^#?([0-9a-f]{6})$/i.exec(hex);
+    if (!m) return hex;
+    var n = parseInt(m[1], 16);
+    return 'rgba(' + ((n >> 16) & 255) + ',' + ((n >> 8) & 255) + ',' + (n & 255) + ',' + alpha + ')';
+  }
+  function socialTiles(list) {
+    if (!list.length) return '';
+    return '<div class="stiles">' + list.map(function (it) {
+      var a = rowAttrs(it); if (!a) return '';
+      var b = brandOf(it.icon);
+      var col = b.c || 'var(--accent)';
+      var style = ' style="--b:' + col + ';--bt:' + tint(b.c, 0.14) + '"';
+      return '<a class="stile"' + a + style + ' aria-label="' + esc(it.label) + '">' +
+             '<span class="sic">' + (iconHtml(it.icon) || iconHtml('link')) + '</span>' +
+             '<span class="snm">' + esc(it.label) + '</span>' +
+             '<span class="svb">' + esc(it.subtitle || b.verb) + '</span></a>';
+    }).join('') + '</div>';
+  }
+  function socialPills(list) {
+    if (!list.length) return '';
+    return '<div class="socials">' + list.map(function (it) {
+      var a = rowAttrs(it); if (!a) return '';
+      return '<a class="soc"' + a + ' title="' + esc(it.label) + '" aria-label="' + esc(it.label) + '">' +
+             (iconHtml(it.icon) || iconHtml('link')) + '</a>';
+    }).join('') + '</div>';
+  }
   function renderItems(items, btnStyle) {
-    var socials = items.filter(function (i) { return i.style === 'social'; });
-    var main    = items.filter(function (i) { return i.style !== 'social'; });
+    var main = items.filter(function (i) { return i.style !== 'social'; });
     var html = '';
-    if (socials.length) {
-      html += '<div class="socials">' + socials.map(function (it) {
-        var a = rowAttrs(it); if (!a) return '';
-        return '<a class="soc"' + a + ' title="' + esc(it.label) + '" aria-label="' + esc(it.label) + '">' +
-               (iconHtml(it.icon) || iconHtml('link')) + '</a>';
-      }).join('') + '</div>';
-    }
     if (main.length) {
       html += '<div class="links">' + main.map(function (it) {
         if (it.style === 'header') return '<div class="hdr">' + esc(it.label) + '</div>';
@@ -338,13 +407,24 @@
     var av = page.avatar_url
       ? '<img class="avatar ' + shape + '" src="' + esc(page.avatar_url) + '" alt="' + esc(page.title) + '">'
       : '<div class="avatar ' + shape + '">' + esc(initials(page.title)) + '</div>';
+    // Socials split by emphasis. The primary ones are what the page is FOR, so
+    // they sit directly under the bio as branded tiles; the rest (email, a
+    // website) are contact details and belong down by the footer. Legacy rows
+    // with no emphasis stay pills, so a page that never set it looks unchanged.
+    var all = items || [];
+    var socials = all.filter(function (i) { return i.style === 'social'; });
+    var primary = socials.filter(function (i) { return i.emphasis === 'primary'; });
+    var secondary = socials.filter(function (i) { return i.emphasis !== 'primary'; });
+
     var html =
       '<a class="pill home" href="/" data-track="home">' + iconHtml('web') + ' comewith.org</a>' +
       '<div class="hd">' + av +
       '<h1>' + esc(page.title) + '</h1>' +
       (page.tagline ? '<p class="tagline">' + esc(page.tagline) + '</p>' : '') + '</div>' +
-      renderItems(items || [], btnStyle) +
+      socialTiles(primary) +
+      renderItems(all, btnStyle) +
       '<footer>' +
+        socialPills(secondary) +
         (page.footer_note ? '<div>' + esc(page.footer_note) + '</div>' : '') +
         '<button class="pill" type="button" id="shareBtn" data-track="copy-link">' +
           iconHtml('link') + ' <span id="shareTx">Copy link</span></button>' +
