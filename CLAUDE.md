@@ -432,14 +432,15 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   for spellings the database has not resolved. The SQL is the source of truth;
   change one, change the other. Prefer `venueIdent(e)` (the resolved `venue_id`
   when present) for grouping.
-- **Venue names are FREE TEXT from three feeds — always group on `venueKey()`.**
-  Prod holds `'Refuge'`, `'REFUGE'` and `'REFUGE '` (trailing space) as three
-  strings; 155 of them are 149 real rooms (also Alphaville/ALPHAVILLE, Drom/DROM,
-  H0l0/H0L0, public records/Public Records, `Dead Letter No. 9`/`No.9`). A `Set`
-  of raw names dedupes nothing, and a dropdown then lists the same room three
-  times with the artists split between them — which is how a busy room showed
-  **one** artist. Fold case, punctuation and whitespace for the key; display the
-  commonest spelling via `venueLabelPicker()`.
+- **Why any of this exists (the evidence, kept because it is the argument):**
+  venue names arrive as FREE TEXT from three feeds and prod held `'Refuge'`,
+  `'REFUGE'` and `'REFUGE '` (trailing space) as three strings — 155 of them for
+  149 real rooms, alongside Alphaville/ALPHAVILLE, Drom/DROM, H0l0/H0L0,
+  public records/Public Records and `Dead Letter No. 9`/`No.9`. A `Set` of raw
+  names dedupes nothing, so a dropdown listed the same room three times with the
+  artists split between them — which is how a room with two dozen artists showed
+  **one**. **Never group or filter on a raw venue string**; use the resolved
+  `venue_id`, or `venueKey()` / `venueLabelPicker()` where one does not exist yet.
 - **`next_venue` is ONE show. Never filter a venue on it.** `raWindowPool()` pins
   each artist to their soonest show in the window, so matching `next_venue` shows
   only artists whose *first* show is at that room — it hid 271 of 1,499

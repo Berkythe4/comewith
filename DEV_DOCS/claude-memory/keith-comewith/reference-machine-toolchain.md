@@ -5,7 +5,7 @@ metadata:
   node_type: memory
   type: reference
   originSessionId: 9285a14c-2927-4aa5-9b36-c63f3a5610ad
-  modified: 2026-08-31T00:00:00.000Z
+  modified: 2026-09-05T00:00:00.000Z
 ---
 
 Machine configuration for `C:\Users\keith\comewith` (the laptop). Verify each
@@ -32,6 +32,13 @@ before relying on it — this is config, and config gets fixed.
   being approved. Until it is removed, a bare `python db.py file.sql` silently
   targets production. Pass the literal `SBP_REF=yaytdosxfhcqatmhctzk python db.py …`
   anyway — it is also the form Henry's allowlist prefix matches.
+- **In the esprima downlevel, rewrite `?.[` and `?.(` BEFORE `?.`.** Doing `?.`
+  first turns `a?.[k]` into `a.[k]`, which is a syntax error esprima reports as
+  "Unexpected token [" — and it looks exactly like a real error introduced by the
+  edit. Order: `?.[` → `[`, `?.(` → `(`, then `?.` → `.`, then `??` → `||`.
+  Also verified 2026-09-02: **check the extraction boundaries return a non-empty
+  block** (`src.index(A):src.index(B)`), because if A appears after B the slice is
+  empty and esprima happily reports PARSE OK on nothing.
 - **A `<<'EOF'` heredoc in the Bash tool is NOT literal — an apostrophe in the
   body breaks the whole command** with ``unexpected EOF while looking for matching
   `'``, pointing at a line number inside the heredoc. The command looks like it is

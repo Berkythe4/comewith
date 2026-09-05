@@ -1653,3 +1653,73 @@ post-apply checks PASS, anon REST sweep end-to-end (tables 401, public views 200
 zero pages visible while `main` is unpublished), and esprima on the extracted
 dashboard block with a control run against `HEAD`. The `main` page is seeded and
 deliberately **unpublished**.
+
+---
+
+## 2026-09-01 → 09-02 — Buzz, venue identity, and the capture model (migrations 208–210)
+
+Four days of work off one links-page request, in which most of the value came from
+things nobody set out to build. Closed 2026-09-05.
+
+**Done — radio DJ auto-assign.** The week generator pre-ticks the four steps that
+are the DJ's own work and assigns them. Resolution is `assigned_actor_id` first,
+then `mix_by` by name — necessary because the FK is set on **one** of ten stations
+while the name is set on nine. Zero or two name matches assign nobody and say why:
+`tasks` carries an "Actors can read assigned tasks" policy, so a bad match is a
+disclosure, not a mislabel. Deliberately the **opposite precedence** from the
+public episode credit (§55), which must link on the printed name and never the FK.
+LEARNINGS §60.
+
+**Done — buzz rebuilt.** Top-track play counts added (already on all 57,291 cached
+songs; the score simply ignored them). Three larger faults found while there:
+`attending` is published by RA on all 941 future events and by DICE and
+Ticketmaster on **none** of their 311, and the null was scored as zero on the
+heaviest input — Galantis scored 47; every input was scaled against the **pool
+maximum**, so a score moved when somebody else was scanned and nobody could exceed
+81; and 191 cache rows are failed scans whose `ok` flag was not even selected. All
+three now shrink the denominator instead of entering the numerator as a zero, with
+coverage shown. Plays on an **empty catalogue are undefined, not zero** — gating
+that wrong scored Ben UFO 56 instead of 76. LEARNINGS §61.
+
+**Done — venue filter.** Canonical keys (three "Refuge" strings, two rendering
+identically, held 23/1/1 artists) and matching on **every** room an artist plays in
+the window rather than their soonest. 1,228 → 1,499 artist-venue pairs reachable.
+`Producers only`, on by default, now reports the third of each room it hides.
+LEARNINGS §62.
+
+**Done — venue normalization (208).** Identity moved into the database as **two
+mechanisms with different authority**: deterministic folds (accents, case,
+punctuation, whitespace) apply automatically and merged 5 duplicate `venues` rows
+plus 2,745 historical events onto canonical rooms; trigram similarity **only ever
+suggests**, because no threshold separates `randall s island`/`randalls island`
+(0.97, same) from `green room`/`green room 42` (0.87, different). `venue_name`
+keeps what the feed sent; `venue_id` is the room. LEARNINGS §63.
+
+**Done — links page socials (209, 210).** `link_items.emphasis` renders YouTube,
+SoundCloud and Instagram as branded tiles under the bio with their action verb;
+contact links drop to the footer. Per link, not hardcoded by platform. 210 exists
+because 209 set the column without adding it to the view the page reads.
+LEARNINGS §64.
+
+**Done — the capture model.** RA, DICE and Ticketmaster are three of **one kind**:
+ticketing marketplaces. Of 23 watchlisted artists only 9 had any upcoming NYC
+record and **all 9 came from RA**. Shipped: manual show entry (`source='manual'`),
+a watchlist coverage strip that names who is missing, a way to watch an artist who
+is not in the pool, and **`pull-bandsintown`** — the first artist-first source,
+whose electronic-only guarantee is *who we ask about* rather than a genre filter,
+because Bandsintown reports no genre. LEARNINGS §65.
+
+**Parked — `BANDSINTOWN_APP_ID`.** The function is deployed and admin-gated and is
+a documented no-op until the secret is set. One step, Keith's.
+
+**Parked — server-rendered `<head>` for link previews.** `/links/<slug>` pasted
+into Instagram shows the site-wide card; the columns exist with nowhere to go
+until an edge function renders the head. ~1h.
+
+**Parked — lineup coverage in the pulls.** 35% of future RA events and 61% of DICE
+ones carry no lineup at all. It is the ceiling on everything venue- and
+artist-shaped, and no downstream filter can lift it.
+
+**Still parked from 2026-08-21/27.** The Planning tab has never been opened in a
+browser; a published planning round is only half frozen; six offerings remain
+provisional; parties still have no per-head ticket price.

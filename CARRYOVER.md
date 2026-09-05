@@ -1,4 +1,108 @@
-# Carryover - 2026-08-31 (link-in-bio pages: /links/<slug> - LAPTOP)
+# Carryover - 2026-09-05 (links page, buzz, venue identity, capture - LAPTOP)
+
+**Closed 2026-09-05, covering the run of 2026-08-31 -> 09-02.** This block is the
+snapshot; the eight dated **ADDENDA below it** are the detail, written as each
+piece landed, and are kept whole. Everything below the 2026-08-27 header is
+older sessions, untouched.
+
+## >> START HERE NEXT SESSION
+
+**1. ONE THING IS OWED BY KEITH, and nothing else is blocked on me.**
+Set **`BANDSINTOWN_APP_ID`** in Supabase -> Project Settings -> Edge Functions ->
+Secrets. `pull-bandsintown` is deployed (v1, admin-only, anon 401) and is a
+**documented no-op** until then - it says the secret is missing rather than
+reporting "no shows". Then: Radio tab -> **🎤 Check watchlist tours**. Lane 8 is
+already on the watchlist (24 artists), so he is asked about on the first press.
+
+**2. ALMOST NONE OF THIS HAS BEEN CLICKED.** No dashboard login on this laptop and
+the Browser pane cannot open `file://`, so everything below was verified at the
+database, PostgREST and syntax level only. Keith HAS used the links page (he
+built it out and published it), and the buzz / venue / capture work in the
+dashboard is unexercised. Highest-value first clicks:
+   - Best Nights -> Venues -> **🏷 Venue names** queue (203 spellings, suggestions).
+   - Best Nights -> Artists: the **Top track** column and a buzz chip with a `*`.
+   - Radio -> the **👁 watchlist coverage** strip, **＋ watch an artist**,
+     **🎫 add a show**.
+   - Radio -> **🗓 Generate week's tasks**: the DJ should be pre-ticked on four rows.
+
+**3. Carried, untouched, from 2026-08-27:** the Planning tab has still never been
+opened in a browser, and **a published planning round is still only half frozen**
+(`plan_publish_round()` does not version `plan_offering_lines`, so editing a price
+changes what a published round says it forecast). Scoped, not built, needs Keith.
+
+**4. Known gaps that are NOT bugs, deliberately left:**
+   - **Social link previews are generic** - `/links/<slug>` pasted into Instagram
+     shows the site-wide card, because the page renders client-side and crawlers
+     do not run JS. `og_image_url` / `seo_description` exist with nowhere to go
+     until something server-renders the `<head>` (~1h).
+   - **35% of future RA events and 61% of DICE ones carry no lineup at all.** No
+     filter can show artists that were never pulled; a venue now states its own
+     coverage so the filter is not blamed for it.
+   - **`sw.js` serves `/dashboard.html` for any navigation when offline** -
+     pre-existing and site-wide, likeliest to bite on a links page opened from
+     Instagram on one bar.
+
+## State summary
+
+- **Prod max migration 210, repo max 210 - NO DRIFT.** sha256 verified file-by-file
+  for 207/208/209/210: all four match `applied_migrations` exactly. 64 recorded.
+- **All 5 financial views return anon 401**, through PostgREST, key proven live first.
+- **Full anon sweep: 0 FAIL.** The six objects added this run (`link_pages`,
+  `link_items`, `v_link_click_stats`, `venue_aliases`, `v_venue_name_review`,
+  `v_venue_link_health`) are all NAMED in it - per the rule added on 08-31 that
+  the sweep discovers nothing and every new object joins one of its two lists.
+- **Latest LEARNINGS: SS65.** Eight added this run (SS58-SS65).
+- **CLAUDE.md gained sections for link-in-bio pages, venue identity, buzz, the
+  capture model and the anon-sweep rule.**
+- **Edge functions: `pull-bandsintown` deployed (v1, verify_jwt on).** No other
+  function touched.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Ran on the **laptop** (`C:\Users\keith\comewith`). Git: `master`, **committed and
+  pushed**, working tree clean, in sync with origin.
+- **Prod DATA touched, deliberately:** 5 duplicate `venues` rows merged and
+  soft-deleted (208); 2,745 `ra_events` back-linked to a canonical venue; three
+  `link_items` promoted to `emphasis='primary'`; one `watchlist` row added (Lane 8).
+- **No JS runtime on this machine still.** esprima with the downlevel recipe, run
+  as control / subject / negative on every change; `?.[` and `?.(` must be
+  rewritten before `?.` or the extraction fails on pre-existing syntax.
+
+## Tomorrow's default
+
+Set the Bandsintown secret and press the tour button; then work the 🏷 Venue names
+queue, which is the only screen here with a real backlog behind it (203 spellings,
+35 with a suggestion).
+
+## This session shipped
+
+Eight pieces, detailed in the addenda below:
+
+1. **Link-in-bio pages** (207) - `/links/<slug>`, multi-page, fully themed, edited
+   from the dashboard with the live preview being `links.html` itself.
+2. **Radio DJ auto-assign** - the week generator pre-ticks the DJ's four steps,
+   resolving FK-first then by name, refusing to guess on ambiguity.
+3. **Buzz rebuilt** - top-track plays added; fixed anchors instead of pool-relative
+   scaling; unmeasured inputs shrink the denominator instead of scoring zero.
+4. **Venue filter audit** - canonical keys, every room an artist plays, and the
+   hidden counts surfaced. 1,228 -> 1,499 artist-venue pairs reachable.
+5. **Venue normalization** (208) - deterministic folds auto-merge, fuzzy only
+   suggests, history keeps the raw string and gains a `venue_id`.
+6. **Links page socials** (209, 210) - `emphasis='primary'` renders branded tiles.
+7. **Capture gap** - manual show entry + watchlist coverage strip.
+8. **Bandsintown** - the first artist-first source, plus a way to watch any artist.
+
+## Parked / next
+
+- **`BANDSINTOWN_APP_ID`** - Keith's, one step, everything else is ready.
+- **Server-rendered `<head>` for link previews** - scoped, ~1h, not built.
+- **Per-page OG image field** - deliberately absent until the above exists; a
+  control that changes nothing is worse than a missing one.
+- **Planning round freeze** - carried from 08-27, needs Keith's call.
+- **The 🏷 Venue names queue** - 203 spellings, a real backlog, one click each.
+- **Lineup coverage in the pulls** - the ceiling on everything venue/artist-shaped.
+
+---
+
+# Carryover - 2026-08-31 (link-in-bio pages - LAPTOP) — superseded by the 2026-09-05 close above
 
 **Work done and closed 2026-08-31.** Everything from 2026-08-27 and earlier is
 preserved below, unchanged - including its open list, which this session did not
