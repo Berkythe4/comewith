@@ -2061,6 +2061,11 @@ column there does not preserve it; it resets it, quietly, on the next save.
 
 ## Section 65 — Three sources of the same KIND is one source (2026-09-02)
 
+> **Partly superseded by §66 (2026-09-10).** The general rule below stands.
+> The MEASUREMENT does not: "all 9 came from RA, DICE contributed nobody" was an
+> artifact of a pagination bug in `pull-dice`, not a fact about DICE. Claptone,
+> named below as watched-and-invisible, was listed on DICE the whole time.
+
 Lane 8 plays NYC in late September and the tool has never heard of him: no artist
 row, no lineup entry, no event title. The instinct is "add another feed". The
 instinct is wrong, and the reason is worth keeping.
@@ -2103,3 +2108,127 @@ becomes a work queue, and the fix for each row is one click away.
 The general rule: when adding a source, ask what KIND it is. If it answers the
 same question the existing ones answer, it buys catalogue. Only a source that asks
 a different question buys coverage.
+
+---
+
+## Section 66 — An unpaged read is a query with an undeclared cap (2026-09-10)
+
+Keith asked why the Lane 8 show at Brooklyn Storehouse was not captured
+automatically. The answer given was "the event carries no genre tag, so the tag
+sweep never sees it", and a fix was proposed on top of it: scan the untagged
+shows and classify which are electronic.
+
+Both were wrong, and the second would have been expensive and permanent.
+
+The event carries **`music:dj`**, one of the fifteen tags `pull-dice` already
+asks for. Nothing was wrong with the event, the tag, or the tag list. What was
+wrong is that `unified_search` is **paged** — every response carries a
+`next_page_cursor`, sent back as `cursor` — and the puller read page one and
+stopped:
+
+```
+music:dj   page 1   94 events   Sep 4 – Sep 19
+           page 2   98 events   Sep 19 – Oct 2   <- the Lane 8 show
+           page 3   97 events   Oct 2 – Oct 24
+           page 4   90 events   Oct 24 – Jan 30
+```
+
+Page one reached sixteen days out. The show was seventeen days out. Paged, the
+full fifteen-tag sweep goes **343 → 829 events for six extra HTTP calls**, and
+every watchlisted artist's NYC DICE event becomes reachable by tag.
+
+This is the same shape as the PostgREST `max_rows` rule already in CLAUDE.md: a
+read with no explicit range is a read with a cap you did not choose, and it never
+announces itself. It answers confidently and truncates in silence. The tell was
+in the data all along — DICE rows stopped at Sep 29 while RA ran to Nov 29 — and
+it got read as "DICE does not list far ahead" rather than "we are not asking for
+the rest".
+
+Two second-order lessons:
+
+**Fixing half of it moves the blind spot rather than removing it.** Paging took
+the 42-day candidate pool from 277 to 555; the Lane 8 show landed at position
+319, and `maxDetail` defaulted to 240. The cap had to rise in the same change or
+the show would still have been dropped, just at a different gate. When you widen
+an input, re-check every cap downstream of it in the same edit.
+
+**Do not build a classifier to solve a bug.** The proposed genre-scan would have
+added a machine that guesses at something the source already states, and it would
+have run forever looking reasonable while the actual defect sat one line away.
+Before inventing a judgement, confirm the data really is missing.
+
+---
+
+## Section 67 — Confirm a name, never derive one (2026-09-10)
+
+62% of future DICE events and 35% of RA ones arrive with an **empty `lineup`**.
+The show is stored and linked to nobody, so it is invisible to the artist pool,
+the watchlist coverage strip and buzz. Claptone's Oct 3 show was captured
+correctly and still reported him as having no upcoming NYC date.
+
+The obvious fix is to parse the artist out of the title. Measured over all 586
+lineup-less events, that is a bad idea: most titles are party names — *CTRL ALT
+DLT*, *FULLSOME*, *Julie's Top 5 UK Music Party*, *WOW NYFW x SAFE - City of
+Stars*. Deriving artists from those fills `ra_artists` with invented evidence,
+which is §26 again.
+
+Matching titles against the whole 3,349-name artist pool was measured too, and is
+just as bad the other way: it links *Stone Street Oktoberfest* to an artist called
+Stone (five times), *Alec Monopoly at the NYSC Summer Club* to Alec, and drags in
+"Dreams", "Cosmo" and "Special Guest".
+
+**So the rule is inverted: never DERIVE a name from a title, only CONFIRM one we
+already track** — the watchlist, our partners, or anyone whose track has been on a
+station. Exactly what the Bandsintown genre policy already said: the answer is
+guaranteed by *who we ask about*, not by parsing the response. Over the same
+corpus this fires twelve times, all twelve correct. Low recall on purpose — the
+goal is not to reconstruct 586 lineups, it is that a show by someone we care about
+cannot go unlinked.
+
+Two guards, both found by dry-running against real data rather than by reasoning
+about it:
+
+* **A single-word name needs a boundary.** "Blanco" is a tracked artist and also
+  the second half of *Gianni Blanco*, who is somebody else. Word-boundary matching
+  does not catch that; punctuation is the only signal, and plain normalising
+  destroys it. Titles are normalised **segment by segment** with the separators
+  kept as markers, and a one-word name must start a segment or follow a joining
+  word.
+* **A colon only separates when a space follows it.** Adding the guard above
+  initially split on every colon, which cut **BLOND:ISH** in half and lost them.
+  `presents: Westend` is a boundary; `BLOND:ISH` is a name.
+
+And it belongs in a **trigger, not a puller**: two of the twelve hits are RA. In
+`pull-dice` it would have fixed a third of the problem and then needed copying
+into two more pullers — three copies of one rule, drifting. It sits beside
+`ra_events_resolve_venue`: one implementation, every source, surviving the
+delete-and-reinsert every pull performs.
+
+---
+
+## Section 68 — The singular field cannot answer the plural question (again) (2026-09-10)
+
+§62 says: *"`next_venue` is ONE show. Never filter a venue on it. The tell is a
+singular field backing a plural question."* One field along, the same trap got
+walked into while building the radio show-chip lookup, which read
+`ra_artists.next_event_date`.
+
+Kim Anh's row said **2026-09-06 at Gabriela**, which had already happened. The
+lookup correctly rejected the past date, found nothing else on the row, and
+cleared her chip with "no upcoming NYC date for anyone credited". False: she had
+**four** upcoming NYC shows — Nowadays on the 12th, BASEMENT on the 19th,
+Knockdown on the 25th, Paragon on Oct 9 — all sitting in `ra_events.lineup`.
+
+Keith caught it, because he remembered pulling that artist out of the tool
+himself. The scale, once measured: **183 artists carry a wrong `next_event_date`
+while genuinely having an upcoming NYC show** — 169 already in the past, 6 null, 8
+pointing later than their real next date. `next_event_date` is a denormalised
+convenience that only refreshes when a pull happens to touch that artist; it rots
+on its own as dates pass.
+
+`ra_events.lineup` is the index. Anything asking "when do they next play" reads
+that. The rule from §62 is restated because stating it once was not enough: **a
+denormalised singular field is a cache, and a cache with no invalidation is a
+guess.** Every consumer still on `next_event_date` — the artist pool, Best Nights,
+the watchlist strip — is reading the same rotten number, and that is *not* fixed
+yet. It is the top item in Parked / next.

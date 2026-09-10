@@ -207,6 +207,42 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-09-10 (DICE pagination, title-confirmed artists, Ep 4)
+
+**The scene data got materially more complete, by fixing reads rather than adding sources.**
+
+- 🟢 **`pull-dice` follows its cursor (v22).** `unified_search` is paged and the
+  puller read page one, which reached only ~16 days out. That is why Lane 8's
+  Cross Pollination at Brooklyn Storehouse was invisible while carrying a tag we
+  already query. **343 → 829 events for six extra HTTP calls**; future DICE rows
+  86 → 555; reach now runs to June 2027. `maxDetail` default 240 → 600 in the
+  same change, since paging alone moved the blind spot to the cap. Bounded calls,
+  a 110s deadline, and `status: OK|PARTIAL` so a short run cannot read as a full
+  one. LEARNINGS §66.
+- 🟢 **Empty lineups no longer orphan a show (211).** 62% of future DICE events
+  and 35% of RA ones send no lineup. A trigger on `ra_events` fills a blank one
+  from the title, **confirming only names we already track** — never deriving one.
+  12 hits, all correct. LEARNINGS §67.
+- 🟢 **Watchlist coverage 9 → 10** artists with a known upcoming NYC show. DICE
+  now contributes 8 of the 10, and **Lane 8 is DICE-only** — which partly
+  supersedes §65's "DICE contributed nobody".
+- 🔴 **Bandsintown is cancelled, not pending.** Their API is issued per-artist to
+  that artist; no key exists for asking about a watchlist we do not own.
+  `pull-bandsintown` stays deployed and permanently inert. Songkick, the other
+  artist-first candidate, is untested.
+- 🟡 **`ra_artists.next_event_date` is a rotten cache** — 183 artists carry a wrong
+  one. Fixed for the radio show-chip path only; the artist pool, Best Nights and
+  the watchlist strip still read it. LEARNINGS §68. **Top of the backlog.**
+- 🟢 **Radio: a set arranged outside SoundCloud can now be reconciled.**
+  `Radio/render/apply_station_from_rekordbox.py` reviews before it writes, keeps
+  researched rows, re-derives show chips from `ra_events.lineup`, and drops the
+  unplayed through `sc_song_log` so they carry to the next show. SHOW 8 rebuilt
+  with it. `rekordbox_clean.py` is now shared by both export parsers.
+- 🟡 **Ep 4 is tracklist-complete but not released** — no cover, descriptions,
+  slug, mix or schedule; drop date was 2026-09-10.
+- 🟡 **`raRowScore` (dashboard) has a tested, unapplied one-line fix** for a false
+  match that pairs a track with a different song on the artist name alone.
+
 ## Current state — reconciled 2026-08-19 (FP&A close-out: 1099s, gear, photo library, Blue Sky)
 
 **Done this pass**

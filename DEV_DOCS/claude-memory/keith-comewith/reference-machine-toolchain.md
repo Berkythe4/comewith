@@ -53,3 +53,14 @@ before relying on it — this is config, and config gets fixed.
   If a fetch dies that way, retry before concluding the remote is unreachable.
 
 Related: [[project-fpa-planning-tool]]
+
+- **A long SQL string cannot be passed to `db.py` as an argument here.** Windows
+  caps a command line near 32k, so a full-station rewrite (~100 statements) dies
+  with `FileNotFoundError: [WinError 206] The filename or extension is too long`
+  before the process starts. The failure is safe (nothing ran) but looks like a
+  missing file. `db.py` accepts a FILE PATH as its argument -- write the SQL to a
+  temp .sql and pass that. `Radio/render/apply_station_from_rekordbox.py` does
+  this above 8k.
+- **Bash heredocs mangle non-ASCII on this machine.** A `<<'PYEOF'` block
+  containing an em-dash silently failed a string match against a UTF-8 file on
+  2026-09-10. Write the script with the Write tool and run the file instead.

@@ -1,3 +1,106 @@
+# Carryover - 2026-09-10 (Ep 4 tracklist, DICE pagination, title-confirmed artists - LAPTOP)
+
+**Closed 2026-09-10.** The 2026-09-05 block below is kept whole and is the
+previous close; everything under it is older still, untouched.
+
+## >> START HERE NEXT SESSION
+
+**1. NOTHING IS OWED BY KEITH.** The Bandsintown item that headed the last two
+carryovers is **cancelled, not pending** - their API is issued per-artist to that
+artist, so no key exists that lets us ask about a watchlist we do not own.
+`pull-bandsintown` stays deployed and **permanently inert**; `BANDSINTOWN_APP_ID`
+will never be set. Do not re-propose it and do not read the deployed function as
+work-in-progress. See CLAUDE.md and LEARNINGS §65's supersede note.
+
+**2. EP 4 IS THE LIVE DEADLINE and it slipped.** SHOW 8's tracklist is correct in
+the database (21 tracks, play order, chips) but **go-live is entirely unset** -
+no cover, no `desc_public`/`desc_sc`, no slug, no mix uploaded, no
+`scheduled_go_live`, status still `planned`. The drop date was **2026-09-10**.
+Everything else about the episode is ready; this is the only thing standing
+between it and release.
+   - Keith still owes the filled-in `Radio/Episode 4/EP4_times.txt`.
+   - Then the cues need rebuilding - see item 4, they are incomplete as written.
+
+**3. THE BIGGEST OPEN BUG: 183 artists carry a wrong `next_event_date`** (169
+already in the past, 6 null, 8 later than their real next show) while genuinely
+having an upcoming NYC date. It is a denormalised cache with no invalidation.
+Fixed for the radio show-chip path only; **the artist pool, Best Nights and the
+watchlist coverage strip all still read it**. Join through `ra_events.lineup`
+instead. LEARNINGS §68.
+
+**4. Two smaller things left mid-air, both scoped, neither applied:**
+   - **`raRowScore` in `dashboard.html` mismatches a track.** It pairs *Take Care
+     (Extended Revisit)* with Tinlicker & Helsloot's *Tell Me* at 0.66 on the
+     artist name alone, because the swapped orientation lets a bare artist name
+     inside a long title carry a match. One-line fix (gate the swapped score on
+     its own second term) tested against all 21 Ep 4 rows: kills only the false
+     match, changes nothing else. **Not applied - `master` auto-deploys.**
+   - **The Ep 4 cues CSV has no `show_date`, `show_venue` or `release_date`**, so
+     `render_card` would silently draw none of the 21 show chips. `make_cues.py`
+     reads the DB but does not emit `genres`, so it trades one gap for another.
+     The two need merging before the render.
+
+**5. Carried, untouched:** the Planning tab has still never been opened in a
+browser, and **a published planning round is still only half frozen**
+(`plan_publish_round()` does not version `plan_offering_lines`). Scoped, not
+built, needs Keith.
+
+## State summary
+
+- **Prod max migration 211, repo max 211 - NO DRIFT.** 211 dry-run with
+  `rollback` against real prod before applying, as required.
+- **All 5 financial views return anon 401**, verified through PostgREST with the
+  publishable key proven live first (`check_financial_views.py`).
+- **Full anon sweep: 0 FAIL.** `v_tracked_artists`, the one view 211 adds, is
+  NAMED in `check_anon_exposure.py` per the rule that the sweep discovers nothing.
+- **Latest LEARNINGS: §68.** Three added (§66, §67, §68); **§65 marked as partly
+  superseded** - its rule stands, its measurement was an artifact of the bug.
+- **Edge functions: `pull-dice` deployed v22** (verify_jwt on). No other function
+  touched. Deployed via `scripts/deploy_edge_function.py`; the CLI cannot do it.
+- **Prod DATA touched, deliberately:** SHOW 8 rewritten to the 21 played tracks
+  (52 dropped, each logged `passed@8` first so they carry to SHOW 9); `pull-dice`
+  re-pulled 555 in-window events; 12 `ra_events` rows gained a title-confirmed
+  lineup; one manual Lane 8 row added then removed once DICE returned the show
+  itself.
+- **Watchlist coverage 9 → 10 artists** with a known upcoming NYC show.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Ran on the **laptop**. Git: `master`, committed and **pushed** - and note the
+  previous close had NOT been: `584a875` (the 2026-09-05 full close) sat unpushed
+  for five days while CARRYOVER claimed "committed and pushed, in sync with
+  origin". Both are on origin now. **Verify the push, do not assert it.**
+- **No JS runtime on this machine.** `raRowScore` was verified by porting it to
+  Python and running it against real data, not by reading it.
+
+## Tomorrow's default
+
+Get Ep 4 out: times sheet back from Keith → merge the cues → render → verify by
+pulling a real frame → fill the go-live fields. If Ep 4 is already out, the
+`next_event_date` cache (item 3) is the highest-value fix on the board.
+
+## This session shipped
+
+1. **Ep 4 / SHOW 8 rebuilt from the real Rekordbox export.** Keith arranged the
+   set outside the SoundCloud playlist, so there was nothing to sync back. 21
+   tracks in play order, BPM/key across, 21 of 21 show chips valid, 52 unplayed
+   songs logged `passed@8` and carried. Files in `Radio/Episode 4/`.
+2. **`pull-dice` v22 - pagination.** `unified_search` is paged; we read page one.
+   Page 1 of `music:dj` reaches ~16 days out and the Lane 8 show was 17 days out.
+   343 → 829 events for six extra calls. `maxDetail` 240 → 600 in the same change
+   (paging alone would have moved the blind spot to the cap), plus a 110s
+   deadline, per-call timeouts and `status: OK|PARTIAL`.
+3. **Migration 211 - title-confirmed artists.** 62% of future DICE events send an
+   empty lineup. A trigger now fills a blank one from the title, confirming ONLY
+   names we already track. 12 hits across all of `ra_events`, all 12 correct.
+4. **Two tools:** `Radio/render/apply_station_from_rekordbox.py` (the SQL path
+   for a set arranged outside SoundCloud - reviews before it writes, drops via
+   `sc_song_log` so nothing is forgotten) and `rekordbox_clean.py`, now shared by
+   both export parsers instead of each carrying its own repairs.
+5. **Docs:** CLAUDE.md gained the Bandsintown dead-end rule, the DICE pagination
+   rule, the widen-an-input-recheck-the-caps rule, the empty-lineup rule and the
+   `next_event_date` warning.
+
+---
+
 # Carryover - 2026-09-05 (links page, buzz, venue identity, capture - LAPTOP)
 
 **Closed 2026-09-05, covering the run of 2026-08-31 -> 09-02.** This block is the

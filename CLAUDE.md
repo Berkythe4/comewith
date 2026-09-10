@@ -386,24 +386,45 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **RA, DICE and Ticketmaster are all MARKETPLACES — three of one kind, not three
   kinds.** An artist selling direct (own site, AXS, Tixr, Shotgun, Eventbrite,
   See) is invisible to all of them, and a fourth marketplace buys catalogue, not
-  coverage. Measured: of 23 watchlisted artists only 9 had any upcoming NYC record
-  and **all 9 came from RA** — DICE and TM contributed nobody on the watchlist.
-  The kind that would close it is **artist-first** (Bandsintown / Songkick), which
-  matches the watchlist because that is already a list of artists. LEARNINGS §65.
-- **`pull-bandsintown` is the artist-first source, and its genre policy IS the
-  watchlist.** Bandsintown returns **no genre**, so any genre rule on the response
-  would be invented. Electronic-only is guaranteed by *who we ask about* — the
-  watchlist / partners / the existing pool. Charli XCX cannot arrive because we
-  never ask about her. **Never add a genre filter on the response**, and never
-  widen the input silently: widening the input IS the decision. A support act on
-  someone's bill is stored on the show but does **not** enter `ra_artists`.
-- **`pull-bandsintown` upserts and never deletes by window.** It reads a rotating
-  subset of artists, so a delete keyed to the date range would throw away shows
-  for every artist that run did not ask about. Only past rows are pruned. Secret:
-  `BANDSINTOWN_APP_ID` — a static id, no OAuth, no expiry; missing = a documented
-  no-op with a reason. It is **its own button**, not part of "↻ Pull shows" (§53:
-  one HTTP call per artist is a different latency from three bulk pulls), and it
-  reports `PARTIAL` by NAMING who it did not reach.
+  coverage. The kind that would close it is **artist-first** — ask "where is this
+  artist playing" rather than "what is on sale in this city". LEARNINGS §65.
+  ⚠ §65's *measurement* ("all 9 came from RA, DICE contributed nobody") was an
+  artifact of the pagination bug fixed on 2026-09-10; see §66. DICE now covers 8
+  of the 10 watchlisted artists who have a known NYC show, and **Lane 8 is
+  DICE-only**. The rule about KINDS still holds; the urgency was overstated.
+- **Bandsintown is a DEAD END — do not put it back on the list.** Settled
+  2026-09-10: their API is issued per-artist to that artist, so there is no key
+  that lets us ask about a watchlist we do not own. `supabase/functions/
+  pull-bandsintown` is deployed but **permanently inert** and `BANDSINTOWN_APP_ID`
+  will never be set. Do not re-propose it, and do not read the deployed function
+  as work-in-progress. Songkick was the other artist-first candidate named in
+  §65 and has not been tested.
+- **`unified_search` (DICE) is PAGED, and the cursor is not optional.** Every
+  response carries `next_page_cursor`; send it back as **`cursor`**. Page 1 of a
+  tag reaches only ~16 days out, which is how Lane 8's Cross Pollination went
+  missing while carrying a tag we already query. Paged, the 15-tag sweep is
+  343 → 829 events for six extra calls. **An unpaged read is a query with an
+  undeclared cap** — same rule as PostgREST `max_rows`, and it truncates just as
+  silently. LEARNINGS §66.
+- **Widening an input means re-checking every cap below it, in the same change.**
+  Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
+  position 319, past the old `maxDetail` default of 240 — fixing only the paging
+  would have moved the blind spot, not removed it. `pull-dice` now defaults to 600
+  (ceiling 900), bounds every call, stops at a 110s deadline, and reports
+  `status: OK|PARTIAL` with `dropped_over_cap` / `timed_out` / `not_reached`.
+- **An empty `lineup` is normal — 62% of future DICE events and 35% of RA ones.**
+  Migration 211 fills a blank lineup from the event TITLE, but only ever
+  **CONFIRMS a name we already track** (watchlist / partner / played on a station);
+  it never DERIVES one. Most of these titles are party names, and matching the
+  full artist pool links "Stone Street Oktoberfest" to an artist called Stone.
+  Entries added this way carry `"via": "title"`. A lineup a feed actually sent is
+  never touched. It is a TRIGGER on `ra_events`, beside `ra_events_resolve_venue`,
+  because the problem spans all three sources — do not move it into a puller.
+  LEARNINGS §67.
+- **`ra_artists.next_event_date` is a stale cache. Do not read it.** 183 artists
+  carry a wrong one while genuinely having an upcoming NYC show (169 in the past).
+  `ra_events.lineup` is the index — join through it. Same trap as `next_venue`
+  (§62): a singular field cannot answer a plural question. LEARNINGS §68.
 - **A show the feeds miss goes in by hand: `source='manual'`.** It is a normal
   `ra_events` row (`ra_id = 'man:<slug>'`) so it flows through the window, venue
   filter, artist pool and buzz with no special cases, and every puller scopes its
