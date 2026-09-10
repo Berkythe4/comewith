@@ -24,6 +24,9 @@ Start times are seeded as arithmetic guesses (track lengths scaled to fit the
 mix), clearly labelled as such. They are a typing aid, NOT a measurement.
 """
 import argparse, csv, io, json, os, re, subprocess, sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from rekordbox_clean import clean_artist, clean_title
 try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception: pass
 
@@ -90,8 +93,11 @@ def read_rekordbox(path):
         # a field ("I've Been Waiting﻿﻿ (Extended)"). It is an encoding
         # artifact, not part of the name — everything else about the title, symbols
         # included, is left exactly as written.
-        title = title.replace("﻿", "")
-        artist = artist.replace("﻿", "")
+        # Shared with the database path so the video, the episode page and the
+        # fill-in sheet cannot print three different tracklists. See
+        # rekordbox_clean.py for what each repair is and which Ep 4 row it is from.
+        title = clean_title(title.replace("﻿", ""))
+        artist = clean_artist(artist.replace("﻿", ""))
         out.append({"artist": artist, "title": title, "bpm": bpm,
                     "camelot": col(c, "Key"), "genre": col(c, "Genre"),
                     "cue": cue, "duration_ms": int(secs * 1000)})

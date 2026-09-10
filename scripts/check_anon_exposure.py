@@ -108,6 +108,7 @@ MUST_BE_EMPTY = [
     ("venue_aliases", "which venue spellings map to which room"),
     ("v_venue_name_review", "the venue names still awaiting a ruling"),
     ("v_venue_link_health", "how much of the event history is linked"),
+    ("v_tracked_artists", "the watchlist and everyone we have played - our strategy, by name"),
     # --- link-in-bio pages (207) ---
     ("link_pages", "unpublished link-in-bio pages"),
     ("link_items", "links on unpublished pages, including scheduled ones"),

@@ -1,0 +1,39 @@
+EP 4 - COME WITH NYC RADIO : TRACK START TIMES
+======================================================================================
+MIX FILE   : 01 Ep.4_FINAL.wav
+MIX LENGTH : 79:14
+TRACKLIST  : CWR_Ep4.txt (Rekordbox export - 21 tracks, play order)
+
+HOW TO FILL THIS IN
+  1. Type the time each track STARTS, right after the '=' sign.  Format mm:ss
+  2. Within ~15 seconds is close enough - I snap it to the exact drop by audio.
+  3. Track 1 is almost always 0:00.
+  4. Do NOT reorder the lines. Save the file, then tell me it's done.
+  5. Unsure about one? Put a ? after it, e.g.  7 = 15:25?
+
+The 'guess' is ARITHMETIC ONLY - track lengths scaled to fit the mix.
+It is NOT from listening. A starting point, not an answer.
+
+--------------------------------------------------------------------------------------
+ 1 =         Flying Lotus - Crust                                                                       [2:13 long | guess 0:00]
+ 2 =         Helsloot - Take Care (Extended Revisit)                                                    [5:52 long | guess 1:27]
+ 3 =         Lane 8, Davey Havok - Empty Theatre, Pretty Picture (Original Mix)                         [5:01 long | guess 5:17]
+ 4 =         Kim Anh - Shadows (Eli Escobar Remix)                                                      [6:27 long | guess 8:35]
+ 5 =         BLOND:ISH, Amadou & Mariam, Francis Mercier - Sete (Nitefreak Remix)                       [6:07 long | guess 12:48]
+ 6 =         Rodriguez Jr., Liset Alea - What Is Real (Deep in the Playa Mix) (Video Edit)              [4:13 long | guess 16:49]
+ 7 =         Lee Burridge, Matthew Dekay - Lost In A Moment (Original Mix)                              [10:08 long | guess 19:34]
+ 8 =         Four Tet - For These Times                                                                 [4:59 long | guess 26:13]
+ 9 =         Eli & Fur - Otherside (Nils Hoffmann Extended Remix)                                       [5:57 long | guess 29:29]
+10 =         Sinead Harnett - Unconditional (Sonny Fodera Extended Deep Mix)                            [6:25 long | guess 33:23]
+11 =         Lane 8, Sultan + Shepard, sadHAPPY - Disappear (Original Mix)                              [5:50 long | guess 37:35]
+12 =         Serge Devant, Camille Safiya, Damiano C - Fearing Love feat. Camille Safiya (Club Mix)     [7:28 long | guess 41:24]
+13 =         Tinlicker, Hero Baldwin - I Want My Freedom (feat. Hero Baldwin)                           [5:10 long | guess 46:18]
+14 =         Gui Boratto, Lane 8, Jyll - The Doubt (Original Mix)                                       [6:40 long | guess 49:41]
+15 =         Rhye, Diplo - MMXX - XII (Kolsch Remix [Extended])                                         [8:11 long | guess 54:03]
+16 =         Lane 8, Kasablanca - Run (Extended Mix)                                                    [5:26 long | guess 59:25]
+17 =         ZHU, J. Worra, partywithray - Zhudio54 (J. Worra Remix)                                    [5:12 long | guess 62:58]
+18 =         Mau P - Like i like it (Adapter remix)                                                     [4:03 long | guess 66:23]
+19 =         Phantogram, HNTR - Fall In Love Again (Extended Mix)                                       [4:35 long | guess 69:02]
+20 =         BLOND:ISH, Nico de Andrea, Darla Jade - Hold Tight (feat. Darla Jade) (Dombresky Extended Remix)[6:16 long | guess 72:02]
+21 =         MYRNE, Massane - In Motion (Original Mix)                                                  [4:43 long | guess 76:09]
+--------------------------------------------------------------------------------------

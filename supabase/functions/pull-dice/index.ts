@@ -3,8 +3,10 @@
 // Widens the Come With Radio / Market data with DICE (dice.fm) EDM shows in NYC.
 // DICE has no official public API, so this uses the SAME endpoints their own
 // website calls (reverse-engineered, no auth):
-//   • POST https://api.dice.fm/unified_search  {tag:"gig:<genre>", lat, lng}
-//       → event listings near a point (id, name, dates, venues, images)
+//   • POST https://api.dice.fm/unified_search  {tag:"gig:<genre>", lat, lng, cursor?}
+//       → event listings near a point (id, name, dates, venues, images).
+//         PAGED: the response's `next_page_cursor` goes back as `cursor`.
+//         Page 1 alone reaches ~16 days out — see the note on search().
 //   • GET  https://api.dice.fm/events/<id>
 //       → detail: perm_name (public URL) + summary_lineup.top_artists
 //
@@ -16,9 +18,10 @@
 // Admin JWT OR service-role. No secret required (DICE endpoints are open).
 // Body: { from?: "YYYY-MM-DD" (default today), to?: "YYYY-MM-DD",
 //          days?: number (default 42, used when `to` is absent),
-//          maxDetail?: number (default 240) }
-//   maxDetail bounds the detail-fetch pass. The response reports
-//   dropped_over_cap + last_date so a truncated pull can't pass for a full one.
+//          maxDetail?: number (default 600, max 900) }
+//   maxDetail bounds the detail-fetch pass. The response reports `status`
+//   (OK | PARTIAL), dropped_over_cap, timed_out, not_reached, search_pages and
+//   last_date, so a truncated pull can never pass for a full one.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -35,30 +38,76 @@ const TAGS = [
   "gig:dubstep", "gig:electronic", "gig:minimal", "gig:afro-house", "gig:amapiano",
 ];
 
-async function search(tag: string): Promise<any[]> {
-  try {
-    const r = await fetch("https://api.dice.fm/unified_search", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "User-Agent": UA },
-      body: JSON.stringify({ tag, lat: NYC.lat, lng: NYC.lng }),
-    });
-    if (!r.ok) return [];
-    const j = await r.json();
-    const out: any[] = [];
+const MAX_PAGES = 12;
+
+// unified_search is PAGED. Every response carries `next_page_cursor`, and the
+// next page is fetched by sending it back as `cursor`. Reading only the first
+// page — which is what this did until 2026-09-10 — is a query with an
+// undeclared cap, the same shape as an unranged PostgREST select: it answers
+// confidently and truncates in silence.
+//
+// It cost us real shows. Page 1 of `music:dj` reached 16 days out; Lane 8's
+// Cross Pollination at Brooklyn Storehouse was 17 days out, on page 2, and
+// never entered the candidate list. The event was correctly tagged `music:dj`
+// the whole time — nothing was wrong with the event or the tag list. Paged,
+// `music:dj` alone yields 379 events where page 1 gave 94, and the full 15-tag
+// sweep goes 343 → 829 for six extra HTTP calls.
+//
+// Pages come back date-ascending, so once a whole page sits beyond the window
+// there is nothing later worth asking for.
+async function search(tag: string, cutoff: string, stats: { pages: number }): Promise<any[]> {
+  const out: any[] = [];
+  const seen = new Set<string>();
+  let cursor: string | null = null;
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    let j: any;
+    try {
+      const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
+      if (cursor) body.cursor = cursor;
+      const r = await fetch("https://api.dice.fm/unified_search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": UA },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!r.ok) break;
+      j = await r.json();
+    } catch { break; }
+    stats.pages++;
+
+    const found: any[] = [];
     const walk = (o: any) => {
       if (Array.isArray(o)) { for (const v of o) walk(v); return; }
       if (o && typeof o === "object") {
-        if (o.type === "event" && o.event?.id) out.push(o.event);
+        if (o.type === "event" && o.event?.id) found.push(o.event);
         for (const v of Object.values(o)) walk(v);
       }
     };
     walk(j);
-    return out;
-  } catch { return []; }
+
+    let fresh = 0, earliest = "9999-99-99";
+    for (const e of found) {
+      if (!e?.id || seen.has(e.id)) continue;
+      seen.add(e.id);
+      out.push(e);
+      fresh++;
+      const d = (e?.dates?.event_start_date || "").slice(0, 10);
+      if (d && d < earliest) earliest = d;
+    }
+
+    cursor = typeof j?.next_page_cursor === "string" ? j.next_page_cursor : null;
+    if (!cursor || !fresh) break;
+    // This page is entirely past the window; every later page is later still.
+    if (earliest !== "9999-99-99" && earliest > cutoff) break;
+  }
+  return out;
 }
 async function detail(id: string): Promise<any | null> {
   try {
-    const r = await fetch(`https://api.dice.fm/events/${id}`, { headers: { "User-Agent": UA } });
+    const r = await fetch(`https://api.dice.fm/events/${id}`, {
+      headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12000),
+    });
     if (!r.ok) return null;
     return await r.json();
   } catch { return null; }
@@ -102,8 +151,9 @@ Deno.serve(async (req) => {
 
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
+    const searchStats = { pages: 0 };
     for (const tag of TAGS) {
-      const evs = await search(tag);
+      const evs = await search(tag, cutoff, searchStats);
       for (const e of evs) {
         if (!cand.has(e.id)) cand.set(e.id, { ...e, _tag: tag.split(":")[1] });
       }
@@ -120,11 +170,12 @@ Deno.serve(async (req) => {
     const dateOf = (e: any) => (e?.dates?.event_start_date || "").slice(0, 10);
     const inRange = [...cand.values()].filter((e) => { const d = dateOf(e); return !d || (d >= from && d <= cutoff); });
     inRange.sort((a, b) => (dateOf(a) || "9999-99-99").localeCompare(dateOf(b) || "9999-99-99"));
-    // Ceiling raised 400 → 600. NYC runs ~10 DICE shows a day, so even a 4-week
-    // window needs more than the old 240 default; the caller scales the request
-    // to the window it asked for. Details run 8-wide, so 600 is ~75 rounds —
-    // still comfortably inside the function's time budget.
-    const maxDetail = Math.min(600, Math.max(40, Number(b.maxDetail) || 240));
+    // Default raised 240 → 600, IN THE SAME CHANGE as pagination, because fixing
+    // only the paging would move the blind spot rather than remove it: paging
+    // takes a 42-day window from 277 candidates to 555, and the Lane 8 show that
+    // prompted all this lands at position 319 — still dropped under a 240 cap.
+    // Ceiling 900 for wide windows; the deadline below is what keeps that safe.
+    const maxDetail = Math.min(900, Math.max(40, Number(b.maxDetail) || 600));
     const picked = inRange.slice(0, maxDetail);
     const droppedOverCap = inRange.length - picked.length;
     const ids = picked.map((e) => e.id);
@@ -132,7 +183,15 @@ Deno.serve(async (req) => {
     const artistMap = new Map<string, Record<string, unknown>>();
     let scanned = 0, kept = 0;
 
+    // Refuse to start work we cannot finish. The edge runtime's wall clock is
+    // ~150s; a full 900-id pass is ~113 rounds of 8. Stopping at a deadline and
+    // SAYING SO beats being killed mid-pass, which writes nothing and leaves no
+    // trace of the attempt. Candidates are soonest-first, so what a short run
+    // drops is always the far end of the window, never a random hole.
+    const DEADLINE = Date.now() + 110_000;
+    let timedOut = false;
     for (let i = 0; i < ids.length; i += 8) {
+      if (Date.now() > DEADLINE) { timedOut = true; break; }
       const batch = ids.slice(i, i + 8);
       const details = await Promise.all(batch.map((id) => detail(id)));
       for (let k = 0; k < batch.length; k++) {
@@ -193,8 +252,16 @@ Deno.serve(async (req) => {
     // week out, that's the search's own horizon, not a filter you can widen.
     const lastDate = rows.reduce((m, r) => (r.event_date as string) > m ? (r.event_date as string) : m, "");
     return new Response(JSON.stringify({
-      success: true, source: "dice", candidates: cand.size, in_window_candidates: inRange.length,
-      detailed: ids.length, dropped_over_cap: droppedOverCap, scanned, saved: kept,
+      // PARTIAL is its own state, not a quieter kind of success: a run that hit
+      // the cap or the clock has a known blind spot at the far end of the window
+      // and the UI must show that as a problem, not a tick.
+      success: true, source: "dice",
+      status: (droppedOverCap > 0 || timedOut) ? "PARTIAL" : "OK",
+      candidates: cand.size, in_window_candidates: inRange.length,
+      search_pages: searchStats.pages,
+      detailed: ids.length, dropped_over_cap: droppedOverCap,
+      timed_out: timedOut, not_reached: timedOut ? ids.length - scanned : 0,
+      scanned, saved: kept,
       last_date: lastDate || null, artists: artistRows.length,
       // Echo the window actually pulled, so a caller can tell "DICE has nothing
       // there" apart from "I asked for the wrong dates".
