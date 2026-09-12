@@ -82,6 +82,7 @@
   .gchip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);font-weight:700;}
   .genres{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
   .gchip.sm{font-size:.68rem;padding:4px 10px;}
+  .fresh{font-family:var(--mono);font-size:.68rem;color:var(--faint);}
   .crate-meta{color:var(--faint);font-size:.82rem;margin:2px 0 10px;}
   .crate-meta b{color:var(--dim);}
   .crate-meta button{font-family:var(--mono);font-size:.7rem;background:none;border:0;color:var(--lime);
@@ -209,7 +210,9 @@ let PLAYING='';
 // typing in the search box used to collapse the whole page, which is the fastest
 // way to make a research tool feel hostile.
 const OPEN=new Set();
+const akey=a=>(a&&a.name||'').trim().toLowerCase();
 let Q='', SORT='soon', MUSIC_ONLY=true, GENRE='', GRP='', DAY='', LIMIT=60, SETOPEN=true;
+let LOADED=0;   // when the crate on screen was fetched
 
 function toast(msg,kind){
   const el=$('#toast'); if(!el) return;
@@ -467,8 +470,13 @@ function artistCard(r){
   const n=(a.songs||[]).length;
   const searching=!!Q.trim();
   const hit=searching&&m.songs;                       // this artist matched on song titles
-  const open=OPEN.has(i)||!!hit;
-  const only=(hit&&!OPEN.has(i))?m.songs:null;        // show the matches; "show all" opens the rest
+  // Which cards are expanded is remembered by NAME, not by position. A refresh
+  // re-reads the whole crate and an artist's index moves the moment a show is
+  // pulled or a scan lands — keyed by index, a refresh would silently open
+  // somebody else's card.
+  const k=akey(a);
+  const open=OPEN.has(k)||!!hit;
+  const only=(hit&&!OPEN.has(k))?m.songs:null;        // show the matches; "show all" opens the rest
   const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
   const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
   // The day chip only appears on an edition scoped past its own night — otherwise
@@ -478,10 +486,10 @@ function artistCard(r){
     <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
     <div class="cardacts">
-      ${n?`<button class="btn songs" data-toggle="${i}">${open?'▾':'🎵'} ${n} song${n===1?'':'s'}</button>`:'<span class="meta">no music scanned yet — nothing to audition here</span>'}
+      ${n?`<button class="btn songs" data-toggle="${esc(k)}">${open?'▾':'🎵'} ${n} song${n===1?'':'s'}</button>`:'<span class="meta">no music scanned yet — nothing to audition here</span>'}
       ${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud ↗</a>`:''}
     </div>
-    ${open&&n?`<div class="songs" id="songs-${i}">${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${i}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
+    ${open&&n?`<div class="songs" id="songs-${i}">${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${esc(k)}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
   </div>`;
 }
 function renderCrate(){
@@ -523,7 +531,16 @@ function toolsHtml(){
     ${hasDisco?`<button class="gchip${GRP===''?' on':''}" data-grp="">All stages</button>
       <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main</button>
       <button class="gchip${GRP==='disco'?' on':''}" data-grp="disco">🕺 Disco Den</button>`:''}
-    <button class="recbtn" data-recopen style="margin-left:auto;">📋 How it works</button>`;
+    <span style="margin-left:auto;display:flex;gap:7px;align-items:center;flex-wrap:wrap;">
+      <span class="fresh" title="The crate is rebuilt live every time this loads — it is never a snapshot taken when the link was made.">crate ${freshLabel()}</span>
+      <button class="recbtn" data-refresh title="Re-read the shows and songs. New artists Keith has pulled, and new music scanned since you opened this, appear here.">↻ Refresh</button>
+      <button class="recbtn" data-recopen>📋 How it works</button>
+    </span>`;
+}
+function freshLabel(){
+  if(!LOADED) return '';
+  const m=Math.round((Date.now()-LOADED)/60000);
+  return m<1?'just loaded':m<60?`loaded ${m} min ago`:`loaded ${Math.round(m/60)} h ago`;
 }
 
 // ── shell ────────────────────────────────────────────────────────────────────
@@ -623,9 +640,10 @@ document.addEventListener('click',e=>{
   if(t.closest('[data-closeplayer]')){ closePlayer(); return; }
 
   const tg=t.closest('[data-toggle]');
-  if(tg){ const i=+tg.dataset.toggle; OPEN.has(i)?OPEN.delete(i):OPEN.add(i); renderCrate(); return; }
+  if(tg){ const k=tg.dataset.toggle; OPEN.has(k)?OPEN.delete(k):OPEN.add(k); renderCrate(); return; }
   const sa=t.closest('[data-showall]');
-  if(sa){ OPEN.add(+sa.dataset.showall); renderCrate(); return; }
+  if(sa){ OPEN.add(sa.dataset.showall); renderCrate(); return; }
+  if(t.closest('[data-refresh]')){ refresh(true); return; }
 
   const add=t.closest('[data-addsong]');
   if(add){
@@ -667,11 +685,66 @@ async function load(){
   let j;
   try{ j=await api({}); }
   catch(e){ $('#shell').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
-  DATA=j;
+  DATA=j; LOADED=Date.now(); ARTBYNAME=null;
   $('#shell').innerHTML=shellHtml();
   const c=$('#clrq'); if(c) c.hidden=!Q;
   renderSet(); renderCrate();
 }
+
+// ── refresh ──────────────────────────────────────────────────────────────────
+// NOTHING here is frozen at the time the link is made: the crate is rebuilt from
+// the shows, artists and scan cache on every request, and the token is only a
+// credential. But the page fetches once on load, so a tab left open all weekend
+// is showing last week's crate. This is how the DJ gets the new artists Keith
+// pulled without being told to reload.
+//
+// The whole view is rebuilt from the fresh payload, so everything on screen that
+// the DJ chose — search, sort, filters, which cards are open, what they were
+// half-way through typing, where they had scrolled — is carried across by hand.
+// A refresh that loses your place is one nobody presses twice.
+let REFRESHING=false;
+async function refresh(loud){
+  if(REFRESHING) return;
+  REFRESHING=true;
+  const btn=document.querySelector('[data-refresh]');
+  if(btn){ btn.disabled=true; btn.textContent='↻ …'; }
+  const y=window.scrollY;
+  const form={a:$('#ownArtist')?.value||'',t:$('#ownTitle')?.value||'',u:$('#ownUrl')?.value||'',s:$('#ownShow')?.value||''};
+  const ownWasOpen=$('#ownBox')?.open;
+  try{
+    const j=await api({});
+    const before=(DATA.artists||[]).length, beforeSongs=(DATA.artists||[]).reduce((s,a)=>s+((a.songs||[]).length),0);
+    DATA=j; LOADED=Date.now(); ARTBYNAME=null;
+    renderSet(); renderCrate();
+    const box=$('#ownBox'); if(box&&(ownWasOpen||form.a||form.t||form.u)) box.open=true;
+    const set=(id,val)=>{ const el=$(id); if(el&&val) el.value=val; };
+    set('#ownArtist',form.a); set('#ownTitle',form.t); set('#ownUrl',form.u);
+    ownMatchUpdate(); set('#ownShow',form.s);
+    if(loud){
+      const now=(DATA.artists||[]).length, nowSongs=(DATA.artists||[]).reduce((s,a)=>s+((a.songs||[]).length),0);
+      const dA=now-before, dS=nowSongs-beforeSongs;
+      // Say what actually changed. "Refreshed" on its own leaves you wondering
+      // whether it did anything.
+      toast(dA||dS ? `Updated — ${dA>=0?'+':''}${dA} artist${Math.abs(dA)===1?'':'s'}, ${dS>=0?'+':''}${dS} song${Math.abs(dS)===1?'':'s'}` : 'Up to date — nothing new yet');
+    }
+  }catch(e){ if(loud) toast(e.message,'err'); }
+  REFRESHING=false;
+  // On success the button is a fresh element already in its normal state; on
+  // failure it is the same one, still disabled. Put it right either way, and
+  // only then put the page back where the DJ had it.
+  const b=document.querySelector('[data-refresh]');
+  if(b){ b.disabled=false; b.textContent='↻ Refresh'; }
+  window.scrollTo(0,y);
+}
+// The "loaded N min ago" label has to age on its own, or it is a clock that only
+// ticks when you touch something. Text only — never a re-render.
+setInterval(()=>{ const el=document.querySelector('.fresh'); if(el&&LOADED) el.textContent='crate '+freshLabel(); },60000);
+// Coming back to a tab that has been in the background for a while is exactly
+// when the crate is stale, so take that as the cue rather than making the DJ
+// think about it. Quiet — no toast for something they did not ask for.
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible'&&DATA&&Date.now()-LOADED>10*60*1000) refresh(false);
+});
 load();
 </script>
 </body>
