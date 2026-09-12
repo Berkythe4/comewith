@@ -58,26 +58,39 @@ Deno.serve(async (req) => {
     if (!token || typeof token !== "string") return err(400, "missing token");
 
     const { data: ep } = await admin.from("sc_playlists")
-      .select("id, station_no, name, drop_date, dj_search_params, status")
+      .select("id, station_no, name, drop_date, dj_search_params, status, mix_by")
       .eq("dj_token", token).maybeSingle();
     if (!ep) return err(404, "This link is invalid or has been revoked.");
 
     // The DJ adds a pick to the episode (source='dj' so it's reviewable + only the
     // DJ's own adds are theirs to remove). Token is the only credential.
     if (action === "add") {
-      const id = track && (track.sc_track_id != null) ? String(track.sc_track_id) : "";
-      if (!id) return err(400, "no track");
+      // A GUEST MIX is the DJ's own records, and most of those are not in our
+      // crate — bought, promos, unreleased. A track with no sc_track_id is that
+      // case: it gets the same synthetic 'man_' id the dashboard's hand-add uses
+      // (migration 102), so dedupe, sc_song_log memory and the carry-over at
+      // finalize all keep working. Title is the only thing we insist on; we never
+      // invent an artist name or a link we were not given.
+      const title = String((track && track.title) || "").trim().slice(0, 300);
+      let id = track && (track.sc_track_id != null) ? String(track.sc_track_id) : "";
+      if (!id) {
+        if (!title) return err(400, "Give the track a title.");
+        id = "man_" + crypto.randomUUID().replace(/-/g, "").slice(0, 16);
+      }
       const { data: dup } = await admin.from("sc_playlist_tracks").select("id").eq("playlist_id", ep.id).eq("sc_track_id", id).maybeSingle();
       if (dup) return new Response(JSON.stringify({ ok: true, already: true }), { headers: JH });
       const { data: mx } = await admin.from("sc_playlist_tracks").select("sort").eq("playlist_id", ep.id).order("sort", { ascending: false }).limit(1).maybeSingle();
-      const { error } = await admin.from("sc_playlist_tracks").insert({
-        playlist_id: ep.id, sc_track_id: id, title: track.title || null, artist_name: track.artist_name || null,
+      // RETURNING the inserted row so the page shows exactly what was stored —
+      // rebuilding it client-side from the form is a second copy of the same
+      // record and drifts the moment either side changes.
+      const { data: row, error } = await admin.from("sc_playlist_tracks").insert({
+        playlist_id: ep.id, sc_track_id: id, title: title || track.title || null, artist_name: (track.artist_name || "").trim().slice(0, 200) || null,
         permalink_url: track.url || track.permalink_url || null, duration_ms: track.duration_ms || null,
         playback_count: track.playback_count || null, artwork_url: track.artwork_url || null,
         source: "dj", sort: (mx?.sort || 0) + 10,
-      });
+      }).select("sc_track_id, artist_name, title, permalink_url, duration_ms, source, sort").single();
       if (error) return err(500, "Could not add that song.");
-      return new Response(JSON.stringify({ ok: true, added: true }), { headers: JH });
+      return new Response(JSON.stringify({ ok: true, added: true, track: row }), { headers: JH });
     }
     if (action === "remove") {
       const id = track && (track.sc_track_id != null) ? String(track.sc_track_id) : "";
@@ -253,12 +266,12 @@ Deno.serve(async (req) => {
 
     // The episode's current tracklist (what's already in).
     const { data: tracks } = await admin.from("sc_playlist_tracks")
-      .select("sc_track_id, artist_name, title, permalink_url, source, sort")
+      .select("sc_track_id, artist_name, title, permalink_url, duration_ms, source, sort")
       .eq("playlist_id", ep.id).order("sort");
 
     return new Response(JSON.stringify({
       ok: true,
-      episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date },
+      episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date, mix_by: ep.mix_by || null },
       scope: {
         weeks, genres, from, to, pool: params.pool || null, day: params.day || null,
         // 'all-producers' = this edition deliberately reaches past its own day.

@@ -19241,7 +19241,7 @@ function raRenderPlaylist() {
         ${has ? '<button class="hub-btn ghost" data-ra-publish title="Copy the tracklist as text — every song plus where that artist plays next. For your caption, the SoundCloud description, or anywhere you want to share it.">📋 Copy tracklist text</button>' : ''}`)}
       ${grp('release', '④', 'Release', pl.status === 'testing' || !!pl.mix_sc_track_url || !!pl.mix_file_path, `
         ${has ? '<button class="hub-btn" data-ra-finalize style="background:var(--green);color:#180c12;border-color:var(--green);font-weight:700;" title="Attach the recorded mix, write the descriptions, publish the episode page + push to SoundCloud">🚀 Go live</button>' : ''}`)}
-      ${has ? '<span class="ra-danger"><button class="hub-mini" data-ra-clearpl title="Remove every song from this station. They are logged as passed and carried into next week.">🗑 Clear all songs</button></span>' : ''}`
+      ${has ? '<span class="ra-danger"><button class="hub-mini" data-ra-clearpl title="Empty this station. Nothing is written to the song log — the tracks are not marked played or passed and are not carried forward. Use this when the tracklist is wrong, not when you have cut songs while testing (the Rekordbox import and SoundCloud sync are what log a cut as passed).">🗑 Clear all songs</button></span>' : ''}`
     : `${has ? '<button class="hub-btn ghost" data-ra-playstation>▶ Play station</button>' : ''}
        ${has ? '<button class="hub-btn ghost" data-ra-publish title="Copy the tracklist as text — every song plus where that artist plays next.">📋 Copy tracklist text</button>' : ''}`;
   // Collapsible: default collapsed so the searchable artist list sits right
@@ -20443,7 +20443,10 @@ async function raMoveTrack(id, dir) {
   await raLoadPlaylist(); raAfterTrackOp();
 }
 async function raClearPlaylist() {
-  if (!confirm('Clear all songs from your station?')) return;
+  // Say what it does NOT do. The old wording claimed these were logged as passed
+  // and carried into next week; nothing here writes to sc_song_log, so a station
+  // cleared this way simply loses them.
+  if (!confirm('Clear all songs from your station? They are removed outright — not logged as passed, and not carried into next week.')) return;
   await sb.from('sc_playlist_tracks').delete().eq('playlist_id', raState.playlist.id);
   await raLoadPlaylist(); renderRaMarket();
 }

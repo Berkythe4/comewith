@@ -8,117 +8,215 @@
 <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
 <link rel="icon" id="favicon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
 <style>
-  :root{--bg0:#140a17;--bg1:#1e1128;--panel:#1b1022;--panel2:#20142a;--line:#33223f;
-    --cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;--lime:#a7e02e;--hot:#ff5ca8;
+  :root{--bg0:#140a17;--bg1:#1e1128;--panel:#1b1022;--panel2:#20142a;--line:#33223f;--line2:#432c52;
+    --cream:#ede4d3;--dim:#b7abbe;--faint:#8a7d92;--lime:#a7e02e;--limed:#8fb339;--hot:#ff5ca8;--gold:#e0a33e;
     --disp:"Arial Black",Arial,sans-serif;--body:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;--mono:"Consolas",ui-monospace,monospace;}
   *{box-sizing:border-box}
-  body{margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg0) 40%);color:var(--cream);font-family:var(--body);line-height:1.55;min-height:100vh;}
-  .wrap{max-width:820px;margin:0 auto;padding:24px 16px 80px;}
-  .kicker{font-family:var(--mono);font-size:.72rem;letter-spacing:.2em;text-transform:uppercase;color:var(--lime);}
-  h1{font-family:var(--disp);font-size:clamp(1.7rem,5vw,2.6rem);margin:.25em 0 .1em;line-height:1.05;}
-  .sub{color:var(--dim);font-size:1rem;}
-  .scopebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0;}
-  .chip{font-family:var(--mono);font-size:.7rem;padding:3px 10px;border-radius:999px;border:1px solid var(--line);color:var(--dim);}
-  .chip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
-  input.search{width:100%;padding:11px 14px;border-radius:10px;border:1px solid var(--line);background:var(--panel);color:var(--cream);font-size:1rem;margin:6px 0 10px;}
-  .grpf{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;}
-  .gchip{font-family:var(--mono);font-size:.72rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:none;color:var(--dim);cursor:pointer;}
-  .gchip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);}
-  .g.disco{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
-  .g.day{color:var(--lime);border-color:var(--limed,var(--lime));}
-  h2{font-family:var(--disp);font-size:1.05rem;margin:22px 0 8px;}
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:10px;}
-  .art-top{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;}
-  .art-top strong{font-size:1.08rem;}
-  .g{font-family:var(--mono);font-size:.62rem;color:var(--dim);border:1px solid var(--line);border-radius:999px;padding:1px 7px;}
-  .nyc{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
-  .meta{color:var(--faint);font-size:.85rem;margin-top:3px;}
+  body{margin:0;background:linear-gradient(180deg,var(--bg1),var(--bg0) 40%);background-attachment:fixed;
+    color:var(--cream);font-family:var(--body);line-height:1.5;min-height:100vh;}
   a{color:var(--lime);text-decoration:none;} a:hover{text-decoration:underline;}
-  .btn{display:inline-block;font-family:var(--mono);font-size:.72rem;padding:4px 11px;border-radius:8px;border:1px solid var(--line);color:var(--cream);margin-top:8px;cursor:pointer;background:none;}
-  .songs{margin-top:8px;display:none;}
-  .songs.open{display:block;}
-  .song{display:flex;gap:8px;align-items:center;padding:4px 0;border-top:1px solid var(--line);font-size:.9rem;}
+  .wrap{max-width:880px;margin:0 auto;padding:0 16px 90px;}
+  .state{text-align:center;color:var(--dim);padding:70px 20px;}
+
+  /* ── The bar that never leaves: the set you're building + the search box.
+     Everything else can scroll away; these two are what you reach for while
+     digging through nine hundred artists. ───────────────────────────────── */
+  .topbar{position:sticky;top:0;z-index:40;background:rgba(20,10,23,.93);backdrop-filter:blur(9px);
+    border-bottom:1px solid var(--line);}
+  .topbar-in{max-width:880px;margin:0 auto;padding:9px 16px;display:flex;gap:9px;align-items:center;flex-wrap:wrap;}
+  .setbtn{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:.78rem;white-space:nowrap;
+    padding:9px 13px;border-radius:10px;border:1px solid var(--limed);background:rgba(167,224,46,.10);
+    color:var(--cream);cursor:pointer;}
+  .setbtn b{font-family:var(--disp);font-size:1rem;color:var(--lime);}
+  .setbtn .chev{color:var(--faint);}
+  .searchwrap{position:relative;flex:1 1 240px;min-width:180px;}
+  .searchwrap .mag{position:absolute;left:11px;top:50%;transform:translateY(-50%);opacity:.5;pointer-events:none;}
+  input.search{width:100%;padding:10px 34px;border-radius:10px;border:1px solid var(--line2);
+    background:var(--panel);color:var(--cream);font-size:1rem;}
+  input.search:focus{outline:none;border-color:var(--limed);}
+  .clrq{position:absolute;right:5px;top:50%;transform:translateY(-50%);background:none;border:0;
+    color:var(--faint);font-size:.95rem;cursor:pointer;padding:5px 8px;}
+
+  /* ── Header ─────────────────────────────────────────────────────────────── */
+  .hd{padding:22px 0 4px;}
+  .kicker{font-family:var(--mono);font-size:.7rem;letter-spacing:.2em;text-transform:uppercase;color:var(--lime);}
+  h1{font-family:var(--disp);font-size:clamp(1.6rem,5.2vw,2.4rem);margin:.2em 0 .2em;line-height:1.04;}
+  .hdchips{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:8px;}
+  .hdchip{font-family:var(--mono);font-size:.68rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line2);color:var(--dim);}
+  .hdchip.due{border-color:var(--gold);color:var(--gold);}
+  .sub{color:var(--dim);font-size:.95rem;}
+  .warn{margin-top:7px;color:var(--gold);font-size:.88rem;}
+
+  /* ── The set ────────────────────────────────────────────────────────────── */
+  .set{background:var(--panel2);border:1px solid var(--limed);border-radius:14px;padding:13px 15px;margin:14px 0 18px;}
+  .set-hd{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:2px;}
+  .set-hd h2{font-family:var(--disp);font-size:1.02rem;margin:0;}
+  .set-hd .tot{font-family:var(--mono);font-size:.76rem;color:var(--lime);}
+  .set-note{color:var(--faint);font-size:.8rem;margin-bottom:8px;}
+  .srow{display:flex;gap:9px;align-items:center;padding:6px 0;border-top:1px solid var(--line);font-size:.9rem;}
+  .srow .idx{font-family:var(--mono);font-size:.7rem;color:var(--faint);width:1.6em;text-align:right;flex:none;}
+  .srow .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .srow .n i{color:var(--dim);font-style:normal;}
+  .srow .d{font-family:var(--mono);font-size:.68rem;color:var(--faint);flex:none;}
+  .srow.mine .idx{color:var(--lime);}
+  .set-empty{border-top:1px solid var(--line);padding:14px 0 4px;color:var(--dim);font-size:.9rem;}
+  .set-empty b{color:var(--cream);}
+  .own{margin-top:11px;border-top:1px solid var(--line);padding-top:10px;}
+  .own summary{cursor:pointer;font-family:var(--mono);font-size:.76rem;color:var(--lime);list-style:none;}
+  .own summary::-webkit-details-marker{display:none}
+  .own-f{display:flex;gap:7px;flex-wrap:wrap;margin-top:9px;}
+  .own-f input{flex:1 1 150px;min-width:120px;padding:9px 11px;border-radius:9px;border:1px solid var(--line2);
+    background:var(--panel);color:var(--cream);font-size:.92rem;}
+  .own-f input:focus{outline:none;border-color:var(--limed);}
+  .own-hint{color:var(--faint);font-size:.78rem;margin-top:7px;}
+
+  /* ── Crate tools ────────────────────────────────────────────────────────── */
+  .tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:9px;}
+  .tools select{font-family:var(--mono);font-size:.74rem;padding:6px 9px;border-radius:999px;
+    border:1px solid var(--line2);background:var(--panel);color:var(--cream);}
+  .gchip{font-family:var(--mono);font-size:.72rem;padding:6px 12px;border-radius:999px;border:1px solid var(--line2);
+    background:none;color:var(--dim);cursor:pointer;}
+  .gchip.on{background:var(--lime);color:#0f0814;border-color:var(--lime);font-weight:700;}
+  .genres{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+  .gchip.sm{font-size:.68rem;padding:4px 10px;}
+  .crate-meta{color:var(--faint);font-size:.82rem;margin:2px 0 10px;}
+  .crate-meta b{color:var(--dim);}
+  .crate-meta button{font-family:var(--mono);font-size:.7rem;background:none;border:0;color:var(--lime);
+    cursor:pointer;padding:0;text-decoration:underline;}
+  h2.sec{font-family:var(--disp);font-size:1rem;margin:20px 0 8px;}
+
+  /* ── Artist cards ───────────────────────────────────────────────────────── */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:9px;}
+  .art-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}
+  .art-top strong{font-size:1.05rem;}
+  .g{font-family:var(--mono);font-size:.6rem;color:var(--dim);border:1px solid var(--line2);border-radius:999px;padding:1px 7px;}
+  .g.nyc{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
+  .g.disco{background:var(--hot);color:#1a0a12;border-color:var(--hot);}
+  .g.day{color:var(--lime);border-color:var(--limed);}
+  .meta{color:var(--faint);font-size:.84rem;margin-top:3px;}
+  .cardacts{display:flex;gap:7px;flex-wrap:wrap;margin-top:8px;}
+  .btn{font-family:var(--mono);font-size:.72rem;padding:5px 11px;border-radius:8px;border:1px solid var(--line2);
+    color:var(--cream);cursor:pointer;background:none;}
+  .btn.songs{border-color:var(--limed);color:var(--lime);}
+  .songs{margin-top:9px;}
+  .song{display:flex;gap:8px;align-items:center;padding:5px 0;border-top:1px solid var(--line);font-size:.89rem;}
   .song .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .song .d{font-family:var(--mono);font-size:.66rem;color:var(--faint);flex:none;}
   .song.playing{background:rgba(167,224,46,.10);}
   .song.playing .n{color:var(--lime);}
-  .mini.play{background:none;color:var(--cream);border-color:var(--line);}
   .song.playing .mini.play{background:var(--lime);color:#0f0814;border-color:var(--lime);}
+  .songmore{padding:7px 0 0;border-top:1px solid var(--line);}
+  .mini{font-family:var(--mono);font-size:.66rem;padding:4px 9px;border-radius:7px;border:1px solid var(--line2);
+    cursor:pointer;white-space:nowrap;background:none;color:var(--cream);}
+  .mini.add{background:var(--lime);color:#0f0814;border-color:var(--lime);font-weight:700;}
+  .mini.rm{background:none;color:var(--lime);border-color:var(--limed);}
+  .mini.inset{color:var(--faint);cursor:default;}
+  .mini.x{color:var(--faint);}
+  .mini:disabled{opacity:.45;}
+  .more{width:100%;padding:11px;border-radius:11px;background:none;border:1px dashed var(--line2);
+    color:var(--dim);font-family:var(--mono);font-size:.78rem;cursor:pointer;margin-top:4px;}
+
+  /* ── Player dock ────────────────────────────────────────────────────────── */
   .dock{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:8px;display:none;}
   .dock.on{display:block;}
-  .dock-in{max-width:760px;margin:0 auto;background:var(--panel2,#1a0f22);border:1px solid var(--line);
+  .dock-in{max-width:760px;margin:0 auto;background:var(--panel2);border:1px solid var(--line2);
     border-radius:14px;padding:9px 12px;box-shadow:0 8px 28px rgba(0,0,0,.55);}
   .dock-top{display:flex;align-items:center;gap:8px;margin-bottom:5px;}
   .dock-top .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.85rem;}
   .dock iframe{display:block;border:0;border-radius:8px;}
-  .dock-hint{font-size:.7rem;color:var(--faint);margin-top:4px;}
+  .dock-hint{font-size:.68rem;color:var(--faint);margin-top:4px;}
   body.docked{padding-bottom:190px;}
-  .mini{font-family:var(--mono);font-size:.66rem;padding:3px 9px;border-radius:7px;border:1px solid var(--line);cursor:pointer;white-space:nowrap;}
-  .mini.add{background:var(--lime);color:#0f0814;border-color:var(--lime);}
-  .mini.rm{background:none;color:var(--lime);border-color:var(--lime);}
-  .mini.inset{color:var(--faint);cursor:default;}
-  .mini:disabled{opacity:.5;}
-  .tl{background:var(--panel2);border:1px solid var(--line);border-radius:12px;padding:8px 14px;}
-  .tl details summary{cursor:pointer;font-family:var(--mono);font-size:.8rem;color:var(--dim);}
-  .tl .t{font-size:.88rem;padding:3px 0;border-top:1px solid var(--line);}
-  .state{text-align:center;color:var(--dim);padding:60px 20px;}
-  .foot{margin-top:40px;color:var(--faint);font-size:.8rem;text-align:center;}
-  .recbtn{position:fixed;top:12px;right:12px;z-index:40;font-family:var(--mono);font-size:.72rem;padding:7px 13px;border-radius:999px;background:var(--lime);color:#0f0814;border:none;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.4);}
-  .rec-ov{position:fixed;inset:0;z-index:50;background:rgba(8,4,12,.72);display:none;align-items:flex-start;justify-content:center;overflow:auto;padding:24px 14px;}
+
+  /* ── Footer / finish ────────────────────────────────────────────────────── */
+  .finish{margin-top:34px;background:rgba(167,224,46,.07);border:1px solid var(--limed);border-radius:14px;padding:15px 17px;}
+  .finish .k{font-family:var(--mono);font-size:.66rem;letter-spacing:.14em;text-transform:uppercase;color:var(--lime);}
+  .finish h3{font-family:var(--disp);font-size:1.05rem;margin:.3em 0 .35em;}
+  .finish p{color:var(--dim);font-size:.9rem;margin:0 0 6px;}
+  .finish .big{font-family:var(--disp);font-size:1.05rem;}
+  .foot{margin-top:22px;color:var(--faint);font-size:.76rem;text-align:center;}
+
+  /* ── How it works ───────────────────────────────────────────────────────── */
+  .recbtn{font-family:var(--mono);font-size:.72rem;padding:8px 12px;border-radius:10px;background:none;
+    color:var(--dim);border:1px solid var(--line2);cursor:pointer;white-space:nowrap;}
+  .rec-ov{position:fixed;inset:0;z-index:70;background:rgba(8,4,12,.75);display:none;align-items:flex-start;
+    justify-content:center;overflow:auto;padding:24px 14px;}
   .rec-ov.on{display:flex;}
-  .rec-card{max-width:520px;width:100%;background:linear-gradient(180deg,#241534,#140a17);border:1px solid var(--line);border-radius:18px;padding:26px 24px;}
-  .rec-card .badge{font-family:var(--mono);font-size:.68rem;letter-spacing:.22em;text-transform:uppercase;color:var(--lime);}
-  .rec-card h2{font-family:var(--disp);font-size:1.7rem;margin:.2em 0 .5em;}
-  .rec-step{display:grid;grid-template-columns:34px 1fr;gap:12px;padding:11px 0;border-top:1px solid var(--line);}
-  .reclbl{font-family:var(--mono);font-size:.68rem;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);margin:16px 0 4px;}
-  .rec-step .rn{font-family:var(--disp);font-size:1.3rem;color:var(--lime);text-align:center;}
-  .rec-step b{color:var(--cream);} .rec-step .t{font-size:.94rem;color:var(--dim);}
-  .rec-specs{display:flex;flex-wrap:wrap;gap:7px;margin:16px 0;}
-  .rec-specs span{font-family:var(--mono);font-size:.68rem;color:var(--cream);border:1px solid var(--limed);border-radius:999px;padding:4px 10px;}
-  .rec-send{background:rgba(167,224,46,.08);border:1px solid var(--limed);border-radius:12px;padding:12px 14px;}
-  .rec-send .big{font-family:var(--disp);font-size:1.05rem;}
-  .rec-close{margin-top:16px;width:100%;padding:10px;border-radius:10px;background:none;border:1px solid var(--line);color:var(--cream);cursor:pointer;font-size:.9rem;}
-  .no{color:var(--hot);}
+  .rec-card{max-width:520px;width:100%;background:linear-gradient(180deg,#241534,#140a17);
+    border:1px solid var(--line2);border-radius:18px;padding:24px 22px;}
+  .rec-card .badge{font-family:var(--mono);font-size:.66rem;letter-spacing:.2em;text-transform:uppercase;color:var(--lime);}
+  .rec-card h2{font-family:var(--disp);font-size:1.6rem;margin:.2em 0 .5em;}
+  .rec-step{display:grid;grid-template-columns:32px 1fr;gap:12px;padding:10px 0;border-top:1px solid var(--line);}
+  .rec-step .rn{font-family:var(--disp);font-size:1.2rem;color:var(--lime);text-align:center;}
+  .rec-step b{color:var(--cream);} .rec-step .t{font-size:.92rem;color:var(--dim);}
+  .reclbl{font-family:var(--mono);font-size:.66rem;letter-spacing:.16em;text-transform:uppercase;color:var(--lime);margin:16px 0 2px;}
+  .rec-close{margin-top:16px;width:100%;padding:11px;border-radius:10px;background:none;border:1px solid var(--line2);
+    color:var(--cream);cursor:pointer;font-size:.92rem;}
+
+  /* ── Toast ──────────────────────────────────────────────────────────────── */
+  #toast{position:fixed;left:50%;transform:translateX(-50%);bottom:22px;z-index:80;display:none;
+    max-width:90vw;padding:10px 16px;border-radius:11px;font-size:.88rem;
+    background:#241534;border:1px solid var(--limed);color:var(--cream);box-shadow:0 8px 24px rgba(0,0,0,.5);}
+  #toast.on{display:block;}
+  #toast.err{border-color:var(--hot);}
+  body.docked #toast{bottom:200px;}
 </style>
 </head>
 <body>
-<button class="recbtn" onclick="document.getElementById('recOv').classList.add('on')">📋 How it works</button>
-<div class="rec-ov" id="recOv" onclick="if(event.target===this)this.classList.remove('on')">
+<div id="shell"><div class="state">Loading your episode…</div></div>
+<!-- The player sits OUTSIDE the crate on purpose. Only #results is re-rendered
+     when you search or filter, but keeping the dock out here means no change to
+     the list can ever rebuild the iframe and restart the track. -->
+<div class="dock" id="djDock"></div>
+<div id="toast"></div>
+<div class="rec-ov" id="recOv">
   <div class="rec-card">
     <div class="badge">● Come With Radio · for DJs</div>
     <h2>How it works</h2>
-    <div class="reclbl">On this page · what the buttons do</div>
-    <div class="rec-step"><span class="rn">▶</span><div><b>Audition</b><div class="t">Play any song right here.</div></div></div>
-    <div class="rec-step"><span class="rn" style="color:#0f0814;background:var(--lime);border-radius:6px;font-size:.8rem;padding:2px 0;">＋</span><div><b>Add to the episode</b><div class="t">It drops into the tracklist instantly. <b>✓ added · remove</b> to pull it back.</div></div></div>
-    <div class="rec-step"><span class="rn" style="font-size:.9rem;">☰</span><div><b>"In this episode"</b><div class="t">Top of the page = the running set (your picks + what's curated).</div></div></div>
-    <div class="t" style="margin:8px 0 4px;color:var(--dim);font-size:.9rem;">Everything's <b style="color:var(--cream)">already scoped</b> — only artists playing NYC this week, in your genres.</div>
+    <div class="reclbl">On this page</div>
+    <div class="rec-step"><span class="rn">▶</span><div><b>Audition</b><div class="t">Play any song right here — the player stays put while you keep digging.</div></div></div>
+    <div class="rec-step"><span class="rn">＋</span><div><b>Add to your set</b><div class="t">It lands in the episode instantly. <b>✓ added</b> to pull it back out.</div></div></div>
+    <div class="rec-step"><span class="rn">🎧</span><div><b>Your set, up top</b><div class="t">Always one tap away — count, running time, every track. Order doesn't matter here; you arrange it when you mix.</div></div></div>
+    <div class="rec-step"><span class="rn">🔎</span><div><b>Search finds songs too</b><div class="t">Type a track name, not just an artist — it looks inside every catalogue below.</div></div></div>
+    <div class="rec-step"><span class="rn">✎</span><div><b>Your own records</b><div class="t">Playing something that isn't in the crate? <b>＋ Add a track of your own</b> in the set panel. That's most of a guest mix.</div></div></div>
     <div class="reclbl">The flow</div>
-    <div class="rec-step"><span class="rn">🎯</span><div><b>Assigned</b><div class="t">Keith gives you an episode + this link.</div></div></div>
-    <div class="rec-step"><span class="rn">🎧</span><div><b style="color:var(--lime)">Build your set — here</b><div class="t">Audition &amp; ＋add from the pool; picks land live.</div></div></div>
-    <div class="rec-step"><span class="rn">🎚️</span><div><b>Record it</b><div class="t">Arrange &amp; mix in Rekordbox, your way.</div></div></div>
+    <div class="rec-step"><span class="rn">🎯</span><div><b>Assigned</b><div class="t">Keith gives you an episode and this link.</div></div></div>
+    <div class="rec-step"><span class="rn">🎧</span><div><b style="color:var(--lime)">Build the tracklist — here</b><div class="t">So the episode page can credit every record and link each artist's next NYC show.</div></div></div>
+    <div class="rec-step"><span class="rn">🎚️</span><div><b>Record it</b><div class="t">Arrange and mix in Rekordbox, your way.</div></div></div>
     <div class="rec-step"><span class="rn">📤</span><div><b>Send the file</b><div class="t">One mix to Keith.</div></div></div>
     <div class="rec-step"><span class="rn">📻</span><div><b>It goes live</b><div class="t">Becomes the episode — page, Now-Playing video, drops on schedule.</div></div></div>
-    <div class="rec-send"><div class="t" style="font-family:var(--mono);font-size:.66rem;letter-spacing:.12em;text-transform:uppercase;color:var(--lime);margin-bottom:3px;">Send your mix to</div><div class="big">berky@comewith.org</div><div class="t" style="color:var(--dim);font-size:.85rem;">or a WeTransfer / Drive link.</div></div>
-    <button class="rec-close" onclick="document.getElementById('recOv').classList.remove('on')">Got it — close</button>
+    <button class="rec-close" data-recclose>Got it — close</button>
   </div>
 </div>
-<div class="wrap" id="root"><div class="state">Loading your episode…</div></div>
-<!-- The player sits OUTSIDE #root on purpose. render() replaces #root wholesale
-     on every search keystroke and filter click; an iframe inside it would be
-     rebuilt each time and the audio would restart from zero. -->
-<div class="dock" id="djDock"></div>
 <script>
 const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const SEND_TO='berky@comewith.org';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
 const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
 const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
-let DATA=null, IN=new Set(), DJADD=new Set(), GRP='', DAY='', PLAYING='';
+const fmtLen=ms=>{const s=Math.round((+ms||0)/1000);return s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'';};
+const fmtTotal=ms=>{const m=Math.round((+ms||0)/60000);return m<60?m+' min':Math.floor(m/60)+' h '+String(m%60).padStart(2,'0');};
 
-// ---- in-page player, same as the dashboard's dock ---------------------------
+let DATA=null;
+let IN=new Set();      // every sc_track_id already in the episode
+let DJADD=new Set();   // ...of those, the ones this DJ added (theirs to remove)
+let PLAYING='';
+// Crate view state. OPEN survives every re-render — expanding an artist and then
+// typing in the search box used to collapse the whole page, which is the fastest
+// way to make a research tool feel hostile.
+const OPEN=new Set();
+let Q='', SORT='soon', MUSIC_ONLY=true, GENRE='', GRP='', DAY='', LIMIT=60, SETOPEN=true;
+
+function toast(msg,kind){
+  const el=$('#toast'); if(!el) return;
+  el.textContent=msg; el.className=(kind==='err'?'err ':'')+'on';
+  clearTimeout(toast._t); toast._t=setTimeout(()=>{el.className='';},3200);
+}
+
+// ── in-page player ───────────────────────────────────────────────────────────
 // Auditioning used to mean target="_blank" — a new tab per track, and you lost
-// your place in the list every time. Now it plays here and the ＋ add button is
-// still under your thumb.
+// your place in the list every time.
 const pkey=u=>String(u||'').trim().toLowerCase().replace('://www.','://').replace(/\/+$/,'').split('?')[0];
 let _scw=null;
 function ensureScWidget(){
@@ -127,8 +225,8 @@ function ensureScWidget(){
   _scw=new Promise(res=>{const s=document.createElement('script');s.src='https://w.soundcloud.com/player/api.js';s.onload=res;s.onerror=res;document.head.appendChild(s);});
   return _scw;
 }
-// Highlight the row that's playing by toggling a class — never by re-rendering,
-// which would rebuild the iframe and restart the track.
+// Highlight the playing row by toggling a class — never by re-rendering, which
+// would rebuild the iframe and restart the track.
 function markPlaying(){
   document.querySelectorAll('.song.playing').forEach(el=>el.classList.remove('playing'));
   if(!PLAYING) return;
@@ -154,116 +252,363 @@ async function djPlay(url,name){
     <div class="dock-hint">Not starting? Tap ▶ in the player (some browsers block autoplay), or use “open ↗”.</div>
   </div>`;
   el.classList.add('on'); document.body.classList.add('docked');
-  // Best-effort autoplay; the player's own ▶ always works.
   try{ await ensureScWidget();
     if(window.SC&&window.SC.Widget){ const w=window.SC.Widget(document.getElementById('djPlayerFrame'));
       w.bind(window.SC.Widget.Events.READY,()=>{try{w.play();}catch(_){}}); }
   }catch(_){}
 }
 
-async function djAction(btn,kind,ai,si){
-  const a=DATA.artists[ai], s=a.songs[si], id=String(s.sc_track_id||''); if(!id) return;
-  btn.disabled=true;
-  const token=new URLSearchParams(location.search).get('ep');
-  const track={sc_track_id:id,title:s.title,url:s.url,artist_name:a.name,duration_ms:s.duration_ms,playback_count:s.playback_count,artwork_url:s.artwork_url};
-  let j={}; try{ const r=await fetch(CWURL+'/functions/v1/dj-station',{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify({token,action:kind,track})}); j=await r.json(); if(!r.ok||!j.ok) throw new Error(j.error||'Could not update.'); }
-  catch(e){ btn.disabled=false; alert(e.message); return; }
-  if(kind==='add'){ IN.add(id); DJADD.add(id); DATA.tracklist.push({sc_track_id:id,artist_name:a.name,title:s.title,permalink_url:s.url,source:'dj'}); btn.outerHTML=`<button class="mini rm" data-rm="${ai}:${si}">✓ added · remove</button>`; }
-  else { IN.delete(id); DJADD.delete(id); DATA.tracklist=DATA.tracklist.filter(t=>String(t.sc_track_id)!==id); btn.outerHTML=`<button class="mini add" data-add="${ai}:${si}">＋ add</button>`; }
-  const c=document.getElementById('inCount'); if(c) c.textContent=DATA.tracklist.length;
+// ── the API ──────────────────────────────────────────────────────────────────
+const token=()=>new URLSearchParams(location.search).get('ep');
+async function api(body){
+  const r=await fetch(CWURL+'/functions/v1/dj-station',{method:'POST',
+    headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},
+    body:JSON.stringify({token:token(),...body})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok||!j.ok) throw new Error(j.error||'Could not reach the episode. Check your connection and try again.');
+  return j;
 }
-document.addEventListener('click',e=>{
-  const add=e.target.closest('[data-add]'); if(add){ const [ai,si]=add.dataset.add.split(':'); djAction(add,'add',+ai,+si); return; }
-  const rm=e.target.closest('[data-rm]'); if(rm){ const [ai,si]=rm.dataset.rm.split(':'); djAction(rm,'remove',+ai,+si); return; }
-  const g=e.target.closest('[data-grp]'); if(g){ GRP=g.dataset.grp; const y=window.scrollY; render($('#q')?.value||''); window.scrollTo(0,y); return; }
-  const dy=e.target.closest('[data-day]'); if(dy){ DAY=dy.dataset.day; const y=window.scrollY; render($('#q')?.value||''); window.scrollTo(0,y); return; }
-  const pl=e.target.closest('[data-play]'); if(pl){ djPlay(pl.dataset.play,pl.dataset.t); return; }
-  if(e.target.closest('[data-closeplayer]')){ closePlayer(); return; }
-});
-
-async function load(){
-  const token=new URLSearchParams(location.search).get('ep');
-  if(!token){ $('#root').innerHTML='<div class="state">No episode link. Ask for a fresh link.</div>'; return; }
-  let j;
+// Add / remove keep the local tracklist in step and then repaint ONLY the set
+// panel and the song buttons — never the whole crate, so nothing you opened
+// closes and the list doesn't jump under your thumb.
+async function addTrack(track,btn){
+  if(btn) btn.disabled=true;
   try{
-    const r=await fetch(CWURL+'/functions/v1/dj-station',{method:'POST',headers:{apikey:CWKEY,Authorization:'Bearer '+CWKEY,'Content-Type':'application/json'},body:JSON.stringify({token})});
-    j=await r.json();
-    if(!r.ok||!j.ok) throw new Error(j.error||'Could not load.');
-  }catch(e){ $('#root').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
-  DATA=j; render('');
+    const j=await api({action:'add',track});
+    const row=j.track||{sc_track_id:track.sc_track_id,artist_name:track.artist_name,title:track.title,
+      permalink_url:track.url||null,duration_ms:track.duration_ms||null,source:'dj'};
+    const id=String(row.sc_track_id||'');
+    if(!j.already){ DATA.tracklist.push(row); DJADD.add(id); }
+    IN.add(id);
+    renderSet(); syncSongButtons();
+    toast(j.already?'Already in the set':'Added — '+(row.title||'track'));
+  }catch(e){ toast(e.message,'err'); if(btn) btn.disabled=false; }
 }
-// Song rows are built when the artist is OPENED, not when the list renders.
-// Removing the per-artist cap took Above & Beyond from 15 songs to 404; across a
-// festival-wide crate that is ~13,000 rows, and building them all up front locked
-// the page for seconds on a phone. Lazy keeps every song reachable — which is the
-// point — without paying for the ones nobody expanded.
-function songRowsHtml(i){
-  const a=DATA.artists[i];
-  return (a.songs||[]).map((s,si)=>{
-    const id=String(s.sc_track_id||'');
-    const btn = !id ? '' : DJADD.has(id) ? `<button class="mini rm" data-rm="${i}:${si}">✓ added · remove</button>`
-      : IN.has(id) ? `<span class="mini inset">✓ in set</span>` : `<button class="mini add" data-add="${i}:${si}">＋ add</button>`;
-    return `<div class="song"><span class="n">${esc(s.title||'')}</span>${s.url?`<button class="mini play" data-play="${esc(s.url)}" data-t="${esc(s.title||'')}" title="Play here">▶</button>`:''}${btn}</div>`;
+async function removeTrack(id){
+  if(!id) return;
+  try{
+    await api({action:'remove',track:{sc_track_id:id}});
+    DATA.tracklist=DATA.tracklist.filter(t=>String(t.sc_track_id)!==String(id));
+    IN.delete(String(id)); DJADD.delete(String(id));
+    renderSet(); syncSongButtons(); toast('Removed from the set');
+  }catch(e){ toast(e.message,'err'); }
+}
+
+// ── the set ──────────────────────────────────────────────────────────────────
+function setIndexes(){
+  IN=new Set((DATA.tracklist||[]).map(t=>String(t.sc_track_id||'')));
+  DJADD=new Set((DATA.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
+}
+function renderSet(){
+  setIndexes();
+  const tl=DATA.tracklist||[];
+  const ms=tl.reduce((s,t)=>s+(+t.duration_ms||0),0);
+  const mine=tl.filter(t=>t.source==='dj').length;
+  const curated=tl.length-mine;
+  // Runtime is only shown when we actually know the lengths. A hand-added record
+  // has no duration, so a total built from the ones that do would read as the
+  // length of the set and be wrong by however many are missing.
+  const known=tl.filter(t=>+t.duration_ms>0).length;
+  const tot=known?fmtTotal(ms)+(known<tl.length?` (${known} of ${tl.length} timed)`:''):'';
+  // A guest mix is mostly records that were never in our crate, so on an empty
+  // set the hand-add form starts OPEN — it is the first thing that gets used.
+  // Once it exists, whatever the DJ left it as is what it stays.
+  const ownBox=$('#ownBox'), ownOpen=ownBox?ownBox.open:(tl.length===0);
+
+  const cnt=$('#tbCount'); if(cnt) cnt.textContent=tl.length;
+  const tbm=$('#tbMin'); if(tbm) tbm.textContent=tot?' · '+fmtTotal(ms):'';
+  const chev=$('#tbChev'); if(chev) chev.textContent=SETOPEN?'▾':'▸';
+
+  const panel=$('#setPanel'); if(!panel) return;
+  panel.hidden=!SETOPEN;
+  const rows=tl.map((t,i)=>{
+    const id=String(t.sc_track_id||'');
+    const own=t.source==='dj';
+    return `<div class="srow${own?' mine':''}">
+      <span class="idx">${i+1}</span>
+      <span class="n">${t.artist_name?`<i>${esc(t.artist_name)} — </i>`:''}${esc(t.title||'')}</span>
+      <span class="d">${fmtLen(t.duration_ms)}</span>
+      ${t.permalink_url?`<button class="mini play" data-play="${esc(t.permalink_url)}" data-t="${esc(t.title||'')}" title="Play">▶</button>`:''}
+      ${own?`<button class="mini x" data-rmid="${esc(id)}" title="Take it back out">✕</button>`
+           :`<span class="mini inset" title="Put in by Keith — ask him to change it">curated</span>`}
+    </div>`;
+  }).join('');
+
+  panel.innerHTML=`
+    <div class="set-hd">
+      <h2>🎧 Your set</h2>
+      <span class="tot">${tl.length} track${tl.length===1?'':'s'}${tot?' · '+tot:''}</span>
+      ${curated&&mine?`<span class="set-note" style="margin:0;">${mine} yours · ${curated} from Keith</span>`:''}
+    </div>
+    <div class="set-note">Order doesn't matter here — you arrange the set when you mix. This is the tracklist the episode page publishes.</div>
+    ${rows||`<div class="set-empty">Nothing in it yet. <b>Dig the crate below</b> and hit <b>＋ add</b>, or put in your own records — most of a guest mix is records that were never in anyone's crate.</div>`}
+    <details class="own" id="ownBox"${ownOpen?' open':''}>
+      <summary>＋ Add a track of your own</summary>
+      <div class="own-f">
+        <input id="ownArtist" placeholder="Artist" autocomplete="off">
+        <input id="ownTitle" placeholder="Track title *" autocomplete="off">
+      </div>
+      <div class="own-f">
+        <input id="ownUrl" placeholder="Link (optional) — SoundCloud, Bandcamp, anywhere" autocomplete="off">
+        <button class="mini add" id="ownAdd" style="padding:9px 15px;">Add to the set</button>
+      </div>
+      <div class="own-hint">For records that aren't in the crate — bought, promo, unreleased, yours. A title is all we need; the link just gives listeners somewhere to go.</div>
+    </details>`;
+}
+
+// ── the crate ────────────────────────────────────────────────────────────────
+// An artist matches on their own details; a SONG matches on its title plus the
+// artist's name, so "sammy virji speed" finds the record and not just the act.
+// Every term has to land somewhere, which is what makes a two-word search useful.
+function matchOf(a,terms){
+  if(!terms.length) return {art:true,songs:null};
+  const hay=[a.name,a.next_venue,a.city,(a.genres||[]).join(' ')].join(' ').toLowerCase();
+  const art=terms.every(t=>hay.includes(t));
+  const nm=(a.name||'').toLowerCase(), songs=[];
+  (a.songs||[]).forEach((s,i)=>{
+    const h=((s.title||'')+' '+nm).toLowerCase();
+    if(terms.every(t=>h.includes(t))) songs.push(i);
+  });
+  return {art,songs:songs.length?songs:null};
+}
+const SORTS={
+  soon:(x,y)=>String(x.a.next_event_date||'9999').localeCompare(String(y.a.next_event_date||'9999')),
+  name:(x,y)=>(x.a.name||'').localeCompare(y.a.name||''),
+  followers:(x,y)=>(y.a.followers||0)-(x.a.followers||0),
+  songs:(x,y)=>((y.a.songs||[]).length)-((x.a.songs||[]).length),
+};
+function crateRows(){
+  const terms=Q.trim().toLowerCase().split(/\s+/).filter(Boolean);
+  let rows=[];
+  (DATA.artists||[]).forEach((a,i)=>{
+    if(GRP&&(a.group||'main')!==GRP) return;
+    if(DAY&&a.day!==DAY) return;
+    if(GENRE&&!(a.genres||[]).includes(GENRE)) return;
+    const m=matchOf(a,terms);
+    if(!m.art&&!m.songs) return;
+    rows.push({a,i,m});
+  });
+  const noMusic=rows.filter(r=>!(r.a.songs||[]).length).length;
+  if(MUSIC_ONLY) rows=rows.filter(r=>(r.a.songs||[]).length);
+  rows.sort(SORTS[SORT]||SORTS.soon);
+  return {rows,noMusic};
+}
+function songBtn(tid){
+  if(!tid) return '';
+  if(DJADD.has(tid)) return `<button class="mini rm" data-rmid="${esc(tid)}">✓ added</button>`;
+  if(IN.has(tid)) return `<span class="mini inset" title="Already in the episode">✓ in set</span>`;
+  return `<button class="mini add" data-addsong>＋ add</button>`;
+}
+// Repaint just the buttons. Re-rendering the list instead would close everything
+// the DJ had opened, every single time they added a track.
+function syncSongButtons(){
+  document.querySelectorAll('.song[data-tid]').forEach(r=>{
+    const slot=r.querySelector('.btnslot'); if(slot) slot.innerHTML=songBtn(r.dataset.tid);
+  });
+}
+function songRows(a,ai,only){
+  const list=only?only.map(k=>[a.songs[k],k]):(a.songs||[]).map((s,k)=>[s,k]);
+  return list.map(([s,si])=>{
+    const tid=String(s.sc_track_id||'');
+    const bits=[fmtLen(s.duration_ms),s.playback_count?fmtNum(s.playback_count)+' plays':''].filter(Boolean).join(' · ');
+    return `<div class="song" data-tid="${esc(tid)}" data-ai="${ai}" data-si="${si}">
+      <span class="n" title="${esc(s.title||'')}">${esc(s.title||'')}</span>
+      <span class="d">${esc(bits)}</span>
+      ${s.url?`<button class="mini play" data-play="${esc(s.url)}" data-t="${esc(s.title||'')}" title="Play here">▶</button>`:''}
+      <span class="btnslot">${songBtn(tid)}</span>
+    </div>`;
   }).join('');
 }
-function artistCard(a,i){
-  const nyc=NYC.test(a.city||'');
+// Song rows are built when the artist is OPENED, not when the list renders.
+// Removing the per-artist cap took Above & Beyond from 15 songs to 404; across
+// this crate that is ~15,000 rows, and building them all up front locked the
+// page for seconds on a phone.
+function artistCard(r){
+  const {a,i,m}=r;
+  const n=(a.songs||[]).length;
+  const searching=!!Q.trim();
+  const hit=searching&&m.songs;                       // this artist matched on song titles
+  const open=OPEN.has(i)||!!hit;
+  const only=(hit&&!OPEN.has(i))?m.songs:null;        // show the matches; "show all" opens the rest
   const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
   const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
-  const songs=(a.songs||[]);
   // The day chip only appears on an edition scoped past its own night — otherwise
-  // every card would carry the same label and say nothing.
+  // every card carries the same label and says nothing.
   const dayChip=a.day?`<span class="g day">${esc(a.day)}</span>`:'';
-  return `<div class="card">
-    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${nyc?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
+  return `<div class="card" data-card="${i}">
+    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
-    <div>${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud</a> `:''}${songs.length?`<button class="btn" data-songs="${i}">🎵 ${songs.length} song${songs.length===1?'':'s'}</button>`:'<span class="meta" style="margin-left:2px;">no songs scanned yet</span>'}</div>
-    ${songs.length?`<div class="songs" id="songs-${i}" data-ai="${i}"></div>`:''}
+    <div class="cardacts">
+      ${n?`<button class="btn songs" data-toggle="${i}">${open?'▾':'🎵'} ${n} song${n===1?'':'s'}</button>`:'<span class="meta">no music scanned yet — nothing to audition here</span>'}
+      ${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud ↗</a>`:''}
+    </div>
+    ${open&&n?`<div class="songs" id="songs-${i}">${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${i}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
   </div>`;
 }
-function render(q){
-  const d=DATA, ep=d.episode, sc=d.scope;
-  IN=new Set((d.tracklist||[]).map(t=>String(t.sc_track_id||'')));
-  DJADD=new Set((d.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
-  let arts=d.artists;
-  const hasDisco=d.artists.some(a=>a.group==='disco');
-  // Distinct festival days present, in lineup order (not alphabetical — Thu
-  // before Fri). Only rendered when the crate spans more than one.
-  const days=[...new Set(d.artists.map(a=>a.day).filter(Boolean))];
-  if(GRP) arts=arts.filter(a=>(a.group||'main')===GRP);
-  if(DAY) arts=arts.filter(a=>a.day===DAY);
-  if(q){ const ql=q.toLowerCase(); arts=arts.filter(a=>(a.name||'').toLowerCase().includes(ql)||(a.next_venue||'').toLowerCase().includes(ql)||(a.genres||[]).some(g=>g.toLowerCase().includes(ql))); }
-  const tl=d.tracklist||[];
-  $('#root').innerHTML=`
-    <div class="kicker">📻 Come With Radio · your DJ workspace</div>
-    <h1>SHOW ${ep.no??''} — ${esc(ep.name||'')}</h1>
-    <div class="sub">${sc.pool==='elements'
-      ? (sc.reach==='all-producers'
-        ? `Your crate = <b>every producer on the Elements bill</b>, all four days${sc.count?` · ${sc.count} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}. Filter by day below, or just dig. Hit <b>＋ add</b> to build the episode.`
-        : `Your crate = the <b>Elements ${esc(sc.day||'')}</b> lineup${sc.count?` · ${sc.count} artists`:''}. Audition and hit <b>＋ add</b> to build the episode.`)
-      : `Scoped to this episode: NYC artists playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${sc.count?` · ${sc.count} artists`:''}${sc.genres&&sc.genres.length?` · genres: ${sc.genres.map(esc).join(', ')}`:''}. Audition songs and hit <b>＋ add</b> to put them in the episode.`}
-      ${sc.capped?`<div style="margin-top:6px;color:var(--warn,#e0a33e)">⚠ Showing the first <b>${sc.count}</b> of <b>${sc.pool_total}</b> artists in this window — narrow the genre filter or shorten the window to see the rest.</div>`:''}</div>
-    <input class="search" id="q" placeholder="🔎 Search artists, venues, genres…" value="${esc(q)}">
-    ${days.length>1?`<div class="grpf">
-      <button class="gchip${DAY===''?' on':''}" data-day="">All days</button>
-      ${days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join('')}</div>`:''}
-    ${hasDisco?`<div class="grpf">
-      <button class="gchip${GRP===''?' on':''}" data-grp="">All</button>
-      <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main lineup</button>
-      <button class="gchip${GRP==='disco'?' on':''}" data-grp="disco">🕺 Disco Den</button></div>`:''}
-    <div class="tl"><details><summary>▶ In this episode — <span id="inCount">${tl.length}</span> track${tl.length===1?'':'s'}</summary>${tl.map(t=>`<div class="t">${esc(t.artist_name||'')} — ${esc(t.title||'')}${t.source==='dj'?' · <span style="color:var(--lime)">your pick</span>':''}${t.permalink_url?` · <a href="${esc(t.permalink_url)}" target="_blank" rel="noopener">play</a>`:''}</div>`).join('')||'<div class="t">Empty — add songs below.</div>'}</details></div>
-    <h2>Artists in scope · ${arts.length}</h2>
-    ${arts.map(artistCard).join('')||'<div class="state">No artists match. Clear the search.</div>'}
-    <div class="foot">Read-only workspace for the assigned DJ. Links expire when access is revoked.</div>`;
-  $('#q').addEventListener('input',e=>{ const v=e.target.value; render(v); const el=$('#q'); if(el){el.focus();el.setSelectionRange(v.length,v.length);} });
-  document.querySelectorAll('[data-songs]').forEach(b=>b.addEventListener('click',()=>{
-    const el=document.getElementById('songs-'+b.dataset.songs); if(!el) return;
-    if(!el.dataset.filled){ el.innerHTML=songRowsHtml(+el.dataset.ai); el.dataset.filled='1'; markPlaying(); }
-    el.classList.toggle('open');
-  }));
-  // A filter or keystroke rebuilds every row, so re-apply the highlight. The dock
-  // itself lives outside #root and keeps playing throughout.
+function renderCrate(){
+  const {rows,noMusic}=crateRows();
+  const shown=rows.slice(0,LIMIT);
+  const gEls=$('#genreBar');
+  if(gEls) gEls.innerHTML=genreBarHtml();
+  const tools=$('#tools'); if(tools) tools.innerHTML=toolsHtml();
+  const meta=$('#crateMeta');
+  if(meta) meta.innerHTML=`<b>${rows.length}</b> artist${rows.length===1?'':'s'}${shown.length<rows.length?` · showing ${shown.length}`:''}`
+    // A filter that is on by default has to say what it took away, or the crate
+    // silently looks a third of its real size.
+    +(MUSIC_ONLY&&noMusic?` · <b>${noMusic}</b> more on these bills have no music scanned yet — <button data-showallartists>show them</button>`:'')
+    +(!MUSIC_ONLY?` · <button data-hidenomusic>hide the ${noMusic} with no music</button>`:'');
+  const res=$('#results');
+  if(res) res.innerHTML=(shown.map(artistCard).join('')||emptyHtml())
+    +(shown.length<rows.length?`<button class="more" data-more>Show ${Math.min(60,rows.length-shown.length)} more · ${rows.length-shown.length} left</button>`:'');
   markPlaying();
+}
+function emptyHtml(){
+  if(Q.trim()) return `<div class="state">Nothing matches “${esc(Q.trim())}”.<br><button class="mini" data-clearall style="margin-top:12px;">Clear search &amp; filters</button></div>`;
+  return `<div class="state">No artists left after these filters.<br><button class="mini" data-clearall style="margin-top:12px;">Clear filters</button></div>`;
+}
+function genreBarHtml(){
+  const counts={};
+  (DATA.artists||[]).forEach(a=>(a.genres||[]).forEach(g=>{counts[g]=(counts[g]||0)+1;}));
+  const top=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]).slice(0,14);
+  if(top.length<2) return '';
+  return `<button class="gchip sm${GENRE===''?' on':''}" data-genre="">All genres</button>`
+    +top.map(g=>`<button class="gchip sm${GENRE===g?' on':''}" data-genre="${esc(g)}">${esc(g)} <span style="opacity:.6">${counts[g]}</span></button>`).join('');
+}
+function toolsHtml(){
+  const d=DATA;
+  const days=[...new Set((d.artists||[]).map(a=>a.day).filter(Boolean))];
+  const hasDisco=(d.artists||[]).some(a=>a.group==='disco');
+  const opt=(v,l)=>`<option value="${v}"${SORT===v?' selected':''}>${l}</option>`;
+  return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('followers','Most followers')}${opt('songs','Most songs')}${opt('name','Artist A–Z')}</select>
+    ${days.length>1?`<button class="gchip${DAY===''?' on':''}" data-day="">All days</button>`+days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join(''):''}
+    ${hasDisco?`<button class="gchip${GRP===''?' on':''}" data-grp="">All stages</button>
+      <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main</button>
+      <button class="gchip${GRP==='disco'?' on':''}" data-grp="disco">🕺 Disco Den</button>`:''}
+    <button class="recbtn" data-recopen style="margin-left:auto;">📋 How it works</button>`;
+}
+
+// ── shell ────────────────────────────────────────────────────────────────────
+function scopeLine(){
+  const sc=DATA.scope||{}, n=sc.count||0;
+  if(sc.pool==='elements'){
+    return sc.reach==='all-producers'
+      ? `Your crate is <b>every producer on the Elements bill</b>, all four days${n?` · ${n} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}.`
+      : `Your crate is the <b>Elements ${esc(sc.day||'')}</b> lineup${n?` · ${n} artists`:''}.`;
+  }
+  return `Your crate is every NYC artist playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${n?` · ${n} artists`:''}${(sc.genres||[]).length?` · ${sc.genres.map(esc).join(', ')}`:''}. Audition anything, add what you'll play.`;
+}
+function shellHtml(){
+  const ep=DATA.episode||{}, sc=DATA.scope||{};
+  let due='';
+  if(ep.drop_date){
+    const days=Math.round((new Date(ep.drop_date+'T00:00:00')-new Date(new Date().toDateString()))/86400000);
+    due=`<span class="hdchip due">📅 Drops ${fmtDate(ep.drop_date)}${days>0?` · in ${days} day${days===1?'':'s'}`:days===0?' · today':''}</span>`;
+  }
+  return `
+  <div class="topbar"><div class="topbar-in">
+    <button class="setbtn" data-settoggle title="Your set — tap to show or hide">🎧 <b id="tbCount">0</b> in set<span id="tbMin"></span> <span class="chev" id="tbChev">▾</span></button>
+    <div class="searchwrap">
+      <span class="mag">🔎</span>
+      <input class="search" id="q" placeholder="Search artists and songs…" value="${esc(Q)}" autocomplete="off">
+      <button class="clrq" id="clrq" hidden title="Clear">✕</button>
+    </div>
+  </div></div>
+  <div class="wrap">
+    <header class="hd">
+      <div class="kicker">📻 Come With Radio · your DJ workspace</div>
+      <h1>${esc(ep.name||'Your episode')}</h1>
+      <div class="hdchips">
+        <span class="hdchip">SHOW ${ep.no??'—'}</span>
+        ${ep.mix_by?`<span class="hdchip">Mixed by ${esc(ep.mix_by)}</span>`:''}
+        ${due}
+      </div>
+      <div class="sub">${scopeLine()}</div>
+      ${sc.capped?`<div class="warn">⚠ Showing the first <b>${sc.count}</b> of <b>${sc.pool_total}</b> artists in this window — search, or ask Keith to narrow the genres.</div>`:''}
+    </header>
+    <section class="set" id="setPanel"></section>
+    <div class="genres" id="genreBar"></div>
+    <div class="tools" id="tools"></div>
+    <div class="crate-meta" id="crateMeta"></div>
+    <div id="results"></div>
+    <div class="finish">
+      <div class="k">When the set's recorded</div>
+      <h3>Send the mix to Keith</h3>
+      <p>One file — WeTransfer, Drive, whatever's easiest.</p>
+      <div class="big"><a href="mailto:${SEND_TO}">${SEND_TO}</a></div>
+    </div>
+    <div class="foot">Your workspace for this episode. The link expires when access is revoked.</div>
+  </div>`;
+}
+
+// ── events ───────────────────────────────────────────────────────────────────
+let _qt=null;
+document.addEventListener('input',e=>{
+  if(e.target.id==='q'){
+    Q=e.target.value; const c=$('#clrq'); if(c) c.hidden=!Q;
+    // Debounced because a keystroke re-sorts and re-renders the whole crate.
+    // The input itself lives in the topbar and is never re-rendered, so the
+    // caret and focus are simply never disturbed.
+    clearTimeout(_qt); _qt=setTimeout(()=>{LIMIT=60;renderCrate();},140);
+  }
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='sortSel'){ SORT=e.target.value; LIMIT=60; renderCrate(); }
+});
+document.addEventListener('click',e=>{
+  const t=e.target;
+  if(t.closest('[data-recopen]')){ $('#recOv').classList.add('on'); return; }
+  if(t.closest('[data-recclose]')||t.id==='recOv'){ $('#recOv').classList.remove('on'); return; }
+  if(t.closest('[data-settoggle]')){ SETOPEN=!SETOPEN; renderSet(); return; }
+  if(t.id==='clrq'){ Q=''; const q=$('#q'); if(q){q.value='';q.focus();} $('#clrq').hidden=true; LIMIT=60; renderCrate(); return; }
+
+  const pl=t.closest('[data-play]'); if(pl){ djPlay(pl.dataset.play,pl.dataset.t); return; }
+  if(t.closest('[data-closeplayer]')){ closePlayer(); return; }
+
+  const tg=t.closest('[data-toggle]');
+  if(tg){ const i=+tg.dataset.toggle; OPEN.has(i)?OPEN.delete(i):OPEN.add(i); renderCrate(); return; }
+  const sa=t.closest('[data-showall]');
+  if(sa){ OPEN.add(+sa.dataset.showall); renderCrate(); return; }
+
+  const add=t.closest('[data-addsong]');
+  if(add){
+    const row=add.closest('.song'); const a=DATA.artists[+row.dataset.ai], s=a.songs[+row.dataset.si];
+    addTrack({sc_track_id:String(s.sc_track_id||''),title:s.title,url:s.url,artist_name:a.name,
+      duration_ms:s.duration_ms,playback_count:s.playback_count,artwork_url:s.artwork_url},add);
+    return;
+  }
+  const rm=t.closest('[data-rmid]'); if(rm){ rm.disabled=true; removeTrack(rm.dataset.rmid); return; }
+
+  const g=t.closest('[data-genre]'); if(g){ GENRE=g.dataset.genre; LIMIT=60; renderCrate(); return; }
+  const dy=t.closest('[data-day]'); if(dy){ DAY=dy.dataset.day; LIMIT=60; renderCrate(); return; }
+  const gr=t.closest('[data-grp]'); if(gr){ GRP=gr.dataset.grp; LIMIT=60; renderCrate(); return; }
+  if(t.closest('[data-showallartists]')){ MUSIC_ONLY=false; renderCrate(); return; }
+  if(t.closest('[data-hidenomusic]')){ MUSIC_ONLY=true; renderCrate(); return; }
+  if(t.closest('[data-more]')){ LIMIT+=60; renderCrate(); return; }
+  if(t.closest('[data-clearall]')){ Q='';GENRE='';DAY='';GRP='';MUSIC_ONLY=true;LIMIT=60;
+    const q=$('#q'); if(q)q.value=''; const c=$('#clrq'); if(c)c.hidden=true; renderCrate(); return; }
+
+  if(t.id==='ownAdd'){
+    const artist=($('#ownArtist')?.value||'').trim(), title=($('#ownTitle')?.value||'').trim(), url=($('#ownUrl')?.value||'').trim();
+    if(!title){ toast('Give the track a title','err'); $('#ownTitle')?.focus(); return; }
+    addTrack({title,artist_name:artist||null,url:url||null},t);
+    return;
+  }
+});
+// Enter in the hand-add form submits it, which is what a form should do.
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'&&['ownArtist','ownTitle','ownUrl'].includes(e.target.id)){ e.preventDefault(); $('#ownAdd')?.click(); }
+});
+
+// ── boot ─────────────────────────────────────────────────────────────────────
+async function load(){
+  if(!token()){ $('#shell').innerHTML='<div class="state">No episode link. Ask Keith for a fresh one.</div>'; return; }
+  let j;
+  try{ j=await api({}); }
+  catch(e){ $('#shell').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
+  DATA=j;
+  $('#shell').innerHTML=shellHtml();
+  const c=$('#clrq'); if(c) c.hidden=!Q;
+  renderSet(); renderCrate();
 }
 load();
 </script>
