@@ -83,12 +83,22 @@ Deno.serve(async (req) => {
       // RETURNING the inserted row so the page shows exactly what was stored —
       // rebuilding it client-side from the form is a second copy of the same
       // record and drifts the moment either side changes.
+      // Where the artist is playing, IF the DJ knows and we don't. It goes in
+      // `comment` — the note field the dashboard already shows and lets Keith
+      // edit — and deliberately NOT into show_date / show_venue, which the
+      // public episode page renders as a checked fact ("🗓 … 📍 …"). The right
+      // home for a show the feeds missed is an ra_events row with
+      // source='manual', where it reaches the window, the venue filter, the
+      // artist pool and buzz; a string typed onto one track reaches none of
+      // those. So we capture the tip-off, attributed, and let Keith promote it.
+      const tip = String((track && track.show_note) || "").trim().slice(0, 300);
       const { data: row, error } = await admin.from("sc_playlist_tracks").insert({
         playlist_id: ep.id, sc_track_id: id, title: title || track.title || null, artist_name: (track.artist_name || "").trim().slice(0, 200) || null,
         permalink_url: track.url || track.permalink_url || null, duration_ms: track.duration_ms || null,
         playback_count: track.playback_count || null, artwork_url: track.artwork_url || null,
+        comment: tip ? "DJ says they're playing: " + tip : null,
         source: "dj", sort: (mx?.sort || 0) + 10,
-      }).select("sc_track_id, artist_name, title, permalink_url, duration_ms, source, sort").single();
+      }).select("sc_track_id, artist_name, title, permalink_url, duration_ms, comment, source, sort").single();
       if (error) return err(500, "Could not add that song.");
       return new Response(JSON.stringify({ ok: true, added: true, track: row }), { headers: JH });
     }
@@ -104,13 +114,20 @@ Deno.serve(async (req) => {
     const genres: string[] = Array.isArray(params.genres) ? params.genres.filter(Boolean) : [];
     const artistNames: string[] = Array.isArray(params.artists) ? params.artists.filter(Boolean) : [];
     const weeks = Math.max(1, Math.min(12, Number(params.weeks) || 4));
-    // The window START is the episode's, not "whenever the DJ opened the link".
-    // An episode planned for October wants October's bills; anchoring on today
-    // handed the DJ the next four weeks of shows that have nothing to do with
-    // the set they're building. Blank/invalid → today, which is the old behaviour.
+    // The window START is the episode's DROP DATE by default, not "whenever the
+    // DJ opened the link". The show's whole promise is that every artist in the
+    // mix is playing NYC *soon*, and soon is measured from the day it airs — a
+    // window anchored on today fills the crate with bills that are over before
+    // the episode exists. Order of preference: an explicit dj_search_params.start
+    // (Keith overriding) → the episode's drop_date → today. A start already in
+    // the past is ignored either way; there is no point offering a DJ a show
+    // that has happened.
     const todayIso = new Date().toISOString().slice(0, 10);
-    const startRaw = typeof params.start === "string" && /^\d{4}-\d{2}-\d{2}$/.test(params.start) ? params.start : null;
-    const from = startRaw && startRaw > todayIso ? startRaw : todayIso;
+    const iso = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}/.test(v) ? v.slice(0, 10) : null);
+    const startRaw = iso(params.start);
+    const dropIso = iso(ep.drop_date);
+    const anchor = startRaw && startRaw > todayIso ? "start" : dropIso && dropIso > todayIso ? "drop" : "today";
+    const from = anchor === "start" ? startRaw! : anchor === "drop" ? dropIso! : todayIso;
     const to = new Date(new Date(from + "T00:00:00Z").getTime() + weeks * 7 * 86400000).toISOString().slice(0, 10);
     const SEL = "name, soundcloud, follower_count, genres, city, next_event_date, next_venue, next_event_url";
 
@@ -264,6 +281,24 @@ Deno.serve(async (req) => {
       songs: a.soundcloud ? (songByUrl[norm(a.soundcloud)] || []) : [],
     }));
 
+    // How far the listings actually REACH, per feed. A window running past the
+    // last show we have pulled is not "nobody is playing then" — it is data that
+    // has not been fetched yet, and a crate that reads as complete while it is
+    // half-built is the same undeclared-cap failure as an unpaged query. Now that
+    // the window starts at the DROP DATE it sits further out than it used to, so
+    // this is the normal case rather than the edge one, and the page says so.
+    const poolLast: Record<string, string> = {};
+    if (!artistNames.length) {
+      const feeds = ["ra", "dice", "tm"];
+      const lasts = await Promise.all(feeds.map((s) =>
+        admin.from("ra_events").select("event_date").eq("source", s)
+          .order("event_date", { ascending: false }).limit(1).maybeSingle()));
+      feeds.forEach((s, i) => {
+        const d = lasts[i]?.data?.event_date;
+        if (d) poolLast[s] = String(d).slice(0, 10);
+      });
+    }
+
     // The episode's current tracklist (what's already in).
     const { data: tracks } = await admin.from("sc_playlist_tracks")
       .select("sc_track_id, artist_name, title, permalink_url, duration_ms, source, sort")
@@ -274,6 +309,12 @@ Deno.serve(async (req) => {
       episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date, mix_by: ep.mix_by || null },
       scope: {
         weeks, genres, from, to, pool: params.pool || null, day: params.day || null,
+        // Which date the window is anchored on, and whether the feeds reach the
+        // end of it — both so the page can explain a thin crate instead of
+        // presenting it as the whole scene.
+        anchor, drop_date: dropIso,
+        pool_last: poolLast,
+        pool_short: Object.keys(poolLast).filter((s) => poolLast[s] < to),
         // 'all-producers' = this edition deliberately reaches past its own day.
         reach: params.scope || null,
         count: (artists || []).length,

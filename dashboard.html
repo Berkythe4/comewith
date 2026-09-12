@@ -3261,6 +3261,8 @@ document.addEventListener('click', async (e) => {
   if (e.target.closest('[data-brief-pop]')) { toggleBriefPopup(); return; }
   if (e.target.closest('[data-ra-djgen]')) { raDjGenLink(); return; }
   if (e.target.closest('[data-ra-djrevoke]')) { raDjRevoke(); return; }
+  if (e.target.closest('[data-ra-djresetwin]')) { const el = document.querySelector('#kpiModalBody [name="ep_dj_start"]'); if (el) { el.value = ''; raDjEchoRefresh(); } return; }
+  if (e.target.closest('[data-ra-djmatchwin]')) { raDjMatchWindow(); return; }
   const djc = e.target.closest('[data-ra-djcopy]'); if (djc) { (navigator.clipboard?.writeText(djc.dataset.raDjcopy) || Promise.resolve()).then(() => toast('Link copied', 'ok')); return; }
   if (e.target.closest('[data-cc-editweek]')) { ccEditWeekPlan(); return; }
   if (e.target.closest('[data-wpe-add]')) { const l = document.getElementById('wpeList'); if (l) l.insertAdjacentHTML('beforeend', ccWpeRow()); return; }
@@ -20818,12 +20820,19 @@ async function raOpenEpisodeDetails() {
         <select name="ep_assigned_actor" class="modal-input" style="flex:1 1 170px;"><option value="">— or a DJ —</option>${djOpts}</select>
       </div>
       <div id="djLinkBox" style="margin-top:8px;">${raDjLinkHtml(pl)}</div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
-        <input name="ep_dj_genres" class="modal-input" value="${v((dp.genres || []).join(', '))}" placeholder="scope genres (comma) — blank = all" style="flex:1 1 200px;font-size:.82rem;">
-        <input name="ep_dj_start" type="date" class="modal-input" value="${v(dp.start || '')}" title="first day of the DJ's window — blank = from today" style="max-width:150px;font-size:.82rem;">
-        <input name="ep_dj_weeks" type="number" class="modal-input" value="${v(dp.weeks || 4)}" min="1" max="12" title="how many weeks of shows the DJ sees" style="max-width:90px;font-size:.82rem;">
+      <div class="li-sub" style="margin:9px 0 3px;">🔎 <strong>What the DJ sees</strong> — the crate on their link is every NYC artist playing inside this window.</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;">
+        <label class="li-sub" style="flex:1 1 200px;">Genres <span style="opacity:.7">— blank = all</span>
+          <input name="ep_dj_genres" class="modal-input" value="${v((dp.genres || []).join(', '))}" placeholder="house, techno" style="width:100%;font-size:.82rem;"></label>
+        <label class="li-sub" style="max-width:160px;">Crate starts
+          <input name="ep_dj_start" type="date" class="modal-input" value="${v(dp.start || '')}" title="First day of the DJ's window. Blank = the episode's drop date." style="width:100%;font-size:.82rem;"></label>
+        <label class="li-sub" style="max-width:100px;">for weeks
+          <input name="ep_dj_weeks" type="number" class="modal-input" value="${v(dp.weeks || 4)}" min="1" max="12" title="How many weeks of shows the DJ sees" style="width:100%;font-size:.82rem;"></label>
+        ${dp.start ? '<button type="button" class="hub-mini" data-ra-djresetwin title="Go back to the default: the window starts on the drop date">↺ Use the drop date</button>' : ''}
       </div>
-      <div class="kpi-hint" style="margin:4px 0 0;">The DJ link shows only NYC artists playing inside this window (+ any genre filter) so they research within scope. Leave the date blank to start from today; set it to plan an episode further out — the pool reaches as far as the last "↻ Pull shows" went.</div></div>
+      <div class="kpi-hint" id="djWindowEcho" style="margin:5px 0 0;">${raDjWindowEcho(pl, dp)}</div>
+      <div style="margin-top:6px;"><button type="button" class="hub-mini" data-ra-djmatchwin title="Set the Build tab's artist window to the DJ's window, so “↻ Refresh music &amp; data” scans exactly the artists they will see">🎯 Point the artist window here</button></div>
+      <div class="kpi-hint" style="margin:4px 0 0;">A crate is only as good as what has been scanned: an artist with no SoundCloud read yet has nothing for the DJ to audition. Use the button above, then <strong>↻ Refresh music &amp; data</strong> on the Build tab, before you send the link.</div></div>
     <div class="form-row" style="border:1px solid var(--gold);border-radius:8px;padding:11px 13px;background:rgba(181,121,31,0.05);">
       <label style="font-size:.86rem;">📝 Recap notes <span class="li-sub">— internal only, never public. For Janelle's recap content.</span></label>
       <textarea name="ep_recap_notes" class="modal-textarea" rows="4" placeholder="Your notes on the set / the night — the story, standout tracks, energy, moments — anything Janelle can turn into recap posts.">${v(pl.recap_notes)}</textarea></div>
@@ -20840,6 +20849,12 @@ async function raOpenEpisodeDetails() {
       const file = f.files && f.files[0]; if (!file) return;
       const small = await downscaleImage(file, 1400, 0.86);
       const prev = $('raCoverPrev'); if (prev) prev.style.backgroundImage = `url('${URL.createObjectURL(small)}')`;
+    });
+    // The window the DJ gets is computed, not typed — so show the answer while
+    // it is being changed rather than after a save and a page load.
+    ['ep_dj_start', 'ep_dj_weeks'].forEach(n => {
+      const el = document.querySelector(`#kpiModalBody [name="${n}"]`);
+      if (el) { el.addEventListener('input', raDjEchoRefresh); el.addEventListener('change', raDjEchoRefresh); }
     });
   }, 90);
 }
@@ -20910,6 +20925,63 @@ async function raSaveEpisodeDetails() {
     toast('Save failed: ' + (e.message || e), 'err');
     btn.disabled = false; btn.textContent = 'Save details';
   }
+}
+// The DJ's crate window, resolved the same way dj-station resolves it: an
+// explicit start → the episode's DROP DATE → today. The drop date is the default
+// because the show's promise is that every artist in the mix is playing NYC
+// soon, and soon is counted from the day it airs — a window anchored on today
+// fills the crate with bills that are over before the episode exists.
+// This MIRRORS the edge function. Change one, change the other.
+function raDjWindow(pl, dp) {
+  const today = new Date().toISOString().slice(0, 10);
+  const iso = (s) => (typeof s === 'string' && /^\d{4}-\d{2}-\d{2}/.test(s)) ? s.slice(0, 10) : null;
+  const start = iso(dp && dp.start), drop = iso(pl && pl.drop_date);
+  const anchor = start && start > today ? 'start' : drop && drop > today ? 'drop' : 'today';
+  const from = anchor === 'start' ? start : anchor === 'drop' ? drop : today;
+  const weeks = Math.max(1, Math.min(12, Number(dp && dp.weeks) || 4));
+  const to = new Date(new Date(from + 'T00:00:00Z').getTime() + weeks * 7 * 86400000).toISOString().slice(0, 10);
+  return { from, to, weeks, anchor };
+}
+function raDjWindowEcho(pl, dp) {
+  const w = raDjWindow(pl, dp);
+  const why = w.anchor === 'drop' ? ' <span class="li-sub">(the drop date)</span>'
+    : w.anchor === 'today' ? ' <span class="li-sub">(today — no drop date set yet)</span>' : '';
+  let out = `DJ sees <strong>${escapeHtml(fmtDate(w.from))}</strong>${why} → <strong>${escapeHtml(fmtDate(w.to))}</strong>`;
+  // How far the pull actually reaches, per feed. A window past it is not "a
+  // quiet month", it is shows nobody has fetched yet — the same trap the Build
+  // toolbar already warns about. Silent when the market data isn't loaded: we
+  // would rather say nothing than claim coverage we haven't checked.
+  const lastBy = {};
+  for (const e of (raState.events || [])) { const s = e.source || 'ra'; if (e.event_date && (!lastBy[s] || e.event_date > lastBy[s])) lastBy[s] = e.event_date; }
+  const short = Object.keys(lastBy).filter(s => lastBy[s] < w.to).sort();
+  if (short.length) out += ` · <span style="color:var(--gold,#B5791F)">⚠ listings only reach ${short.map(s => (RA_SOURCE[s]?.l || s.toUpperCase()) + ' ' + lastBy[s]).join(', ')} — “↻ Pull shows” to extend them</span>`;
+  return out;
+}
+function raDjFormParams() {
+  return {
+    start: document.querySelector('#kpiModalBody [name="ep_dj_start"]')?.value || null,
+    weeks: Number(document.querySelector('#kpiModalBody [name="ep_dj_weeks"]')?.value) || 4,
+  };
+}
+function raDjEchoRefresh() {
+  const pl = raState.playlist, el = $('djWindowEcho');
+  if (pl && el) el.innerHTML = raDjWindowEcho(pl, raDjFormParams());
+}
+// Point the Build tab's artist window at the DJ's window. A crate is only as
+// good as what has been SCANNED, and scanning is driven from that window — so an
+// episode planned a month out hands the DJ artists nobody has read yet. This
+// lines the two up and drops you on the list, where the existing
+// "↻ Refresh music & data (N)" already counts what still needs reading. No second
+// copy of that counting lives here.
+function raDjMatchWindow() {
+  const pl = raState.playlist; if (!pl) return;
+  const w = raDjWindow(pl, raDjFormParams());
+  raState.radioStart = w.from;
+  raState.radioWeeks = w.weeks;
+  closeKpi();
+  activateTab('ra-market');
+  setTimeout(() => { raState.ccMode = false; raState.stationOpen = false; renderRaMarket(); }, 160);
+  toast(`Artist window set to ${w.from} → ${w.to}. Now hit “↻ Refresh music & data”.`, 'ok');
 }
 function raDjLinkHtml(pl) {
   if (!pl.dj_token) return `<button type="button" class="hub-mini" data-ra-djgen>🔗 Generate a DJ access link</button>`;

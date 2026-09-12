@@ -69,6 +69,9 @@
     background:var(--panel);color:var(--cream);font-size:.92rem;}
   .own-f input:focus{outline:none;border-color:var(--limed);}
   .own-hint{color:var(--faint);font-size:.78rem;margin-top:7px;}
+  .own-match{font-size:.8rem;margin-top:7px;min-height:1px;}
+  .own-match.hit{color:var(--lime);}
+  .own-match.miss{color:var(--dim);}
 
   /* ── Crate tools ────────────────────────────────────────────────────────── */
   .tools{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-bottom:9px;}
@@ -177,7 +180,7 @@
     <div class="rec-step"><span class="rn">＋</span><div><b>Add to your set</b><div class="t">It lands in the episode instantly. <b>✓ added</b> to pull it back out.</div></div></div>
     <div class="rec-step"><span class="rn">🎧</span><div><b>Your set, up top</b><div class="t">Always one tap away — count, running time, every track. Order doesn't matter here; you arrange it when you mix.</div></div></div>
     <div class="rec-step"><span class="rn">🔎</span><div><b>Search finds songs too</b><div class="t">Type a track name, not just an artist — it looks inside every catalogue below.</div></div></div>
-    <div class="rec-step"><span class="rn">✎</span><div><b>Your own records</b><div class="t">Playing something that isn't in the crate? <b>＋ Add a track of your own</b> in the set panel. That's most of a guest mix.</div></div></div>
+    <div class="rec-step"><span class="rn">✎</span><div><b>Your own records</b><div class="t">Playing something that isn't in the crate? <b>＋ Add a track of your own</b> in the set panel. That's most of a guest mix. Start typing the artist — if we already track them, the show line writes itself; if we don't, tell us where they're playing and Keith will check it.</div></div></div>
     <div class="reclbl">The flow</div>
     <div class="rec-step"><span class="rn">🎯</span><div><b>Assigned</b><div class="t">Keith gives you an episode and this link.</div></div></div>
     <div class="rec-step"><span class="rn">🎧</span><div><b style="color:var(--lime)">Build the tracklist — here</b><div class="t">So the episode page can credit every record and link each artist's next NYC show.</div></div></div>
@@ -299,6 +302,38 @@ function setIndexes(){
   IN=new Set((DATA.tracklist||[]).map(t=>String(t.sc_track_id||'')));
   DJADD=new Set((DATA.tracklist||[]).filter(t=>t.source==='dj').map(t=>String(t.sc_track_id||'')));
 }
+// Name → the crate's own row for that artist. A hand-added track that carries a
+// name we already hold gets its show line filled in automatically on Keith's
+// side (the dashboard re-matches tracks to the pull by artist name), so the
+// picker is doing real work, not autocomplete for its own sake. A name we don't
+// hold is fine too — it just can't fill itself in, which is when we ask.
+let ARTBYNAME=null;
+function artistIndex(){
+  if(ARTBYNAME) return ARTBYNAME;
+  ARTBYNAME=new Map();
+  (DATA.artists||[]).forEach(a=>{ const k=(a.name||'').trim().toLowerCase(); if(k&&!ARTBYNAME.has(k)) ARTBYNAME.set(k,a); });
+  return ARTBYNAME;
+}
+// Reflect what the typed name did or didn't match, and only ask "where are they
+// playing" when we actually don't know — asking about an artist whose show we
+// already hold invites a second, contradictory answer.
+function ownMatchUpdate(){
+  const el=$('#ownMatch'), wrap=$('#ownShowWrap'); if(!el) return;
+  const raw=($('#ownArtist')?.value||'').trim();
+  const hit=raw?artistIndex().get(raw.toLowerCase()):null;
+  if(!raw){ el.className='own-match'; el.innerHTML=''; if(wrap) wrap.hidden=true; return; }
+  if(hit){
+    el.className='own-match hit';
+    // next_venue/next_event_date is their SOONEST show, not their only one —
+    // labelled as such so a DJ who means a later night isn't told they're wrong.
+    el.innerHTML=`✓ In the crate${hit.next_event_date?` — next NYC show ${esc(hit.next_venue||'')} ${fmtDate(hit.next_event_date)}`:''}. The show line on the episode page fills itself in.`;
+    if(wrap){ wrap.hidden=true; const s=$('#ownShow'); if(s) s.value=''; }
+  }else{
+    el.className='own-match miss';
+    el.innerHTML=`Not one we're tracking — that's fine. If you know where they're playing, say so below and Keith will check it.`;
+    if(wrap) wrap.hidden=false;
+  }
+}
 function renderSet(){
   setIndexes();
   const tl=DATA.tracklist||[];
@@ -345,8 +380,12 @@ function renderSet(){
     <details class="own" id="ownBox"${ownOpen?' open':''}>
       <summary>＋ Add a track of your own</summary>
       <div class="own-f">
-        <input id="ownArtist" placeholder="Artist" autocomplete="off">
+        <input id="ownArtist" placeholder="Artist" list="artistList" autocomplete="off">
         <input id="ownTitle" placeholder="Track title *" autocomplete="off">
+      </div>
+      <div class="own-match" id="ownMatch"></div>
+      <div class="own-f" id="ownShowWrap" hidden>
+        <input id="ownShow" placeholder="Where are they playing? e.g. Nowadays · Fri 17 Oct" autocomplete="off">
       </div>
       <div class="own-f">
         <input id="ownUrl" placeholder="Link (optional) — SoundCloud, Bandcamp, anywhere" autocomplete="off">
@@ -495,7 +534,23 @@ function scopeLine(){
       ? `Your crate is <b>every producer on the Elements bill</b>, all four days${n?` · ${n} artists`:''} — this is the early slot, so it isn't limited to ${esc(sc.day||'your day')}.`
       : `Your crate is the <b>Elements ${esc(sc.day||'')}</b> lineup${n?` · ${n} artists`:''}.`;
   }
-  return `Your crate is every NYC artist playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${n?` · ${n} artists`:''}${(sc.genres||[]).length?` · ${sc.genres.map(esc).join(', ')}`:''}. Audition anything, add what you'll play.`;
+  // The window is anchored on the episode's DROP DATE, which is the thing that
+  // makes the crate mean something: these are the shows a listener can still go
+  // to when the episode airs. Say so, or a window that starts a month out looks
+  // like a bug.
+  const why=sc.anchor==='drop'?' — the four weeks from the day this episode drops'
+    :sc.anchor==='start'?' — the window Keith set for this episode':'';
+  return `Your crate is every NYC artist playing between <b>${fmtDate(sc.from)}</b> and <b>${fmtDate(sc.to)}</b>${why}${n?` · ${n} artists`:''}${(sc.genres||[]).length?` · ${sc.genres.map(esc).join(', ')}`:''}. Audition anything, add what you'll play.`;
+}
+// Listings for a window this far out are still being announced. A thin crate is
+// then a fact about the calendar, not about the scene — and saying nothing would
+// let it read as "that's all there is".
+function coverageNote(){
+  const sc=DATA.scope||{}, short=sc.pool_short||[], last=sc.pool_last||{};
+  if(!short.length) return '';
+  const NAME={ra:'Resident Advisor',dice:'DICE',tm:'Ticketmaster'};
+  const bits=short.map(s=>`${NAME[s]||s.toUpperCase()} up to ${fmtDate(last[s])}`).join(', ');
+  return `<div class="warn">📅 Shows this far ahead are still being announced — we have ${bits}, and this window runs to ${fmtDate(sc.to)}. More artists will appear here as the bills go up, so it's worth another look closer to the date.</div>`;
 }
 function shellHtml(){
   const ep=DATA.episode||{}, sc=DATA.scope||{};
@@ -524,7 +579,9 @@ function shellHtml(){
       </div>
       <div class="sub">${scopeLine()}</div>
       ${sc.capped?`<div class="warn">⚠ Showing the first <b>${sc.count}</b> of <b>${sc.pool_total}</b> artists in this window — search, or ask Keith to narrow the genres.</div>`:''}
+      ${coverageNote()}
     </header>
+    <datalist id="artistList">${(DATA.artists||[]).map(a=>`<option value="${esc(a.name)}"></option>`).join('')}</datalist>
     <section class="set" id="setPanel"></section>
     <div class="genres" id="genreBar"></div>
     <div class="tools" id="tools"></div>
@@ -550,6 +607,7 @@ document.addEventListener('input',e=>{
     // caret and focus are simply never disturbed.
     clearTimeout(_qt); _qt=setTimeout(()=>{LIMIT=60;renderCrate();},140);
   }
+  if(e.target.id==='ownArtist') ownMatchUpdate();
 });
 document.addEventListener('change',e=>{
   if(e.target.id==='sortSel'){ SORT=e.target.value; LIMIT=60; renderCrate(); }
@@ -589,14 +647,18 @@ document.addEventListener('click',e=>{
 
   if(t.id==='ownAdd'){
     const artist=($('#ownArtist')?.value||'').trim(), title=($('#ownTitle')?.value||'').trim(), url=($('#ownUrl')?.value||'').trim();
+    // Only sent when the field is actually showing — i.e. when the artist is one
+    // we don't hold. Otherwise we'd be collecting a show note nobody asked for
+    // next to a show we already know.
+    const showEl=$('#ownShow'), show=($('#ownShowWrap')?.hidden===false&&showEl)?showEl.value.trim():'';
     if(!title){ toast('Give the track a title','err'); $('#ownTitle')?.focus(); return; }
-    addTrack({title,artist_name:artist||null,url:url||null},t);
+    addTrack({title,artist_name:artist||null,url:url||null,show_note:show||null},t);
     return;
   }
 });
 // Enter in the hand-add form submits it, which is what a form should do.
 document.addEventListener('keydown',e=>{
-  if(e.key==='Enter'&&['ownArtist','ownTitle','ownUrl'].includes(e.target.id)){ e.preventDefault(); $('#ownAdd')?.click(); }
+  if(e.key==='Enter'&&['ownArtist','ownTitle','ownUrl','ownShow'].includes(e.target.id)){ e.preventDefault(); $('#ownAdd')?.click(); }
 });
 
 // ── boot ─────────────────────────────────────────────────────────────────────
