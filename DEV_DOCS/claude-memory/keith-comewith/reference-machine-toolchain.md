@@ -1,26 +1,25 @@
 ---
 name: reference-machine-toolchain
-description: "This machine cannot run node --check, Bash heredocs are not quote-safe, the anon sweep works here, and .env still points db.py at prod by default"
+description: "No JS runtime here (use scripts/check_inline_js.py), heredocs corrupt scripts three ways, the anon sweep works, and .env still points db.py at prod by default"
 metadata:
   node_type: memory
   type: reference
   originSessionId: 9285a14c-2927-4aa5-9b36-c63f3a5610ad
-  modified: 2026-09-05T00:00:00.000Z
+  modified: 2026-09-12T17:21:01.444Z
 ---
 
 Machine configuration for `C:\Users\keith\comewith` (the laptop). Verify each
 before relying on it — this is config, and config gets fixed.
 
 - **No JS runtime at all** — `node`, `deno`, `bun`, `npx` all absent (still true
-  2026-08-27). The `node --check` loop CLAUDE.md documents for `dashboard.html`
-  cannot run here. Workaround: extract the inline module, downlevel the syntax
-  esprima cannot see (`||=`, `??`, `?.`, `catch {`, numeric separators), and
-  **wrap the body in an async IIFE after lifting the `import` lines out** —
-  esprima has no top-level `await`, which is the one that blocked this before.
-  Run it three ways: git HEAD as control (must PASS, or the checker is the
-  problem), the working copy, and a copy with a brace deleted (must FAIL, or the
-  checker would pass a real bug). Script kept at `scratchpad/syntax_check.py`;
-  worth moving into `scripts/` if this machine stays Node-less.
+  2026-09-12). The `node --check` loop CLAUDE.md documents for `dashboard.html`
+  cannot run here. **This is now solved and committed: `python
+  scripts/check_inline_js.py <file>`** (added 2026-09-12). It extracts the inline
+  module, downlevels what esprima cannot parse (`||=` `&&=` `??=`, `?.`, `??`,
+  `catch {`), and runs the same extraction against `git show HEAD:<file>` as a
+  control. It does NOT solve top-level `await` — `dashboard.html` ends on one, so
+  the expected pass for that file is **both sides stopping on the same final
+  line**, and the exit code knows that. `dj.html` parses clean outright.
 - **`SUPABASE_PROD_PUBLISHABLE_KEY` IS now in `.env`** (added 2026-08-22), so
   `scripts/check_anon_exposure.py` and `scripts/check_financial_views.py` both
   run here. The key was never secret — it ships inside `dashboard.html` because
@@ -64,3 +63,12 @@ Related: [[project-fpa-planning-tool]]
 - **Bash heredocs mangle non-ASCII on this machine.** A `<<'PYEOF'` block
   containing an em-dash silently failed a string match against a UTF-8 file on
   2026-09-10. Write the script with the Write tool and run the file instead.
+- **Bash heredocs also eat BACKSLASH ESCAPES, quoted or not — the worst of the
+  three, because it succeeds.** On 2026-09-12 a `<<'PY'` patch script wrote `\\n\\n`
+  into a JS `confirm()` string; Python received `\n\n` already unescaped and put a
+  REAL newline inside a single-quoted JS literal, breaking `dashboard.html`. The
+  same run turned a regex `r"\\bcatch"` into a literal backspace character, so the
+  substitution silently never matched. Both were found by eye, not by any check.
+  **Any patch script containing a backslash goes through the Write tool, never a
+  heredoc** — this now covers apostrophes, non-ASCII AND escapes, so the honest
+  rule is simply: do not write scripts through heredocs on this machine.

@@ -1,3 +1,139 @@
+# Carryover - 2026-09-12 (the DJ workspace, for the first guest mix - LAPTOP)
+
+**Closed 2026-09-12.** The 2026-09-10 block below is kept whole and is the
+previous close; everything under it is older still, untouched.
+
+## >> START HERE NEXT SESSION
+
+**1. ONE THING IS OWED BY KEITH, and it is small but it gates the guest mix.**
+SHOW 10's DJ link is live and correct, but the crate behind it has barely been
+scanned. In its window (8 Oct - 5 Nov) **327 artists are on the bills and only 57
+have any music read**; the other 270 have never been scanned, because scanning is
+driven from the Build tab's own window, which has been sitting on today+4w.
+   - Dashboard -> Radio -> SHOW 10 -> **✎ Episode details** -> **🎯 Point the
+     artist window here**, then **↻ Refresh music & data** on the Build tab.
+   - The link needs no regenerating and Miss Vee needs no new message - the page
+     is live-read, so the new artists appear on her next look. LEARNINGS §70.
+   - Worth a second pass nearer the date: DICE listings only reach 22 Oct while
+     that window runs to 5 Nov.
+
+**2. EP 4 IS STILL THE LIVE DEADLINE and it slipped further.** Nothing about it
+moved this session. SHOW 8's tracklist is right in the database (21 tracks, play
+order, chips) but go-live is entirely unset - no cover, no `desc_public` /
+`desc_sc`, no slug, no mix uploaded, no `scheduled_go_live`, status still
+`planned`. The drop date was **2026-09-10**. Keith still owes the filled-in
+`Radio/Episode 4/EP4_times.txt`; then the cues need rebuilding (item 4).
+
+**3. THE BIGGEST OPEN BUG is unchanged: 183 artists carry a wrong
+`next_event_date`** (169 already in the past, 6 null, 8 later than their real next
+show) while genuinely having an upcoming NYC date. Fixed for the radio show-chip
+path only; **the artist pool, Best Nights and the watchlist coverage strip all
+still read it**. Join through `ra_events.lineup` instead. LEARNINGS §68.
+   - Note: `dj-station`'s window mode already builds from lineups and is NOT
+     affected. But the dashboard's **↻ Show info** (`raRefreshShowInfo`) reads
+     `next_event_date`, so a track's show line can still be filled with a stale
+     date. That is the same bug wearing a different hat.
+
+**4. Two smaller things still mid-air, both scoped, neither applied:**
+   - **`raRowScore` in `dashboard.html` mismatches a track.** It pairs *Take Care
+     (Extended Revisit)* with Tinlicker & Helsloot's *Tell Me* at 0.66 on the
+     artist name alone. One-line fix (gate the swapped score on its own second
+     term), tested against all 21 Ep 4 rows. **Not applied.**
+   - **The Ep 4 cues CSV has no `show_date`, `show_venue` or `release_date`**, so
+     `render_card` would silently draw none of the 21 show chips. `make_cues.py`
+     reads the DB but does not emit `genres`. The two need merging before the
+     render. (`Radio/render/*` and `Radio/Episode 4/*` are still uncommitted
+     working files on this machine - deliberately, they are Keith's in-progress
+     render work.)
+
+**5. Carried, untouched:** the Planning tab has still never been opened in a
+browser, and **a published planning round is still only half frozen**
+(`plan_publish_round()` does not version `plan_offering_lines`). Scoped, not
+built, needs Keith.
+
+## State summary
+
+- **NO MIGRATIONS THIS SESSION.** Prod max 211, repo max 211 - **no drift**,
+  re-confirmed indirectly: 211's `v_tracked_artists` answers the anon sweep, so
+  211 is applied.
+- **All 5 financial views return anon 401**, verified through PostgREST with the
+  publishable key proven live first (`check_financial_views.py`).
+- **Full anon sweep: 0 FAIL** (`check_anon_exposure.py`). No new tables or views
+  this session, so nothing needed adding to its two lists.
+- **Latest LEARNINGS: §72.** Four added (§69 §70 §71 §72).
+- **Edge functions: `dj-station` deployed v25 then v26** (verify_jwt off, as it
+  was). No other function touched. Deployed via `scripts/deploy_edge_function.py`.
+- **Prod DATA touched, deliberately:** SHOW 10's 48 tracks deleted - 46 auto-
+  carried in from SHOW 2 on 2026-07-30, 2 hand-added 2026-08-21. They were there
+  by accident, not chosen. Backed up to
+  `backups/premerge_2026-09-12_show10_tracks.json`. **`sc_song_log` deliberately
+  left alone**, so those 46 keep `carried_to = SHOW 10` and will NOT land in the
+  next station Go-live creates. One update to null that column if Keith wants
+  them back in the pool - his call, flagged, not taken.
+- **SHOW 10 is the first DJ guest mix**: `mix_by = Miss Vee`, DJ actor assigned,
+  drops 2026-10-08, link `https://comewith.org/dj.html?ep=dj_hv9ogowec3bf21up`.
+- **Live site verified deployed**, not assumed: fetched comewith.org/dj.html and
+  /dashboard.html and grepped for this session's markup.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- Ran on the **laptop**. Git: `master`, three commits, committed and **pushed**,
+  verified `0 0` against origin after the push.
+- **Still no JS runtime on this machine** - which is now handled rather than
+  worked around: `scripts/check_inline_js.py` is the esprima-based extract-and-
+  control syntax check CLAUDE.md has always asked for.
+
+## Tomorrow's default
+
+Point the artist window at SHOW 10's crate and run the scan (item 1) - it is ten
+minutes and it is the difference between a guest DJ having 57 artists to dig
+through and 327. Then Ep 4: times sheet -> merge the cues -> render -> verify by
+pulling a real frame -> fill the go-live fields. If both are done, the
+`next_event_date` cache (item 3) is the highest-value fix on the board.
+
+## This session shipped
+
+1. **SHOW 10 cleared.** 48 tracks removed; they were carried in automatically
+   back in July and had nothing to do with the episode. Backed up first.
+2. **`dj.html` rebuilt.** The link a guest DJ opens was serving 1,103 artists of
+   which 415 had any music, sorted by date, with no song search and the set being
+   built hidden in a collapsed `<details>` you could not remove from. Now: the set
+   is a real panel with running time and per-track remove; a sticky bar keeps it
+   and the search on screen; **search matches song titles** across 14.5k songs;
+   sort, genre chips, paging; artists with no music hidden by default **with the
+   count of what that removed on screen**; only the results repaint on a
+   keystroke. LEARNINGS §69.
+3. **A guest DJ can add their own records** - `dj-station` accepts a track with no
+   `sc_track_id` and gives it the synthetic `man_` id (102). The artist box is a
+   picker over the crate, so a picked name matches ↻ Show info first time; an
+   artist we do not track reveals "where are they playing", which lands in
+   `comment` and never in `show_date`/`show_venue`. LEARNINGS §72.
+4. **The crate window now starts at the DROP DATE** (+weeks), overridable, with a
+   live echo of the resulting window in ✎ Episode details, a ↺ reset, and 🎯 Point
+   the artist window here. Reach per feed is now reported and rendered. LEARNINGS
+   §70.
+5. **↻ Refresh on the DJ page**, plus a quiet re-fetch when a backgrounded tab
+   returns after 10 minutes - and the latent bug that had to be fixed first:
+   expanded cards were keyed by array index, which a refresh reorders. LEARNINGS
+   §71.
+6. **Two honesty fixes on the dashboard.** "🗑 Clear all songs" claimed the tracks
+   were logged as passed and carried into next week; `raClearPlaylist` is a plain
+   delete and writes nothing to `sc_song_log`. Tooltip and confirm now say what it
+   really does.
+7. **`scripts/check_inline_js.py`** - the extract-and-control syntax check
+   CLAUDE.md mandates, as a command, for machines with no JS runtime.
+
+## Parked / next
+
+- **Nothing is parked on a branch.** All three commits are on `master` and
+  deployed.
+- **Open question for Keith, flagged not taken:** should a DJ's typed show info
+  publish straight to the episode page (`show_date`/`show_venue`) instead of
+  waiting in `comment`? One-line change; the default is deliberately the cautious
+  one.
+- **`raRefreshShowInfo` reads the rotten `next_event_date`** (see item 3) - worth
+  folding into that fix rather than doing twice.
+
+---
+
 # Carryover - 2026-09-10 (Ep 4 tracklist, DICE pagination, title-confirmed artists - LAPTOP)
 
 **Closed 2026-09-10.** The 2026-09-05 block below is kept whole and is the

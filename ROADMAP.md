@@ -1759,3 +1759,54 @@ artist-shaped, and no downstream filter can lift it.
 **Still parked from 2026-08-21/27.** The Planning tab has never been opened in a
 browser; a published planning round is only half frozen; six offerings remain
 provisional; parties still have no per-head ticket price.
+
+---
+
+## 2026-09-12 — The DJ workspace, rebuilt for the first guest mix (no migrations)
+
+SHOW 10 is the first episode mixed by a guest (Miss Vee, drops 8 Oct). Keith
+opened the link he'd generated for her and said it didn't feel intuitive. The
+session was that review, and the two questions that came out of it.
+
+**Done — the crate cleared.** SHOW 10 was carrying 48 tracks, 46 of them
+auto-carried from SHOW 2 back in July. Removed, backed up, and `sc_song_log`
+deliberately left alone so they can't reappear in the next station.
+
+**Done — `dj.html` rebuilt.** Measured before designing: the link was serving
+**1,103 artists of which 415 had any music scanned**, sorted by date, no song
+search across 14.5k songs, and the set being built sat in a collapsed `<details>`
+you could not remove from. Now a persistent set panel with running time and
+per-track remove, a sticky bar holding the set and the search, song-title search,
+sort/genre/paging, and a music-only default that says what it hid. LEARNINGS §69.
+
+**Done — a guest can add their own records.** Most of a guest mix is never in our
+crate. `dj-station` takes a track with no `sc_track_id` and gives it the synthetic
+`man_` id (102). The artist box is a picker over the crate, so a picked name
+matches ↻ Show info first time. LEARNINGS §72.
+
+**Done — the crate window starts at the DROP DATE.** Anchoring on "whenever the
+DJ opened the link" filled the crate with bills that are over before the episode
+airs. Overridable, with a live echo of the resulting window. LEARNINGS §70.
+
+**Done — the link is now refreshable in place**, and the latent index-keyed
+view-state bug that had to be fixed before that could exist. LEARNINGS §71.
+
+**Done — `scripts/check_inline_js.py`.** The extract-and-control syntax check
+CLAUDE.md has always mandated, as a command, using esprima because the laptop has
+no JS runtime.
+
+**BLOCKED ON A SCAN, not on code — SHOW 10's crate.** Moving the window to the
+drop date exposed that scanning runs off a *different* window: 327 artists on
+those bills, **57 with any music read**. 🎯 Point the artist window here →
+↻ Refresh music & data. Ten minutes, and it is the whole difference for the guest
+DJ. Top of CARRYOVER.
+
+**Open question, deliberately not decided.** Should a DJ's typed show info publish
+straight to the episode page instead of waiting in `comment` for Keith? One line
+either way; the cautious default shipped.
+
+**Still parked from before.** Ep 4 go-live is entirely unset and the drop date has
+passed. 183 artists carry a rotten `next_event_date` and the artist pool, Best
+Nights, the watchlist strip and now ↻ Show info all still read it. The Planning
+tab has never been opened in a browser; a published planning round is only half
+frozen.

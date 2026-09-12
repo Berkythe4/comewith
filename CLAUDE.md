@@ -543,6 +543,42 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **Phase 1.1/2 pending:** YouTube auto-post at finalize; listener "export my
   saved playlist to my own SoundCloud" (OAuth per listener — designed, not built).
 
+## The DJ workspace (`dj.html` — the link a guest DJ opens)
+
+- **The link is LIVE-READ, never a snapshot.** `dj-station` rebuilds the crate from
+  `ra_events`, `ra_artists` and `sc_artist_cache` on **every request**; `dj_token` is
+  only a credential. So a pull, a scan, or a change to the genres / date / weeks
+  shows up on the DJ's next load with no new link. **Never regenerate a link to
+  "refresh" it** — that only kills the one the DJ already has. The page itself
+  fetches once on load, so it carries ↻ Refresh plus a quiet re-fetch when a
+  backgrounded tab comes back after 10 minutes.
+- **The crate window defaults to the episode's DROP DATE, not today.** Resolution
+  order: explicit `dj_search_params.start` → `drop_date` → today; a start already in
+  the past is ignored. The mix's promise is that every artist in it is playing NYC
+  *soon*, counted from the day it airs. LEARNINGS §70.
+- **That window is implemented TWICE** — `dj-station`'s resolver and `raDjWindow()`
+  in `dashboard.html`, which draws the live echo in ✎ Episode details. **Change one,
+  change the other**, same standing tax as `v_plan_monthly` / `planModelMonth`.
+- **A crate is only as good as what has been SCANNED, and scanning runs off a
+  DIFFERENT window** — the Build tab's date range, not the DJ's. Moving an episode's
+  window to its drop date took SHOW 10 to 327 artists of whom **57** had any music
+  read. Use **🎯 Point the artist window here** → **↻ Refresh music & data** before
+  sending a link, every time.
+- **Reach is reported, not assumed.** `scope.pool_last` (per feed) and `pool_short`
+  say how far the listings actually go, and the page renders it. A window at the
+  drop date routinely runs past DICE's horizon; without the note a thin crate reads
+  as "that's all there is". Same rule as §18 / §66.
+- **A hand-added track may carry the DJ's show tip-off, but it goes in `comment`,
+  prefixed `DJ says they're playing:` — never in `show_date` / `show_venue`.** Those
+  render on the public episode page as a checked fact. A show the feeds missed
+  belongs in `ra_events` with `source='manual'`. LEARNINGS §72.
+- **Hand-added tracks get the synthetic `man_…` `sc_track_id`** (migration 102), so
+  dedupe, `sc_song_log` and the carry-over at finalize keep working. `source='dj'`
+  marks the DJ's own picks — the only rows they are allowed to remove.
+- **View state survives a refetch only if it is keyed by IDENTITY.** Which cards are
+  expanded is keyed by artist name; it was an index into `DATA.artists`, which a
+  refresh reorders. A position is not an identity. LEARNINGS §71.
+
 ## Public artist profiles (`artist.html`) — added 2026-08-27
 
 - **"Is this event public?" is TWO flags, and one of them is date-scoped.**
@@ -674,10 +710,16 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   gets read on nearly every dashboard PR. Locate the region with `grep -n`, pull only
   that window with `sed -n 'A,Bp'`, then `Edit` on an exact unique string. To review a
   change, `git diff` it — never `cat` the file.
-- **Syntax-check by extraction, not by re-reading.** Extract the inline module body to
-  a temp `.mjs` and run `node --check` on it. Run the **same extraction against the
-  pre-edit version** (`git show HEAD:dashboard.html`) as a control — otherwise an
-  artifact of the extraction itself reads as a real error introduced by the edit.
+- **Syntax-check by extraction, not by re-reading — and there is now a command for it:
+  `python scripts/check_inline_js.py dashboard.html`.** It extracts the inline module,
+  parses it, and runs the **same extraction against the pre-edit version**
+  (`git show HEAD:<file>`) as a control, so an artifact of the extraction cannot read
+  as an error the edit introduced. It uses `esprima` (pure Python) because not every
+  machine here has a JS runtime — the laptop has neither node nor deno — and
+  downgrades ES2018+ syntax before parsing. `dashboard.html` ends on a top-level
+  `await`, so BOTH sides stopping on that same final line is the pass; the exit code
+  already knows that. `node --check` on an extracted `.mjs` is the same idea where a
+  runtime exists.
 - **There is no local console check** — the Browser pane can't open `file://` URLs. The
   loop is `node --check` plus the deployed Netlify build.
 
@@ -688,6 +730,14 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **Non-BMP characters in patch scripts:** write the literal character, never a
   surrogate-pair escape — Python turns those into lone surrogates and the write fails
   *after* it has already truncated. Use `chr(0x1F4F7)` if the literal is awkward.
+- **NEVER pipe a patch script through a shell heredoc if it contains backslash
+  escapes.** Even a quoted `<<'PY'` heredoc processes them here, so a `\n` written for
+  a JS string arrives as a REAL newline and silently breaks the string literal it was
+  meant to sit inside — which is what happened to a `confirm()` in `dashboard.html` on
+  2026-09-12, and the syntax check did not catch it because the parse stopped earlier
+  on an unrelated artifact. A `\b` in a regex arrived as a backspace the same day.
+  Use the editor tools (Write/Edit) for anything containing escapes, and run
+  `scripts/check_inline_js.py` afterwards.
 
 ## Bulk-edit surfaces (any tab with checkboxes)
 

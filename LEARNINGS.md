@@ -2232,3 +2232,110 @@ denormalised singular field is a cache, and a cache with no invalidation is a
 guess.** Every consumer still on `next_event_date` — the artist pool, Best Nights,
 the watchlist strip — is reading the same rotten number, and that is *not* fixed
 yet. It is the top item in Parked / next.
+
+---
+
+## Section 69 — The workspace you hand someone else is not the tool you built for yourself (2026-09-12)
+
+`dj.html` is the page an assigned DJ opens. It was built as a by-product of the
+radio tab and had quietly inherited none of that tab's affordances. Keith looked
+at it before sending SHOW 10 — the first guest mix — and said it "does not feel as
+user friendly or intuitive as I would like."
+
+Measured rather than argued. The payload that link was actually serving:
+**1,103 artists, of which 415 had any music scanned.** So 688 of the cards were
+dead ends. They were sorted by date with no sort control. The search matched
+artist, venue and genre but **not song titles**, across a crate of 14,543 songs.
+The set being built sat in a collapsed `<details>` between the search box and the
+list, and there was **no way to remove anything from it** — only to find the
+artist again, re-expand them, and un-add. Expanding an artist and then typing in
+the search box collapsed the entire page, because every keystroke re-rendered the
+whole document.
+
+None of that is visible from the dashboard, because the dashboard has a sort
+control, a persistent station panel, and a person who built it. **A read-only
+view spun out of an internal tool keeps the internal tool's data and loses its
+ergonomics, and the person using it has no fallback.** The tell is that nobody on
+the team has ever done the task on the page they hand out.
+
+The rebuild is elsewhere in this file's siblings; the rule is: when a surface is
+for somebody outside the team, open the real payload for the real link before
+designing anything. The numbers said what to build.
+
+---
+
+## Section 70 — A window anchored on "now" answers the wrong question when the thing ships later (2026-09-12)
+
+The DJ crate ran from whenever the DJ opened the link. SHOW 10 drops
+**2026-10-08** and was serving shows from **12 Sep – 10 Oct**. The show's entire
+promise — the line in its own SoundCloud description — is that *every artist in
+this mix is playing NYC soon*. Soon is counted from the day it airs, not from the
+day somebody happened to open a tab. A window anchored on today fills the crate
+with bills that are over before the episode exists.
+
+Resolution is now: an explicit `dj_search_params.start` → the episode's
+`drop_date` → today. A start already in the past is still ignored.
+
+**The second half is the part that nearly shipped broken.** Moving the window
+exposed that it is fed by a *different* window: scanning is driven from the Build
+tab's own date range, which had been sitting on today+4w. In the new crate
+**327 artists were on the bills and 57 had any music read** — the other 270 had
+never been scanned at all. The date change was correct and would have handed the
+guest DJ a crate of 57.
+
+So: **moving a window means re-checking every input that fills it, in the same
+change** — the same rule §66 states for widening a read, now stated for moving
+one. Shipped with it: a "🎯 Point the artist window here" button that lines the
+Build window up with the DJ's, and reach reporting (`scope.pool_last` per feed,
+`pool_short`) so a thin crate reads as *"the bills aren't announced yet — RA to
+29 Nov, DICE only to 22 Oct"* rather than as the whole scene. An undeclared
+shortfall reads as "that's all there is", exactly as in §66 and §18.
+
+---
+
+## Section 71 — Remember view state by identity, not by position (2026-09-12)
+
+Which artist cards were expanded on the DJ page was held as a `Set` of **indices
+into `DATA.artists`**. That is correct for exactly as long as the array never
+changes — and then a refresh button was added, which is precisely the moment it
+does. One show pulled or one scan landed shifts every index after it, so pressing
+refresh would have silently expanded somebody else's card. Nothing would have
+errored; the page would just have been wrong, in a way that looks like a glitch
+rather than a bug.
+
+Keyed by artist name now. The general form belongs next to §62 and §63: **a
+position is not an identity.** A raw venue string is not a room; an index is not
+a row; `next_venue` is not the set of venues. The tell is a key that is only
+stable because nothing has re-fetched yet — which is a property of the session,
+not of the data.
+
+This had to be fixed *before* the refresh could exist at all, and it is worth
+noticing that the feature request ("does a reload update pre-existing links?")
+surfaced a latent bug that had been sitting in a shipped page.
+
+---
+
+## Section 72 — Capture a claim as a claim (2026-09-12)
+
+A guest mix is mostly records that were never in our crate, so the DJ page had to
+let a DJ add their own. Keith then asked the right follow-up: should they also be
+able to type the date and venue of the artist's show, in case we don't have it?
+
+Yes to capturing it, no to storing it where it becomes ours. `show_date` /
+`show_venue` are rendered on the public episode page as a checked fact
+(`🗓 … 📍 …`), and the documented home for a show the feeds missed is an
+`ra_events` row with `source='manual'`, where it reaches the window, the venue
+filter, the artist pool and buzz. **A string typed onto one track reaches none of
+those** — it looks like data and behaves like a label.
+
+So the DJ's answer goes to the track's `comment`, prefixed `DJ says they're
+playing:` — the note field the dashboard already renders and lets Keith edit —
+and Keith promotes it to a real manual show. The field only appears when the
+artist is one we *don't* track; when we do track them, the form says so and shows
+their next NYC date instead, because asking about a show we already hold invites a
+second, contradictory answer.
+
+The same shape as §26 (never default a field that feeds a computation) and §67
+(confirm a name, never derive one): **an unverified claim may be recorded, but it
+must be recorded as somebody's claim, attributed, and not in the field that means
+"we checked this."**
