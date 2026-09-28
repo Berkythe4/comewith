@@ -1,6 +1,6 @@
 # Memory index
 
-- **[Finance dev handoff — read first](pending-handoff-note.md)** — before any /finance development, read `NOTE_finance_control_center.md`: 3 tabs, the model, 12 invariants, how to run everything
+- **[Finance dev handoff — read first](pending-handoff-note.md)** — before any /finance development, read `NOTE_finance_control_center.md`: 3 tabs, the model, 18 invariants, the push, how to run everything
 - [CW cost categorisation chain](cw-cost-categorisation-chain.md) — why named freelancers land in Operations; empty Marketing/Contractors is usually a routing miss, not absent spend
 - [CW cash reserve / missing inflows](cw-cash-reserve-inflows-bug.md) — 2026-09-28; reserve read low because importers post money OUT not IN; Bluevine credit-swallowing fixed (+$357.39 Stripe); $100 PayPal wash + $0.79 open; SBP_PAT revoked
 - [Come With push wired into import](cw-push-wired-into-import.md) — 2026-09-23; Run import now pushes CW to the live site (it never did); payload contract pinned to the Edge Function + tested; UF_PUSH_DISABLED guards the smokes

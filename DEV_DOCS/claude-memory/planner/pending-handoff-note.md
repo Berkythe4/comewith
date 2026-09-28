@@ -1,15 +1,16 @@
 ---
 name: pending-handoff-note
-description: If Keith returns to /finance development, read NOTE_finance_control_center.md first — it is the current state of the whole surface
+description: Before any /finance development read NOTE_finance_control_center.md first — it is the current state of the whole surface
 metadata:
   type: project
 ---
 
 Before doing any development work on `/finance`, read
 `C:\Users\Admin\Documents\Master\planner\NOTE_finance_control_center.md`. Written
-2026-08-25, it replaces the 2026-08-21 note entirely and covers the three tabs, the
-table-per-idea model, **twelve invariants that will bite you**, how to run every
-suite, the 3-known-failure baseline, what is deliberately not built, and what is
+2026-08-25 and **updated 2026-09-28**, it covers the three tabs, the
+table-per-idea model, **eighteen invariants that will bite you** (twelve on the
+surface, six on the push to the Come With site), how to run every suite, the
+pytest 3-known-failure baseline plus the `uf_plan_test` 41/42 date-fragility, what is deliberately not built, and what is
 open for Keith rather than for code.
 
 **Why:** the surface changed shape several times in one session (expense plan →
