@@ -13131,15 +13131,23 @@ let expShiftHeld = false;
 document.addEventListener('click', (e) => { expShiftHeld = e.shiftKey; }, true);
 async function loadExpenses() {
   $('expensesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading expenses…</div>';
-  const [ex, ev, ac] = await Promise.all([
+  const [ex, ev, ac, run, q] = await Promise.all([
     sb.from('expenses').select('id, date, amount, category, vendor, description, event_id, event_na, vendor_actor_id, receipt_path, verified_at, funded_by, reimbursed_at, deductible, cash_source, ledger, updated_at, status, due_date, expected_amount, settled_at').is('deleted_at', null).order('date', { ascending: false }).limit(1000),
     sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('actors').select('id, display_name').is('deleted_at', null).order('display_name'),
+    // The importer runs on Keith's desktop and this page cannot see it. Without
+    // these two the only way to know an import had happened was to notice a
+    // number look wrong — which is how the feed sat stale for a month. (207)
+    sb.from('ingest_runs').select('*').order('ran_at', { ascending: false }).limit(1),
+    sb.from('v_ingest_queue').select('*'),
   ]);
   if (ex.error) { $('expensesBody').innerHTML = `<div class="panel-state err">${escapeHtml(ex.error.message)}</div>`; return; }
   expDash.events = ev.data || [];
   expDash.actors = ac.data || [];
   expDash.rows = ex.data || [];
+  // Not installed yet (migration 207 unapplied) is a normal state, not an error.
+  expDash.lastRun = (run && !run.error && (run.data || [])[0]) || null;
+  expDash.queue = (q && !q.error && q.data) || [];
   renderExpenses();
 }
 // Same date + same amount as another row. The 66-duplicate episode across the two
@@ -13179,9 +13187,62 @@ function expFiltered() {
   return s.rows.filter(x => matchEvent(x) && matchFlag(x) && matchFunded(x)
     && (!ql || [x.vendor, x.category, x.description].join(' ').toLowerCase().includes(ql)));
 }
+// Where the feed stands, and what it refused to guess at.
+//
+// SETTLED is shown apart from ADDED deliberately. They are different events — a
+// payment matched to a cost already on the books, versus a genuinely new charge
+// — and collapsing them into one "updated" count is what let $250 of
+// double-counted contractor cost sit unnoticed across two months.
+function ingestStatusHtml() {
+  const r = expDash.lastRun, q = expDash.queue || [];
+  if (!r && !q.length) return '';
+  let when = '', stale = false;
+  if (r) {
+    const d = new Date(r.ran_at), hrs = (Date.now() - d.getTime()) / 36e5;
+    stale = hrs > 24 * 7;
+    when = hrs < 1 ? 'just now'
+         : hrs < 24 ? Math.round(hrs) + 'h ago'
+         : Math.round(hrs / 24) + 'd ago';
+  }
+  const chip = (n, label, cls) => !n ? '' :
+    `<span class="hub-mini${cls ? ' ' + cls : ''}" style="cursor:default;">${n} ${escapeHtml(label)}</span>`;
+  const REASON = {
+    ambiguous_settlement: 'more than one row could be this payment',
+    amount_variance: 'settles a known cost, for a different amount',
+    vendor_mismatch: 'amount and timing fit, the payee does not',
+    missing_ref: 'arrived with no reference — cannot be deduped later',
+  };
+  return `
+    <div class="inc-gap" style="margin:0 0 14px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <b>Feed</b>
+        ${r ? `<span class="muted">last run ${escapeHtml(when)}${r.report_only ? ' (report only — nothing written)' : ''}</span>` : '<span class="muted">no run recorded yet</span>'}
+        ${r ? chip(r.settled, 'settled') + chip(r.inserted, 'added') + chip(r.adopted, 'adopted') + chip(r.updated, 'refreshed') : ''}
+        ${stale ? '<span class="hub-mini" style="cursor:default;">⚠ over a week old</span>' : ''}
+      </div>
+      ${q.length ? `
+        <div style="margin-top:10px;">
+          <b>${q.length} item${q.length > 1 ? 's' : ''} the importer would not guess at.</b>
+          Nothing was written for these — they are waiting on you.
+          <table class="data-table" style="margin-top:8px;">
+            <thead><tr><th>Date</th><th style="text-align:right;">Amount</th><th>Payee</th><th>Why it stopped</th></tr></thead>
+            <tbody>
+              ${q.map(x => `<tr>
+                <td>${escapeHtml(fmtDate(x.date))}</td>
+                <td style="text-align:right;">${money(x.amount)}</td>
+                <td>${escapeHtml(x.vendor || '—')}</td>
+                <td>${escapeHtml(REASON[x.reason] || x.reason)}${x.candidate_count > 1 ? ` <span class="muted">(${x.candidate_count} candidates)</span>` : ''}</td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>` : ''}
+    </div>`;
+}
+
 function renderExpenses() {
   const s = expDash;
   $('expensesBody').innerHTML = `
+    ${ingestStatusHtml()}
     <div id="expAgg"></div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:14px 0;">
       <input class="modal-input" data-expq placeholder="Search vendor / category / note…" style="max-width:230px;" value="${escapeHtml(s.q)}">
