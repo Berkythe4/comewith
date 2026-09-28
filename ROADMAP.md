@@ -207,6 +207,44 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-09-28 (finance ingest: settle before add)
+
+**The importer stopped guessing, and started saying which it did.**
+
+- 🟢 **`ingest-finance` settles before it adds (212, function v17).** It could only
+  ask "is there a row with this exact date and amount?" — blind to a cost incurred
+  at a gig and paid weeks later. That cost **$250 of contractor spend counted
+  twice across two months**, and let a $357.39 Stripe payout double-count revenue
+  as the net of a $361.00 fee already on the books. Now an ordered hierarchy: S0
+  identity → S1 settle an open payable → S2 same-day adopt → S3 settle within 90
+  days → S4 insert. Settlement writes `settled_at` and **never overwrites `date`**,
+  so an accrual stays in the month it was incurred. LEARNINGS §69.
+- 🟢 **Ambiguity queues instead of guessing (212).** `ingest_queue` — four reasons,
+  admin-only, anon-revoked. Where two rows could be the payment, nothing is
+  chosen. First real run: **27 items**, of which 26 are historical duplicates the
+  old exact-match rule had let through ($905.71; a constant 1.0664 amount ratio
+  across 25 of 26 pairs gave them away — the same charge at the quoted price and
+  at what the card was billed).
+- 🟢 **Every run is recorded (`ingest_runs`), and the Expenses tab shows it.** Last
+  run, how long ago, settled/added counts, a stale flag past a week, and the open
+  queue in plain English. The importer runs on a laptop the site cannot see, which
+  is how the feed once sat stale for a month with nobody told.
+- 🟢 **Report-only mode.** `report_only: true` computes every decision and writes
+  nothing but the run record — the settlement rules reach back 90 days over
+  history, so they get read before they get applied.
+- 🟡 **26 duplicates are queued, not cleared.** Keith clears them on the site.
+  They are owner-funded/personal, so clearing moves "what Come With owes Keith"
+  (−$906), not the cash reserve.
+- 🟡 **The Berky $100 needs a human.** One candidate after narrowing; settle the
+  8/16 row and retire the 9/8 row together, or neither.
+- ⚪ **`applied_migrations` is keyed on `version` alone** and silently overwrote a
+  row when 207 was used twice. Repaired; a `(version, sha256)` composite would
+  make it fail loudly instead. LEARNINGS §70. Not done.
+- ⚪ **Website-triggered import is not possible as asked.** The CSVs and `data.db`
+  live on Keith's desktop; a browser page cannot read them. Status and the queue
+  are on the site, running stays local (Desktop shortcut). Porting the importers
+  server-side is its own project.
+
 ## Current state — reconciled 2026-09-10 (DICE pagination, title-confirmed artists, Ep 4)
 
 **The scene data got materially more complete, by fixing reads rather than adding sources.**

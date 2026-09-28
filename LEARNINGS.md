@@ -2232,3 +2232,75 @@ denormalised singular field is a cache, and a cache with no invalidation is a
 guess.** Every consumer still on `next_event_date` — the artist pool, Best Nights,
 the watchlist strip — is reading the same rotten number, and that is *not* fixed
 yet. It is the top item in Parked / next.
+
+---
+
+## Section 69 — An importer that can only match exactly cannot see a settlement (2026-09-28)
+
+`ingest-finance` asked one question of every incoming payment: *is there a row
+with this exact date and this exact amount?* If not, insert. That rule was
+written for a true-up between two ledgers holding the same charges on the same
+days, and it worked for that. It is blind to the thing Come With actually does.
+
+A cost is incurred at the gig and paid weeks later. Henry $150 and Berky $100
+were booked against the 2026-08-16 event and paid through PayPal on 2026-09-08.
+Same-date adopt could not see the August rows, so it inserted its own — **$250 of
+contractor cost counted twice, in two different months**, for eleven days before
+anyone looked.
+
+The same blindness in the other direction: a $357.39 Stripe payout was the NET of
+a $361.00 production fee already on these books, less a $3.61 platform fee.
+Recorded as new money it double-counted the revenue while the *cash* number still
+looked right — which is why it survived a reconciliation that tied to the penny.
+
+**A payment is not a fact about a day and an amount. It is an event that
+discharges an obligation, and the obligation has its own date.** So the importer
+now walks an ordered hierarchy — identity, settle an open payable, same-day adopt,
+settle within 90 days, insert — and takes the first step that fits. Settlement
+writes `settled_at` and leaves `date` alone: Jennifer sends the date the cash
+moved, this database wants the date the cost was incurred (§177's accrual), and
+clobbering it would drag every settled cost into the month it was paid.
+
+The corollary matters as much as the rule. **Where two rows could be the answer,
+it refuses to choose.** A guess here is silent, lands in the P&L, and is only
+findable by noticing a total look wrong. `ingest_queue` exists so the importer has
+somewhere to put a question instead of an answer, and the first real run put 27
+items in it — 26 historical duplicates the old exact-match rule had let through
+($905.71, a constant 1.0664 FX ratio giving them away) and one genuine ambiguity.
+
+An empty queue is the normal state. A queue with something in it is the system
+working, not failing.
+
+---
+
+## Section 70 — A ledger keyed on a number silently overwrites (2026-09-28)
+
+`public.applied_migrations` is keyed on `version` alone, and `db.py` upserts
+(`on conflict (version) do update set filename = excluded.filename`). Two
+migrations numbered 207 are therefore not a conflict — they are a **replacement**,
+with no error, no warning, and no trace of what was there before.
+
+It happened here. A migration was written as `207_ingest_settlement.sql` against a
+local `master` that was 22 commits stale, where `ls supabase/migrations/ | tail`
+honestly showed 206 as the highest. `origin/master` already had 207–211. Applying
+it overwrote the ledger row for `207_link_pages.sql`; prod then claimed 207 was a
+different file, applied on a different day.
+
+The schema was never damaged — `link_pages`, `v_public_link_pages` and
+`v_link_click_stats` were all still present, so that migration really had run.
+**Only the bookkeeping lied, which is the harder failure to notice**, because
+nothing breaks and every object you look for is there.
+
+Two things follow. **Checking the local directory is not checking** — only
+`git fetch` then `git ls-tree -r --name-only origin/master supabase/migrations/`
+is; MERGE_ROUTINE step 0 says "pull before you pick a number" and this is the
+whole reason. And **the repair is a record, not a schema change**: restore the
+clobbered row with its real `sha256` (`git show origin/master:<path>` and hash
+it), state the inferred `applied_at` in the `note` column rather than pretending
+to know it, renumber the new file, and write the collision into that file's header
+so the next reader is told rather than left to infer.
+
+A `version`-keyed upsert would be safer as a composite key on `(version,
+sha256)` — a genuine re-run of the same file would still collapse, while two
+different files would collide loudly instead of silently. Not changed here;
+noted as the fix if this recurs.
