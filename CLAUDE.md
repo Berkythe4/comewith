@@ -438,6 +438,15 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   builds a NEW private playlist in the DJ's account through the same
   `scBuildPlaylist()` as Keith's export. **The DJ's token is never stored.** It never
   touches the station's own `sc_playlist_id` / `sc_playlist_url`.
+- **Anyone on the team can do the same from the dashboard (216): "☁ Copy to my
+  SoundCloud".** `sc-connect export_mine_start` writes an `sc_dj_exports` row with
+  `origin='dashboard'` + `requested_by`, and `sc-oauth` returns them to
+  `dashboard.html?sc=myexported`. Two people exporting one station get two playlists
+  in two accounts. The stored singleton connection (⇪ push / ↺ sync) is separate and
+  unchanged — do not route "my SoundCloud" through it.
+- **The guest crate (`dj.html`) uses the dashboard's ROW layout** (`.hub-li`: name +
+  chips, "Playing · date · genres · city" line, actions right, songs inline, zebra).
+  That is the standard for external links; do not bring back the card layout.
 - **Widening an input means re-checking every cap below it, in the same change.**
   Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
   position 319, past the old `maxDetail` default of 240 — fixing only the paging

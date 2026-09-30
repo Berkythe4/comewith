@@ -26,16 +26,20 @@ Deno.serve(async (req) => {
   // the token is handed to sc-connect export_as for this one playlist, and then
   // dropped: it is never written anywhere. They land back on their dj.html link.
   if (state) {
-    const { data: dx } = await admin.from("sc_dj_exports").select("state, playlist_id, code_verifier, created_at, completed_at")
+    const { data: dx } = await admin.from("sc_dj_exports").select("state, playlist_id, code_verifier, created_at, completed_at, origin")
       .eq("state", state).maybeSingle();
     if (dx) {
       const { data: ep } = await admin.from("sc_playlists").select("dj_token").eq("id", dx.playlist_id).maybeSingle();
-      const djBack = (st: string) => Response.redirect(`${SITE}/dj.html?ep=${encodeURIComponent(ep?.dj_token || "")}&sc=${st}`, 302);
+      // Back to wherever it started: the DJ's link, or the dashboard (216).
+      const fromDash = dx.origin === "dashboard";
+      const djBack = (st: string) => fromDash
+        ? Response.redirect(`${SITE}/dashboard.html?sc=my${st}`, 302)
+        : Response.redirect(`${SITE}/dj.html?ep=${encodeURIComponent(ep?.dj_token || "")}&sc=${st}`, 302);
       const finish = async (patch: Record<string, unknown>, st: string) => {
         await admin.from("sc_dj_exports").update({ ...patch, code_verifier: null, completed_at: new Date().toISOString() }).eq("state", state);
         return djBack(st);
       };
-      if (!ep?.dj_token) return finish({ ok: false, error: "The DJ link was revoked." }, "error");
+      if (!fromDash && !ep?.dj_token) return finish({ ok: false, error: "The DJ link was revoked." }, "error");
       if (url.searchParams.get("error")) return finish({ ok: false, error: "Declined on SoundCloud." }, "denied");
       // One use, and only for 30 minutes: a replayed or stale callback does nothing.
       const fresh = Date.now() - new Date(dx.created_at).getTime() < 30 * 60000;

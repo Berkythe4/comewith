@@ -113,10 +113,16 @@ Deno.serve(async (req) => {
   const bearer = auth.replace(/^Bearer\s+/i, "");
   const roleOf = (t: string) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role || null; } catch { return null; } };
   let authed = bearer === SRK || roleOf(bearer) === "service_role";
+  let userId: string | null = null;   // the logged-in admin, when there is one
   if (!authed && bearer) {
     const uc = createClient(SUPA, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
     const { data: { user } } = await uc.auth.getUser();
-    if (user) { const { data: p } = await admin.from("profiles").select("role").eq("id", user.id).single(); authed = !!p && ["master_admin", "sub_admin"].includes(p.role); }
+    if (user) {
+      // deleted_at: a deactivated profile is no-role (098 contract).
+      const { data: p } = await admin.from("profiles").select("role, deleted_at").eq("id", user.id).single();
+      authed = !!p && !p.deleted_at && ["master_admin", "sub_admin"].includes(p.role);
+      if (authed) userId = user.id;
+    }
   }
   if (!authed) return err(401, "admin only");
 
@@ -199,6 +205,24 @@ Deno.serve(async (req) => {
     const state = b64url(crypto.getRandomValues(new Uint8Array(16)));
     // Upsert only these columns — existing tokens (if any) are preserved.
     await admin.from("sc_oauth").upsert({ id: "singleton", state, code_verifier: verifier, updated_at: new Date().toISOString() });
+    const authorize = `https://secure.soundcloud.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
+    return ok({ authorize_url: authorize });
+  }
+
+  // "Copy to MY SoundCloud" from the dashboard (migration 216). The same one-shot
+  // flow a guest DJ uses: whoever is logged in approves on SoundCloud and gets their
+  // own copy; nothing about their account is stored, and the stored singleton
+  // connection (Keith's, which also powers sync-back) is not involved at all.
+  if (action === "export_mine_start") {
+    if (!userId) return err(403, "log in to export to your own SoundCloud");
+    if (!clientId) return err(503, "SoundCloud app not configured.");
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+    const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    const state = "me_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
+    const { error: xe } = await admin.from("sc_dj_exports").insert({ state, playlist_id: playlistId, code_verifier: verifier, origin: "dashboard", requested_by: userId });
+    if (xe) return err(500, "Could not start the export: " + xe.message);
     const authorize = `https://secure.soundcloud.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
     return ok({ authorize_url: authorize });
   }

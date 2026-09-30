@@ -323,7 +323,7 @@ Deno.serve(async (req) => {
       if (evs.length < EV_PAGE) break;
     }
     const out = (artists || []).map((a) => ({
-      name: a.name, soundcloud: a.soundcloud,
+      name: a.name, soundcloud: a.soundcloud, source: a.source || "ra",
       // `followers` is SoundCloud reach from the scan (null = not measured). It used
       // to be ra_artists.follower_count — RA's own ra.co follow count, which DICE and
       // Ticketmaster never send, so every DICE headliner sorted as 0.
