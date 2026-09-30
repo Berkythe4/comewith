@@ -5564,7 +5564,8 @@ async function campaignStats(id) {
     });
     return [...seen.values()].sort((a, b) => (a.name || a.email).localeCompare(b.name || b.email));
   };
-  const sent = cnt('sent') || camp?.recipient_count || 0;
+  // Unique, like the rest: a duplicate 'sent' row (Resend's own email.sent, pre-213) doubled this.
+  const sent = uniq('sent') || camp?.recipient_count || 0;
   const delivered = uniq('delivered'), opened = uniq('opened'), clicked = uniq('clicked');
   const bounced = uniq('bounced'), complained = uniq('complained'), failed = cnt('failed_to_send');
   const base = delivered || sent;
