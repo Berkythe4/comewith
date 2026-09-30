@@ -238,9 +238,9 @@ Deno.serve(async (req) => {
           const akey = `dice:${a.artist_id}`;
           const prev = artistMap.get(akey);
           if (!prev || (date && (prev.next_event_date as string) > date)) {
+            // See the note at the artist upsert: no soundcloud/instagram/follower_count.
             artistMap.set(akey, {
-              ra_id: akey, source: "dice", name: a.name, soundcloud: null, instagram: null,
-              follower_count: null, image: a.image?.url || null, content_url: url,
+              ra_id: akey, source: "dice", name: a.name, image: a.image?.url || null, content_url: url,
               next_event_date: date, next_event_title: d.name || base.name, next_venue: venue.name || null,
               next_event_url: url, genres, fetched_at: new Date().toISOString(),
             });
@@ -268,10 +268,17 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("ra_events").upsert(rows, { onConflict: "ra_id" });
       if (error) { console.error("dice ra_events:", error.message); return err(500, "Could not save DICE events: " + error.message); }
     }
+    // soundcloud / instagram / follower_count are deliberately NOT in this row. A column
+    // in an upsert payload is overwritten on conflict, and this feed has no value for
+    // them - sending null wiped every link sc-match had found, on every Refresh, so
+    // DICE/TM headliners (Purple Disco Machine, Vintage Culture) never stayed linked
+    // long enough to be scanned. Omitted, a new row gets null and an existing one keeps
+    // its link.
     const artistRows = [...artistMap.values()];
+    let artistError: string | null = null;
     if (artistRows.length) {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
-      if (ae) console.error("dice ra_artists:", ae.message);
+      if (ae) { console.error("dice ra_artists:", ae.message); artistError = ae.message; }
     }
     // last_date makes a short pull obvious at a glance: if DICE only reaches a
     // week out, that's the search's own horizon, not a filter you can widen.
@@ -281,13 +288,16 @@ Deno.serve(async (req) => {
       // the cap or the clock has a known blind spot at the far end of the window
       // and the UI must show that as a problem, not a tick.
       success: true, source: "dice",
-      status: (droppedOverCap > 0 || timedOut) ? "PARTIAL" : "OK",
+      status: (droppedOverCap > 0 || timedOut || artistError) ? "PARTIAL" : "OK",
       candidates: cand.size, in_window_candidates: inRange.length,
       search_pages: searchStats.pages,
       detailed: ids.length, dropped_over_cap: droppedOverCap,
       timed_out: timedOut, not_reached: timedOut ? ids.length - scanned : 0,
       scanned, saved: kept,
-      last_date: lastDate || null, artists: artistRows.length,
+      last_date: lastDate || null, artists: artistError ? 0 : artistRows.length,
+      // A failed artist save used to be a console line only, while the response
+      // still claimed every artist was written.
+      artist_error: artistError,
       // Echo the window actually pulled, so a caller can tell "DICE has nothing
       // there" apart from "I asked for the wrong dates".
       from, to: cutoff,

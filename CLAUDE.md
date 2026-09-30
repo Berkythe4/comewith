@@ -418,6 +418,11 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **A blocked source must never reach a delete.** `pull-dice` returns 502 and deletes
   nothing when no search page or no detail call answers; before that, a 403 read as
   "zero shows" and a Refresh wiped every upcoming DICE event while reporting OK.
+- **A puller never sends a column it has no value for.** An upsert overwrites every
+  column in its payload, so `soundcloud: null` from `pull-dice` / `pull-ticketmaster`
+  wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage
+  Culture, Purple Disco Machine) never stayed linked long enough to be scanned. Omit
+  the key: a new row defaults to null and an existing row keeps what it has.
 - **Widening an input means re-checking every cap below it, in the same change.**
   Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
   position 319, past the old `maxDetail` default of 240 — fixing only the paging

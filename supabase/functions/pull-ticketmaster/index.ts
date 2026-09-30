@@ -112,8 +112,9 @@ Deno.serve(async (req) => {
           const prev = artistMap.get(key);
           if (!prev || (date && (prev.next_event_date as string) > date)) {
             artistMap.set(key, {
-              ra_id: key, source: "tm", name: a.name, soundcloud: null, instagram: null,
-              follower_count: null, image: (a.images || [])[0]?.url || null, content_url: a.url || null,
+              // No soundcloud/instagram/follower_count: sending null here wiped every
+              // sc-match link on each pull (same bug as pull-dice, fixed 2026-09-30).
+              ra_id: key, source: "tm", name: a.name, image: (a.images || [])[0]?.url || null, content_url: a.url || null,
               next_event_date: date, next_event_title: e.name, next_venue: venue.name || null,
               next_cost: cost, next_event_url: e.url || null, genres, fetched_at: new Date().toISOString(),
             });
