@@ -19048,6 +19048,7 @@ function raRadioList() {
   if (raState.producersOnly && !raState.sourceFilter) out = out.filter(a => a.is_partner || (a.c && a.c.is_producer) || (!a.soundcloud && raState.showNoSc));
   raState._hiddenByProducers = beforeProducers - out.length;
   const s = raState.sort, songs = a => a.c ? a.c.song_count || 0 : -1;
+  const scFol = a => (a.c && a.c.ok && a.c.followers != null) ? Number(a.c.followers) : null;
   // Venue sort groups the room together (who else is on that bill / that week),
   // so a venue with no name sinks instead of heading the list, and inside a
   // venue it's soonest-first — that's the order you'd work a room in.
@@ -19055,7 +19056,12 @@ function raRadioList() {
   const bz = s === 'buzz' ? raBuzzMap() : null;
   const buzzOf = a => bz[(a.name || '').toLowerCase()] || 0;
   out.sort((a, b) => s === 'buzz' ? (buzzOf(b) - buzzOf(a)) || (a.next_event_date || '').localeCompare(b.next_event_date || '')
-    : s === 'followers' ? (b.follower_count || 0) - (a.follower_count || 0)
+    // 'followers' = SoundCloud reach from the scan. It used to sort on follower_count, which
+    // is RA's own ra.co follow count: DICE/TM send none, so every DICE headliner sorted as 0
+    // (50 Cent, 2.2M on SoundCloud, sat under RA acts with a few thousand). Unmeasured
+    // artists sink rather than count as 0; RA followers break ties.
+    : s === 'followers' ? (scFol(b) ?? -1) - (scFol(a) ?? -1) || (b.follower_count || 0) - (a.follower_count || 0)
+    : s === 'rafollowers' ? (b.follower_count || 0) - (a.follower_count || 0)
     : s === 'name' ? (a.name || '').localeCompare(b.name || '')
       : s === 'songs' ? songs(b) - songs(a)
         : s === 'venue' ? venue(a).localeCompare(venue(b))
@@ -19132,7 +19138,7 @@ function renderRaRadio() {
             : `<span class="role-chip" style="cursor:default;">🎧 DJ · sets only</span>`;
     return `<div class="hub-li" style="flex-wrap:wrap;">
       <div class="li-main">
-        <strong>${escapeHtml(a.name)}</strong>${buzzChip} ${raSourceTag(a.source)}${nycTag(a)}${a.is_partner ? ` <span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;font-size:.58rem;padding:1px 6px;" title="Added by you as a partner / manual entry">🤝 partner</span>` : ''}${a.follower_count ? ` <span class="li-sub">· ${fmtNum(a.follower_count)} followers</span>` : ''} ${badge}
+        <strong>${escapeHtml(a.name)}</strong>${buzzChip} ${raSourceTag(a.source)}${nycTag(a)}${a.is_partner ? ` <span class="role-chip" style="cursor:default;background:var(--green,#1f7a1f);color:#fff;font-size:.58rem;padding:1px 6px;" title="Added by you as a partner / manual entry">🤝 partner</span>` : ''}${(c && c.ok && c.followers != null) ? ` <span class="li-sub" title="SoundCloud followers, from the last scan">· ☁ ${fmtNum(c.followers)}</span>` : ''}${a.follower_count ? ` <span class="li-sub" title="People following them on ra.co">· ${fmtNum(a.follower_count)} RA followers</span>` : ''} ${badge}
         <div class="li-sub">${a.next_event_date ? 'Playing ' + escapeHtml(a.next_venue || 'NYC') + ' · ' + escapeHtml(fmtDate(a.next_event_date)) : '<span style="color:var(--gold,#B5791F)">Partner · no upcoming show tracked</span>'}${(a.genres || []).length ? ' · ' + escapeHtml((a.genres || []).slice(0, 2).join(', ')) : ''}${a.city ? ' · 📍 ' + escapeHtml(a.city) : ''}</div>
       </div>
       <span style="display:flex;gap:6px;">
@@ -19167,7 +19173,7 @@ function renderRaRadio() {
           <input class="modal-input" data-ra-search placeholder="Search by artist or venue…" style="width:100%;padding-left:32px;${raState.search ? 'padding-right:32px;' : ''}" value="${escapeHtml(raState.search)}">
           ${raState.search ? '<button class="hub-mini" data-ra-clearsearch title="Clear search" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);padding:2px 7px;">✕</button>' : ''}
         </div>
-        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('buzz', '🔥 Buzz')}${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most followers')}</select></label>
+        <label class="li-sub" style="display:flex;align-items:center;gap:4px;">Sort <select class="modal-select" data-ra-sort style="max-width:150px;" title="Order the artist list">${sortOpt('buzz', '🔥 Buzz')}${sortOpt('name', 'Artist A–Z')}${sortOpt('venue', 'Venue A–Z')}${sortOpt('soon', 'Soonest show')}${sortOpt('songs', 'Most songs')}${sortOpt('followers', 'Most SoundCloud followers')}${sortOpt('rafollowers', 'Most RA followers')}</select></label>
         <select class="modal-select" data-ra-genre style="max-width:150px;" title="Filter by genre"><option value="">All genres</option>${genreSet.map(g => genreOpt(g, g)).join('')}</select>
         <select class="modal-select" data-ra-venue style="max-width:190px;" title="Filter by venue — everyone on a bill there inside the window, not just artists whose next show happens to be there"><option value="">All venues</option>${venueSet.map(v => `<option value="${escapeHtml(v)}"${raState.venue === v ? ' selected' : ''}>${escapeHtml(vpick.label(v))} · ${vCount[v]}</option>`).join('')}</select>
         ${srcSet.length > 1 ? `<select class="modal-select" data-ra-source style="max-width:150px;" title="Show only shows pulled from one source. DICE/Ticketmaster artists have no SoundCloud, so pick the source to see them all."><option value="">All sources</option>${srcSet.map(s => `<option value="${s}"${raState.sourceFilter === s ? ' selected' : ''}>${(RA_SOURCE[s]?.l || s.toUpperCase())} · ${srcCounts[s]}</option>`).join('')}</select>` : ''}
@@ -20128,7 +20134,7 @@ async function raScan() {
     const batch = todo.slice(i, i + 20);
     try {
       await sb.functions.invoke('sc-enrich', { body: { urls: batch, maxMinutes: raState.maxMin } });
-      const { data: rows } = await sb.from('sc_artist_cache').select('soundcloud,username,is_producer,song_count,set_count,songs,ok,sc_track_count').in('soundcloud', batch);
+      const { data: rows } = await sb.from('sc_artist_cache').select('soundcloud,username,followers,is_producer,song_count,set_count,songs,ok,sc_track_count').in('soundcloud', batch);
       (rows || []).forEach(r => { raState.cache[raKey(r.soundcloud)] = r; });
     } catch (_) { /* skip batch, keep going */ }
     raState.scanDone = Math.min(i + 20, todo.length); renderRaMarket();
