@@ -110,6 +110,23 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ ok: true, removed: true }), { headers: JH });
     }
 
+    // "Export to my SoundCloud" — start a one-shot OAuth for the DJ's OWN account
+    // (migration 215). We store only the PKCE verifier + state; sc-oauth finishes
+    // it and the DJ's token is never kept.
+    if (action === "sc_export_start") {
+      const clientId = Deno.env.get("SC_CLIENT_ID");
+      if (!clientId) return err(503, "SoundCloud export is not configured.");
+      const b64url = (u: Uint8Array) => btoa(String.fromCharCode(...u)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+      const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+      const challenge = b64url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
+      const state = "dj_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
+      const { error: xe } = await admin.from("sc_dj_exports").insert({ state, playlist_id: ep.id, code_verifier: verifier });
+      if (xe) return err(500, "Could not start the export.");
+      const redirectUri = `${Deno.env.get("SUPABASE_URL")}/functions/v1/sc-oauth`;
+      const authorize = `https://secure.soundcloud.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
+      return new Response(JSON.stringify({ ok: true, authorize_url: authorize }), { headers: JH });
+    }
+
     const params = ep.dj_search_params || {};
     const genres: string[] = Array.isArray(params.genres) ? params.genres.filter(Boolean) : [];
     const artistNames: string[] = Array.isArray(params.artists) ? params.artists.filter(Boolean) : [];
@@ -129,7 +146,7 @@ Deno.serve(async (req) => {
     const anchor = startRaw && startRaw > todayIso ? "start" : dropIso && dropIso > todayIso ? "drop" : "today";
     const from = anchor === "start" ? startRaw! : anchor === "drop" ? dropIso! : todayIso;
     const to = new Date(new Date(from + "T00:00:00Z").getTime() + weeks * 7 * 86400000).toISOString().slice(0, 10);
-    const SEL = "name, soundcloud, follower_count, genres, city, next_event_date, next_venue, next_event_url";
+    const SEL = "name, soundcloud, follower_count, source, genres, city, next_event_date, next_venue, next_event_url";
 
     // Two scope modes:
     //  • FIXED LINEUP (params.artists set, e.g. a festival edition) → exactly those
@@ -244,9 +261,10 @@ Deno.serve(async (req) => {
     // Their songs, from the scan cache (keyed by normalized soundcloud URL).
     const scUrls = [...new Set((artists || []).map((a) => a.soundcloud).filter(Boolean).map(norm))];
     const songByUrl: Record<string, any[]> = {};
+    const statsByUrl: Record<string, any> = {};
     for (let i = 0; i < scUrls.length; i += 200) {
       const { data: cache } = await admin.from("sc_artist_cache")
-        .select("soundcloud, songs, is_producer, followers").in("soundcloud", scUrls.slice(i, i + 200));
+        .select("soundcloud, songs, is_producer, followers, ok, song_count").in("soundcloud", scUrls.slice(i, i + 200));
       // SONGS ONLY — never DJ sets. sc-enrich already applies this cut when it
       // scans, but the cap it used is whatever maxMinutes the operator had set at
       // the time: the Elements lineup was scanned on 2026-07-28 with it wide open,
@@ -255,6 +273,22 @@ Deno.serve(async (req) => {
       // never put a mix in front of the DJ. Duration is the real distinguisher —
       // mixes are still kind=track on SoundCloud.
       (cache || []).forEach((c) => {
+        // Buzz inputs, derived exactly as dashboard.html scArtistData() derives them
+        // (the formula itself is shared: assets/buzz.js). A failed scan (ok=false)
+        // is UNKNOWN, not zero. Top plays come from the full cached catalogue.
+        const all = Array.isArray(c.songs) ? c.songs : [];
+        const scanOk = c.ok !== false;
+        let top: any = null;
+        for (const s of all) if ((Number(s.playback_count) || 0) > (Number(top?.playback_count) || -1)) top = s;
+        const sixMo = Date.now() - 182 * 86400000;
+        statsByUrl[norm(c.soundcloud)] = {
+          scan_ok: scanOk,
+          sc_followers: scanOk && c.followers != null ? Number(c.followers) : null,
+          song_count: scanOk ? (Number(c.song_count) || 0) : null,
+          top_plays: scanOk && top ? (Number(top.playback_count) || 0) : null,
+          recent: scanOk && all.some((s: any) => s.created_at && Date.parse(s.created_at) >= sixMo),
+          is_producer: !!c.is_producer,
+        };
         // NO per-artist cap. There was a .slice(0, 12) here, and it was invisible:
         // twelve songs reads as "that's their catalogue" whether the artist has
         // twelve or a hundred and twelve, so the DJ never knew to look further.
@@ -272,8 +306,41 @@ Deno.serve(async (req) => {
     // the early slot) — without it 138 artists arrive as one undifferentiated
     // list and the DJ can't tell their own night from the rest of the weekend.
     const dayOf: Record<string, string> = (params.day_of && typeof params.day_of === "object") ? params.day_of : {};
+    // RSVP demand + RA editorial pick, over every UPCOMING show (not just the
+    // window) — the same event set the dashboard's Buzz reads. DICE and Ticketmaster
+    // publish no RSVPs, so `attending` null means unknown, never 0.
+    const demandByName: Record<string, { demand: number; known: boolean; pick: boolean }> = {};
+    for (let off = 0; ; off += EV_PAGE) {
+      const { data: evs } = await admin.from("ra_events").select("ra_id, attending, is_pick, lineup")
+        .gte("event_date", todayIso).order("ra_id", { ascending: true }).range(off, off + EV_PAGE - 1);
+      if (!evs || !evs.length) break;
+      for (const e of evs) for (const la of ((e.lineup as any[]) || [])) {
+        const k = ((la && la.name) || "").trim().toLowerCase(); if (!k) continue;
+        const d = demandByName[k] || (demandByName[k] = { demand: 0, known: false, pick: false });
+        if (e.attending != null) { d.known = true; d.demand = Math.max(d.demand, Number(e.attending) || 0); }
+        if (e.is_pick) d.pick = true;
+      }
+      if (evs.length < EV_PAGE) break;
+    }
     const out = (artists || []).map((a) => ({
-      name: a.name, soundcloud: a.soundcloud, followers: a.follower_count || 0,
+      name: a.name, soundcloud: a.soundcloud,
+      // `followers` is SoundCloud reach from the scan (null = not measured). It used
+      // to be ra_artists.follower_count — RA's own ra.co follow count, which DICE and
+      // Ticketmaster never send, so every DICE headliner sorted as 0.
+      followers: a.soundcloud ? (statsByUrl[norm(a.soundcloud)]?.sc_followers ?? null) : null,
+      // follower_count is RA's ra.co count ONLY on source='ra' rows. The Elements
+      // lineup and hand-added artists store their SoundCloud count in the same
+      // column, so labelling that "RA" would be a claim the data does not make.
+      ra_followers: (a.source || "ra") === "ra" ? (a.follower_count || 0) : 0,
+      buzz_in: (() => {
+        const st = a.soundcloud ? statsByUrl[norm(a.soundcloud)] : null;
+        const dm = demandByName[(a.name || "").trim().toLowerCase()];
+        return {
+          scan_ok: !!st?.scan_ok, top_plays: st?.top_plays ?? null, song_count: st?.song_count ?? null,
+          sc_followers: st?.sc_followers ?? null, recent: !!st?.recent,
+          demand: dm?.known ? dm.demand : null, editorial: !!dm?.pick,
+        };
+      })(),
       genres: a.genres || [], city: a.city || null,
       group: discoSet.has(a.name) ? "disco" : "main",
       day: dayOf[a.name] || null,
@@ -304,8 +371,16 @@ Deno.serve(async (req) => {
       .select("sc_track_id, artist_name, title, permalink_url, duration_ms, source, sort")
       .eq("playlist_id", ep.id).order("sort");
 
+    // The DJ's most recent SoundCloud export, so the page can show where it went
+    // (or why it failed) after SoundCloud sends them back.
+    const { data: lastExport } = await admin.from("sc_dj_exports")
+      .select("completed_at, ok, sc_username, result_url, tracks, skipped, error")
+      .eq("playlist_id", ep.id).not("completed_at", "is", null)
+      .order("completed_at", { ascending: false }).limit(1).maybeSingle();
+
     return new Response(JSON.stringify({
       ok: true,
+      sc_export: lastExport || null,
       episode: { no: ep.station_no, name: ep.name, drop_date: ep.drop_date, mix_by: ep.mix_by || null },
       scope: {
         weeks, genres, from, to, pool: params.pool || null, day: params.day || null,

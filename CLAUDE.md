@@ -423,6 +423,21 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage
   Culture, Purple Disco Machine) never stayed linked long enough to be scanned. Omit
   the key: a new row defaults to null and an existing row keeps what it has.
+- **`ra_artists.follower_count` means RA follows ONLY on `source='ra'` rows.** Elements
+  and hand-added rows store a SoundCloud count there; DICE/TM leave it null. So
+  "followers" for sorting is the SCAN's `sc_artist_cache.followers`, and an "RA
+  followers" label/sort only reads `follower_count` where `source='ra'`. Sorting on it
+  raw put 50 Cent (2.2M on SoundCloud) under RA acts with a few thousand.
+- **Buzz lives in `assets/buzz.js` — one copy, imported by `dashboard.html` AND
+  `dj.html`.** `dj-station` sends the raw inputs (`buzz_in`) and the page scores them,
+  so the guest crate ranks exactly like the dashboard. Change the formula there only;
+  if you change how an INPUT is derived in `scArtistData()`, change `dj-station` too.
+- **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`
+  stores a PKCE verifier in `sc_dj_exports`; `sc-oauth` recognises that state,
+  exchanges the code and calls `sc-connect export_as` (service role only), which
+  builds a NEW private playlist in the DJ's account through the same
+  `scBuildPlaylist()` as Keith's export. **The DJ's token is never stored.** It never
+  touches the station's own `sc_playlist_id` / `sc_playlist_url`.
 - **Widening an input means re-checking every cap below it, in the same change.**
   Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
   position 319, past the old `maxDetail` default of 240 — fixing only the paging

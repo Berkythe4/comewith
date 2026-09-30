@@ -214,6 +214,28 @@ const akey=a=>(a&&a.name||'').trim().toLowerCase();
 let Q='', SORT='soon', MUSIC_ONLY=true, GENRE='', GRP='', DAY='', LIMIT=60, SETOPEN=true;
 let LOADED=0;   // when the crate on screen was fetched
 
+// Buzz — the SAME formula the dashboard ranks with (assets/buzz.js, one copy).
+// dj-station sends the raw inputs per artist; the score is computed here so the
+// two pages can never disagree about who is hot. Until the module arrives the
+// Buzz sort falls back to soonest-first rather than inventing an order.
+let BUZZ=null;
+import('./assets/buzz.js').then(m=>{BUZZ=m; if(DATA){computeBuzz(); renderCrate();}}).catch(()=>{});
+function computeBuzz(){
+  if(!BUZZ||!DATA) return;
+  (DATA.artists||[]).forEach(a=>{
+    const b=a.buzz_in||{};
+    const raF=+a.ra_followers||0, scF=b.scan_ok?(+b.sc_followers||0):0;
+    // Mirrors dashboard.html scArtistData(): unknown stays unknown (see buzz.js).
+    const c={topPlays:+b.top_plays||0, topTrack:(b.scan_ok&&b.top_plays!=null)?{}:null,
+      reach:Math.max(raF,scF), raFollowers:raF,
+      demand:+b.demand||0, demandKnown:b.demand!=null,
+      songCount:b.scan_ok?(+b.song_count||0):0, scanOk:!!b.scan_ok,
+      editorial:!!b.editorial, recent:!!b.recent};
+    BUZZ.scScoreArtist(c);
+    a.buzz=c.buzz; a.buzzCov=c.coverage;
+  });
+}
+
 function toast(msg,kind){
   const el=$('#toast'); if(!el) return;
   el.textContent=msg; el.className=(kind==='err'?'err ':'')+'on';
@@ -337,6 +359,37 @@ function ownMatchUpdate(){
     if(wrap) wrap.hidden=false;
   }
 }
+// ── Export to the DJ's OWN SoundCloud (migration 215) ────────────────────────
+// SoundCloud asks them to approve Come With once, we build the playlist in their
+// account, and their access is thrown away straight after — nothing is stored.
+// Songs they typed in by hand aren't SoundCloud tracks, and some uploaders block
+// API adds; both are named in the result rather than dropped silently.
+function exportHtml(tl){
+  const onSc=tl.filter(t=>/^\d+$/.test(String(t.sc_track_id||''))).length;
+  const x=DATA.sc_export, st=new URLSearchParams(location.search).get('sc');
+  let res='';
+  if(x&&x.ok){
+    const sk=x.skipped||{}, bl=(sk.blocked||[]).length, off=(sk.not_on_soundcloud||[]).length;
+    res=`<div class="set-note" style="color:var(--lime)">✓ Last export: ${x.tracks||0} song${x.tracks===1?'':'s'} into ${x.sc_username?'<b>'+esc(x.sc_username)+'</b>’s':'your'} SoundCloud${x.result_url?` · <a href="${esc(x.result_url)}" target="_blank" rel="noopener">open playlist ↗</a>`:''} <span style="color:var(--faint)">(${fmtWhen(x.completed_at)}, private — change it on SoundCloud)</span>
+      ${bl?`<br>⚠ ${bl} not added — the uploader blocks API adds: ${esc((sk.blocked||[]).slice(0,6).join(', '))}${bl>6?'…':''}`:''}
+      ${off?`<br>ℹ ${off} of your own records aren't SoundCloud tracks, so they aren't in it: ${esc((sk.not_on_soundcloud||[]).slice(0,6).join(', '))}${off>6?'…':''}`:''}</div>`;
+  } else if(x&&!x.ok&&st){
+    res=`<div class="set-note" style="color:#ff8a8a">✕ Export didn't go through: ${esc(x.error||'unknown error')}</div>`;
+  } else if(st==='denied'){
+    res=`<div class="set-note" style="color:#ff8a8a">You declined on SoundCloud, so nothing was created.</div>`;
+  }
+  return `<div class="set-note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="recbtn" data-scexport ${onSc?'':'disabled'} title="Creates a NEW private playlist of this set in YOUR SoundCloud account. SoundCloud will ask you to approve Come With first; we don't keep your login.">☁ Export to my SoundCloud</button>
+      <span style="color:var(--faint)">${onSc?`${onSc} of ${tl.length} are SoundCloud tracks`:'add some songs from the crate first'}</span>
+    </div>${res}`;
+}
+const fmtWhen=t=>{try{return new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(_){return '';}};
+async function scExport(btn){
+  if(btn){btn.disabled=true;btn.textContent='☁ Opening SoundCloud…';}
+  try{ const j=await api({action:'sc_export_start'}); location.href=j.authorize_url; }
+  catch(e){ toast(e.message||'Could not start the export','err'); if(btn){btn.disabled=false;btn.textContent='☁ Export to my SoundCloud';} }
+}
+
 function renderSet(){
   setIndexes();
   const tl=DATA.tracklist||[];
@@ -379,6 +432,7 @@ function renderSet(){
       ${curated&&mine?`<span class="set-note" style="margin:0;">${mine} yours · ${curated} from Keith</span>`:''}
     </div>
     <div class="set-note">Order doesn't matter here — you arrange the set when you mix. This is the tracklist the episode page publishes.</div>
+    ${exportHtml(tl)}
     ${rows||`<div class="set-empty">Nothing in it yet. <b>Dig the crate below</b> and hit <b>＋ add</b>, or put in your own records — most of a guest mix is records that were never in anyone's crate.</div>`}
     <details class="own" id="ownBox"${ownOpen?' open':''}>
       <summary>＋ Add a track of your own</summary>
@@ -416,7 +470,11 @@ function matchOf(a,terms){
 const SORTS={
   soon:(x,y)=>String(x.a.next_event_date||'9999').localeCompare(String(y.a.next_event_date||'9999')),
   name:(x,y)=>(x.a.name||'').localeCompare(y.a.name||''),
-  followers:(x,y)=>(y.a.followers||0)-(x.a.followers||0),
+  // SoundCloud followers from the scan; unmeasured sink instead of counting as 0.
+  followers:(x,y)=>((y.a.followers??-1)-(x.a.followers??-1))||((y.a.ra_followers||0)-(x.a.ra_followers||0)),
+  rafollowers:(x,y)=>(y.a.ra_followers||0)-(x.a.ra_followers||0),
+  buzz:(x,y)=>(BUZZ?(BUZZ.buzzSort(y.a.buzz)-BUZZ.buzzSort(x.a.buzz)):0)||String(x.a.next_event_date||'9999').localeCompare(String(y.a.next_event_date||'9999')),
+  venue:(x,y)=>(x.a.next_venue||'￿').toLowerCase().localeCompare((y.a.next_venue||'￿').toLowerCase())||String(x.a.next_event_date||'').localeCompare(String(y.a.next_event_date||'')),
   songs:(x,y)=>((y.a.songs||[]).length)-((x.a.songs||[]).length),
 };
 function crateRows(){
@@ -483,7 +541,7 @@ function artistCard(r){
   // every card carries the same label and says nothing.
   const dayChip=a.day?`<span class="g day">${esc(a.day)}</span>`:'';
   return `<div class="card" data-card="${i}">
-    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
+    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.buzz!=null?`<span class="meta" title="Buzz ${a.buzz}/100 — scored on ${a.buzzCov}% of the inputs (plays, reach, RSVPs, catalogue); the same score as Keith's dashboard">· 🔥 ${a.buzz}</span>`:''}${a.followers!=null?`<span class="meta" title="SoundCloud followers">· ☁ ${fmtNum(a.followers)}</span>`:''}${a.ra_followers?`<span class="meta" title="People following them on ra.co">· ${fmtNum(a.ra_followers)} RA</span>`:''}</div>
     ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
     <div class="cardacts">
       ${n?`<button class="btn songs" data-toggle="${esc(k)}">${open?'▾':'🎵'} ${n} song${n===1?'':'s'}</button>`:'<span class="meta">no music scanned yet — nothing to audition here</span>'}
@@ -526,7 +584,7 @@ function toolsHtml(){
   const days=[...new Set((d.artists||[]).map(a=>a.day).filter(Boolean))];
   const hasDisco=(d.artists||[]).some(a=>a.group==='disco');
   const opt=(v,l)=>`<option value="${v}"${SORT===v?' selected':''}>${l}</option>`;
-  return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('followers','Most followers')}${opt('songs','Most songs')}${opt('name','Artist A–Z')}</select>
+  return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('buzz','🔥 Buzz')}${opt('followers','Most SoundCloud followers')}${opt('rafollowers','Most RA followers')}${opt('songs','Most songs')}${opt('venue','Venue A–Z')}${opt('name','Artist A–Z')}</select>
     ${days.length>1?`<button class="gchip${DAY===''?' on':''}" data-day="">All days</button>`+days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join(''):''}
     ${hasDisco?`<button class="gchip${GRP===''?' on':''}" data-grp="">All stages</button>
       <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main</button>
@@ -634,6 +692,7 @@ document.addEventListener('click',e=>{
   if(t.closest('[data-recopen]')){ $('#recOv').classList.add('on'); return; }
   if(t.closest('[data-recclose]')||t.id==='recOv'){ $('#recOv').classList.remove('on'); return; }
   if(t.closest('[data-settoggle]')){ SETOPEN=!SETOPEN; renderSet(); return; }
+  if(t.closest('[data-scexport]')){ scExport(t.closest('[data-scexport]')); return; }
   if(t.id==='clrq'){ Q=''; const q=$('#q'); if(q){q.value='';q.focus();} $('#clrq').hidden=true; LIMIT=60; renderCrate(); return; }
 
   const pl=t.closest('[data-play]'); if(pl){ djPlay(pl.dataset.play,pl.dataset.t); return; }
@@ -685,7 +744,7 @@ async function load(){
   let j;
   try{ j=await api({}); }
   catch(e){ $('#shell').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
-  DATA=j; LOADED=Date.now(); ARTBYNAME=null;
+  DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
   $('#shell').innerHTML=shellHtml();
   const c=$('#clrq'); if(c) c.hidden=!Q;
   renderSet(); renderCrate();
@@ -714,7 +773,7 @@ async function refresh(loud){
   try{
     const j=await api({});
     const before=(DATA.artists||[]).length, beforeSongs=(DATA.artists||[]).reduce((s,a)=>s+((a.songs||[]).length),0);
-    DATA=j; LOADED=Date.now(); ARTBYNAME=null;
+    DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
     renderSet(); renderCrate();
     const box=$('#ownBox'); if(box&&(ownWasOpen||form.a||form.t||form.u)) box.open=true;
     const set=(id,val)=>{ const el=$(id); if(el&&val) el.value=val; };
