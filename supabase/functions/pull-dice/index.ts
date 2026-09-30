@@ -29,6 +29,12 @@ const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
 const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15";
+// DICE now requires an API version header on every call (search AND detail). By
+// 2026-09-30 a request without it got 403, and one without a browser UA got a
+// Cloudflare challenge page. The value is what dice.fm's own web client sends
+// (`eventListHeaders()` in their bundle). If DICE starts 403-ing again, re-read
+// their current bundle for this header before assuming the endpoint is gone.
+const DICE_HEADERS = { "User-Agent": UA, "X-Api-Timestamp": "2025-04-16", "X-Client-Platform": "web" };
 
 // NYC point (matches RA area 8) + the electronic/EDM genre tags DICE exposes.
 const NYC = { lat: 40.7128, lng: -74.006 };
@@ -67,7 +73,7 @@ async function search(tag: string, cutoff: string, stats: { pages: number; lastS
       if (cursor) body.cursor = cursor;
       const r = await fetch("https://api.dice.fm/unified_search", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": UA },
+        headers: { "Content-Type": "application/json", ...DICE_HEADERS },
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(12000),
       });
@@ -106,7 +112,7 @@ async function search(tag: string, cutoff: string, stats: { pages: number; lastS
 async function detail(id: string): Promise<any | null> {
   try {
     const r = await fetch(`https://api.dice.fm/events/${id}`, {
-      headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12000),
+      headers: DICE_HEADERS, signal: AbortSignal.timeout(12000),
     });
     if (!r.ok) return null;
     return await r.json();
