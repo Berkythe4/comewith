@@ -34,7 +34,14 @@ const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15
 // Cloudflare challenge page. The value is what dice.fm's own web client sends
 // (`eventListHeaders()` in their bundle). If DICE starts 403-ing again, re-read
 // their current bundle for this header before assuming the endpoint is gone.
-const DICE_HEADERS = { "User-Agent": UA, "X-Api-Timestamp": "2025-04-16", "X-Client-Platform": "web" };
+// From a Supabase edge function the version header alone still got 403; the full set
+// dice.fm's web client sends (Chrome UA, Origin/Referer, timezone, device id) gets 200.
+const DICE_HEADERS = {
+  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
+  "Accept": "application/json", "Origin": "https://dice.fm", "Referer": "https://dice.fm/",
+  "X-Api-Timestamp": "2025-04-16", "X-Client-Platform": "web",
+  "X-Client-Timezone": "America/New_York", "X-Device-Id": crypto.randomUUID(),
+};
 
 // NYC point (matches RA area 8) + the electronic/EDM genre tags DICE exposes.
 const NYC = { lat: 40.7128, lng: -74.006 };
