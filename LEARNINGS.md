@@ -2304,3 +2304,102 @@ A `version`-keyed upsert would be safer as a composite key on `(version,
 sha256)` — a genuine re-run of the same file would still collapse, while two
 different files would collide loudly instead of silently. Not changed here;
 noted as the fix if this recurs.
+
+## Section 71 — A webhook that echoes your own record breaks every single-row lookup (2026-09-30)
+
+Campaign stats showed **164 sent for an 82-person send**, and the 8/13 campaign
+showed **11 delivered of 87**. Both came from one cause. At some point after June the
+Resend webhook began forwarding `email.sent`, and `resend-webhook` stored it as a
+second `sent` row beside the one `send-campaign` already writes.
+
+The doubled count was the visible symptom. The worse one was silent: the webhook
+attributes every later event by looking up the `sent` row with `.maybeSingle()`, and
+two rows make that call **error**, so every `delivered` / `opened` / `clicked` event
+after the duplicate landed with `campaign_id = null`. 267 events were orphaned — the
+data was all there, attached to nothing.
+
+Two rules. **Do not store an external event that restates a record you already
+write** — the webhook now ignores `email.sent`. And **an attribution lookup must
+tolerate a duplicate** — `.order().limit(1)` before `.maybeSingle()`, because
+"exactly one" is an assumption about someone else's system. Repaired by migration 213
+(re-attribute through `resend_event_id`, drop the 169 shadowing rows); our own rows
+were told apart by `metadata` (`{}` vs Resend's payload, which carries `created_at`).
+Stats now count `sent` by unique recipient like every other card.
+
+## Section 72 — A blocked source reached a delete (2026-09-30)
+
+§24 says a blocked source must be reported as blocked. `pull-dice` reported it — as
+**`OK`, 0 saved**, after deleting every upcoming DICE show. DICE began answering 403;
+`search()` treated a non-200 as "no more pages" and broke out quietly; zero candidates
+reached the bounded delete; the delete ran; the upsert had nothing to write.
+
+The general rule is sharper than §24: **a puller that deletes-then-inserts must prove
+the source answered before it deletes.** `pull-dice` now returns 502 and deletes
+nothing unless at least one search page and one detail call succeeded, and the
+Refresh lists DICE under failed. The same session found `pull-ra-market` returning a
+bare "Could not save events." with the real error swallowed, and an unchecked delete
+before it — both now surface the message.
+
+## Section 73 — When the edge is blocked, the database can be the transport (2026-09-30)
+
+DICE now requires an `X-Api-Timestamp` header (found by reading dice.fm's own
+bundle, `eventListHeaders()`), and with it the API answers from a desktop. From the
+**Supabase edge runtime** it still 403s with byte-identical headers; from **pg_net in
+the database** it answers 200. Cloudflare is judging the caller, not the request.
+
+So `pull-dice` keeps its logic and moves only its HTTP: `dice_fetch_enqueue()` queues
+calls, `dice_fetch_collect()` reads them back (214). Both are security definer, fixed
+to one host and two paths, EXECUTE service_role only — outbound HTTP as the database
+must be fenced like a credential. It is faster than before (639 shows in 36s, 50 detail
+calls per round trip), so the 600 detail cap came off.
+
+The trap: **pg_net's worker waits on its in-flight batch.** Invoking `pull-dice` itself
+through `net.http_post` parks the worker on that call, so the function's own DICE
+requests queue behind the request that is waiting for them, and it times out. Call it
+over plain HTTP. Found by doing exactly that in the first test.
+
+## Section 74 — A puller must not send a column it has no value for (2026-09-30)
+
+"Why don't Vintage Culture and Purple Disco Machine have SoundCloud?" They did — every
+Refresh erased it. `pull-dice` and `pull-ticketmaster` upserted artists with
+`soundcloud: null, instagram: null, follower_count: null`. An upsert overwrites every
+column in its payload, so the link `sc-match` had found was wiped on the next pull,
+before the scan ever reached it. The cycle made the button look broken.
+
+Omit the key instead: a new row defaults to null and an existing row keeps what it
+has. `pull-ra-market` had the same bug in delete-and-reinsert form, where omission is
+not enough — it now reads back `soundcloud` / `instagram` / `city` / `is_partner` for
+the rows it is about to replace and carries them over where RA sends nothing (RA's own
+link still wins). First run kept 172 links the old code would have erased. A failed
+read aborts before the delete, or the safeguard becomes the wipe.
+
+## Section 75 — A column means what its source row says it means (2026-09-30)
+
+"Most followers" put 50 Cent (2.2M on SoundCloud) below RA acts with a few thousand. It
+sorted on `ra_artists.follower_count`, which is **RA's own ra.co follow count on
+`source='ra'` rows, null on DICE/TM rows, and a SoundCloud count on Elements and
+hand-added rows** — three meanings in one column, and the card labelled it all
+"followers". The guest DJ page inherited the same field under the same name.
+
+Sort on what was measured (`sc_artist_cache.followers`, null = unmeasured, which sinks
+rather than scoring 0), and only call a number "RA followers" where the row came from
+RA. The column is not renamed — too many readers — but every reader now says which
+number it shows.
+
+## Section 76 — One formula, two pages, and credentials that are never kept (2026-09-30)
+
+The guest crate (`dj.html`) had no Buzz, and copying `scScoreArtist()` into it would
+have been a third copy of a formula that already took a rebuild to get right. The
+formula moved verbatim into `assets/buzz.js`, imported by both pages; `dj-station`
+sends the raw inputs and the page scores them, so the two cannot disagree. Input
+*derivation* still lives in two places (`scArtistData()` and `dj-station`), which is
+the one remaining change-both seam and is written into CLAUDE.md.
+
+Exporting a station to SoundCloud used one stored connection — Keith's. Guests and
+teammates now export to **their own** account through a one-shot OAuth round trip
+(215/216): the PKCE verifier and state are stored, the access token is used for one
+playlist and dropped. Same principle as Beatport (§ Beatport paste-a-token): no
+standing credential at rest for anyone who is not the account owner. Two people
+exporting one station get two playlists; the stored connection and its sync-back are
+untouched. The guest crate also moved to the dashboard's row layout, now the standard
+for external links.

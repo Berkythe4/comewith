@@ -355,6 +355,12 @@ segment. Public signup widgets pass the brand segment (`come_with` on the
 homepage; DI pages must pass `dance_infusion`). Never re-subscribe an
 unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 
+**Campaign stats come from `mailing_events`, and `resend-webhook` ignores
+`email.sent`.** `send-campaign` already writes the `sent` row; storing Resend's echo
+doubled every campaign's Sent and made the attribution lookup error, orphaning every
+later delivered/opened event (213 repaired it; LEARNINGS §71). Count every card by
+unique recipient, and never `.maybeSingle()` on a lookup another system can duplicate.
+
 ## Come With Radio (episodes live outside `events`)
 
 - **`station_no` is the SHOW counter; `edition_seq` is the episode number.** Two

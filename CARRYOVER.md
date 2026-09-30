@@ -1,3 +1,95 @@
+# Carryover - 2026-09-30 (campaign stats, DICE back via the database, guest DJ link + own-SoundCloud export - DESKTOP)
+
+**Closed 2026-09-30 on the DESKTOP.** No branch; everything is on `master` and
+deployed. The 2026-09-28 block below is kept whole and is the previous close — its
+finance items (27 queued duplicates, the Berky $100) are **still open**, untouched here.
+
+## >> START HERE NEXT SESSION
+
+**1. Two SoundCloud exports need one real click each.** Both ship, neither round trip
+has been done from here (it needs a real SoundCloud login):
+- *Guest link* — Keith tested it on 2026-09-30 and it **worked**.
+- *Dashboard "☁ Copy to my SoundCloud"* (station builder, ② Put in order) — **not yet
+  tested.** Have Keith and Martin/Henry each export the same station; expect two
+  playlists in two accounts and a result modal on return. The dashboard comes back on
+  its default view after the redirect (it does not reopen the station) — the modal
+  carries the result.
+
+**2. Look at the guest crate on a phone.** `dj.html` moved from cards to the
+dashboard's row layout. Syntax-checked, not eyeballed. SHOW 10 (`Come With NYC Radio
+Ep6`, status building, 0 tracks) is the guest DJ's episode.
+
+**3. 41 DICE artists (10/8+) still have no SoundCloud match.** Before this session a
+match never survived a Refresh (§74), so "☁ Match SoundCloud" is worth one more press
+now that links stick.
+
+**4. DICE is unofficial and was blocked once already.** If Refresh lists DICE as
+failed: the rows are kept (§72). First check dice.fm's current JS bundle for the
+`X-Api-Timestamp` value (`eventListHeaders()`); it is set in migration 214's
+`dice_fetch_enqueue()`, not in the edge function.
+
+## State summary
+
+- **Migrations 001-216**, all applied, no drift (`applied_migrations` top = 216).
+  213 campaign-stats repair (data only) · 214 `dice_fetch_enqueue/collect` (pg_net,
+  service_role only) · 215 `sc_dj_exports` (RLS admin-only, anon 401) · 216
+  `origin` + `requested_by` on it.
+- **Functions deployed:** `resend-webhook` v31, `pull-dice` v27, `pull-ticketmaster`
+  v24, `pull-ra-market` v32, `sc-connect` v37, `sc-oauth` v24, `dj-station` v29.
+- **LEARNINGS §76** is the latest (§71-§76 added this session).
+- **Anon-401 invariant verified** on all five financial views; anon sweep clean incl.
+  `sc_dj_exports`; `post_apply.sql` 6 PASS / 3 INFO (standing counts).
+- **git**: `master` pushed and deployed (live site serves the new dashboard, dj.html
+  and `assets/buzz.js`). Machine: DESKTOP.
+- **Prod data now:** DICE 640 upcoming shows (through 11/11, 435 artists, status OK);
+  RA 996 shows / 1,340 artists; campaign stats: DI3 Announcement 82 sent, DI#3 Save
+  the Date 87 sent / 87 delivered / 57 opened.
+
+## Tomorrow's default
+
+Item 1 (the dashboard export click), then the guest DJ session. After that the
+2026-09-28 finance items (queue + Berky $100), and the long-standing 183 wrong
+`next_event_date` artists (2026-09-10), which nothing here touched.
+
+## This session shipped
+
+- **Campaign stats were wrong, and it was one bug.** Resend's `email.sent` webhook was
+  stored as a second `sent` row (82 showed as 164), and the duplicate made the
+  attribution `.maybeSingle()` error, orphaning every later delivered/opened event
+  (8/13 read 11 delivered of 87; really 87 / 57 opened). Webhook ignores `email.sent`;
+  migration 213 re-attributed 267 events and dropped 169 duplicates; Sent counts
+  unique recipients. §71.
+- **DICE was blocked, and a Refresh had wiped every upcoming DICE show** while
+  reporting OK. `pull-dice` now refuses before deleting (§72). DICE needs a new
+  `X-Api-Timestamp` header and still refuses the edge runtime, so its HTTP goes
+  through pg_net (214). Full window restored: 639/639, 36s; dashboard cap 600→900. §73.
+- **SoundCloud links were erased on every Refresh** by all three pullers (DICE/TM sent
+  nulls; RA delete-and-reinsert). Fixed; RA now carries links/city/partner across.
+  Scanned the 42 linked-but-unscanned DICE/TM artists. §74.
+- **"Most followers" sorted on RA's count** (0 for every DICE act). Now "Most SoundCloud
+  followers" + "Most RA followers", labelled chips, RA only on `source='ra'` rows. §75.
+- **Guest DJ link (dj.html):** SoundCloud followers, Buzz / SC / RA / venue sorts, Buzz
+  shared with the dashboard via `assets/buzz.js`, row layout, and **"Export to my
+  SoundCloud"** to the DJ's own account (one-shot OAuth, token never stored). §76.
+- **Dashboard "☁ Copy to my SoundCloud"** for every logged-in teammate (216). §76.
+- CLAUDE.md gained the standing rules for all of the above.
+
+## Parked / next
+
+- **49 webhook `sent` rows for non-campaign mail** (actor emails, invoices) were left in
+  `mailing_events`; no campaign, affect no stats. Delete or leave.
+- **`pull-ra-market` failed once with "Could not save events"** (nothing deleted; retry
+  succeeded; cause unknown — edge logs are empty on this plan). It now returns the real
+  message; capture it if it recurs.
+- **Buzz input derivation is still in two places** (`scArtistData()` and `dj-station`);
+  the formula is shared, the inputs are not. Change both.
+- **`ra_artists.follower_count` has three meanings** by source (§75). A rename/split is
+  the durable fix; not attempted.
+- **After "Copy to my SoundCloud" the dashboard does not reopen the station** it came
+  from. Carry the station id through `state` if that matters.
+
+---
+
 # Carryover - 2026-09-28 (finance ingest: settle before add - DESKTOP)
 
 **Closed 2026-09-28.** The 2026-09-10 block below is kept whole and is the

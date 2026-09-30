@@ -207,6 +207,33 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-09-30 (campaign stats, DICE via the database, guest DJ link)
+
+**Three "the numbers look wrong" questions, each a real bug, and the guest-DJ tooling
+brought up to the dashboard's standard.**
+
+- 🟢 **Campaign stats are true (213, resend-webhook v31).** Resend's `email.sent`
+  echo doubled Sent and orphaned every later event. Repaired on prod; Sent is now
+  unique recipients. LEARNINGS §71.
+- 🟢 **DICE is back, through the database (214, pull-dice v27).** DICE needs a new
+  version header and blocks the edge runtime; calls now go via pg_net. 639/639 shows
+  in 36s. A blocked source can no longer reach the delete. §72, §73.
+- 🟢 **SoundCloud matches survive a Refresh** — DICE, Ticketmaster and RA pullers all
+  fixed (RA carries links, city, partner flag across its delete-and-reinsert). §74.
+- 🟢 **Followers mean one thing per label.** Sort by SoundCloud followers (measured) or
+  RA followers (RA rows only), on the dashboard and the guest link. §75.
+- 🟢 **Guest DJ link = the dashboard's crate.** Row layout, Buzz (shared
+  `assets/buzz.js`), Buzz / SC / RA / venue sorts, source tags. §76.
+- 🟢 **Export to your OWN SoundCloud (215, 216).** Guests from their link, teammates
+  from the dashboard ("☁ Copy to my SoundCloud"). One-shot OAuth, no stored
+  credential; two people, two playlists. Guest path tested by Keith.
+- 🟡 **Dashboard "Copy to my SoundCloud" round trip untested**, and the guest row
+  layout not yet viewed on a phone.
+- ⚪ **`ra_artists.follower_count` holds three meanings by source** (§75); a split is
+  the durable fix. Buzz inputs are still derived in two places.
+- ⚪ Still open from earlier closes: the 183 wrong `next_event_date` artists
+  (2026-09-10); the finance queue and Berky $100 (2026-09-28).
+
 ## Current state — reconciled 2026-09-28 (finance ingest: settle before add)
 
 **The importer stopped guessing, and started saying which it did.**

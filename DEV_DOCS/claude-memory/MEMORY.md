@@ -64,3 +64,4 @@
 - [Phase 3 status](project_phase_3_status.md) — admin dashboard-v2.html read-only closed 2026-05-28; all 7 admin tabs wired, magic-link login working
 - [Phase 2 status](project_phase_2_status.md) — auth bootstrap closed 2026-05-28 on staging; Berky+throwaway provisioned, magic-link configured, RLS isolation proven
 - [Anon RLS quirk on staging](project_anon_rls_sql_editor.md) — `set local role anon` rejects WITH CHECK=true INSERTs in Supabase SQL Editor; deferred until Phase 3 frontend can prove it via supabase-js
+- [State coverage before ranking](feedback_state_coverage_before_ranking.md) — for any "top N / most followers" answer, report N-of-M measured first; a gap sorts like a zero (2026-09-30: top-5 over 53 of 338 missed 50 Cent/Armin)
