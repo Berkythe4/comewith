@@ -55,7 +55,7 @@ const MAX_PAGES = 12;
 //
 // Pages come back date-ascending, so once a whole page sits beyond the window
 // there is nothing later worth asking for.
-async function search(tag: string, cutoff: string, stats: { pages: number }): Promise<any[]> {
+async function search(tag: string, cutoff: string, stats: { pages: number; lastStatus: string }): Promise<any[]> {
   const out: any[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
@@ -71,9 +71,9 @@ async function search(tag: string, cutoff: string, stats: { pages: number }): Pr
         body: JSON.stringify(body),
         signal: AbortSignal.timeout(12000),
       });
-      if (!r.ok) break;
+      if (!r.ok) { stats.lastStatus = `HTTP ${r.status}`; break; }
       j = await r.json();
-    } catch { break; }
+    } catch (e) { stats.lastStatus = e instanceof Error ? e.message : String(e); break; }
     stats.pages++;
 
     const found: any[] = [];
@@ -151,7 +151,7 @@ Deno.serve(async (req) => {
 
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
-    const searchStats = { pages: 0 };
+    const searchStats = { pages: 0, lastStatus: "" };
     for (const tag of TAGS) {
       const evs = await search(tag, cutoff, searchStats);
       for (const e of evs) {
@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
     const ids = picked.map((e) => e.id);
     const rows: Record<string, unknown>[] = [];
     const artistMap = new Map<string, Record<string, unknown>>();
-    let scanned = 0, kept = 0;
+    let scanned = 0, kept = 0, detailOk = 0;
 
     // Refuse to start work we cannot finish. The edge runtime's wall clock is
     // ~150s; a full 900-id pass is ~113 rounds of 8. Stopping at a deadline and
@@ -194,6 +194,7 @@ Deno.serve(async (req) => {
       if (Date.now() > DEADLINE) { timedOut = true; break; }
       const batch = ids.slice(i, i + 8);
       const details = await Promise.all(batch.map((id) => detail(id)));
+      detailOk += details.filter(Boolean).length;
       for (let k = 0; k < batch.length; k++) {
         scanned++;
         const id = batch[k];
@@ -231,6 +232,15 @@ Deno.serve(async (req) => {
           }
         }
       }
+    }
+
+    // A BLOCKED source is not an empty one. On 2026-09-30 DICE began answering 403 to
+    // every call; search() broke out quietly, zero candidates reached here, and the
+    // bounded delete below wiped every upcoming DICE show while reporting OK / 0
+    // saved. Refuse before deleting anything: no search page answered, or not one
+    // detail call did. The caller then shows DICE as FAILED, and the old rows stay.
+    if (searchStats.pages === 0 || (ids.length > 0 && detailOk === 0)) {
+      return err(502, `DICE is not answering (${searchStats.lastStatus || "detail calls all failed"}). Nothing was deleted; existing DICE shows are kept.`);
     }
 
     // 3. Replace ONLY the dice-sourced rows (never touch ra / tm).
