@@ -18828,7 +18828,9 @@ async function raRefresh(btn) {
     // ~10 DICE shows a day in NYC, so ask for the window's worth of detail budget
     // rather than the old flat 240 — which bound exactly on the 8/15 pull and cut
     // the last two weeks off a 4-week window.
-    const diceDetail = Math.min(600, Math.max(240, Math.ceil((new Date(winCut + 'T00:00:00Z') - new Date(winStart + 'T00:00:00Z')) / 86400000) * 14));
+    // 900 = pull-dice's ceiling. Through the database (214) 600 lookups take ~30s, so the
+    // old 600 cap only dropped the far end of the window (39 shows on 2026-09-30).
+    const diceDetail = Math.min(900, Math.max(240, Math.ceil((new Date(winCut + 'T00:00:00Z') - new Date(winStart + 'T00:00:00Z')) / 86400000) * 14));
     try { const r = await sb.functions.invoke('pull-dice', { body: { from: winStart, to: winCut, maxDetail: diceDetail } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; diceLast = r.data?.last_date || null; } catch (_) { failed.push('DICE'); }
     toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`
       + ` · RA to ${data.to || '?'}, DICE ${winStart}→${winCut}${diceLast ? ` (reached ${diceLast})` : ''}`

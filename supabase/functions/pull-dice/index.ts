@@ -28,20 +28,35 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15";
-// DICE now requires an API version header on every call (search AND detail). By
-// 2026-09-30 a request without it got 403, and one without a browser UA got a
-// Cloudflare challenge page. The value is what dice.fm's own web client sends
-// (`eventListHeaders()` in their bundle). If DICE starts 403-ing again, re-read
-// their current bundle for this header before assuming the endpoint is gone.
-// From a Supabase edge function the version header alone still got 403; the full set
-// dice.fm's web client sends (Chrome UA, Origin/Referer, timezone, device id) gets 200.
-const DICE_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
-  "Accept": "application/json", "Origin": "https://dice.fm", "Referer": "https://dice.fm/",
-  "X-Api-Timestamp": "2025-04-16", "X-Client-Platform": "web",
-  "X-Client-Timezone": "America/New_York", "X-Device-Id": crypto.randomUUID(),
-};
+// TRANSPORT: every DICE call goes through the DATABASE (migration 214), not fetch().
+// From 2026-09-30 DICE's Cloudflare answers 403 to anything leaving the Supabase edge
+// runtime, even carrying the exact headers dice.fm's web client sends; the same
+// request made by pg_net from the database gets 200. dice_fetch_enqueue() queues
+// calls (host fixed to api.dice.fm, headers set there, incl. the X-Api-Timestamp
+// version header DICE now requires) and dice_fetch_collect() reads them back. If DICE
+// starts 403-ing again, re-read dice.fm's current bundle for that header first.
+let DB: any = null;
+type DiceRes = { status: number | null; json: any | null; err: string };
+async function diceMany(reqs: { path: string; body?: unknown }[], waitMs = 25000): Promise<DiceRes[]> {
+  const fail = (err: string) => reqs.map(() => ({ status: null, json: null, err }));
+  const { data: ids, error } = await DB.rpc("dice_fetch_enqueue", { reqs });
+  if (error || !Array.isArray(ids)) return fail("enqueue: " + (error?.message || "no ids"));
+  const got = new Map<number, any>();
+  const until = Date.now() + waitMs;
+  while (got.size < ids.length && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 500));
+    const { data } = await DB.rpc("dice_fetch_collect", { ids: ids.filter((i: number) => !got.has(i)) });
+    for (const row of data || []) got.set(row.id, row);
+  }
+  return ids.map((i: number) => {
+    const row = got.get(i);
+    if (!row) return { status: null, json: null, err: "no response in time" };
+    if (row.timed_out || row.error_msg) return { status: null, json: null, err: row.error_msg || "timed out" };
+    if (row.status_code !== 200) return { status: row.status_code, json: null, err: `HTTP ${row.status_code}` };
+    try { return { status: 200, json: JSON.parse(row.content), err: "" }; }
+    catch { return { status: 200, json: null, err: "not JSON (challenge page?)" }; }
+  });
+}
 
 // NYC point (matches RA area 8) + the electronic/EDM genre tags DICE exposes.
 const NYC = { lat: 40.7128, lng: -74.006 };
@@ -74,19 +89,11 @@ async function search(tag: string, cutoff: string, stats: { pages: number; lastS
   let cursor: string | null = null;
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    let j: any;
-    try {
-      const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
-      if (cursor) body.cursor = cursor;
-      const r = await fetch("https://api.dice.fm/unified_search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", ...DICE_HEADERS },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!r.ok) { stats.lastStatus = `HTTP ${r.status}`; break; }
-      j = await r.json();
-    } catch (e) { stats.lastStatus = e instanceof Error ? e.message : String(e); break; }
+    const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
+    if (cursor) body.cursor = cursor;
+    const [res] = await diceMany([{ path: "/unified_search", body }]);
+    if (!res.json) { stats.lastStatus = res.err; break; }
+    const j = res.json;
     stats.pages++;
 
     const found: any[] = [];
@@ -116,15 +123,6 @@ async function search(tag: string, cutoff: string, stats: { pages: number; lastS
   }
   return out;
 }
-async function detail(id: string): Promise<any | null> {
-  try {
-    const r = await fetch(`https://api.dice.fm/events/${id}`, {
-      headers: DICE_HEADERS, signal: AbortSignal.timeout(12000),
-    });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
-}
 const isNYC = (v: any) => {
   const city = (v?.city?.name || "").toLowerCase();
   const addr = (v?.address || "").toLowerCase();
@@ -138,6 +136,7 @@ Deno.serve(async (req) => {
   const SUPA = Deno.env.get("SUPABASE_URL")!;
   const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(SUPA, SRK);
+  DB = admin;
   const auth = req.headers.get("Authorization") || "";
   const bearer = auth.replace(/^Bearer\s+/i, "");
   const roleOf = (t: string) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role || null; } catch { return null; } };
@@ -165,8 +164,11 @@ Deno.serve(async (req) => {
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
     const searchStats = { pages: 0, lastStatus: "" };
-    for (const tag of TAGS) {
-      const evs = await search(tag, cutoff, searchStats);
+    // Tags run in parallel: through the database each page is a queue-and-poll round
+    // trip, so sequential tags would spend most of the wall clock waiting.
+    const perTag = await Promise.all(TAGS.map((tag) => search(tag, cutoff, searchStats)));
+    for (let t = 0; t < TAGS.length; t++) {
+      const tag = TAGS[t], evs = perTag[t];
       for (const e of evs) {
         if (!cand.has(e.id)) cand.set(e.id, { ...e, _tag: tag.split(":")[1] });
       }
@@ -197,16 +199,16 @@ Deno.serve(async (req) => {
     let scanned = 0, kept = 0, detailOk = 0;
 
     // Refuse to start work we cannot finish. The edge runtime's wall clock is
-    // ~150s; a full 900-id pass is ~113 rounds of 8. Stopping at a deadline and
+    // ~150s; a full 900-id pass is 18 rounds of 50 through the database. Stopping at a deadline and
     // SAYING SO beats being killed mid-pass, which writes nothing and leaves no
     // trace of the attempt. Candidates are soonest-first, so what a short run
     // drops is always the far end of the window, never a random hole.
     const DEADLINE = Date.now() + 110_000;
     let timedOut = false;
-    for (let i = 0; i < ids.length; i += 8) {
+    for (let i = 0; i < ids.length; i += 50) {
       if (Date.now() > DEADLINE) { timedOut = true; break; }
-      const batch = ids.slice(i, i + 8);
-      const details = await Promise.all(batch.map((id) => detail(id)));
+      const batch = ids.slice(i, i + 50);
+      const details = (await diceMany(batch.map((id) => ({ path: `/events/${id}` })))).map((r) => r.json);
       detailOk += details.filter(Boolean).length;
       for (let k = 0; k < batch.length; k++) {
         scanned++;

@@ -406,6 +406,18 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   343 → 829 events for six extra calls. **An unpaged read is a query with an
   undeclared cap** — same rule as PostgREST `max_rows`, and it truncates just as
   silently. LEARNINGS §66.
+- **DICE is reached THROUGH THE DATABASE, not `fetch()` (214, 2026-09-30).** DICE's
+  Cloudflare 403s every request from the edge runtime, even with dice.fm's exact
+  headers; the same request from pg_net gets 200. `pull-dice` queues calls with
+  `dice_fetch_enqueue()` (host fixed to api.dice.fm, service_role only) and polls
+  `dice_fetch_collect()`. DICE also now REQUIRES `X-Api-Timestamp` (set in 214) — if it
+  403s again, re-read dice.fm's current JS bundle for that header before assuming the
+  endpoint is gone. **Never invoke `pull-dice` itself via `net.http_post`**: pg_net's
+  worker waits on its in-flight batch, so the function's own DICE calls queue behind
+  the call that is waiting for them and it times out. Call it over plain HTTP.
+- **A blocked source must never reach a delete.** `pull-dice` returns 502 and deletes
+  nothing when no search page or no detail call answers; before that, a 403 read as
+  "zero shows" and a Refresh wiped every upcoming DICE event while reporting OK.
 - **Widening an input means re-checking every cap below it, in the same change.**
   Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
   position 319, past the old `maxDetail` default of 240 — fixing only the paging
