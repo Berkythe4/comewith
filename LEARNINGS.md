@@ -2510,3 +2510,48 @@ The same shape as §26 (never default a field that feeds a computation) and §67
 (confirm a name, never derive one): **an unverified claim may be recorded, but it
 must be recorded as somebody's claim, attributed, and not in the field that means
 "we checked this."**
+
+---
+
+## Section 81 — The close commit is the one that has to be pushed (2026-10-01)
+
+*(Merge note: §77-80 above were written on the laptop on 2026-09-12 as §69-72. That
+close was never pushed, the desktop numbered its own 09-28 and 09-30 sections 69-76
+in the meantime, and the two collided when the laptop finally merged on 2026-10-01.
+Origin's numbers were kept, because they were already published and referenced; the
+laptop's became 77-80 and every reference to them was remapped.)*
+
+The 2026-09-12 CARRYOVER says: *"three commits, committed and **pushed**, verified
+`0 0` against origin after the push."* All true when it was written. Then the close
+commit itself — CARRYOVER, LEARNINGS, ROADMAP, the session review — was made **after**
+that check, and never pushed. The one commit that claimed everything was pushed was
+the one that wasn't.
+
+It stayed invisible for nineteen days because nothing was missing from the *site*:
+the code had shipped. What was missing was the record. Two desktop closes were
+written against a base that didn't include it, took the same section numbers, and
+the next session on the laptop opened onto a stalled merge with conflict markers in
+the two files whose job is to say what's true.
+
+**The `0 0` check belongs after the LAST commit of a close, not after the last code
+commit.** A verification is a fact about the moment it ran; anything committed after
+it isn't covered by it, however recently it ran. And a numbered, append-only file
+shared across three machines collides on the number, not the text — a push that's
+late by one session is enough.
+
+---
+
+## Section 82 — A filter on a half-filled field must say which half it dropped (2026-10-01)
+
+The guest DJ asked for "NYC locals". The only evidence of where an artist lives is
+their SoundCloud profile city, and in SHOW 10's crate **581 of 1,123 artists carry
+one**. Filtering on `NYC.test(city)` therefore removes two different groups: people
+whose profile says somewhere else (295), and people whose profile says nothing
+(542) — who may well be locals.
+
+Reporting one number ("hid 837") would read as "837 out-of-towners", which is a claim
+the data doesn't make. The page splits it: *"hid N based elsewhere and M with no city
+on their profile"*. Same rule as §23 (never render a blank as zero) and the default
+filter rule in CLAUDE.md (say what you removed), applied to a filter the user turns
+on: **when a filter's field is partly empty, unknown is its own bucket in the report,
+never merged into "doesn't match".**

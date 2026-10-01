@@ -38,6 +38,9 @@ Four Come-With-specific rules on top of whichever variant you run:
 - **Take the next migration number AFTER pulling.** On 2026-08-15 a migration was
   authored as `138` while the laptop was landing its own `138` and `139`. Duplicate
   numbers are a conflict in prod, not in git.
+- **The `0 0` check runs AFTER the close commit is pushed** — not after the last code
+  commit. The 2026-09-12 close skipped this and its docs sat unpushed for 19 days,
+  colliding on LEARNINGS numbers (§81).
 - **Re-snapshot Claude memory** into `DEV_DOCS/claude-memory/` (see the README
   there) so the other machines aren't more than one session behind.
 - **`master` auto-deploys to Netlify.** Pushing `master` publishes the site and

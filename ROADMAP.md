@@ -207,6 +207,19 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-10-01 (guest DJ link filters; the 09-12 close landed)
+
+**Three requests from training the first guest DJ, plus a stalled merge cleared.**
+
+- 🟢 **📍 NYC locals on the guest link** — profile city, with what it hid split into
+  "elsewhere" vs "no city". LEARNINGS §82.
+- 🟢 **Venue filter** over every show in the window (`dj-station` v30 sends `shows[]`),
+  never `next_venue` — 18 of Signal's 78 artists would have been missed.
+- 🟢 **Song sort** Most played / Newest (SoundCloud upload date), dates on every song.
+- 🟢 **The 2026-09-12 laptop close is on origin**, its LEARNINGS renumbered §77-80. §81.
+- ⚪ **Parked:** real release dates (`sc-enrich` + re-scan); a shared `assets/venue.js`
+  to take the venue normaliser from three copies to two.
+
 ## Current state — reconciled 2026-09-30 (campaign stats, DICE via the database, guest DJ link)
 
 **Three "the numbers look wrong" questions, each a real bug, and the guest-DJ tooling

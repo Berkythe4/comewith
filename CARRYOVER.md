@@ -1,3 +1,73 @@
+# Carryover - 2026-10-01 (guest DJ link: NYC locals, venue filter, song sort - LAPTOP)
+
+**Closed 2026-10-01 on the LAPTOP.** No branch; everything is on `master` and
+deployed. The 2026-09-30 block below is the previous close and its START HERE list
+is **still open** — nothing in it was touched today.
+
+## >> START HERE NEXT SESSION
+
+**1. Look at the three new filters on a phone, on SHOW 10's real link**
+(`https://comewith.org/dj.html?ep=dj_hv9ogowec3bf21up`). Verified through the live
+payload and the deployed markup; not eyeballed in a browser (no JS runtime here).
+
+**2. The Supabase PAT was rotated on this machine today.** The old `sbp_fc4…` token
+answered 401. If the desktop or Henry's machine used the same one, `db.py` and
+`deploy_edge_function.py` will 401 there too — give each its own token in `.env`.
+
+**3. Then the 2026-09-30 list below** (dashboard "Copy to my SoundCloud" click,
+phone check of the row layout, 41 unmatched DICE artists).
+
+## State summary
+
+- **No migrations.** Repo and prod both top out at **216** (`applied_migrations`).
+- **Functions deployed:** `dj-station` **v30** (sends `shows[]`, scan-city fallback,
+  per-song `created_at`). Additive — the old page ignored the new fields.
+- **LEARNINGS §82** is the latest (§81, §82 added this session; §77-80 are the
+  renumbered 09-12 laptop sections, see below).
+- **Anon-401 invariant verified** on all five financial views
+  (`check_financial_views.py`); `check_anon_exposure.py` clean. No new tables/views.
+- **git:** `master` pushed, `0 0` against origin, live site verified serving the new
+  `dj.html`. Machine: LAPTOP. Uncommitted on purpose: `Radio/render/*`,
+  `Radio/Episode 4/*`, `Radio/Episode 5/`, `Radio/tracklists/` (Keith's render work).
+- **SHOW 10's crate today:** 1,123 artists, 150 rooms, 148 artists in more than one
+  room; 581 carry a profile city, 286 of them NYC; 25,898 songs, all dated.
+
+## Tomorrow's default
+
+Item 1, then the 2026-09-30 list. Ep 4's go-live and the 183 wrong
+`next_event_date` artists are still the biggest carried items (see 09-12 / 09-10).
+
+## This session shipped
+
+- **Landed the 2026-09-12 laptop close, which had never been pushed.** It sat as a
+  half-finished merge on this machine. Docs-only conflict: the desktop had used
+  LEARNINGS §69-76 meanwhile, so the laptop's §69-72 became **§77-80** and every
+  reference to them was remapped. §81.
+- **Guest DJ link (`dj.html` + `dj-station` v30), three features from training the
+  first guest DJ:**
+  - **📍 NYC locals** — SoundCloud profile city (artist row, else the scan's city, as
+    `raCity()`). Says what it hid, split "based elsewhere" vs "no city on their
+    profile". §82.
+  - **Venue filter** — every show in the window, not `next_venue` (§62): at Signal,
+    18 of 78 artists have a sooner show elsewhere. Rows name the show at the picked
+    room and "+N more" rooms. Grouping on `venue_id`, then a THIRD copy of
+    `normalize_venue_name()` (CLAUDE.md updated: change all three).
+  - **Song sort** Most played / Newest, one setting for every open artist; each song
+    shows its date. "Newest" = SoundCloud **upload** date, the only date the scan
+    keeps.
+
+## Parked / next
+
+- **Real release dates.** "Newest" sorts on upload date; back-catalogue uploads read
+  as new. Fixing it means `sc-enrich` storing SoundCloud's `release_date` fields and
+  a re-scan. Not asked for yet.
+- **City coverage is about half** (581 / 1,123). Unknown city is shown as unknown, not
+  as non-local; more scans fill it.
+- **Venue normaliser now lives in three places** (SQL, dashboard, dj.html). A shared
+  `assets/venue.js` (like `buzz.js`) would take it to two.
+
+---
+
 # Carryover - 2026-09-30 (campaign stats, DICE back via the database, guest DJ link + own-SoundCloud export - DESKTOP)
 
 **Closed 2026-09-30 on the DESKTOP.** No branch; everything is on `master` and

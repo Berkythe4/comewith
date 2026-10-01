@@ -57,6 +57,10 @@ carries the state:
   memories would overwrite a 64-entry index with a 3-entry one and lose the map to files
   that are still sitting right there. Per-machine snapshots go in a subfolder —
   `DEV_DOCS/claude-memory/henry/` is the worked example (2026-08-15).
+- **Push the close commit itself, then check `0 0` against origin.** The 2026-09-12
+  close verified `0 0` after its code commits, then committed the docs and never
+  pushed them — nineteen days later two other closes had taken its LEARNINGS numbers.
+  A check is only true of the commits that existed when it ran. LEARNINGS §81.
 - **Say in CARRYOVER which machine the session ran on**, and name any branch the
   work is parked on, with the exact command to pick it up.
 - **`master` auto-deploys to Netlify.** Never merge un-green-lit work to master
