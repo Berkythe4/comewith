@@ -154,6 +154,11 @@ Deno.serve(async (req) => {
     //  • DEFAULT → NYC artists playing within the window (+ optional genre filter).
     let artists;
     let poolTotal: number | null = null, capped = false;
+    // EVERY show each artist plays inside the window, for the page's venue filter.
+    // next_venue is only their soonest one, and filtering a room on it hides
+    // anyone whose first show in the window is somewhere else (CLAUDE.md, §62).
+    // Raw venue_name + the resolved venue_id; the page groups on venue_id first.
+    const showsByName: Record<string, { date: string; venue: string; venue_id: string | null }[]> = {};
     if (artistNames.length) {
       const { data } = await admin.from("ra_artists").select(SEL).in("name", artistNames);
       // The SAME artist name can exist under several sources — Brainrack and
@@ -180,7 +185,7 @@ Deno.serve(async (req) => {
       const showByName: Record<string, { date: string; venue: string | null; genres: string[]; name: string }> = {};
       for (let off = 0; ; off += EV_PAGE) {
         const { data: evs, error: evErr } = await admin.from("ra_events")
-          .select("event_date, venue_name, genres, lineup")
+          .select("event_date, venue_name, venue_id, genres, lineup")
           .gte("event_date", from).lte("event_date", to)
           .order("event_date", { ascending: true })
           .range(off, off + EV_PAGE - 1);
@@ -195,6 +200,11 @@ Deno.serve(async (req) => {
             // this artist plays inside the window — that's what the DJ should see.
             const k = n.toLowerCase();
             if (!showByName[k]) showByName[k] = { date: e.event_date, venue: e.venue_name || null, genres: e.genres || [], name: n };
+            const vn = (e.venue_name || "").trim();
+            if (vn) {
+              const list = showsByName[k] || (showsByName[k] = []);
+              if (!list.some((x) => x.date === e.event_date && x.venue === vn)) list.push({ date: e.event_date, venue: vn, venue_id: e.venue_id || null });
+            }
           }
         }
         if (evs.length < EV_PAGE) break;
@@ -262,9 +272,12 @@ Deno.serve(async (req) => {
     const scUrls = [...new Set((artists || []).map((a) => a.soundcloud).filter(Boolean).map(norm))];
     const songByUrl: Record<string, any[]> = {};
     const statsByUrl: Record<string, any> = {};
+    // Profile city from the scan (sc-enrich), the fallback the dashboard's raCity()
+    // uses when the artist row carries none — the page's "NYC locals" reads it.
+    const cityByUrl: Record<string, string> = {};
     for (let i = 0; i < scUrls.length; i += 200) {
       const { data: cache } = await admin.from("sc_artist_cache")
-        .select("soundcloud, songs, is_producer, followers, ok, song_count").in("soundcloud", scUrls.slice(i, i + 200));
+        .select("soundcloud, songs, is_producer, followers, ok, song_count, city").in("soundcloud", scUrls.slice(i, i + 200));
       // SONGS ONLY — never DJ sets. sc-enrich already applies this cut when it
       // scans, but the cap it used is whatever maxMinutes the operator had set at
       // the time: the Elements lineup was scanned on 2026-07-28 with it wide open,
@@ -294,9 +307,12 @@ Deno.serve(async (req) => {
         // twelve or a hundred and twelve, so the DJ never knew to look further.
         // The length filter stays — that removes DJ sets, which is a different
         // thing from hiding songs.
+        if (c.city) cityByUrl[norm(c.soundcloud)] = c.city;
+        // created_at is the SoundCloud UPLOAD date — the only date the scan keeps.
+        // The page sorts "newest" on it and labels it as an upload date.
         songByUrl[norm(c.soundcloud)] = (c.songs || [])
           .filter((s: any) => !s.duration_ms || Number(s.duration_ms) <= SONG_MAX_MS)
-          .map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url }));
+          .map((s: any) => ({ sc_track_id: s.sc_track_id, title: s.title, url: s.permalink_url, duration_ms: s.duration_ms, playback_count: s.playback_count, artwork_url: s.artwork_url, created_at: s.created_at || null }));
       });
     }
     // A sub-group (e.g. the festival's Disco Den stage) so the DJ can sort it out.
@@ -341,10 +357,15 @@ Deno.serve(async (req) => {
           demand: dm?.known ? dm.demand : null, editorial: !!dm?.pick,
         };
       })(),
-      genres: a.genres || [], city: a.city || null,
+      genres: a.genres || [], city: a.city || (a.soundcloud ? cityByUrl[norm(a.soundcloud)] || null : null),
       group: discoSet.has(a.name) ? "disco" : "main",
       day: dayOf[a.name] || null,
       next_event_date: a.next_event_date, next_venue: a.next_venue, next_event_url: a.next_event_url,
+      // An artist picked up only by the next_event_date sweep has no event row;
+      // their own stamped show stands in when it falls inside the window.
+      shows: showsByName[(a.name || "").trim().toLowerCase()]
+        || (a.next_venue && a.next_event_date >= from && a.next_event_date <= to
+          ? [{ date: a.next_event_date, venue: String(a.next_venue).trim(), venue_id: null }] : []),
       songs: a.soundcloud ? (songByUrl[norm(a.soundcloud)] || []) : [],
     }));
 

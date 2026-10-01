@@ -499,7 +499,8 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **`venueKey()` in `dashboard.html` MIRRORS `normalize_venue_name()`** and is only
   for spellings the database has not resolved. The SQL is the source of truth;
   change one, change the other. Prefer `venueIdent(e)` (the resolved `venue_id`
-  when present) for grouping.
+  when present) for grouping. **`dj.html` carries a third copy** (its venue filter,
+  2026-10-01) — change all three.
 - **Why any of this exists (the evidence, kept because it is the argument):**
   venue names arrive as FREE TEXT from three feeds and prod held `'Refuge'`,
   `'REFUGE'` and `'REFUGE '` (trailing space) as three strings — 155 of them for

@@ -128,6 +128,11 @@
   .song.playing .n{color:var(--lime);}
   .song.playing .mini.play{background:var(--lime);color:#0f0814;border-color:var(--lime);}
   .songmore{padding:7px 0 0;border-top:1px solid var(--line);}
+  .songsort{display:flex;gap:6px;align-items:center;padding:2px 0 7px;font-family:var(--mono);font-size:.64rem;color:var(--faint);}
+  .songsort span{margin-right:2px;}
+  .mini.on{background:var(--lime);color:#0f0814;border-color:var(--lime);font-weight:700;}
+  .gchip.nyc.on{background:var(--hot,#ff5ca8);border-color:var(--hot,#ff5ca8);color:#1a0a12;}
+  .tools select.on{border-color:var(--lime);color:var(--lime);}
   .mini{font-family:var(--mono);font-size:.66rem;padding:4px 9px;border-radius:7px;border:1px solid var(--line2);
     cursor:pointer;white-space:nowrap;background:none;color:var(--cream);}
   .mini.add{background:var(--lime);color:#0f0814;border-color:var(--lime);font-weight:700;}
@@ -214,7 +219,16 @@ const CWURL='https://yaytdosxfhcqatmhctzk.supabase.co',CWKEY='sb_publishable_Iki
 const SEND_TO='berky@comewith.org';
 const $=s=>document.querySelector(s);
 const esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const NYC=/\b(new york|nyc|brooklyn|queens|bronx|manhattan|bushwick|ridgewood|astoria)\b/i;
+// Same test as the dashboard's NYC_RE / "📍 NYC locals": the artist's profile city.
+const NYC=/\b(new york|nyc|brooklyn|queens|the bronx|bronx|manhattan|staten island|ridgewood|bushwick|astoria)\b/i;
+// Venue identity. MIRRORS venueKey() in dashboard.html, which mirrors
+// public.normalize_venue_name() (208) — the SQL is the source of truth; change
+// one, change the others. Feeds send the same room as 'Refuge', 'REFUGE' and
+// 'REFUGE ', so a raw string is never a room. The resolved venue_id wins.
+const VACC={à:'a',á:'a',â:'a',ã:'a',ä:'a',å:'a',ç:'c',è:'e',é:'e',ê:'e',ë:'e',ì:'i',í:'i',î:'i',ï:'i',ñ:'n',ò:'o',ó:'o',ô:'o',õ:'o',ö:'o',ø:'o',ù:'u',ú:'u',û:'u',ü:'u',ý:'y',ÿ:'y'};
+const venueKey=v=>String(v||'').toLowerCase().replace(/[àáâãäåçèéêëìíîïñòóôõöøùúûüýÿ]/g,c=>VACC[c]||c)
+  .replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').trim();
+const venueIdent=s=>s&&s.venue_id?'v:'+s.venue_id:venueKey(s&&s.venue);
 const fmtDate=d=>{try{return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}catch(_){return d||'';}};
 const fmtNum=n=>n>=1000?(n/1000).toFixed(n>=10000?0:1)+'k':String(n||0);
 const fmtLen=ms=>{const s=Math.round((+ms||0)/1000);return s?Math.floor(s/60)+':'+String(s%60).padStart(2,'0'):'';};
@@ -230,6 +244,8 @@ let PLAYING='';
 const OPEN=new Set();
 const akey=a=>(a&&a.name||'').trim().toLowerCase();
 let Q='', SORT='soon', MUSIC_ONLY=true, GENRE='', GRP='', DAY='', LIMIT=60, SETOPEN=true;
+let NYC_ONLY=false, VENUE='', SONGSORT='recent';
+let VENUES=[];  // [{k,label,n}] — every room on these bills, built per payload
 let LOADED=0;   // when the crate on screen was fetched
 
 // Buzz — the SAME formula the dashboard ranks with (assets/buzz.js, one copy).
@@ -254,6 +270,32 @@ function computeBuzz(){
   });
 }
 
+// Index every room each artist plays in the window. Filtering a venue on
+// next_venue (their SOONEST show) hid 271 of 1,499 artist-venue pairs on the
+// dashboard (§62) — so the filter reads every show. An older dj-station sends no
+// `shows`; the soonest show stands in rather than the filter breaking.
+function prepareVenues(){
+  if(!DATA) return;
+  const seen={}, count={};
+  (DATA.artists||[]).forEach(a=>{
+    const shows=(a.shows&&a.shows.length)?a.shows:(a.next_venue?[{date:a.next_event_date,venue:a.next_venue}]:[]);
+    a.vkeys=new Set();
+    a.vshows={};
+    shows.forEach(s=>{
+      const k=venueIdent(s); if(!k) return;
+      if(!a.vkeys.has(k)){ a.vkeys.add(k); a.vshows[k]=s; count[k]=(count[k]||0)+1; }
+      const raw=String(s.venue||'').trim(), m=seen[k]||(seen[k]={});
+      if(raw) m[raw]=(m[raw]||0)+1;
+    });
+    a.venueText=shows.map(s=>s.venue||'').join(' ');
+  });
+  // Label: the most common spelling, preferring one that isn't shouted on a tie
+  // (DICE upper-cases everything). Same rule as venueLabelPicker().
+  const label=k=>{ const m=seen[k]||{}; return Object.keys(m).sort((x,y)=>(m[y]-m[x])
+    ||((x===x.toUpperCase()?1:0)-(y===y.toUpperCase()?1:0))||x.localeCompare(y))[0]||k; };
+  VENUES=Object.keys(count).map(k=>({k,label:label(k),n:count[k]}))
+    .sort((x,y)=>x.label.toLowerCase().localeCompare(y.label.toLowerCase()));
+}
 function toast(msg,kind){
   const el=$('#toast'); if(!el) return;
   el.textContent=msg; el.className=(kind==='err'?'err ':'')+'on';
@@ -476,7 +518,7 @@ function renderSet(){
 // Every term has to land somewhere, which is what makes a two-word search useful.
 function matchOf(a,terms){
   if(!terms.length) return {art:true,songs:null};
-  const hay=[a.name,a.next_venue,a.city,(a.genres||[]).join(' ')].join(' ').toLowerCase();
+  const hay=[a.name,a.venueText||a.next_venue,a.city,(a.genres||[]).join(' ')].join(' ').toLowerCase();
   const art=terms.every(t=>hay.includes(t));
   const nm=(a.name||'').toLowerCase(), songs=[];
   (a.songs||[]).forEach((s,i)=>{
@@ -502,14 +544,25 @@ function crateRows(){
     if(GRP&&(a.group||'main')!==GRP) return;
     if(DAY&&a.day!==DAY) return;
     if(GENRE&&!(a.genres||[]).includes(GENRE)) return;
+    if(VENUE&&!(a.vkeys&&a.vkeys.has(VENUE))) return;
     const m=matchOf(a,terms);
     if(!m.art&&!m.songs) return;
     rows.push({a,i,m});
   });
+  // NYC locals: what it removes is said on screen, split into "not local" and
+  // "no city on their profile" — the second is unknown, not out of town.
+  let notLocal=0, noCity=0;
+  if(NYC_ONLY){
+    rows=rows.filter(r=>{
+      if(NYC.test(r.a.city||'')) return true;
+      if(r.a.city) notLocal++; else noCity++;
+      return false;
+    });
+  }
   const noMusic=rows.filter(r=>!(r.a.songs||[]).length).length;
   if(MUSIC_ONLY) rows=rows.filter(r=>(r.a.songs||[]).length);
   rows.sort(SORTS[SORT]||SORTS.soon);
-  return {rows,noMusic};
+  return {rows,noMusic,notLocal,noCity};
 }
 function songBtn(tid){
   if(!tid) return '';
@@ -526,9 +579,15 @@ function syncSongButtons(){
 }
 function songRows(a,ai,only){
   const list=only?only.map(k=>[a.songs[k],k]):(a.songs||[]).map((s,k)=>[s,k]);
+  // Same two orders as the dashboard's song list. "Newest" is the SoundCloud
+  // UPLOAD date — the only date the scan keeps — and an undated song sinks.
+  list.sort(SONGSORT==='popular'
+    ?(x,y)=>(+y[0].playback_count||0)-(+x[0].playback_count||0)
+    :(x,y)=>String(y[0].created_at||'').localeCompare(String(x[0].created_at||'')));
   return list.map(([s,si])=>{
     const tid=String(s.sc_track_id||'');
-    const bits=[fmtLen(s.duration_ms),s.playback_count?fmtNum(s.playback_count)+' plays':''].filter(Boolean).join(' · ');
+    const up=s.created_at?new Date(s.created_at).toLocaleDateString('en-US',{month:'short',year:'numeric'}):'';
+    const bits=[fmtLen(s.duration_ms),s.playback_count?fmtNum(s.playback_count)+' plays':'',up].filter(Boolean).join(' · ');
     return `<div class="song" data-tid="${esc(tid)}" data-ai="${ai}" data-si="${si}">
       <span class="n" title="${esc(s.title||'')}">${esc(s.title||'')}</span>
       <span class="d">${esc(bits)}</span>
@@ -560,7 +619,13 @@ function artistCard(r){
   const open=OPEN.has(k)||!!hit;
   const only=(hit&&!OPEN.has(k))?m.songs:null;        // show the matches; "show all" opens the rest
   const gs=(a.genres||[]).slice(0,3).map(g=>`<span class="g">${esc(g)}</span>`).join(' ');
-  const show=a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
+  // With a venue picked, name THAT show — their soonest may be somewhere else,
+  // which would read as the filter being wrong. Say how many rooms they play.
+  const vs=VENUE&&a.vshows?a.vshows[VENUE]:null;
+  const nRooms=a.vkeys?a.vkeys.size:0;
+  const show=vs?`Playing ${esc(vs.venue)} · ${fmtDate(vs.date)}`
+    :a.next_event_date?`Playing ${esc(a.next_venue||'NYC')} · ${fmtDate(a.next_event_date)}`:'';
+  const more=nRooms>1?` <span title="${esc(Object.values(a.vshows).map(s=>s.venue+' '+fmtDate(s.date)).join(' · '))}">+${nRooms-1} more</span>`:'';
   // The day chip only appears on an edition scoped past its own night — otherwise
   // every card carries the same label and says nothing.
   const dayChip=a.day?`<span class="g day">${esc(a.day)}</span>`:'';
@@ -571,7 +636,7 @@ function artistCard(r){
   // artists per screen and read differently from the tool Keith trains people on.
   const src=SRC_TAG[a.source||'ra']||'';
   const tix=a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:'';
-  const sub=[show, (a.genres||[]).slice(0,2).map(esc).join(', '), a.city?'📍 '+esc(a.city):''].filter(Boolean).join(' · ');
+  const sub=[show+more, (a.genres||[]).slice(0,2).map(esc).join(', '), a.city?'📍 '+esc(a.city):''].filter(Boolean).join(' · ');
   return `<div class="row" data-card="${i}">
     <div class="rmain">
       <strong>${esc(a.name)}</strong>${a.buzz!=null?`<span class="chip buzz" title="Buzz ${a.buzz}/100 — scored on ${a.buzzCov}% of the inputs (plays, reach, RSVPs, catalogue); the same score as Keith's dashboard">🔥 ${a.buzz}</span>`:''}${src}${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${a.followers!=null?`<span class="rsub-i" title="SoundCloud followers">☁ ${fmtNum(a.followers)}</span>`:''}${a.ra_followers?`<span class="rsub-i" title="People following them on ra.co">${fmtNum(a.ra_followers)} RA</span>`:''}
@@ -581,11 +646,17 @@ function artistCard(r){
       ${n?`<button class="mini songsbtn${open?' on':''}" data-toggle="${esc(k)}">${open?'▾ songs':'🎵 '+n+' song'+(n===1?'':'s')}</button>`:'<span class="rsub-i" title="Nothing scanned for this artist yet">no music yet</span>'}
       ${a.soundcloud?`<a class="mini" href="${esc(a.soundcloud)}" target="_blank" rel="noopener" title="Open their SoundCloud">☁ ↗</a>`:''}
     </span>
-    ${open&&n?`<div class="songs" id="songs-${i}">${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${esc(k)}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
+    ${open&&n?`<div class="songs" id="songs-${i}">${n>1?songSortHtml():''}${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${esc(k)}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
   </div>`;
 }
+// One setting for every open artist, like the dashboard — flipping it per artist
+// would mean re-choosing it on each card.
+function songSortHtml(){
+  const b=(v,l,t)=>`<button class="mini${SONGSORT===v?' on':''}" data-songsort="${v}" title="${t}">${l}</button>`;
+  return `<div class="songsort"><span>Sort songs</span>${b('popular','Most played','Highest SoundCloud play count first')}${b('recent','Newest','Most recently uploaded to SoundCloud first')}</div>`;
+}
 function renderCrate(){
-  const {rows,noMusic}=crateRows();
+  const {rows,noMusic,notLocal,noCity}=crateRows();
   const shown=rows.slice(0,LIMIT);
   const gEls=$('#genreBar');
   if(gEls) gEls.innerHTML=genreBarHtml();
@@ -595,7 +666,9 @@ function renderCrate(){
     // A filter that is on by default has to say what it took away, or the crate
     // silently looks a third of its real size.
     +(MUSIC_ONLY&&noMusic?` · <b>${noMusic}</b> more on these bills have no music scanned yet — <button data-showallartists>show them</button>`:'')
-    +(!MUSIC_ONLY?` · <button data-hidenomusic>hide the ${noMusic} with no music</button>`:'');
+    +(!MUSIC_ONLY?` · <button data-hidenomusic>hide the ${noMusic} with no music</button>`:'')
+    +(NYC_ONLY?` · 📍 NYC locals only — hid <b>${notLocal}</b> based elsewhere${noCity?` and <b>${noCity}</b> with no city on their profile`:''} · <button data-nyc>show everyone</button>`:'')
+    +(VENUE?` · at <b>${esc((VENUES.find(v=>v.k===VENUE)||{}).label||'this venue')}</b> · <button data-venueclear>all venues</button>`:'');
   const res=$('#results');
   if(res) res.innerHTML=(shown.length?`<div class="rows">${shown.map(artistCard).join('')}</div>`:emptyHtml())
     +(shown.length<rows.length?`<button class="more" data-more>Show ${Math.min(60,rows.length-shown.length)} more · ${rows.length-shown.length} left</button>`:'');
@@ -619,6 +692,8 @@ function toolsHtml(){
   const hasDisco=(d.artists||[]).some(a=>a.group==='disco');
   const opt=(v,l)=>`<option value="${v}"${SORT===v?' selected':''}>${l}</option>`;
   return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('buzz','🔥 Buzz')}${opt('followers','Most SoundCloud followers')}${opt('rafollowers','Most RA followers')}${opt('songs','Most songs')}${opt('venue','Venue A–Z')}${opt('name','Artist A–Z')}</select>
+    ${venueSelHtml()}
+    <button class="gchip nyc${NYC_ONLY?' on':''}" data-nyc title="Only artists whose SoundCloud profile city is in NYC">📍 NYC locals</button>
     ${days.length>1?`<button class="gchip${DAY===''?' on':''}" data-day="">All days</button>`+days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join(''):''}
     ${hasDisco?`<button class="gchip${GRP===''?' on':''}" data-grp="">All stages</button>
       <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main</button>
@@ -628,6 +703,18 @@ function toolsHtml(){
       <button class="recbtn" data-refresh title="Re-read the shows and songs. New artists Keith has pulled, and new music scanned since you opened this, appear here.">↻ Refresh</button>
       <button class="recbtn" data-recopen>📋 How it works</button>
     </span>`;
+}
+// Counts are artists playing that room anywhere in the window, not only on their
+// soonest night. A picked venue that a refresh dropped stays listed (at 0) so the
+// control never silently disagrees with the filter that is still applied.
+function venueSelHtml(){
+  if(VENUES.length<2&&!VENUE) return '';
+  const list=VENUES.slice();
+  if(VENUE&&!list.some(v=>v.k===VENUE)) list.unshift({k:VENUE,label:VENUE.replace(/^v:.*/,'(venue no longer listed)'),n:0});
+  return `<select id="venueSel" class="${VENUE?'on':''}" style="max-width:min(260px,100%);" title="Only artists playing this venue in the window">
+    <option value="">📍 All venues (${VENUES.length})</option>
+    ${list.map(v=>`<option value="${esc(v.k)}"${VENUE===v.k?' selected':''}>${esc(v.label)} · ${v.n}</option>`).join('')}
+  </select>`;
 }
 function freshLabel(){
   if(!LOADED) return '';
@@ -720,6 +807,7 @@ document.addEventListener('input',e=>{
 });
 document.addEventListener('change',e=>{
   if(e.target.id==='sortSel'){ SORT=e.target.value; LIMIT=60; renderCrate(); }
+  if(e.target.id==='venueSel'){ VENUE=e.target.value; LIMIT=60; renderCrate(); }
 });
 document.addEventListener('click',e=>{
   const t=e.target;
@@ -750,10 +838,13 @@ document.addEventListener('click',e=>{
   const g=t.closest('[data-genre]'); if(g){ GENRE=g.dataset.genre; LIMIT=60; renderCrate(); return; }
   const dy=t.closest('[data-day]'); if(dy){ DAY=dy.dataset.day; LIMIT=60; renderCrate(); return; }
   const gr=t.closest('[data-grp]'); if(gr){ GRP=gr.dataset.grp; LIMIT=60; renderCrate(); return; }
+  if(t.closest('[data-nyc]')){ NYC_ONLY=!NYC_ONLY; LIMIT=60; renderCrate(); return; }
+  if(t.closest('[data-venueclear]')){ VENUE=''; LIMIT=60; renderCrate(); return; }
+  const ss=t.closest('[data-songsort]'); if(ss){ SONGSORT=ss.dataset.songsort; renderCrate(); return; }
   if(t.closest('[data-showallartists]')){ MUSIC_ONLY=false; renderCrate(); return; }
   if(t.closest('[data-hidenomusic]')){ MUSIC_ONLY=true; renderCrate(); return; }
   if(t.closest('[data-more]')){ LIMIT+=60; renderCrate(); return; }
-  if(t.closest('[data-clearall]')){ Q='';GENRE='';DAY='';GRP='';MUSIC_ONLY=true;LIMIT=60;
+  if(t.closest('[data-clearall]')){ Q='';GENRE='';DAY='';GRP='';MUSIC_ONLY=true;NYC_ONLY=false;VENUE='';LIMIT=60;
     const q=$('#q'); if(q)q.value=''; const c=$('#clrq'); if(c)c.hidden=true; renderCrate(); return; }
 
   if(t.id==='ownAdd'){
@@ -778,7 +869,7 @@ async function load(){
   let j;
   try{ j=await api({}); }
   catch(e){ $('#shell').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
-  DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
+  DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz(); prepareVenues();
   $('#shell').innerHTML=shellHtml();
   const c=$('#clrq'); if(c) c.hidden=!Q;
   renderSet(); renderCrate();
@@ -807,7 +898,7 @@ async function refresh(loud){
   try{
     const j=await api({});
     const before=(DATA.artists||[]).length, beforeSongs=(DATA.artists||[]).reduce((s,a)=>s+((a.songs||[]).length),0);
-    DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
+    DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz(); prepareVenues();
     renderSet(); renderCrate();
     const box=$('#ownBox'); if(box&&(ownWasOpen||form.a||form.t||form.u)) box.open=true;
     const set=(id,val)=>{ const el=$(id); if(el&&val) el.value=val; };
