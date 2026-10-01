@@ -89,6 +89,24 @@
     cursor:pointer;padding:0;text-decoration:underline;}
   h2.sec{font-family:var(--disp);font-size:1rem;margin:20px 0 8px;}
 
+  /* ── Artist rows (the dashboard's .hub-li list) ─────────────────────────── */
+  .rows{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-bottom:9px;}
+  .row{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;padding:10px 14px;border-bottom:1px solid var(--line);}
+  .row:last-child{border-bottom:0;}
+  .rows>.row:nth-child(even){background:rgba(128,128,128,.045);}
+  .rmain{flex:1 1 260px;min-width:0;display:flex;flex-wrap:wrap;gap:4px 8px;align-items:baseline;}
+  .rmain strong{font-size:.98rem;}
+  .rsub{flex:0 0 100%;color:var(--faint);font-size:.78rem;}
+  .rsub a{color:var(--dim);}
+  .rsub-i{font-family:var(--mono);font-size:.68rem;color:var(--faint);}
+  .racts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+  .chip.buzz{font-family:var(--mono);font-size:.64rem;font-weight:700;background:var(--lime);color:#0f0814;border-radius:4px;padding:0 6px;}
+  .g.src{color:var(--faint);}
+  .mini.songsbtn{border-color:var(--limed);color:var(--lime);}
+  .mini.songsbtn.on{background:var(--lime);color:#0f0814;}
+  .row .songs{flex:0 0 100%;margin-top:4px;}
+  a.mini{text-decoration:none;}
+
   /* ── Artist cards ───────────────────────────────────────────────────────── */
   .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:12px 14px;margin-bottom:9px;}
   .art-top{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;}
@@ -214,6 +232,28 @@ const akey=a=>(a&&a.name||'').trim().toLowerCase();
 let Q='', SORT='soon', MUSIC_ONLY=true, GENRE='', GRP='', DAY='', LIMIT=60, SETOPEN=true;
 let LOADED=0;   // when the crate on screen was fetched
 
+// Buzz — the SAME formula the dashboard ranks with (assets/buzz.js, one copy).
+// dj-station sends the raw inputs per artist; the score is computed here so the
+// two pages can never disagree about who is hot. Until the module arrives the
+// Buzz sort falls back to soonest-first rather than inventing an order.
+let BUZZ=null;
+import('./assets/buzz.js').then(m=>{BUZZ=m; if(DATA){computeBuzz(); renderCrate();}}).catch(()=>{});
+function computeBuzz(){
+  if(!BUZZ||!DATA) return;
+  (DATA.artists||[]).forEach(a=>{
+    const b=a.buzz_in||{};
+    const raF=+a.ra_followers||0, scF=b.scan_ok?(+b.sc_followers||0):0;
+    // Mirrors dashboard.html scArtistData(): unknown stays unknown (see buzz.js).
+    const c={topPlays:+b.top_plays||0, topTrack:(b.scan_ok&&b.top_plays!=null)?{}:null,
+      reach:Math.max(raF,scF), raFollowers:raF,
+      demand:+b.demand||0, demandKnown:b.demand!=null,
+      songCount:b.scan_ok?(+b.song_count||0):0, scanOk:!!b.scan_ok,
+      editorial:!!b.editorial, recent:!!b.recent};
+    BUZZ.scScoreArtist(c);
+    a.buzz=c.buzz; a.buzzCov=c.coverage;
+  });
+}
+
 function toast(msg,kind){
   const el=$('#toast'); if(!el) return;
   el.textContent=msg; el.className=(kind==='err'?'err ':'')+'on';
@@ -337,6 +377,37 @@ function ownMatchUpdate(){
     if(wrap) wrap.hidden=false;
   }
 }
+// ── Export to the DJ's OWN SoundCloud (migration 215) ────────────────────────
+// SoundCloud asks them to approve Come With once, we build the playlist in their
+// account, and their access is thrown away straight after — nothing is stored.
+// Songs they typed in by hand aren't SoundCloud tracks, and some uploaders block
+// API adds; both are named in the result rather than dropped silently.
+function exportHtml(tl){
+  const onSc=tl.filter(t=>/^\d+$/.test(String(t.sc_track_id||''))).length;
+  const x=DATA.sc_export, st=new URLSearchParams(location.search).get('sc');
+  let res='';
+  if(x&&x.ok){
+    const sk=x.skipped||{}, bl=(sk.blocked||[]).length, off=(sk.not_on_soundcloud||[]).length;
+    res=`<div class="set-note" style="color:var(--lime)">✓ Last export: ${x.tracks||0} song${x.tracks===1?'':'s'} into ${x.sc_username?'<b>'+esc(x.sc_username)+'</b>’s':'your'} SoundCloud${x.result_url?` · <a href="${esc(x.result_url)}" target="_blank" rel="noopener">open playlist ↗</a>`:''} <span style="color:var(--faint)">(${fmtWhen(x.completed_at)}, private — change it on SoundCloud)</span>
+      ${bl?`<br>⚠ ${bl} not added — the uploader blocks API adds: ${esc((sk.blocked||[]).slice(0,6).join(', '))}${bl>6?'…':''}`:''}
+      ${off?`<br>ℹ ${off} of your own records aren't SoundCloud tracks, so they aren't in it: ${esc((sk.not_on_soundcloud||[]).slice(0,6).join(', '))}${off>6?'…':''}`:''}</div>`;
+  } else if(x&&!x.ok&&st){
+    res=`<div class="set-note" style="color:#ff8a8a">✕ Export didn't go through: ${esc(x.error||'unknown error')}</div>`;
+  } else if(st==='denied'){
+    res=`<div class="set-note" style="color:#ff8a8a">You declined on SoundCloud, so nothing was created.</div>`;
+  }
+  return `<div class="set-note" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+      <button class="recbtn" data-scexport ${onSc?'':'disabled'} title="Creates a NEW private playlist of this set in YOUR SoundCloud account. SoundCloud will ask you to approve Come With first; we don't keep your login.">☁ Export to my SoundCloud</button>
+      <span style="color:var(--faint)">${onSc?`${onSc} of ${tl.length} are SoundCloud tracks`:'add some songs from the crate first'}</span>
+    </div>${res}`;
+}
+const fmtWhen=t=>{try{return new Date(t).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});}catch(_){return '';}};
+async function scExport(btn){
+  if(btn){btn.disabled=true;btn.textContent='☁ Opening SoundCloud…';}
+  try{ const j=await api({action:'sc_export_start'}); location.href=j.authorize_url; }
+  catch(e){ toast(e.message||'Could not start the export','err'); if(btn){btn.disabled=false;btn.textContent='☁ Export to my SoundCloud';} }
+}
+
 function renderSet(){
   setIndexes();
   const tl=DATA.tracklist||[];
@@ -379,6 +450,7 @@ function renderSet(){
       ${curated&&mine?`<span class="set-note" style="margin:0;">${mine} yours · ${curated} from Keith</span>`:''}
     </div>
     <div class="set-note">Order doesn't matter here — you arrange the set when you mix. This is the tracklist the episode page publishes.</div>
+    ${exportHtml(tl)}
     ${rows||`<div class="set-empty">Nothing in it yet. <b>Dig the crate below</b> and hit <b>＋ add</b>, or put in your own records — most of a guest mix is records that were never in anyone's crate.</div>`}
     <details class="own" id="ownBox"${ownOpen?' open':''}>
       <summary>＋ Add a track of your own</summary>
@@ -416,7 +488,11 @@ function matchOf(a,terms){
 const SORTS={
   soon:(x,y)=>String(x.a.next_event_date||'9999').localeCompare(String(y.a.next_event_date||'9999')),
   name:(x,y)=>(x.a.name||'').localeCompare(y.a.name||''),
-  followers:(x,y)=>(y.a.followers||0)-(x.a.followers||0),
+  // SoundCloud followers from the scan; unmeasured sink instead of counting as 0.
+  followers:(x,y)=>((y.a.followers??-1)-(x.a.followers??-1))||((y.a.ra_followers||0)-(x.a.ra_followers||0)),
+  rafollowers:(x,y)=>(y.a.ra_followers||0)-(x.a.ra_followers||0),
+  buzz:(x,y)=>(BUZZ?(BUZZ.buzzSort(y.a.buzz)-BUZZ.buzzSort(x.a.buzz)):0)||String(x.a.next_event_date||'9999').localeCompare(String(y.a.next_event_date||'9999')),
+  venue:(x,y)=>(x.a.next_venue||'￿').toLowerCase().localeCompare((y.a.next_venue||'￿').toLowerCase())||String(x.a.next_event_date||'').localeCompare(String(y.a.next_event_date||'')),
   songs:(x,y)=>((y.a.songs||[]).length)-((x.a.songs||[]).length),
 };
 function crateRows(){
@@ -465,6 +541,12 @@ function songRows(a,ai,only){
 // Removing the per-artist cap took Above & Beyond from 15 songs to 404; across
 // this crate that is ~15,000 rows, and building them all up front locked the
 // page for seconds on a phone.
+const SRC_TAG={
+  ra:'<span class="g src" title="Show listed on Resident Advisor">RA</span>',
+  dice:'<span class="g src" title="Show listed on DICE">DICE</span>',
+  tm:'<span class="g src" title="Show listed on Ticketmaster">TM</span>',
+  elements:'<span class="g src" title="On the Elements festival bill">Elements</span>',
+};
 function artistCard(r){
   const {a,i,m}=r;
   const n=(a.songs||[]).length;
@@ -482,13 +564,23 @@ function artistCard(r){
   // The day chip only appears on an edition scoped past its own night — otherwise
   // every card carries the same label and says nothing.
   const dayChip=a.day?`<span class="g day">${esc(a.day)}</span>`:'';
-  return `<div class="card" data-card="${i}">
-    <div class="art-top"><strong>${esc(a.name)}</strong>${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${gs}${a.followers?`<span class="meta">· ${fmtNum(a.followers)} followers</span>`:''}</div>
-    ${show?`<div class="meta">${show}${a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:''}</div>`:''}
-    <div class="cardacts">
-      ${n?`<button class="btn songs" data-toggle="${esc(k)}">${open?'▾':'🎵'} ${n} song${n===1?'':'s'}</button>`:'<span class="meta">no music scanned yet — nothing to audition here</span>'}
-      ${a.soundcloud?`<a class="btn" href="${esc(a.soundcloud)}" target="_blank" rel="noopener">☁ SoundCloud ↗</a>`:''}
+  // ONE LINE PER ARTIST, the dashboard's Come With Radio row (dashboard.html
+  // .hub-li): name + chips, then "Playing <venue> · <date> · genres · city",
+  // actions on the right, songs opening full-width underneath. Made the standard
+  // for external links on 2026-09-30 — the card layout showed a third as many
+  // artists per screen and read differently from the tool Keith trains people on.
+  const src=SRC_TAG[a.source||'ra']||'';
+  const tix=a.next_event_url?` · <a href="${esc(a.next_event_url.startsWith('http')?a.next_event_url:'https://ra.co'+a.next_event_url)}" target="_blank" rel="noopener">tickets ↗</a>`:'';
+  const sub=[show, (a.genres||[]).slice(0,2).map(esc).join(', '), a.city?'📍 '+esc(a.city):''].filter(Boolean).join(' · ');
+  return `<div class="row" data-card="${i}">
+    <div class="rmain">
+      <strong>${esc(a.name)}</strong>${a.buzz!=null?`<span class="chip buzz" title="Buzz ${a.buzz}/100 — scored on ${a.buzzCov}% of the inputs (plays, reach, RSVPs, catalogue); the same score as Keith's dashboard">🔥 ${a.buzz}</span>`:''}${src}${dayChip}${a.group==='disco'?'<span class="g disco">🕺 Disco Den</span>':''}${NYC.test(a.city||'')?'<span class="g nyc">📍 NYC</span>':''}${a.followers!=null?`<span class="rsub-i" title="SoundCloud followers">☁ ${fmtNum(a.followers)}</span>`:''}${a.ra_followers?`<span class="rsub-i" title="People following them on ra.co">${fmtNum(a.ra_followers)} RA</span>`:''}
+      <div class="rsub">${sub||'&nbsp;'}${tix}</div>
     </div>
+    <span class="racts">
+      ${n?`<button class="mini songsbtn${open?' on':''}" data-toggle="${esc(k)}">${open?'▾ songs':'🎵 '+n+' song'+(n===1?'':'s')}</button>`:'<span class="rsub-i" title="Nothing scanned for this artist yet">no music yet</span>'}
+      ${a.soundcloud?`<a class="mini" href="${esc(a.soundcloud)}" target="_blank" rel="noopener" title="Open their SoundCloud">☁ ↗</a>`:''}
+    </span>
     ${open&&n?`<div class="songs" id="songs-${i}">${songRows(a,i,only)}${only?`<div class="songmore"><button class="mini" data-showall="${esc(k)}">show all ${n} songs</button> <span class="d" style="color:var(--faint);font-family:var(--mono);font-size:.66rem;">${only.length} match your search</span></div>`:''}</div>`:''}
   </div>`;
 }
@@ -505,7 +597,7 @@ function renderCrate(){
     +(MUSIC_ONLY&&noMusic?` · <b>${noMusic}</b> more on these bills have no music scanned yet — <button data-showallartists>show them</button>`:'')
     +(!MUSIC_ONLY?` · <button data-hidenomusic>hide the ${noMusic} with no music</button>`:'');
   const res=$('#results');
-  if(res) res.innerHTML=(shown.map(artistCard).join('')||emptyHtml())
+  if(res) res.innerHTML=(shown.length?`<div class="rows">${shown.map(artistCard).join('')}</div>`:emptyHtml())
     +(shown.length<rows.length?`<button class="more" data-more>Show ${Math.min(60,rows.length-shown.length)} more · ${rows.length-shown.length} left</button>`:'');
   markPlaying();
 }
@@ -526,7 +618,7 @@ function toolsHtml(){
   const days=[...new Set((d.artists||[]).map(a=>a.day).filter(Boolean))];
   const hasDisco=(d.artists||[]).some(a=>a.group==='disco');
   const opt=(v,l)=>`<option value="${v}"${SORT===v?' selected':''}>${l}</option>`;
-  return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('followers','Most followers')}${opt('songs','Most songs')}${opt('name','Artist A–Z')}</select>
+  return `<select id="sortSel" title="Order the crate">${opt('soon','Soonest show')}${opt('buzz','🔥 Buzz')}${opt('followers','Most SoundCloud followers')}${opt('rafollowers','Most RA followers')}${opt('songs','Most songs')}${opt('venue','Venue A–Z')}${opt('name','Artist A–Z')}</select>
     ${days.length>1?`<button class="gchip${DAY===''?' on':''}" data-day="">All days</button>`+days.map(dd=>`<button class="gchip${DAY===dd?' on':''}" data-day="${esc(dd)}">${esc(dd)}</button>`).join(''):''}
     ${hasDisco?`<button class="gchip${GRP===''?' on':''}" data-grp="">All stages</button>
       <button class="gchip${GRP==='main'?' on':''}" data-grp="main">🎧 Main</button>
@@ -634,6 +726,7 @@ document.addEventListener('click',e=>{
   if(t.closest('[data-recopen]')){ $('#recOv').classList.add('on'); return; }
   if(t.closest('[data-recclose]')||t.id==='recOv'){ $('#recOv').classList.remove('on'); return; }
   if(t.closest('[data-settoggle]')){ SETOPEN=!SETOPEN; renderSet(); return; }
+  if(t.closest('[data-scexport]')){ scExport(t.closest('[data-scexport]')); return; }
   if(t.id==='clrq'){ Q=''; const q=$('#q'); if(q){q.value='';q.focus();} $('#clrq').hidden=true; LIMIT=60; renderCrate(); return; }
 
   const pl=t.closest('[data-play]'); if(pl){ djPlay(pl.dataset.play,pl.dataset.t); return; }
@@ -685,7 +778,7 @@ async function load(){
   let j;
   try{ j=await api({}); }
   catch(e){ $('#shell').innerHTML='<div class="state">'+esc(e.message||'This link is invalid or has been revoked.')+'</div>'; return; }
-  DATA=j; LOADED=Date.now(); ARTBYNAME=null;
+  DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
   $('#shell').innerHTML=shellHtml();
   const c=$('#clrq'); if(c) c.hidden=!Q;
   renderSet(); renderCrate();
@@ -714,7 +807,7 @@ async function refresh(loud){
   try{
     const j=await api({});
     const before=(DATA.artists||[]).length, beforeSongs=(DATA.artists||[]).reduce((s,a)=>s+((a.songs||[]).length),0);
-    DATA=j; LOADED=Date.now(); ARTBYNAME=null;
+    DATA=j; LOADED=Date.now(); ARTBYNAME=null; computeBuzz();
     renderSet(); renderCrate();
     const box=$('#ownBox'); if(box&&(ownWasOpen||form.a||form.t||form.u)) box.open=true;
     const set=(id,val)=>{ const el=$(id); if(el&&val) el.value=val; };

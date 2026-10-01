@@ -207,6 +207,71 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-09-30 (campaign stats, DICE via the database, guest DJ link)
+
+**Three "the numbers look wrong" questions, each a real bug, and the guest-DJ tooling
+brought up to the dashboard's standard.**
+
+- 🟢 **Campaign stats are true (213, resend-webhook v31).** Resend's `email.sent`
+  echo doubled Sent and orphaned every later event. Repaired on prod; Sent is now
+  unique recipients. LEARNINGS §71.
+- 🟢 **DICE is back, through the database (214, pull-dice v27).** DICE needs a new
+  version header and blocks the edge runtime; calls now go via pg_net. 639/639 shows
+  in 36s. A blocked source can no longer reach the delete. §72, §73.
+- 🟢 **SoundCloud matches survive a Refresh** — DICE, Ticketmaster and RA pullers all
+  fixed (RA carries links, city, partner flag across its delete-and-reinsert). §74.
+- 🟢 **Followers mean one thing per label.** Sort by SoundCloud followers (measured) or
+  RA followers (RA rows only), on the dashboard and the guest link. §75.
+- 🟢 **Guest DJ link = the dashboard's crate.** Row layout, Buzz (shared
+  `assets/buzz.js`), Buzz / SC / RA / venue sorts, source tags. §76.
+- 🟢 **Export to your OWN SoundCloud (215, 216).** Guests from their link, teammates
+  from the dashboard ("☁ Copy to my SoundCloud"). One-shot OAuth, no stored
+  credential; two people, two playlists. Guest path tested by Keith.
+- 🟡 **Dashboard "Copy to my SoundCloud" round trip untested**, and the guest row
+  layout not yet viewed on a phone.
+- ⚪ **`ra_artists.follower_count` holds three meanings by source** (§75); a split is
+  the durable fix. Buzz inputs are still derived in two places.
+- ⚪ Still open from earlier closes: the 183 wrong `next_event_date` artists
+  (2026-09-10); the finance queue and Berky $100 (2026-09-28).
+
+## Current state — reconciled 2026-09-28 (finance ingest: settle before add)
+
+**The importer stopped guessing, and started saying which it did.**
+
+- 🟢 **`ingest-finance` settles before it adds (212, function v17).** It could only
+  ask "is there a row with this exact date and amount?" — blind to a cost incurred
+  at a gig and paid weeks later. That cost **$250 of contractor spend counted
+  twice across two months**, and let a $357.39 Stripe payout double-count revenue
+  as the net of a $361.00 fee already on the books. Now an ordered hierarchy: S0
+  identity → S1 settle an open payable → S2 same-day adopt → S3 settle within 90
+  days → S4 insert. Settlement writes `settled_at` and **never overwrites `date`**,
+  so an accrual stays in the month it was incurred. LEARNINGS §69.
+- 🟢 **Ambiguity queues instead of guessing (212).** `ingest_queue` — four reasons,
+  admin-only, anon-revoked. Where two rows could be the payment, nothing is
+  chosen. First real run: **27 items**, of which 26 are historical duplicates the
+  old exact-match rule had let through ($905.71; a constant 1.0664 amount ratio
+  across 25 of 26 pairs gave them away — the same charge at the quoted price and
+  at what the card was billed).
+- 🟢 **Every run is recorded (`ingest_runs`), and the Expenses tab shows it.** Last
+  run, how long ago, settled/added counts, a stale flag past a week, and the open
+  queue in plain English. The importer runs on a laptop the site cannot see, which
+  is how the feed once sat stale for a month with nobody told.
+- 🟢 **Report-only mode.** `report_only: true` computes every decision and writes
+  nothing but the run record — the settlement rules reach back 90 days over
+  history, so they get read before they get applied.
+- 🟡 **26 duplicates are queued, not cleared.** Keith clears them on the site.
+  They are owner-funded/personal, so clearing moves "what Come With owes Keith"
+  (−$906), not the cash reserve.
+- 🟡 **The Berky $100 needs a human.** One candidate after narrowing; settle the
+  8/16 row and retire the 9/8 row together, or neither.
+- ⚪ **`applied_migrations` is keyed on `version` alone** and silently overwrote a
+  row when 207 was used twice. Repaired; a `(version, sha256)` composite would
+  make it fail loudly instead. LEARNINGS §70. Not done.
+- ⚪ **Website-triggered import is not possible as asked.** The CSVs and `data.db`
+  live on Keith's desktop; a browser page cannot read them. Status and the queue
+  are on the site, running stays local (Desktop shortcut). Porting the importers
+  server-side is its own project.
+
 ## Current state — reconciled 2026-09-10 (DICE pagination, title-confirmed artists, Ep 4)
 
 **The scene data got materially more complete, by fixing reads rather than adding sources.**
@@ -1777,19 +1842,19 @@ deliberately left alone so they can't reappear in the next station.
 search across 14.5k songs, and the set being built sat in a collapsed `<details>`
 you could not remove from. Now a persistent set panel with running time and
 per-track remove, a sticky bar holding the set and the search, song-title search,
-sort/genre/paging, and a music-only default that says what it hid. LEARNINGS §69.
+sort/genre/paging, and a music-only default that says what it hid. LEARNINGS §77.
 
 **Done — a guest can add their own records.** Most of a guest mix is never in our
 crate. `dj-station` takes a track with no `sc_track_id` and gives it the synthetic
 `man_` id (102). The artist box is a picker over the crate, so a picked name
-matches ↻ Show info first time. LEARNINGS §72.
+matches ↻ Show info first time. LEARNINGS §80.
 
 **Done — the crate window starts at the DROP DATE.** Anchoring on "whenever the
 DJ opened the link" filled the crate with bills that are over before the episode
-airs. Overridable, with a live echo of the resulting window. LEARNINGS §70.
+airs. Overridable, with a live echo of the resulting window. LEARNINGS §78.
 
 **Done — the link is now refreshable in place**, and the latent index-keyed
-view-state bug that had to be fixed before that could exist. LEARNINGS §71.
+view-state bug that had to be fixed before that could exist. LEARNINGS §79.
 
 **Done — `scripts/check_inline_js.py`.** The extract-and-control syntax check
 CLAUDE.md has always mandated, as a command, using esprima because the laptop has

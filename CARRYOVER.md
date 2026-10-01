@@ -1,6 +1,198 @@
+# Carryover - 2026-09-30 (campaign stats, DICE back via the database, guest DJ link + own-SoundCloud export - DESKTOP)
+
+**Closed 2026-09-30 on the DESKTOP.** No branch; everything is on `master` and
+deployed. The 2026-09-28 block below is kept whole and is the previous close — its
+finance items (27 queued duplicates, the Berky $100) are **still open**, untouched here.
+
+## >> START HERE NEXT SESSION
+
+**1. Two SoundCloud exports need one real click each.** Both ship, neither round trip
+has been done from here (it needs a real SoundCloud login):
+- *Guest link* — Keith tested it on 2026-09-30 and it **worked**.
+- *Dashboard "☁ Copy to my SoundCloud"* (station builder, ② Put in order) — **not yet
+  tested.** Have Keith and Martin/Henry each export the same station; expect two
+  playlists in two accounts and a result modal on return. The dashboard comes back on
+  its default view after the redirect (it does not reopen the station) — the modal
+  carries the result.
+
+**2. Look at the guest crate on a phone.** `dj.html` moved from cards to the
+dashboard's row layout. Syntax-checked, not eyeballed. SHOW 10 (`Come With NYC Radio
+Ep6`, status building, 0 tracks) is the guest DJ's episode.
+
+**3. 41 DICE artists (10/8+) still have no SoundCloud match.** Before this session a
+match never survived a Refresh (§74), so "☁ Match SoundCloud" is worth one more press
+now that links stick.
+
+**4. DICE is unofficial and was blocked once already.** If Refresh lists DICE as
+failed: the rows are kept (§72). First check dice.fm's current JS bundle for the
+`X-Api-Timestamp` value (`eventListHeaders()`); it is set in migration 214's
+`dice_fetch_enqueue()`, not in the edge function.
+
+## State summary
+
+- **Migrations 001-216**, all applied, no drift (`applied_migrations` top = 216).
+  213 campaign-stats repair (data only) · 214 `dice_fetch_enqueue/collect` (pg_net,
+  service_role only) · 215 `sc_dj_exports` (RLS admin-only, anon 401) · 216
+  `origin` + `requested_by` on it.
+- **Functions deployed:** `resend-webhook` v31, `pull-dice` v27, `pull-ticketmaster`
+  v24, `pull-ra-market` v32, `sc-connect` v37, `sc-oauth` v24, `dj-station` v29.
+- **LEARNINGS §76** is the latest (§71-§76 added this session).
+- **Anon-401 invariant verified** on all five financial views; anon sweep clean incl.
+  `sc_dj_exports`; `post_apply.sql` 6 PASS / 3 INFO (standing counts).
+- **git**: `master` pushed and deployed (live site serves the new dashboard, dj.html
+  and `assets/buzz.js`). Machine: DESKTOP.
+- **Prod data now:** DICE 640 upcoming shows (through 11/11, 435 artists, status OK);
+  RA 996 shows / 1,340 artists; campaign stats: DI3 Announcement 82 sent, DI#3 Save
+  the Date 87 sent / 87 delivered / 57 opened.
+
+## Tomorrow's default
+
+Item 1 (the dashboard export click), then the guest DJ session. After that the
+2026-09-28 finance items (queue + Berky $100), and the long-standing 183 wrong
+`next_event_date` artists (2026-09-10), which nothing here touched.
+
+## This session shipped
+
+- **Campaign stats were wrong, and it was one bug.** Resend's `email.sent` webhook was
+  stored as a second `sent` row (82 showed as 164), and the duplicate made the
+  attribution `.maybeSingle()` error, orphaning every later delivered/opened event
+  (8/13 read 11 delivered of 87; really 87 / 57 opened). Webhook ignores `email.sent`;
+  migration 213 re-attributed 267 events and dropped 169 duplicates; Sent counts
+  unique recipients. §71.
+- **DICE was blocked, and a Refresh had wiped every upcoming DICE show** while
+  reporting OK. `pull-dice` now refuses before deleting (§72). DICE needs a new
+  `X-Api-Timestamp` header and still refuses the edge runtime, so its HTTP goes
+  through pg_net (214). Full window restored: 639/639, 36s; dashboard cap 600→900. §73.
+- **SoundCloud links were erased on every Refresh** by all three pullers (DICE/TM sent
+  nulls; RA delete-and-reinsert). Fixed; RA now carries links/city/partner across.
+  Scanned the 42 linked-but-unscanned DICE/TM artists. §74.
+- **"Most followers" sorted on RA's count** (0 for every DICE act). Now "Most SoundCloud
+  followers" + "Most RA followers", labelled chips, RA only on `source='ra'` rows. §75.
+- **Guest DJ link (dj.html):** SoundCloud followers, Buzz / SC / RA / venue sorts, Buzz
+  shared with the dashboard via `assets/buzz.js`, row layout, and **"Export to my
+  SoundCloud"** to the DJ's own account (one-shot OAuth, token never stored). §76.
+- **Dashboard "☁ Copy to my SoundCloud"** for every logged-in teammate (216). §76.
+- CLAUDE.md gained the standing rules for all of the above.
+
+## Parked / next
+
+- **49 webhook `sent` rows for non-campaign mail** (actor emails, invoices) were left in
+  `mailing_events`; no campaign, affect no stats. Delete or leave.
+- **`pull-ra-market` failed once with "Could not save events"** (nothing deleted; retry
+  succeeded; cause unknown — edge logs are empty on this plan). It now returns the real
+  message; capture it if it recurs.
+- **Buzz input derivation is still in two places** (`scArtistData()` and `dj-station`);
+  the formula is shared, the inputs are not. Change both.
+- **`ra_artists.follower_count` has three meanings** by source (§75). A rename/split is
+  the durable fix; not attempted.
+- **After "Copy to my SoundCloud" the dashboard does not reopen the station** it came
+  from. Carry the station id through `state` if that matters.
+
+---
+
+# Carryover - 2026-09-28 (finance ingest: settle before add - DESKTOP)
+
+**Closed 2026-09-28.** The 2026-09-10 block below is kept whole and is the
+previous close; everything under it is older still, untouched.
+
+## >> START HERE NEXT SESSION
+
+**1. 27 items are waiting in the ingest queue** — Expenses tab, top of the panel.
+26 are historical duplicates the old exact-match adopt rule let through ($905.71
+total: Beatport 23, Ableton 2, Janelle 1). Keith said he will clear these himself
+on the site. **They are `funded_by='owner'` / `cash_source='personal'`, so
+clearing them does NOT move the cash reserve** — it cuts "what Come With owes
+Keith" (now $25,410.76) by about $906. The 27th is the Berky $100 (below).
+
+**2. The Berky $100 is the one real open question.** A 2026-08-16 $100 contractor
+cost (event `b1723400`) may be the same payment as the 2026-09-08 Keith Berkman
+$100 that PayPal shows. Keith has confirmed the *other* two 9/8 Keith lines were
+an accidental pay-then-refund that nets to zero, so the queue item is narrowed to
+one candidate. If it IS the same payment, settle the 8/16 row (`settled_at`
+2026-09-08, `cash_source` paypal) **and retire the 9/8 row — the two together,
+never one alone.** Setting a cash source on the 8/16 row on its own subtracts the
+same $100 twice and breaks the tie-out.
+
+**3. Do NOT "fix" the No-cash-source filter by filling it in.** The single row in
+it is the Berky $100, and it is outside the cash reserve *on purpose*. That filter
+is for rows where nobody ever said which account paid — not for duplicates.
+
+**4. Janelle's September retainer had not actually been paid.** Keith processed it
+2026-09-28 after this session surfaced it. It will not appear until fresh
+Simplifi/PayPal/Bluevine statements are exported; then run the Desktop shortcut.
+Her vendor is now taught (`rules/paypal_vendor_map.yml` in the planner), so it
+lands in Marketing on its own.
+
+## State summary
+
+- **Migrations 001-212**, all applied, no drift. `212_ingest_settlement.sql` adds
+  `ingest_queue` + `ingest_runs` (+ `v_ingest_queue`), admin-only, anon-revoked.
+- **`ingest-finance` is at version 17**, deployed `--no-verify-jwt`. 23 tests
+  (was 13), `node --test supabase/functions/ingest-finance/index.test.ts`.
+- **LEARNINGS §70** is the latest. §69 = settle before add; §70 = a version-keyed
+  ledger silently overwrites.
+- **Anon-401 invariant verified** on all five financial views plus the three new
+  objects.
+- **git**: `master` = `0e58d4c`, pushed, deployed. Branch
+  `finance/settle-before-add` is merged and can be deleted.
+- **The Come With cash reserve ties to the bank statement exactly: $2,956.30.**
+
+## Tomorrow's default
+
+Clear the queue (item 1), then decide the Berky $100 (item 2). After that the
+finance surface needs nothing; the open work is elsewhere — the 183 wrong
+`next_event_date` artists from the 2026-09-10 close are still the biggest bug in
+this repo and are untouched by this session.
+
+## This session shipped
+
+- **`ingest-finance` settles before it adds.** An ordered hierarchy — S0 identity,
+  S1 settle an open payable, S2 same-day adopt, S3 settle within 90 days, S4
+  insert — replacing a single exact date+amount match that could not see a cost
+  incurred in one month and paid in the next. Ambiguity queues instead of
+  guessing. Settlement never overwrites `date`, so an accrual stays in the month
+  it was incurred with `settled_at` carrying the cash date.
+- **Migration 212** — `ingest_queue` (4 reasons) and `ingest_runs` (every run,
+  including `report_only` dry runs). Both admin-only and anon-revoked.
+- **Feed status on the Expenses tab** — last run, how long ago, settled/added
+  counts, a stale flag past a week, and the open queue with plain-English reasons.
+  The importer runs on a laptop this page cannot see, which is how the feed once
+  sat stale for a month unnoticed.
+- **Fixed: $250 of contractor cost double-counted** across August and September
+  (Henry merged into the 2026-08-16 accrual; Berky queued as ambiguous).
+- **Found and queued: $905.71 more** of the same class, spanning 2024-12 to
+  2026-03. A constant 1.0664 amount ratio across 25 of 26 pairs identified them —
+  the same charge booked once at the quoted price and once at what the card was
+  billed.
+- **Migration numbering collision repaired.** 207 was used twice; the
+  `applied_migrations` upsert had silently overwritten `207_link_pages.sql`'s
+  record. Row restored with its real sha256, this work renumbered to 212. Schema
+  was never affected. LEARNINGS §70.
+- Claude memory re-snapshotted into `DEV_DOCS/claude-memory/planner/` (25 files,
+  credential-scanned). **Root stays the desktop Comewith index — do not copy the
+  planner's 25-file set over its 68.**
+
+## Parked / next
+
+- **Composite key on `applied_migrations`** — `(version, sha256)` would make two
+  different files collide loudly instead of silently. Written up in §70, not done.
+- **A "recurring payee went quiet" check.** Janelle's missed September was caught
+  by Keith noticing the Marketing line looked thin, not by the system. Same shape
+  as the missing-revenue banner the events tab already has.
+- **Website-triggered import is not possible as asked** and was not attempted: the
+  CSVs and `data.db` are on Keith's desktop and a browser page cannot read them.
+  The site shows status and the queue; running stays local via the Desktop
+  shortcut. Porting the three importers server-side would change that and is its
+  own project.
+
+---
+
 # Carryover - 2026-09-12 (the DJ workspace, for the first guest mix - LAPTOP)
 
-**Closed 2026-09-12.** The 2026-09-10 block below is kept whole and is the
+**Closed 2026-09-12 on the LAPTOP; this close was not pushed until it was merged on
+2026-10-01, after the 09-28 and 09-30 desktop closes above.** Its LEARNINGS sections
+were renumbered §69-72 -> §77-80 in that merge (the desktop had already used 69-76).
+Original note: The 2026-09-10 block below is kept whole and is the
 previous close; everything under it is older still, untouched.
 
 ## >> START HERE NEXT SESSION
@@ -13,7 +205,7 @@ driven from the Build tab's own window, which has been sitting on today+4w.
    - Dashboard -> Radio -> SHOW 10 -> **✎ Episode details** -> **🎯 Point the
      artist window here**, then **↻ Refresh music & data** on the Build tab.
    - The link needs no regenerating and Miss Vee needs no new message - the page
-     is live-read, so the new artists appear on her next look. LEARNINGS §70.
+     is live-read, so the new artists appear on her next look. LEARNINGS §78.
    - Worth a second pass nearer the date: DICE listings only reach 22 Oct while
      that window runs to 5 Nov.
 
@@ -60,7 +252,7 @@ built, needs Keith.
   publishable key proven live first (`check_financial_views.py`).
 - **Full anon sweep: 0 FAIL** (`check_anon_exposure.py`). No new tables or views
   this session, so nothing needed adding to its two lists.
-- **Latest LEARNINGS: §72.** Four added (§69 §70 §71 §72).
+- **Latest LEARNINGS: §80.** Four added (§77 §78 §79 §80).
 - **Edge functions: `dj-station` deployed v25 then v26** (verify_jwt off, as it
   was). No other function touched. Deployed via `scripts/deploy_edge_function.py`.
 - **Prod DATA touched, deliberately:** SHOW 10's 48 tracks deleted - 46 auto-
@@ -100,20 +292,20 @@ pulling a real frame -> fill the go-live fields. If both are done, the
    and the search on screen; **search matches song titles** across 14.5k songs;
    sort, genre chips, paging; artists with no music hidden by default **with the
    count of what that removed on screen**; only the results repaint on a
-   keystroke. LEARNINGS §69.
+   keystroke. LEARNINGS §77.
 3. **A guest DJ can add their own records** - `dj-station` accepts a track with no
    `sc_track_id` and gives it the synthetic `man_` id (102). The artist box is a
    picker over the crate, so a picked name matches ↻ Show info first time; an
    artist we do not track reveals "where are they playing", which lands in
-   `comment` and never in `show_date`/`show_venue`. LEARNINGS §72.
+   `comment` and never in `show_date`/`show_venue`. LEARNINGS §80.
 4. **The crate window now starts at the DROP DATE** (+weeks), overridable, with a
    live echo of the resulting window in ✎ Episode details, a ↺ reset, and 🎯 Point
    the artist window here. Reach per feed is now reported and rendered. LEARNINGS
-   §70.
+   §78.
 5. **↻ Refresh on the DJ page**, plus a quiet re-fetch when a backgrounded tab
    returns after 10 minutes - and the latent bug that had to be fixed first:
    expanded cards were keyed by array index, which a refresh reorders. LEARNINGS
-   §71.
+   §79.
 6. **Two honesty fixes on the dashboard.** "🗑 Clear all songs" claimed the tracks
    were logged as passed and carried into next week; `raClearPlaylist` is a plain
    delete and writes nothing to `sc_song_log`. Tooltip and confirm now say what it

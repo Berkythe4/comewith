@@ -52,6 +52,53 @@ export function canonicalScUrl(raw: string | null | undefined): string | null {
   return u.replace(/\/s-[A-Za-z0-9]+$/, "") || null;
 }
 
+// Build (or update) a playlist in whichever account `token` belongs to. Shared by
+// the admin export (Keith's stored connection) and export_as (a guest DJ's one-shot
+// token handed over by sc-oauth), so the track pre-check and SoundCloud's form
+// quirks live in exactly one place.
+async function scBuildPlaylist(
+  token: string,
+  wanted: { id: number; title: string }[],
+  opt: { title: string; description: string; updateId: string | null; sharing?: string },
+): Promise<{ ok: true; playlist: any; added: { id: number }[]; skipped: string[] } | { ok: false; status: number; error: string }> {
+  // SoundCloud rejects the WHOLE playlist if even one track can't be added via
+  // the public API (uploader disabled off-SoundCloud/API embedding, or it went
+  // private/deleted since we cached it). Pre-check each track with this user's
+  // token and keep only the ones the API will actually accept — reporting the
+  // rest instead of failing the whole export.
+  const checks = await Promise.all(wanted.map(async (t) => {
+    try {
+      const cr = await fetch(`https://api.soundcloud.com/tracks/${t.id}`, { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
+      const tj = cr.ok ? await cr.json().catch(() => ({})) : {};
+      return { ...t, okTrack: cr.ok && tj.embeddable_by !== "none" };
+    } catch { return { ...t, okTrack: false }; }
+  }));
+  const good = checks.filter((t) => t.okTrack);
+  const skipped = checks.filter((t) => !t.okTrack).map((t) => t.title);
+  if (!good.length) return { ok: false, status: 422, error: `SoundCloud won't let any of these ${wanted.length} track(s) be added via the API — the uploaders have off-SoundCloud/API sharing turned off. Try a station with different songs.` };
+  const added = good.map((t) => ({ id: t.id }));
+  // SoundCloud's playlist endpoint rejects a JSON body ("Could not parse JSON
+  // request body") — it wants Rails-style nested form params instead.
+  const form = new URLSearchParams();
+  form.set("playlist[title]", opt.title);
+  form.set("playlist[description]", opt.description);
+  form.set("playlist[sharing]", opt.sharing || "private");
+  for (const t of added) form.append("playlist[tracks][][id]", String(t.id));
+  const scRes = await fetch(`https://api.soundcloud.com/playlists${opt.updateId ? "/" + opt.updateId : ""}`, {
+    method: opt.updateId ? "PUT" : "POST",
+    headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": SC_ACCEPT },
+    body: form.toString(),
+  });
+  const j = await scRes.json().catch(() => ({}));
+  if (!scRes.ok) {
+    console.error("sc playlist:", scRes.status, JSON.stringify(j).slice(0, 300));
+    if (scRes.status === 401) return { ok: false, status: 401, error: "SoundCloud connection expired — reconnect." };
+    const scMsg = (j?.errors?.[0]?.error_message || j?.error?.message || j?.error || j?.message || "").toString().slice(0, 160);
+    return { ok: false, status: 502, error: "SoundCloud rejected the playlist" + (scMsg ? ": " + scMsg : ". It may not recognize one of the track IDs.") };
+  }
+  return { ok: true, playlist: j, added, skipped };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: CORS });
   if (req.method !== "POST") return err(405, "POST only");
@@ -66,10 +113,16 @@ Deno.serve(async (req) => {
   const bearer = auth.replace(/^Bearer\s+/i, "");
   const roleOf = (t: string) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role || null; } catch { return null; } };
   let authed = bearer === SRK || roleOf(bearer) === "service_role";
+  let userId: string | null = null;   // the logged-in admin, when there is one
   if (!authed && bearer) {
     const uc = createClient(SUPA, Deno.env.get("SUPABASE_ANON_KEY")!, { global: { headers: { Authorization: auth } } });
     const { data: { user } } = await uc.auth.getUser();
-    if (user) { const { data: p } = await admin.from("profiles").select("role").eq("id", user.id).single(); authed = !!p && ["master_admin", "sub_admin"].includes(p.role); }
+    if (user) {
+      // deleted_at: a deactivated profile is no-role (098 contract).
+      const { data: p } = await admin.from("profiles").select("role, deleted_at").eq("id", user.id).single();
+      authed = !!p && !p.deleted_at && ["master_admin", "sub_admin"].includes(p.role);
+      if (authed) userId = user.id;
+    }
   }
   if (!authed) return err(401, "admin only");
 
@@ -156,6 +209,50 @@ Deno.serve(async (req) => {
     return ok({ authorize_url: authorize });
   }
 
+  // "Copy to MY SoundCloud" from the dashboard (migration 216). The same one-shot
+  // flow a guest DJ uses: whoever is logged in approves on SoundCloud and gets their
+  // own copy; nothing about their account is stored, and the stored singleton
+  // connection (Keith's, which also powers sync-back) is not involved at all.
+  if (action === "export_mine_start") {
+    if (!userId) return err(403, "log in to export to your own SoundCloud");
+    if (!clientId) return err(503, "SoundCloud app not configured.");
+    const playlistId = (body.playlist_id || "").toString();
+    if (!playlistId) return err(400, "playlist_id required");
+    const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
+    const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
+    const state = "me_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
+    const { error: xe } = await admin.from("sc_dj_exports").insert({ state, playlist_id: playlistId, code_verifier: verifier, origin: "dashboard", requested_by: userId });
+    if (xe) return err(500, "Could not start the export: " + xe.message);
+    const authorize = `https://secure.soundcloud.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
+    return ok({ authorize_url: authorize });
+  }
+
+  // A guest DJ's export, called ONLY by sc-oauth (service role) with the one-shot
+  // token it just exchanged. Always a NEW playlist in the DJ's account; never
+  // touches the station's own sc_playlist_id/url, which are Come With's export.
+  if (action === "export_as") {
+    if (!(bearer === SRK || roleOf(bearer) === "service_role")) return err(403, "service role only");
+    const playlistId = (body.playlist_id || "").toString();
+    const djToken = (body.access_token || "").toString();
+    if (!playlistId || !djToken) return err(400, "playlist_id and access_token required");
+    const { data: pl } = await admin.from("sc_playlists").select("id, name, station_no").eq("id", playlistId).single();
+    if (!pl) return err(404, "playlist not found");
+    const { data: tracks } = await admin.from("sc_playlist_tracks").select("sc_track_id, title").eq("playlist_id", playlistId).order("sort");
+    const all = tracks || [];
+    // Songs a DJ typed in by hand (synthetic 'man_' ids) are not SoundCloud tracks
+    // and cannot go in a SoundCloud playlist; they are reported, never dropped quietly.
+    const offSc = all.filter((t) => !Number(t.sc_track_id)).map((t) => (t.title || "untitled").toString());
+    const wanted = all.map((t) => ({ id: Number(t.sc_track_id), title: (t.title || "track " + t.sc_track_id).toString() })).filter((t) => t.id);
+    if (!wanted.length) return err(400, "This episode has no SoundCloud songs to export yet.");
+    const built = await scBuildPlaylist(djToken, wanted, {
+      title: pl.name || `Come With Radio — SHOW ${pl.station_no ?? ""}`.trim(),
+      description: `Built with Come With Radio (${SITE}/radio.html).`,
+      updateId: null,
+    });
+    if (!built.ok) return err(built.status, built.error);
+    return ok({ success: true, url: built.playlist.permalink_url || null, tracks: built.added.length, skipped: built.skipped, not_on_soundcloud: offSc });
+  }
+
   if (action === "export") {
     if (!row?.access_token) return err(400, "Connect SoundCloud first.");
     const playlistId = (body.playlist_id || "").toString();
@@ -170,45 +267,10 @@ Deno.serve(async (req) => {
     const wanted = (tracks || []).map((t) => ({ id: Number(t.sc_track_id), title: (t.title || "track " + t.sc_track_id).toString() })).filter((t) => t.id);
     if (!wanted.length) return err(400, "This station has no songs to export.");
 
-    // SoundCloud rejects the WHOLE playlist if even one track can't be added via
-    // the public API (uploader disabled off-SoundCloud/API embedding, or it went
-    // private/deleted since we cached it). Pre-check each track with this user's
-    // token and keep only the ones the API will actually accept — reporting the
-    // rest instead of failing the whole export.
-    const checks = await Promise.all(wanted.map(async (t) => {
-      try {
-        const cr = await fetch(`https://api.soundcloud.com/tracks/${t.id}`, { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT } });
-        const tj = cr.ok ? await cr.json().catch(() => ({})) : {};
-        // Reject deleted/private (non-200) and tracks explicitly blocked from embedding.
-        return { ...t, okTrack: cr.ok && tj.embeddable_by !== "none" };
-      } catch { return { ...t, okTrack: false }; }
-    }));
-    const good = checks.filter((t) => t.okTrack);
-    const skipped = checks.filter((t) => !t.okTrack).map((t) => t.title);
-    if (!good.length) return err(422, `SoundCloud won't let any of these ${wanted.length} track(s) be added via the API — the uploaders have off-SoundCloud/API sharing turned off. Try a station with different songs.`);
-    const trackObjs = good.map((t) => ({ id: t.id }));
-
     const description = (body.description || "").toString().slice(0, 4000) || "Built in the Come With dashboard from upcoming NYC artists.";
-    // SoundCloud's playlist endpoint rejects a JSON body ("Could not parse JSON
-    // request body") — it wants Rails-style nested form params instead.
-    const form = new URLSearchParams();
-    form.set("playlist[title]", pl.name || "Come With station");
-    form.set("playlist[description]", description);
-    form.set("playlist[sharing]", "private");
-    for (const t of trackObjs) form.append("playlist[tracks][][id]", String(t.id));
-    const isUpdate = !!pl.sc_playlist_id;
-    const scRes = await fetch(`https://api.soundcloud.com/playlists${isUpdate ? "/" + pl.sc_playlist_id : ""}`, {
-      method: isUpdate ? "PUT" : "POST",
-      headers: { "Authorization": "OAuth " + token, "Content-Type": "application/x-www-form-urlencoded", "accept": SC_ACCEPT },
-      body: form.toString(),
-    });
-    const j = await scRes.json().catch(() => ({}));
-    if (!scRes.ok) {
-      console.error("sc playlist:", scRes.status, JSON.stringify(j).slice(0, 300));
-      if (scRes.status === 401) return err(401, "SoundCloud connection expired — reconnect.");
-      const scMsg = (j?.errors?.[0]?.error_message || j?.error?.message || j?.error || j?.message || "").toString().slice(0, 160);
-      return err(502, "SoundCloud rejected the playlist" + (scMsg ? ": " + scMsg : ". It may not recognize one of the track IDs."));
-    }
+    const built = await scBuildPlaylist(token, wanted, { title: pl.name || "Come With station", description, updateId: pl.sc_playlist_id || null });
+    if (!built.ok) return err(built.status, built.error);
+    const j = built.playlist, trackObjs = built.added, skipped = built.skipped, isUpdate = !!pl.sc_playlist_id;
     const purl = j.permalink_url || null, pid = j.id != null ? String(j.id) : pl.sc_playlist_id;
     await admin.from("sc_playlists").update({ sc_playlist_id: pid, sc_playlist_url: purl, updated_at: new Date().toISOString() }).eq("id", playlistId);
     return ok({ success: true, url: purl, updated: isUpdate, tracks: trackObjs.length, skipped });

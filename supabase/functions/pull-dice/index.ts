@@ -28,7 +28,35 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const JH = { ...CORS, "Content-Type": "application/json" };
 const err = (s: number, m: string) => new Response(JSON.stringify({ error: m }), { status: s, headers: JH });
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Safari/605.1.15";
+// TRANSPORT: every DICE call goes through the DATABASE (migration 214), not fetch().
+// From 2026-09-30 DICE's Cloudflare answers 403 to anything leaving the Supabase edge
+// runtime, even carrying the exact headers dice.fm's web client sends; the same
+// request made by pg_net from the database gets 200. dice_fetch_enqueue() queues
+// calls (host fixed to api.dice.fm, headers set there, incl. the X-Api-Timestamp
+// version header DICE now requires) and dice_fetch_collect() reads them back. If DICE
+// starts 403-ing again, re-read dice.fm's current bundle for that header first.
+let DB: any = null;
+type DiceRes = { status: number | null; json: any | null; err: string };
+async function diceMany(reqs: { path: string; body?: unknown }[], waitMs = 25000): Promise<DiceRes[]> {
+  const fail = (err: string) => reqs.map(() => ({ status: null, json: null, err }));
+  const { data: ids, error } = await DB.rpc("dice_fetch_enqueue", { reqs });
+  if (error || !Array.isArray(ids)) return fail("enqueue: " + (error?.message || "no ids"));
+  const got = new Map<number, any>();
+  const until = Date.now() + waitMs;
+  while (got.size < ids.length && Date.now() < until) {
+    await new Promise((r) => setTimeout(r, 500));
+    const { data } = await DB.rpc("dice_fetch_collect", { ids: ids.filter((i: number) => !got.has(i)) });
+    for (const row of data || []) got.set(row.id, row);
+  }
+  return ids.map((i: number) => {
+    const row = got.get(i);
+    if (!row) return { status: null, json: null, err: "no response in time" };
+    if (row.timed_out || row.error_msg) return { status: null, json: null, err: row.error_msg || "timed out" };
+    if (row.status_code !== 200) return { status: row.status_code, json: null, err: `HTTP ${row.status_code}` };
+    try { return { status: 200, json: JSON.parse(row.content), err: "" }; }
+    catch { return { status: 200, json: null, err: "not JSON (challenge page?)" }; }
+  });
+}
 
 // NYC point (matches RA area 8) + the electronic/EDM genre tags DICE exposes.
 const NYC = { lat: 40.7128, lng: -74.006 };
@@ -55,25 +83,17 @@ const MAX_PAGES = 12;
 //
 // Pages come back date-ascending, so once a whole page sits beyond the window
 // there is nothing later worth asking for.
-async function search(tag: string, cutoff: string, stats: { pages: number }): Promise<any[]> {
+async function search(tag: string, cutoff: string, stats: { pages: number; lastStatus: string }): Promise<any[]> {
   const out: any[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    let j: any;
-    try {
-      const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
-      if (cursor) body.cursor = cursor;
-      const r = await fetch("https://api.dice.fm/unified_search", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "User-Agent": UA },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(12000),
-      });
-      if (!r.ok) break;
-      j = await r.json();
-    } catch { break; }
+    const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
+    if (cursor) body.cursor = cursor;
+    const [res] = await diceMany([{ path: "/unified_search", body }]);
+    if (!res.json) { stats.lastStatus = res.err; break; }
+    const j = res.json;
     stats.pages++;
 
     const found: any[] = [];
@@ -103,15 +123,6 @@ async function search(tag: string, cutoff: string, stats: { pages: number }): Pr
   }
   return out;
 }
-async function detail(id: string): Promise<any | null> {
-  try {
-    const r = await fetch(`https://api.dice.fm/events/${id}`, {
-      headers: { "User-Agent": UA }, signal: AbortSignal.timeout(12000),
-    });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
-}
 const isNYC = (v: any) => {
   const city = (v?.city?.name || "").toLowerCase();
   const addr = (v?.address || "").toLowerCase();
@@ -125,6 +136,7 @@ Deno.serve(async (req) => {
   const SUPA = Deno.env.get("SUPABASE_URL")!;
   const SRK = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const admin = createClient(SUPA, SRK);
+  DB = admin;
   const auth = req.headers.get("Authorization") || "";
   const bearer = auth.replace(/^Bearer\s+/i, "");
   const roleOf = (t: string) => { try { return JSON.parse(atob(t.split(".")[1].replace(/-/g, "+").replace(/_/g, "/"))).role || null; } catch { return null; } };
@@ -151,9 +163,12 @@ Deno.serve(async (req) => {
 
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
-    const searchStats = { pages: 0 };
-    for (const tag of TAGS) {
-      const evs = await search(tag, cutoff, searchStats);
+    const searchStats = { pages: 0, lastStatus: "" };
+    // Tags run in parallel: through the database each page is a queue-and-poll round
+    // trip, so sequential tags would spend most of the wall clock waiting.
+    const perTag = await Promise.all(TAGS.map((tag) => search(tag, cutoff, searchStats)));
+    for (let t = 0; t < TAGS.length; t++) {
+      const tag = TAGS[t], evs = perTag[t];
       for (const e of evs) {
         if (!cand.has(e.id)) cand.set(e.id, { ...e, _tag: tag.split(":")[1] });
       }
@@ -181,19 +196,20 @@ Deno.serve(async (req) => {
     const ids = picked.map((e) => e.id);
     const rows: Record<string, unknown>[] = [];
     const artistMap = new Map<string, Record<string, unknown>>();
-    let scanned = 0, kept = 0;
+    let scanned = 0, kept = 0, detailOk = 0;
 
     // Refuse to start work we cannot finish. The edge runtime's wall clock is
-    // ~150s; a full 900-id pass is ~113 rounds of 8. Stopping at a deadline and
+    // ~150s; a full 900-id pass is 18 rounds of 50 through the database. Stopping at a deadline and
     // SAYING SO beats being killed mid-pass, which writes nothing and leaves no
     // trace of the attempt. Candidates are soonest-first, so what a short run
     // drops is always the far end of the window, never a random hole.
     const DEADLINE = Date.now() + 110_000;
     let timedOut = false;
-    for (let i = 0; i < ids.length; i += 8) {
+    for (let i = 0; i < ids.length; i += 50) {
       if (Date.now() > DEADLINE) { timedOut = true; break; }
-      const batch = ids.slice(i, i + 8);
-      const details = await Promise.all(batch.map((id) => detail(id)));
+      const batch = ids.slice(i, i + 50);
+      const details = (await diceMany(batch.map((id) => ({ path: `/events/${id}` })))).map((r) => r.json);
+      detailOk += details.filter(Boolean).length;
       for (let k = 0; k < batch.length; k++) {
         scanned++;
         const id = batch[k];
@@ -222,15 +238,24 @@ Deno.serve(async (req) => {
           const akey = `dice:${a.artist_id}`;
           const prev = artistMap.get(akey);
           if (!prev || (date && (prev.next_event_date as string) > date)) {
+            // See the note at the artist upsert: no soundcloud/instagram/follower_count.
             artistMap.set(akey, {
-              ra_id: akey, source: "dice", name: a.name, soundcloud: null, instagram: null,
-              follower_count: null, image: a.image?.url || null, content_url: url,
+              ra_id: akey, source: "dice", name: a.name, image: a.image?.url || null, content_url: url,
               next_event_date: date, next_event_title: d.name || base.name, next_venue: venue.name || null,
               next_event_url: url, genres, fetched_at: new Date().toISOString(),
             });
           }
         }
       }
+    }
+
+    // A BLOCKED source is not an empty one. On 2026-09-30 DICE began answering 403 to
+    // every call; search() broke out quietly, zero candidates reached here, and the
+    // bounded delete below wiped every upcoming DICE show while reporting OK / 0
+    // saved. Refuse before deleting anything: no search page answered, or not one
+    // detail call did. The caller then shows DICE as FAILED, and the old rows stay.
+    if (searchStats.pages === 0 || (ids.length > 0 && detailOk === 0)) {
+      return err(502, `DICE is not answering (${searchStats.lastStatus || "detail calls all failed"}). Nothing was deleted; existing DICE shows are kept.`);
     }
 
     // 3. Replace ONLY the dice-sourced rows (never touch ra / tm).
@@ -243,10 +268,17 @@ Deno.serve(async (req) => {
       const { error } = await admin.from("ra_events").upsert(rows, { onConflict: "ra_id" });
       if (error) { console.error("dice ra_events:", error.message); return err(500, "Could not save DICE events: " + error.message); }
     }
+    // soundcloud / instagram / follower_count are deliberately NOT in this row. A column
+    // in an upsert payload is overwritten on conflict, and this feed has no value for
+    // them - sending null wiped every link sc-match had found, on every Refresh, so
+    // DICE/TM headliners (Purple Disco Machine, Vintage Culture) never stayed linked
+    // long enough to be scanned. Omitted, a new row gets null and an existing one keeps
+    // its link.
     const artistRows = [...artistMap.values()];
+    let artistError: string | null = null;
     if (artistRows.length) {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
-      if (ae) console.error("dice ra_artists:", ae.message);
+      if (ae) { console.error("dice ra_artists:", ae.message); artistError = ae.message; }
     }
     // last_date makes a short pull obvious at a glance: if DICE only reaches a
     // week out, that's the search's own horizon, not a filter you can widen.
@@ -256,13 +288,16 @@ Deno.serve(async (req) => {
       // the cap or the clock has a known blind spot at the far end of the window
       // and the UI must show that as a problem, not a tick.
       success: true, source: "dice",
-      status: (droppedOverCap > 0 || timedOut) ? "PARTIAL" : "OK",
+      status: (droppedOverCap > 0 || timedOut || artistError) ? "PARTIAL" : "OK",
       candidates: cand.size, in_window_candidates: inRange.length,
       search_pages: searchStats.pages,
       detailed: ids.length, dropped_over_cap: droppedOverCap,
       timed_out: timedOut, not_reached: timedOut ? ids.length - scanned : 0,
       scanned, saved: kept,
-      last_date: lastDate || null, artists: artistRows.length,
+      last_date: lastDate || null, artists: artistError ? 0 : artistRows.length,
+      // A failed artist save used to be a console line only, while the response
+      // still claimed every artist was written.
+      artist_error: artistError,
       // Echo the window actually pulled, so a caller can tell "DICE has nothing
       // there" apart from "I asked for the wrong dates".
       from, to: cutoff,

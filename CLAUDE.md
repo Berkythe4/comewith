@@ -355,6 +355,12 @@ segment. Public signup widgets pass the brand segment (`come_with` on the
 homepage; DI pages must pass `dance_infusion`). Never re-subscribe an
 unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 
+**Campaign stats come from `mailing_events`, and `resend-webhook` ignores
+`email.sent`.** `send-campaign` already writes the `sent` row; storing Resend's echo
+doubled every campaign's Sent and made the attribution lookup error, orphaning every
+later delivered/opened event (213 repaired it; LEARNINGS §71). Count every card by
+unique recipient, and never `.maybeSingle()` on a lookup another system can duplicate.
+
 ## Come With Radio (episodes live outside `events`)
 
 - **`station_no` is the SHOW counter; `edition_seq` is the episode number.** Two
@@ -406,6 +412,47 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
   343 → 829 events for six extra calls. **An unpaged read is a query with an
   undeclared cap** — same rule as PostgREST `max_rows`, and it truncates just as
   silently. LEARNINGS §66.
+- **DICE is reached THROUGH THE DATABASE, not `fetch()` (214, 2026-09-30).** DICE's
+  Cloudflare 403s every request from the edge runtime, even with dice.fm's exact
+  headers; the same request from pg_net gets 200. `pull-dice` queues calls with
+  `dice_fetch_enqueue()` (host fixed to api.dice.fm, service_role only) and polls
+  `dice_fetch_collect()`. DICE also now REQUIRES `X-Api-Timestamp` (set in 214) — if it
+  403s again, re-read dice.fm's current JS bundle for that header before assuming the
+  endpoint is gone. **Never invoke `pull-dice` itself via `net.http_post`**: pg_net's
+  worker waits on its in-flight batch, so the function's own DICE calls queue behind
+  the call that is waiting for them and it times out. Call it over plain HTTP.
+- **A blocked source must never reach a delete.** `pull-dice` returns 502 and deletes
+  nothing when no search page or no detail call answers; before that, a 403 read as
+  "zero shows" and a Refresh wiped every upcoming DICE event while reporting OK.
+- **A puller never sends a column it has no value for.** An upsert overwrites every
+  column in its payload, so `soundcloud: null` from `pull-dice` / `pull-ticketmaster`
+  wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage
+  Culture, Purple Disco Machine) never stayed linked long enough to be scanned. Omit
+  the key: a new row defaults to null and an existing row keeps what it has.
+- **`ra_artists.follower_count` means RA follows ONLY on `source='ra'` rows.** Elements
+  and hand-added rows store a SoundCloud count there; DICE/TM leave it null. So
+  "followers" for sorting is the SCAN's `sc_artist_cache.followers`, and an "RA
+  followers" label/sort only reads `follower_count` where `source='ra'`. Sorting on it
+  raw put 50 Cent (2.2M on SoundCloud) under RA acts with a few thousand.
+- **Buzz lives in `assets/buzz.js` — one copy, imported by `dashboard.html` AND
+  `dj.html`.** `dj-station` sends the raw inputs (`buzz_in`) and the page scores them,
+  so the guest crate ranks exactly like the dashboard. Change the formula there only;
+  if you change how an INPUT is derived in `scArtistData()`, change `dj-station` too.
+- **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`
+  stores a PKCE verifier in `sc_dj_exports`; `sc-oauth` recognises that state,
+  exchanges the code and calls `sc-connect export_as` (service role only), which
+  builds a NEW private playlist in the DJ's account through the same
+  `scBuildPlaylist()` as Keith's export. **The DJ's token is never stored.** It never
+  touches the station's own `sc_playlist_id` / `sc_playlist_url`.
+- **Anyone on the team can do the same from the dashboard (216): "☁ Copy to my
+  SoundCloud".** `sc-connect export_mine_start` writes an `sc_dj_exports` row with
+  `origin='dashboard'` + `requested_by`, and `sc-oauth` returns them to
+  `dashboard.html?sc=myexported`. Two people exporting one station get two playlists
+  in two accounts. The stored singleton connection (⇪ push / ↺ sync) is separate and
+  unchanged — do not route "my SoundCloud" through it.
+- **The guest crate (`dj.html`) uses the dashboard's ROW layout** (`.hub-li`: name +
+  chips, "Playing · date · genres · city" line, actions right, songs inline, zebra).
+  That is the standard for external links; do not bring back the card layout.
 - **Widening an input means re-checking every cap below it, in the same change.**
   Paging DICE took the 42-day pool 277 → 555 and pushed the Lane 8 show to
   position 319, past the old `maxDetail` default of 240 — fixing only the paging
@@ -555,7 +602,7 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **The crate window defaults to the episode's DROP DATE, not today.** Resolution
   order: explicit `dj_search_params.start` → `drop_date` → today; a start already in
   the past is ignored. The mix's promise is that every artist in it is playing NYC
-  *soon*, counted from the day it airs. LEARNINGS §70.
+  *soon*, counted from the day it airs. LEARNINGS §78.
 - **That window is implemented TWICE** — `dj-station`'s resolver and `raDjWindow()`
   in `dashboard.html`, which draws the live echo in ✎ Episode details. **Change one,
   change the other**, same standing tax as `v_plan_monthly` / `planModelMonth`.
@@ -571,13 +618,13 @@ unsubscribed email during an import (e.g. `chaddercheesy@gmail.com`).
 - **A hand-added track may carry the DJ's show tip-off, but it goes in `comment`,
   prefixed `DJ says they're playing:` — never in `show_date` / `show_venue`.** Those
   render on the public episode page as a checked fact. A show the feeds missed
-  belongs in `ra_events` with `source='manual'`. LEARNINGS §72.
+  belongs in `ra_events` with `source='manual'`. LEARNINGS §80.
 - **Hand-added tracks get the synthetic `man_…` `sc_track_id`** (migration 102), so
   dedupe, `sc_song_log` and the carry-over at finalize keep working. `source='dj'`
   marks the DJ's own picks — the only rows they are allowed to remove.
 - **View state survives a refetch only if it is keyed by IDENTITY.** Which cards are
   expanded is keyed by artist name; it was an index into `DATA.artists`, which a
-  refresh reorders. A position is not an identity. LEARNINGS §71.
+  refresh reorders. A position is not an identity. LEARNINGS §79.
 
 ## Public artist profiles (`artist.html`) — added 2026-08-27
 

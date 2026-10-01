@@ -74,17 +74,28 @@ Deno.serve(async (req) => {
       return jsonError(400, "missing type or email_id in payload");
     }
 
+    // Resend's own "email.sent" is ignored: send-campaign already wrote the 'sent'
+    // row. Storing it doubled every campaign's Sent count, and the duplicate made the
+    // attribution lookup below error, orphaning every later delivered/opened event
+    // (DI#3 Save the Date showed 11 delivered of 87; migration 213 repaired it).
+    if (eventType === "sent") {
+      return new Response(JSON.stringify({ success: true, ignored: "sent" }), { headers: JSON_HEADERS });
+    }
+
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
     // Find the original 'sent' event to attribute campaign + subscriber.
+    // limit(1), not maybeSingle() alone: a second matching row must not null the attribution.
     const { data: originalSent } = await admin
       .from("mailing_events")
       .select("campaign_id, subscriber_id")
       .eq("resend_event_id", resendEmailId)
       .eq("event_type", "sent")
+      .order("occurred_at", { ascending: true })
+      .limit(1)
       .maybeSingle();
 
     const newEventRow = {

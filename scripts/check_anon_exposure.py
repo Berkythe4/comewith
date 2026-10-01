@@ -61,6 +61,7 @@ MUST_BE_EMPTY = [
     ("subscribers", "the mailing list"),
     ("profiles", "staff accounts"),
     ("data_health_runs", "the audit log"),
+    ("sc_dj_exports", "guest-DJ SoundCloud exports (215)"),
     ("data_health_waivers", "the audit log"),
     ("capital_contributions", "what Keith has put in"),
     ("event_photos", "unpublished photos"),

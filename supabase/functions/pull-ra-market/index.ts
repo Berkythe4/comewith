@@ -182,27 +182,52 @@ Deno.serve(async (req) => {
     // Bounded at BOTH ends. The pull covers [dayFrom, dayTo]; deleting from
     // dayFrom forward and re-inserting only that range would discard every RA row
     // beyond it the moment the window stops being "today + everything".
-    await admin.from("ra_events").delete().eq("source", "ra")
+    const { error: de } = await admin.from("ra_events").delete().eq("source", "ra")
       .gte("event_date", dayFrom).lte("event_date", dayTo);
+    if (de) { console.error("ra_events delete:", de.message); return err(500, "Could not clear old RA events: " + de.message); }
+    // Carry over what OTHER tools added before this delete-and-reinsert erases it.
+    // RA sends a SoundCloud link for most artists but not all; sc-match fills the
+    // rest (plus `city`), and `is_partner` is a person's ruling. Re-inserting only
+    // RA's fields wiped all of that on every pull (the pull-dice/pull-ticketmaster
+    // bug, fixed 2026-09-30, in delete-and-reinsert form). RA's own link still wins
+    // where it sends one; a stored value only fills what RA left blank.
+    const kept = new Map<string, any>();
+    const artistIds = [...artistMap.keys()].map(String);
+    for (let i = 0; i < artistIds.length; i += 200) {
+      const { data: prior, error: pe } = await admin.from("ra_artists")
+        .select("ra_id,soundcloud,instagram,city,is_partner").in("ra_id", artistIds.slice(i, i + 200));
+      // Refuse rather than delete: a failed read here would silently become the wipe.
+      if (pe) { console.error("ra_artists read:", pe.message); return err(500, "Could not read existing artists; nothing was changed."); }
+      for (const r of prior || []) kept.set(r.ra_id, r);
+    }
+    let carried = 0;
+    for (const [id, row] of artistMap) {
+      const k = kept.get(String(id));
+      if (!row.soundcloud && k?.soundcloud) carried++;
+      row.soundcloud = row.soundcloud || k?.soundcloud || null;
+      row.instagram = row.instagram || k?.instagram || null;
+      row.city = k?.city ?? null;
+      row.is_partner = k?.is_partner ?? false;
+    }
     await admin.from("ra_artists").delete().eq("source", "ra")
       .gte("next_event_date", dayFrom).lte("next_event_date", dayTo);
     let evN = 0, arN = 0;
     const eventRows = [...eventMap.values()];
     if (eventRows.length) {
       const { error: e1 } = await admin.from("ra_events").upsert(eventRows, { onConflict: "ra_id" });
-      if (e1) { console.error("ra_events upsert:", e1.message); return err(500, "Could not save events."); }
+      if (e1) { console.error("ra_events upsert:", e1.message); return err(500, "Could not save events: " + e1.message); }
       evN = eventRows.length;
     }
     const artistRows = [...artistMap.values()];
     if (artistRows.length) {
       const { error: e2 } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
-      if (e2) { console.error("ra_artists upsert:", e2.message); return err(500, "Could not save artists."); }
+      if (e2) { console.error("ra_artists upsert:", e2.message); return err(500, "Could not save artists: " + e2.message); }
       arN = artistRows.length;
     }
 
     return new Response(JSON.stringify({
       success: true, area, days, pages, total_available: total,
-      events_saved: evN, artists_saved: arN,
+      events_saved: evN, artists_saved: arN, soundcloud_links_kept: carried,
       artists_with_soundcloud: artistRows.filter((a) => a.soundcloud).length,
       // Echo the window actually pulled, and say so when RA had more pages than
       // maxPages allowed — a truncated pull must never read as a complete one.
