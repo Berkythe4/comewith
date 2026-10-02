@@ -385,6 +385,13 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **The secret is the URL path segment** (`/functions/v1/social-mcp/<SOCIAL_MCP_SECRET>`,
   deployed `verify_jwt = false`). It lives in the desktop `.env` and as a Supabase
   secret, never in git. Rotating it = set a new secret + re-add the connector in claude.ai.
+- **The radio release card is created in TWO places** — `radio_publish_station()` (SQL,
+  scheduled go-live, 220) and `sc-connect` finalize (`radio_post.ts`, manual Go live).
+  Both set `phase radio / account come_with / format reel`. Change one, change the other;
+  `radio_post.test.ts` checks both. Nothing auto-creates a recap.
+- **Bulk re-classification goes through a plan, by id** (`scripts/plan_social_reclassify.py`
+  → a migration of per-id UPDATEs that each must hit 1 live row, with checksum asserts
+  on caption/stage/date/owner and on deleted rows). 219 is the worked example.
 - **After any connector change: `python scripts/e2e_social_mcp.py`** (live, on prod,
   cleans up its test post) plus `node --test supabase/functions/social-mcp/tools.test.ts`
   and the transport test (needs `.test-deps`, see `server.test.ts`). No LLM calls happen

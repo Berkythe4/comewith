@@ -17,6 +17,7 @@
 // The public sc-oauth function handles the browser redirect + token exchange.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { radioReleasePost } from "./radio_post.ts";
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -627,13 +628,7 @@ Deno.serve(async (req) => {
     // Drop a "posted" card on the social calendar so releases show up alongside
     // the rest of the content plan. Best-effort — never blocks going live.
     try {
-      await admin.from("social_posts").insert({
-        title: `📻 Come With Radio SHOW ${pl.station_no ?? ""} — ${pl.name || ""}`.trim(),
-        caption: (descSc || "").slice(0, 1000) || null,
-        channels: ["other"], series: "Come With Radio", content_pillar: "radio episode",
-        stage: "posted", scheduled_for: nowIso, posted_at: nowIso,
-        link_url: `${SITE}/radio.html?s=${slug}`,
-      });
+      await admin.from("social_posts").insert(radioReleasePost(pl, descSc, nowIso, `${SITE}/radio.html?s=${slug}`));
     } catch (e) { console.error("finalize social post:", e instanceof Error ? e.message : String(e)); }
 
     return ok({ success: true, slug, page_url: `${SITE}/radio.html?s=${slug}`, sc_url: pl.mix_sc_track_url, sc_warning: scWarning, next: nextInfo });
