@@ -19,8 +19,12 @@ const escapeHtml = (v) => String(v == null ? '' : v)
 const fmtDate = (d) => String(d).slice(0, 10);
 const fmtDateTime = (d) => String(d).slice(0, 16).replace('T', ' ');
 const mediaKindLabel = (u) => (/soundcloud/.test(u) ? 'SoundCloud audio' : 'YouTube video');
-const SOCIAL_STAGES = ['idea', 'drafted', 'review', 'planned', 'scheduled', 'posted', 'archived'];
-const SOCIAL_STAGE_LABEL = { idea: 'Idea', drafted: 'Drafted', review: 'In review', planned: 'Planned', scheduled: 'Scheduled', posted: 'Posted', archived: 'Archived' };
+// The real stage / account / phase constants and helpers, lifted from the module
+// rather than transcribed, so this test follows the pipeline when it changes (217).
+const SC = new Function(mod.slice(mod.indexOf('const SOCIAL_STAGES = '), mod.indexOf('const SOCIAL_CHANNELS')) +
+  '\nreturn { SOCIAL_STAGES, SOCIAL_STAGE_LABEL, socialStageList, socialStagesPresent, socialNeedsReview, ' +
+  'SOCIAL_ACCOUNTS, SOCIAL_ACCOUNT_LABEL, SOCIAL_FORMAT_LABEL, SOCIAL_PHASES, SOCIAL_PHASE_LABEL };')();
+const { SOCIAL_STAGES, SOCIAL_STAGE_LABEL, socialStageList } = SC;
 const toast = () => {};
 const confirm = () => false;
 const sb = { from: () => ({ update: () => ({ eq: async () => ({ error: null }) }), delete: () => ({ eq: async () => ({ error: null }) }) }) };
@@ -50,10 +54,10 @@ const hub = {
 };
 
 const fn = new Function(
-  'escapeHtml,fmtDate,fmtDateTime,mediaKindLabel,SOCIAL_STAGES,SOCIAL_STAGE_LABEL,toast,confirm,sb,hub',
+  'escapeHtml,fmtDate,fmtDateTime,mediaKindLabel,SOCIAL_STAGES,SOCIAL_STAGE_LABEL,socialStageList,toast,confirm,sb,hub',
   recapRule + '\n' + region +
   '\n; return { hubRecapVideosHTML, hubAssetsHTML, hubPostsHTML, hubContentCardsHTML, hubUrlHost, hubRecapList };');
-const api = fn(escapeHtml, fmtDate, fmtDateTime, mediaKindLabel, SOCIAL_STAGES, SOCIAL_STAGE_LABEL, toast, confirm, sb, hub);
+const api = fn(escapeHtml, fmtDate, fmtDateTime, mediaKindLabel, SOCIAL_STAGES, SOCIAL_STAGE_LABEL, socialStageList, toast, confirm, sb, hub);
 
 let fails = 0;
 const fail = (m) => { fails++; console.log('FAIL  ' + m); };
@@ -180,15 +184,17 @@ const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'ema
 const SOCIAL_CHAN_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X', youtube: 'YouTube', email: 'Email', blog: 'Blog', other: 'Other' };
 const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', posted: '#3DA35D' };
 const social = {
-  q: '', fStage: [], fSeries: [], fChan: [], view: 'list', selected: new Set(),
+  q: '', fStage: [], fSeries: [], fChan: [], fPhase: [], fAccount: [], view: 'list', selected: new Set(),
   noteCounts: { p1: 3 },
   posts: [
     { id: 'p1', title: 'Recap reel', stage: 'posted', posted_at: '2026-08-01T20:00:00Z',
       scheduled_for: '2026-07-31T18:30:00Z', channels: ['instagram', 'tiktok'], content_pillar: 'recap',
-      series: 'Come With Parties', link_url: 'https://instagram.com/p/x',
+      series: 'Come With Parties', link_url: 'https://instagram.com/p/x', account: 'come_with', format: 'reel', phase: 'post',
+      claude_caption: 'draft', caption: 'final',
       owner: { full_name: 'Janelle' }, event: { name: '7-11' } },
     { id: 'p2', title: 'Lineup drop', stage: 'scheduled', scheduled_for: '2026-09-04T17:00:00Z',
-      channels: ['instagram'], content_pillar: 'lineup', series: 'Dance Infusion',
+      channels: ['instagram'], content_pillar: 'lineup', series: 'Dance Infusion', account: 'di', format: 'carousel', phase: 'awareness',
+      claude_caption: 'Claude wrote this', caption: null,
       owner: { email: 'liz@comewith.org' } },
     { id: 'p3', title: 'Studio session', stage: 'idea', scheduled_for: null, channels: [],
       content_pillar: 'takeover', series: null, caption: 'Berky in the booth' },
@@ -202,19 +208,34 @@ const $stub = (id) => (id === 'socialFilters'
   : null);
 
 const socFn = new Function(
-  'escapeHtml,fmtDate,fmtDateTime,mediaKindLabel,SOCIAL_STAGES,SOCIAL_STAGE_LABEL,SOCIAL_CHANNELS,SOCIAL_CHAN_LABEL,SOCIAL_STAGE_COLOR,toast,confirm,sb,hub,social,$',
+  'escapeHtml,fmtDate,fmtDateTime,mediaKindLabel,SOCIAL_STAGES,SOCIAL_STAGE_LABEL,socialStageList,SOCIAL_CHANNELS,SOCIAL_CHAN_LABEL,SOCIAL_STAGE_COLOR,toast,confirm,sb,hub,social,$,' +
+  'socialStagesPresent,socialNeedsReview,SOCIAL_ACCOUNTS,SOCIAL_ACCOUNT_LABEL,SOCIAL_FORMAT_LABEL,SOCIAL_PHASES,SOCIAL_PHASE_LABEL',
   recapRule + '\n' + region + '\n' + socRegion +
   '\n; return { socialListHTML, socialFiltered, socialFilterDesc, renderSocialFilters, socialPillarList, socialChanCell };');
-const soc = socFn(escapeHtml, fmtDate, fmtDateTime, mediaKindLabel, SOCIAL_STAGES, SOCIAL_STAGE_LABEL,
-                  SOCIAL_CHANNELS, SOCIAL_CHAN_LABEL, SOCIAL_STAGE_COLOR, toast, confirm, sb, hub, social, $stub);
+const soc = socFn(escapeHtml, fmtDate, fmtDateTime, mediaKindLabel, SOCIAL_STAGES, SOCIAL_STAGE_LABEL, socialStageList,
+                  SOCIAL_CHANNELS, SOCIAL_CHAN_LABEL, SOCIAL_STAGE_COLOR, toast, confirm, sb, hub, social, $stub,
+                  SC.socialStagesPresent, SC.socialNeedsReview, SC.SOCIAL_ACCOUNTS, SC.SOCIAL_ACCOUNT_LABEL,
+                  SC.SOCIAL_FORMAT_LABEL, SC.SOCIAL_PHASES, SC.SOCIAL_PHASE_LABEL);
 
 // ---- the table itself --------------------------------------------------------
 const clist = render('content list', () => soc.socialListHTML(social.posts));
-for (const need of ['data-sp-field="stage"', 'data-sp-field="scheduled_for"', 'data-sp-field="content_pillar"']) {
+for (const need of ['data-sp-field="stage"', 'data-sp-field="scheduled_for"']) {
   if (!clist.includes(need)) fail('the list has no inline editor for ' + need);
 }
 if (!/data-sp-field="stage"[\s\S]{0,400}?<\/select>/.test(clist)) fail('the stage editor is not a select');
-else pass('stage, date and pillar edit in place');
+else pass('stage and date edit in place');
+// v2 (217): Channels and Pillar columns gave way to Account / Format / Phase chips.
+if (/data-sp-field="content_pillar"|data-sp-chanadd/.test(clist)) fail('the list still carries the Channels / Pillar columns');
+const p2row = clist.split('<tr class="').find(s => s.includes('sl:p2')) || '';
+if (!/acct-di"[^>]*>DI</.test(p2row) ||!/>Carousel</.test(p2row) || !/>Awareness</.test(p2row)) fail('account / format / phase chips missing on a row');
+else pass('rows carry Account, Format and Phase chips');
+const p1row = clist.split('<tr class="').find(s => s.includes('sl:p1')) || '';
+if (!/🤖/.test(p2row) || /🤖/.test(p1row)) fail('the robot marks the wrong rows');
+else pass('🤖 only where Claude drafted and Final is empty');
+// A legacy stage stays selectable on its own row, so the dropdown cannot rewrite it.
+const p4row = clist.split('<tr class="').find(s => s.includes('sl:p4')) || '';
+if (!/<option value="archived" selected>/.test(p4row)) fail('a legacy stage is not preselected - touching that row would rewrite it');
+else pass('a legacy stage keeps its value in the dropdown');
 if (!/class="data-table cc-table"/.test(clist)) fail('the list is not the events-list table');
 else pass('same data-table as the events list, with a real thead');
 if (!/<thead><tr><th>Post<\/th>/.test(clist)) fail('the list has no real header row');
@@ -250,10 +271,8 @@ else pass('channels: both kept, one add select, no data loss');
 if (!/value="2026-09-04"/.test(clist)) fail('the scheduled date does not reach the date input');
 else pass('the scheduled day lands in the date box');
 
-// content_pillar is FREE TEXT. A value nobody hardcoded must survive the select.
-if (!/<option value="takeover" selected>/.test(clist)) {
-  fail('a free-text pillar is not preselected - editing that row would erase it');
-} else pass('an off-list pillar stays selected');
+// content_pillar is hidden in v2 but still on file - the helper still derives
+// from the data, should the column ever come back.
 if (soc.socialPillarList().indexOf('takeover') < 0) fail('the pillar list is not derived from the data');
 
 if (!/No posts match these filters\./.test(soc.socialListHTML([]))) {
@@ -262,9 +281,10 @@ if (!/No posts match these filters\./.test(soc.socialListHTML([]))) {
 
 // ---- multi-select filtering --------------------------------------------------
 const only = (patch) => {
-  Object.assign(social, { q: '', fStage: [], fSeries: [], fChan: [] }, patch);
+  const RESET = { q: '', fStage: [], fSeries: [], fChan: [], fPhase: [], fAccount: [], needsReview: false };
+  Object.assign(social, RESET, patch);
   const n = soc.socialFiltered().length;
-  Object.assign(social, { q: '', fStage: [], fSeries: [], fChan: [] });
+  Object.assign(social, RESET);
   return n;
 };
 const expect = (label, got, want) => (got === want ? pass(label) : fail(label + ': got ' + got + ', wanted ' + want));
@@ -277,6 +297,11 @@ expect('two channels at once', only({ fChan: ['tiktok', 'email'] }), 2);
 expect('groups combine (AND across, OR within)', only({ fStage: ['posted'], fChan: ['email'] }), 0);
 expect('search reaches the caption', only({ q: 'booth' }), 1);
 expect('search reaches the pillar', only({ q: 'takeover' }), 1);
+expect('account filter', only({ fAccount: ['di'] }), 1);
+expect('an unset account counts as Come With', only({ fAccount: ['come_with'] }), 3);
+expect('phase filter (unset = general)', only({ fPhase: ['general'] }), 2);
+expect('needs-review shortcut', only({ needsReview: true }), 1);
+expect('search reaches Claude\'s caption', only({ q: 'claude wrote' }), 1);
 
 social.fStage = ['idea', 'drafted'];
 const desc = soc.socialFilterDesc();
@@ -288,10 +313,14 @@ social.fStage = [];
 soc.renderSocialFilters();
 if (/<select/.test(filterHtml)) fail('the filter strip still has a dropdown in it');
 else pass('filters are chips, not single-value dropdowns');
-for (const g of ['fStage', 'fSeries', 'fChan']) {
+for (const g of ['fStage', 'fAccount', 'fPhase']) {
   if (!filterHtml.includes('data-scchip="' + g + '"')) fail('no chip group for ' + g);
 }
-if (!/data-val="__none"[^>]*>General/.test(filterHtml)) fail('there is no "General" chip for unfiled posts');
+// Series / channel are hidden fields in v2: their chips only show while one is
+// picked, so an invisible filter can never be narrowing the list.
+if (/data-scchip="fSeries"|data-scchip="fChan"/.test(filterHtml)) fail('series / channel chips show with nothing picked');
+else pass('Stage, Account and Phase chips; series/channel only while in use');
+if (!/data-scneedsreview/.test(filterHtml)) fail('no Needs review shortcut');
 if (!/data-val="posted"[^>]*>Posted <span class="ev-chip-n">1<\/span>/.test(filterHtml)) {
   fail('chips do not carry their own count');
 } else pass('every chip carries its count');

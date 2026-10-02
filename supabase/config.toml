@@ -139,3 +139,9 @@ verify_jwt = false          # PUBLIC beacon — sendBeacon cannot set an apikey 
 [functions.ingest-email]
 enabled = true
 verify_jwt = false          # PUBLIC — inbound email webhook; gated by INGEST_SECRET
+
+# 217: remote MCP server for the claude.ai connector. The SOCIAL_MCP_SECRET
+# path segment is the credential; claude.ai sends no Supabase JWT.
+[functions.social-mcp]
+enabled = true
+verify_jwt = false

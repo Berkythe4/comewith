@@ -114,6 +114,10 @@ MUST_BE_EMPTY = [
     ("link_pages", "unpublished link-in-bio pages"),
     ("link_items", "links on unpublished pages, including scheduled ones"),
     ("v_link_click_stats", "how many people click each link"),
+    # --- social calendar (044, swept from 217) + the Claude connector log ---
+    ("social_posts", "unpublished posts, briefs and Claude's draft captions"),
+    ("social_post_notes", "the Keith/Janelle/Claude conversation on each post"),
+    ("connector_log", "every call the Claude connector has made (217)"),
 ]
 
 

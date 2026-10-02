@@ -1510,6 +1510,21 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .note-body { font-size: 0.85rem; line-height: 1.45; white-space: pre-wrap; }
 .note-add { display: flex; gap: 8px; align-items: flex-start; }
 .note-add textarea { flex: 1; }
+/* Post editor v2 (217): segmented pickers, the two-caption panel, chips */
+.sp-seg { display: inline-flex; flex-wrap: wrap; border: 1px solid var(--border-strong); border-radius: 6px; overflow: hidden; }
+.sp-seg button { font: inherit; font-size: 0.78rem; padding: 5px 12px; background: transparent; color: var(--ink); border: 0; border-right: 1px solid var(--border-strong); cursor: pointer; }
+.sp-seg button:last-child { border-right: 0; }
+.sp-seg button.on { background: var(--ink); color: var(--bg); }
+.sp-claude { border: 1px dashed var(--border-strong); border-radius: 8px; padding: 10px; background: var(--off); }
+.sp-claude-text { white-space: pre-wrap; font-size: 0.86rem; line-height: 1.5; max-height: 220px; overflow-y: auto; }
+.sp-btns { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+.sp-chip { display: inline-block; font-size: 0.6rem; letter-spacing: 0.05em; text-transform: uppercase; padding: 1px 6px; margin: 1px 3px 1px 0; border: 1px solid var(--border-strong); border-radius: 9px; color: var(--mid); white-space: nowrap; }
+.sp-chip.acct-di { border-color: #8362A8; color: #8362A8; }
+.sp-chip.acct-collab { border-color: #B5791F; color: #B5791F; }
+.sp-guard { border: 1px solid var(--red); background: rgba(193,59,42,0.08); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
+.sp-results { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .sp-results { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+details.sp-notes > summary { cursor: pointer; font-weight: 600; font-size: 0.85rem; padding: 4px 0; }
 /* Content list — the channel cell. Everything else (table, banding, chips,
    inline selects) is shared with the events list on purpose. */
 .sc-chans { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
@@ -2762,11 +2777,29 @@ async function inviteUser() {
 // ===========================================================================
 // Social calendar — content planner (board/list) + threaded, timestamped notes
 // ===========================================================================
-const SOCIAL_STAGES = ['idea', 'drafted', 'review', 'planned', 'scheduled', 'posted', 'archived'];
-const SOCIAL_STAGE_LABEL = { idea: 'Idea', drafted: 'Drafted', review: 'In review', planned: 'Planned', scheduled: 'Scheduled', posted: 'Posted', archived: 'Archived' };
+// The pipeline since 217. review / planned / archived are still LEGAL in the
+// database (the CHECK was widened, never narrowed) and still labelled, so a row
+// that holds one renders and keeps its value; they are just not offered.
+const SOCIAL_STAGES = ['idea', 'drafted', 'ready', 'approved', 'scheduled', 'posted'];
+const SOCIAL_LEGACY_STAGES = ['review', 'planned', 'archived'];
+const SOCIAL_STAGE_LABEL = { idea: 'Idea', drafted: 'Drafted', ready: 'Ready', approved: 'Approved', scheduled: 'Scheduled', posted: 'Posted', review: 'In review', planned: 'Planned', archived: 'Archived' };
+// Stages to offer for a row: the pipeline, plus whatever legacy value the row
+// already holds, so touching the dropdown can never silently rewrite it.
+const socialStageList = (cur) => SOCIAL_STAGES.concat(cur && SOCIAL_STAGES.indexOf(cur) < 0 ? [cur] : []);
+// Board columns / filter chips: the pipeline, plus any legacy stage still on file.
+const socialStagesPresent = (posts) => SOCIAL_STAGES.concat(SOCIAL_LEGACY_STAGES.filter(k => posts.some(p => p.stage === k)));
+const SOCIAL_ACCOUNTS = ['come_with', 'di', 'collab'];
+const SOCIAL_ACCOUNT_LABEL = { come_with: 'Come With', di: 'DI', collab: 'Collab' };
+const SOCIAL_FORMATS = ['reel', 'carousel', 'story', 'post'];
+const SOCIAL_FORMAT_LABEL = { reel: 'Reel', carousel: 'Carousel', story: 'Story', post: 'Post' };
+const SOCIAL_PHASES = ['awareness', 'sponsors', 'radio', 'convert', 'event', 'post', 'general'];
+const SOCIAL_PHASE_LABEL = { awareness: 'Awareness', sponsors: 'Sponsors', radio: 'Radio', convert: 'Convert', event: 'Event', post: 'Post-event', general: 'General' };
+const SOCIAL_RESULT_KEYS = ['views', 'likes', 'shares', 'saves'];
+// Claude has drafted and nobody has written the final yet: Janelle's queue.
+const socialNeedsReview = (p) => !!(p.claude_caption && !(p.caption || '').trim());
 const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'email', 'blog', 'other'];
 const SOCIAL_CHAN_LABEL = { instagram: 'Instagram', tiktok: 'TikTok', facebook: 'Facebook', x: 'X', youtube: 'YouTube', email: 'Email', blog: 'Blog', other: 'Other' };
-const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', drafted: '#B5791F', review: '#8362A8', planned: '#2F6F9F', scheduled: '#2E8E72', posted: '#3DA35D', archived: '#B8B0A4' };
+const SOCIAL_STAGE_COLOR = { idea: '#8A7F72', drafted: '#B5791F', ready: '#8362A8', approved: '#2F6F9F', review: '#8362A8', planned: '#2F6F9F', scheduled: '#2E8E72', posted: '#3DA35D', archived: '#B8B0A4' };
 const SOCIAL_VIEWS = ['calendar', 'list', 'board'];
 const SOCIAL_VIEW_LABEL = { calendar: 'Calendar', board: 'Board', list: 'List', center: '📋 Control Center' };
 // Social calendar state: a month grid of scheduled posts + a board of the tasks
@@ -2774,7 +2807,7 @@ const SOCIAL_VIEW_LABEL = { calendar: 'Calendar', board: 'Board', list: 'List', 
 const socialCal = { month: new Date().toISOString().slice(0, 7), tasks: [] };
 // Every filter is a LIST, like the events list. One-of was fine until "show me
 // the drafts and the ones in review" - most real questions - needed two passes.
-const social = { posts: [], noteCounts: {}, q: '', fStage: [], fSeries: [], fChan: [],
+const social = { posts: [], noteCounts: {}, q: '', fStage: [], fSeries: [], fChan: [], fPhase: [], fAccount: [],
                  view: 'calendar', selected: new Set() };
 let socialPeople = null, socialEvents = null;
 
@@ -2823,11 +2856,16 @@ function socialFiltered() {
   const any = (arr, v) => !arr.length || arr.indexOf(v) >= 0;
   return s.posts.filter(p =>
     any(s.fStage, p.stage || '') &&
+    (!s.needsReview || socialNeedsReview(p)) &&
+    any(s.fPhase, p.phase || 'general') &&
+    any(s.fAccount, p.account || 'come_with') &&
     any(s.fSeries, p.series || '__none') &&
     (!s.fChan.length || (p.channels || []).some(c => s.fChan.indexOf(c) >= 0)) &&
     (!ql || (p.title || '').toLowerCase().includes(ql)
          || (p.content_pillar || '').toLowerCase().includes(ql)
-         || (p.caption || '').toLowerCase().includes(ql)));
+         || (p.caption || '').toLowerCase().includes(ql)
+         || (p.claude_caption || '').toLowerCase().includes(ql)
+         || (p.brief || '').toLowerCase().includes(ql)));
 }
 
 // One sentence describing the current filter, for the shared snapshot and the
@@ -2838,6 +2876,8 @@ function socialFilterDesc() {
     s.fSeries.length ? s.fSeries.map(x => x === '__none' ? 'General' : x).join(', ') : 'All series',
     s.fStage.length ? s.fStage.map(x => SOCIAL_STAGE_LABEL[x] || x).join(', ') : 'All stages',
   ];
+  if (s.fAccount.length) parts.push(s.fAccount.map(x => SOCIAL_ACCOUNT_LABEL[x] || x).join(', '));
+  if (s.fPhase.length) parts.push(s.fPhase.map(x => SOCIAL_PHASE_LABEL[x] || x).join(', '));
   if (s.fChan.length) parts.push(s.fChan.map(c => SOCIAL_CHAN_LABEL[c] || c).join(', '));
   if (s.q) parts.push('\u201c' + s.q + '\u201d');
   return parts.join(' \u00b7 ');
@@ -2848,7 +2888,7 @@ function postCardHtml(p) {
   const nc = social.noteCounts[p.id] || 0;
   const owner = p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '';
   return `<div class="post-card" data-post="${p.id}">
-    <div class="post-card-title">${escapeHtml(p.title)}</div>
+    <div class="post-card-title">${escapeHtml(p.title)}${socialNeedsReview(p) ? ` <span title="${SOCIAL_BOT_TITLE}">🤖</span>` : ''}</div>
     ${chans ? `<div class="post-card-chans">${chans}</div>` : ''}
     <div class="post-card-meta">
       ${p.scheduled_for ? `<span>🗓 ${escapeHtml(socialFmtDate(p.scheduled_for))}</span>` : ''}
@@ -2895,34 +2935,40 @@ function socialChanCell(p) {
   return '<div class="sc-chans">' + chips + add + '</div>';
 }
 
+// Account / format / phase as read-only chips. They are set in the editor;
+// the row is for scanning, and three more dropdowns per row was the clutter v2
+// set out to remove.
+function socialTagChips(p) {
+  const acct = p.account || 'come_with';
+  return '<span class="sp-chip acct-' + escapeHtml(acct) + '" title="Account">' + escapeHtml(SOCIAL_ACCOUNT_LABEL[acct] || acct) + '</span>' +
+    (p.format ? '<span class="sp-chip" title="Format">' + escapeHtml(SOCIAL_FORMAT_LABEL[p.format] || p.format) + '</span>' : '') +
+    '<span class="sp-chip" title="Phase">' + escapeHtml(SOCIAL_PHASE_LABEL[p.phase || 'general'] || p.phase) + '</span>';
+}
+const SOCIAL_BOT_TITLE = 'Claude has drafted a caption and there is no final caption yet - needs Janelle';
 function socialListHTML(posts) {
-  const pillars = socialPillarList();
   const rows = posts.map(p => {
     const when = p.posted_at ? 'posted ' + fmtDate(p.posted_at)
       : (p.scheduled_for ? socialFmtDate(p.scheduled_for) : 'no date');
-    const seriesChip = p.series
-      ? ' <span class="role-chip" style="cursor:default;">' + escapeHtml(p.series) + '</span>' : '';
     const ev = p.event && p.event.name ? ' \u00b7 ' + escapeHtml(p.event.name) : '';
+    const bot = socialNeedsReview(p)
+      ? ' <span title="' + SOCIAL_BOT_TITLE + '" aria-label="' + SOCIAL_BOT_TITLE + '">\ud83e\udd16</span>' : '';
     return '<tr class="' + ccPostBand(p) + '">' +
-      '<td>' + ccTitle('sl:' + p.id, p.title || 'Untitled', p.link_url) +
-        '<div class="li-sub">' + escapeHtml(when) + ev + seriesChip + '</div></td>' +
+      '<td>' + ccTitle('sl:' + p.id, p.title || 'Untitled', p.link_url) + bot +
+        '<div class="li-sub">' + escapeHtml(when) + ev + '</div></td>' +
       '<td>' + ccSel('data-sp-field="stage" data-id="' + escapeHtml(p.id) + '"',
-                     SOCIAL_STAGES.map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
+                     socialStageList(p.stage).map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
                      'Where the post has got to') + '</td>' +
       '<td><input class="modal-input ev-inline cc-date" type="date" data-sp-field="scheduled_for" data-id="' +
         escapeHtml(p.id) + '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) +
         '" title="When it goes out"></td>' +
-      '<td>' + socialChanCell(p) + '</td>' +
-      '<td>' + ccSel('data-sp-field="content_pillar" data-id="' + escapeHtml(p.id) + '"',
-                     [['', '\u2014']].concat(pillars.map(v => [v, v])), p.content_pillar || '',
-                     'What the post is for') + '</td>' +
+      '<td>' + socialTagChips(p) + '</td>' +
       '<td class="li-sub">' + (p.owner ? escapeHtml(p.owner.full_name || p.owner.email) : '\u2014') + '</td>' +
       '<td class="num">' + (social.noteCounts[p.id] || 0) + '</td>' +
       '<td class="cc-act"><button class="hub-mini" data-sc-edit="' + escapeHtml(p.id) +
-        '" title="Caption, channels, assets, notes">Brief \u2192</button></td></tr>';
-  }).join('') || '<tr><td colspan="8" class="muted" style="padding:14px;">No posts match these filters.</td></tr>';
+        '" title="Brief, captions, asset, notes">Open \u2192</button></td></tr>';
+  }).join('') || '<tr><td colspan="7" class="muted" style="padding:14px;">No posts match these filters.</td></tr>';
   return '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Channels</th><th>Pillar</th>' +
+    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Account \u00b7 Format \u00b7 Phase</th>' +
     '<th>Owner</th><th class="num">Notes</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + rows + '</tbody></table></div>';
 }
@@ -2933,7 +2979,7 @@ function socialListHTML(posts) {
 function renderSocialFilters() {
   const s = social, el = $('socialFilters');
   if (!el) return;
-  const anyFilter = s.q || s.fStage.length || s.fSeries.length || s.fChan.length;
+  const anyFilter = s.q || s.fStage.length || s.fSeries.length || s.fChan.length || s.fPhase.length || s.fAccount.length || s.needsReview;
   const chip = (grp, val, label, count, title) =>
     '<button class="ev-chip' + (s[grp].indexOf(val) >= 0 ? ' on' : '') + '"' +
     ' data-scchip="' + grp + '" data-val="' + escapeHtml(val) + '"' +
@@ -2942,6 +2988,8 @@ function renderSocialFilters() {
   const nStage = (k) => s.posts.filter(p => (p.stage || '') === k).length;
   const nSeries = (k) => s.posts.filter(p => (p.series || '__none') === k).length;
   const nChan = (k) => s.posts.filter(p => (p.channels || []).indexOf(k) >= 0).length;
+  const nPhase = (k) => s.posts.filter(p => (p.phase || 'general') === k).length;
+  const nAccount = (k) => s.posts.filter(p => (p.account || 'come_with') === k).length;
   const group = (label, html) => html
     ? '<div class="ev-filter-row"><span class="ev-filter-lbl">' + label + '</span>' +
       '<span class="ev-chips">' + html + '</span></div>' : '';
@@ -2953,15 +3001,24 @@ function renderSocialFilters() {
         'style="max-width:220px;" value="' + escapeHtml(s.q) + '">' +
       '<button class="ev-chip shortcut" data-scnotposted ' +
         'title="Everything still to go out: idea through scheduled">Not posted</button>' +
+      '<button class="ev-chip shortcut' + (s.needsReview ? ' on' : '') + '" data-scneedsreview title="' + SOCIAL_BOT_TITLE + '">' +
+        '🤖 Needs review <span class="ev-chip-n">' + s.posts.filter(socialNeedsReview).length + '</span></button>' +
       (anyFilter ? '<button class="hub-mini" data-scclear>\u2715 clear all</button>' : '') +
       '<span class="li-sub" style="margin-left:auto;" id="scCount">' +
         socialFiltered().length + ' of ' + s.posts.length + '</span>' +
     '</div>' +
-    group('Stage', SOCIAL_STAGES.filter(k => nStage(k))
+    group('Stage', socialStagesPresent(s.posts).filter(k => nStage(k))
       .map(k => chip('fStage', k, SOCIAL_STAGE_LABEL[k] || k, nStage(k))).join('')) +
-    group('Series', series) +
-    group('Channel', SOCIAL_CHANNELS.filter(k => nChan(k))
-      .map(k => chip('fChan', k, SOCIAL_CHAN_LABEL[k] || k, nChan(k))).join('')) +
+    group('Account', SOCIAL_ACCOUNTS.filter(k => nAccount(k))
+      .map(k => chip('fAccount', k, SOCIAL_ACCOUNT_LABEL[k] || k, nAccount(k))).join('')) +
+    group('Phase', SOCIAL_PHASES.filter(k => nPhase(k))
+      .map(k => chip('fPhase', k, SOCIAL_PHASE_LABEL[k] || k, nPhase(k))).join('')) +
+    // Series and channels are hidden in the v2 editor, so their filters only
+    // show while a value is still picked - a filter you cannot see must not be
+    // silently narrowing the list.
+    (s.fSeries.length ? group('Series', series) : '') +
+    (s.fChan.length ? group('Channel', SOCIAL_CHANNELS.filter(k => nChan(k))
+      .map(k => chip('fChan', k, SOCIAL_CHAN_LABEL[k] || k, nChan(k))).join('')) : '') +
     '</div>';
 }
 
@@ -3007,7 +3064,8 @@ function renderSocialView() {
   if (!social.posts.length) { body.innerHTML = '<div class="placeholder">No posts yet. Click <b>＋ New post</b> to start planning with Janelle.</div>'; return; }
   if (social.view === 'list') { body.innerHTML = socialListHTML(posts); return; }
   if (social.view === 'center') { renderSocialCenter(posts); return; }
-  const stages = social.fStage.length ? SOCIAL_STAGES.filter(k => social.fStage.indexOf(k) >= 0) : SOCIAL_STAGES;
+  const allStages = socialStagesPresent(social.posts);
+  const stages = social.fStage.length ? allStages.filter(k => social.fStage.indexOf(k) >= 0) : allStages;
   let h = '<div class="social-board">';
   for (const s of stages) {
     const col = posts.filter(p => p.stage === s);
@@ -3116,6 +3174,24 @@ async function ensureSocialLookups() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// The post editor, v2 (217). Cut down to what is actually used: two captions
+// (Claude's draft, read-only, and the FINAL one Janelle posts, which is the
+// existing `caption` column), plus account / format / phase / stage. Every
+// other field (channels, series, linked event, owner, drafter/approver, CTA,
+// destination URL, asset status, tasks, attached content) is HIDDEN, not
+// dropped: the save writes only the fields shown here, so their data stays on
+// the row untouched. Claude's caption is written only by the social-mcp
+// connector; the database refuses it from a signed-in user (217 trigger).
+// ---------------------------------------------------------------------------
+const spSeg = (name, keys, labels, cur) =>
+  `<div class="sp-seg" role="radiogroup" data-sp-seg="${name}">` +
+  keys.map(k => `<button type="button" role="radio" aria-checked="${cur === k}" class="${cur === k ? 'on' : ''}" data-val="${k}">${escapeHtml(labels[k])}</button>`).join('') +
+  `</div><input type="hidden" name="${name}" value="${escapeHtml(cur || '')}">`;
+const spFmtStamp = (iso) => iso ? new Date(iso).toLocaleString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '';
+const SP_CLAUDE_EMPTY = 'Claude drafts this on Mondays for posts in the next 14 days.';
+const SP_DRAFTABLE = ['idea', 'drafted', 'ready', 'review', 'planned'];
+
 async function openPostModal(post, opts) {
   opts = opts || {};
   await ensureSocialLookups();
@@ -3123,77 +3199,119 @@ async function openPostModal(post, opts) {
   // hub "create post"). isNew is driven by the presence of an id, not the object.
   const p = post || {};
   const isNew = !p.id;
-  const chanBoxes = SOCIAL_CHANNELS.map(c => `<label class="chk"><input type="checkbox" data-chan value="${c}" ${(p.channels || []).includes(c) ? 'checked' : ''}> ${SOCIAL_CHAN_LABEL[c]}</label>`).join('');
-  const stageOpts = SOCIAL_STAGES.map(s => `<option value="${s}" ${p.stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s]}</option>`).join('');
-  const seriesOpts = ['', 'Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings'].map(s => `<option value="${s}" ${(p.series || '') === s ? 'selected' : ''}>${s || '— general —'}</option>`).join('');
-  const ownerOpts = ['<option value="">— unassigned —</option>'].concat(socialPeople.map(pe => `<option value="${pe.id}" ${p.owner_id === pe.id ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`)).join('');
-  const eventOpts = ['<option value="">— none —</option>'].concat(socialEvents.map(ev => `<option value="${ev.id}" ${p.event_id === ev.id ? 'selected' : ''}>${escapeHtml(ev.name)}</option>`)).join('');
-  const assetOpts = ['none', 'requested', 'in_progress', 'ready'].map(a => `<option value="${a}" ${(p.asset_status || 'none') === a ? 'selected' : ''}>${a.replace('_', ' ')}</option>`).join('');
+  const stage = p.stage || 'idea';
+  const stageOpts = socialStageList(stage).map(s => `<option value="${s}" ${stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s] || s}</option>`).join('');
+  const phaseOpts = SOCIAL_PHASES.map(s => `<option value="${s}" ${(p.phase || 'general') === s ? 'selected' : ''}>${SOCIAL_PHASE_LABEL[s]}</option>`).join('');
   const dtVal = p.scheduled_for ? new Date(new Date(p.scheduled_for).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
-
-  const draftOpts = ['<option value="">— who drafts —</option>'].concat(socialPeople.map(pe => `<option value="${pe.id}" ${p.draft_by === pe.id ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`)).join('');
-  const reviewOpts = ['<option value="">— who approves —</option>'].concat(socialPeople.map(pe => `<option value="${pe.id}" ${p.review_by === pe.id ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`)).join('');
-  const COPY_STATUS = { brief: '📋 Brief', drafting: '✍️ Drafting', feedback: '👀 Feedback requested', approved: '✅ Approved' };
+  const nc = isNew ? 0 : (social.noteCounts[p.id] ?? (p.notes && p.notes[0] && p.notes[0].count) ?? 0);
+  const res = (p.results && typeof p.results === 'object') ? p.results : {};
+  const claude = p.claude_caption
+    ? `<div class="sp-claude-text" id="spClaudeText">${escapeHtml(p.claude_caption)}</div>
+       <div class="sp-btns"><button type="button" class="hub-mini" data-sp-use title="Copy Claude's caption into Final caption (then Save)">Use this</button>
+       <button type="button" class="hub-mini" data-sp-copy="claude" title="Copy Claude's caption to the clipboard">Copy</button></div>`
+    : `<div class="li-sub">${SP_CLAUDE_EMPTY}</div>`;
   const fields = `
     <div class="modal-form-row"><label class="modal-label">Title *</label><input class="modal-input" name="title" required value="${escapeHtml(p.title || '')}" placeholder="Post title / internal name"></div>
     <div id="postEpisodeBox"></div>
-    <div class="modal-form-row" style="background:rgba(167,224,46,0.06);border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:8px;"><label class="modal-label" style="margin:0;">📋 Brief — what this post should say <span class="li-sub">(you write it, the drafter turns it into copy)</span></label><button type="button" class="hub-mini" data-brief-pop style="margin-left:auto;flex:0 0 auto;" title="Pop the brief into a floating window you can read while writing the caption">⤢ Read full</button></div>
-      <textarea class="modal-input" name="brief" rows="3" placeholder="e.g. Recap of 7/11 — thank everyone, tease the next one, tag the DJs. Fun, high-energy tone.">${escapeHtml(p.brief || '')}</textarea>
-      <div class="modal-grid2" style="margin-top:6px;">
-        <div><label class="modal-label">Drafts the copy</label><select class="modal-input" name="draft_by">${draftOpts}</select></div>
-        <div><label class="modal-label">Approves</label><select class="modal-input" name="review_by">${reviewOpts}</select></div>
-      </div>
-    </div>
-    <div class="modal-form-row"><label class="modal-label">Caption / copy <span class="li-sub">(the drafter writes this)</span></label><textarea class="modal-input" name="caption" rows="4" placeholder="Draft the post text…">${escapeHtml(p.caption || '')}</textarea></div>
-    <div class="modal-form-row"><label class="modal-label">Channels</label><div class="chk-row">${chanBoxes}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Account</label>${spSeg('account', SOCIAL_ACCOUNTS, SOCIAL_ACCOUNT_LABEL, p.account || 'come_with')}</div>
+    <div class="modal-form-row"><label class="modal-label">Format</label>${spSeg('format', SOCIAL_FORMATS, SOCIAL_FORMAT_LABEL, p.format || '')}</div>
     <div class="modal-grid2">
-      <div><label class="modal-label">Stage</label><select class="modal-input" name="stage">${stageOpts}</select></div>
-      <div><label class="modal-label">Series</label><select class="modal-input" name="series">${seriesOpts}</select></div>
-      <div><label class="modal-label">Scheduled for</label><input class="modal-input" type="datetime-local" name="scheduled_for" value="${dtVal}"></div>
-      <div><label class="modal-label">Owner</label><select class="modal-input" name="owner_id">${ownerOpts}</select></div>
-      <div><label class="modal-label">Linked event</label><select class="modal-input" name="event_id">${eventOpts}</select></div>
-      <div><label class="modal-label">Content pillar / tag</label><input class="modal-input" name="content_pillar" value="${escapeHtml(p.content_pillar || '')}" placeholder="recap, promo, BTS…"></div>
-      <div><label class="modal-label">Asset link</label><input class="modal-input" name="asset_url" value="${escapeHtml(p.asset_url || '')}" placeholder="https://…"></div>
-      <div><label class="modal-label">Asset status</label><select class="modal-input" name="asset_status">${assetOpts}</select></div>
-      <div><label class="modal-label">Post / destination URL</label><input class="modal-input" name="link_url" value="${escapeHtml(p.link_url || '')}" placeholder="https://…"></div>
-      <div><label class="modal-label">CTA</label><input class="modal-input" name="cta" value="${escapeHtml(p.cta || '')}" placeholder="Get tickets, RSVP…"></div>
-    </div>`;
-  let notesHtml = '';
-  if (!isNew) {
-    notesHtml = `<div class="modal-form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">✅ Tasks</strong>
-        <span id="postTaskSummary" class="li-sub">loading…</span>
-        <button type="button" class="hub-mini" id="postTaskToggle" style="margin-left:auto;">Show / edit</button></div>
-      <div id="postTaskList" style="display:none;margin-top:8px;"></div>
+      <div><label class="modal-label">Date / time</label><input class="modal-input" type="datetime-local" name="scheduled_for" value="${dtVal}"></div>
+      <div><label class="modal-label">Phase</label><select class="modal-input" name="phase">${phaseOpts}</select></div>
     </div>
-    <div class="modal-form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:8px;"><strong style="font-size:.85rem;">🎬 Attached content</strong>
-        <button type="button" class="hub-mini" data-post-addasset="${p.id}" style="margin-left:auto;">➕ Add clip / link</button></div>
-      <div id="postAssetList" style="margin-top:6px;"><div class="li-sub">loading…</div></div>
-    </div>
-    <div class="modal-form-row" style="border:1px solid var(--border-strong);border-radius:8px;padding:10px;">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><strong style="font-size:.85rem;">🔁 Workflow</strong>
-        <span class="role-chip" style="cursor:default;">${COPY_STATUS[p.copy_status || 'brief']}</span></div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button type="button" class="hub-mini" data-post-req="draft" data-post="${p.id}" title="Ask the drafter to write the copy — sends them a notification">📝 Request draft</button>
-        <button type="button" class="hub-mini" data-post-req="feedback" data-post="${p.id}" title="Ask the reviewer for feedback on the copy">👀 Request feedback</button>
-        <button type="button" class="hub-mini" data-post-req="approved" data-post="${p.id}" title="Approve the copy — ready to schedule">✅ Approve</button>
-      </div>
-      <div class="li-sub" style="margin-top:5px;">Whoever you pick above gets a 🔔 notification. All the back-and-forth stays in the conversation below.</div>
-    </div>
-    <div class="notes-block">
-      <div class="modal-label">Conversation</div>
+    <div class="modal-form-row"><label class="modal-label">Brief <span class="li-sub">(what the post should do - Keith or Claude writes it)</span></label>
+      <textarea class="modal-input" name="brief" rows="2" placeholder="e.g. Recap of 7/11 - thank everyone, tease the next one, tag the DJs.">${escapeHtml(p.brief || '')}</textarea></div>
+    <div class="modal-form-row"><label class="modal-label">🤖 Claude's caption ${p.claude_drafted_at ? `<span class="li-sub">drafted ${escapeHtml(spFmtStamp(p.claude_drafted_at))}</span>` : ''}</label>
+      <div class="sp-claude">${claude}</div></div>
+    <div class="modal-form-row"><label class="modal-label">Final caption <span class="li-sub">(what Janelle posts)</span></label>
+      <textarea class="modal-input" name="caption" rows="5" placeholder="The caption that goes out…">${escapeHtml(p.caption || '')}</textarea>
+      <div class="sp-btns"><button type="button" class="hub-mini" data-sp-copy="final" title="Copy for Meta Business Suite. If Final is empty, copies Claude's caption.">Copy final caption</button></div></div>
+    <div class="modal-form-row"><label class="modal-label">Asset link <span class="li-sub">(Drive / OpusClip)</span></label><input class="modal-input" name="asset_url" value="${escapeHtml(p.asset_url || '')}" placeholder="https://…"></div>
+    <div class="modal-form-row"><label class="modal-label">Stage</label>
+      <div class="sp-btns" style="margin-top:0;"><select class="modal-input" name="stage" style="max-width:220px;">${stageOpts}</select>
+      ${!isNew && SP_DRAFTABLE.indexOf(stage) >= 0 ? `<button type="button" class="hub-mini" data-sp-approve title="Save as Approved and notify the owner (🔔)">✅ Approve</button>` : ''}</div></div>
+    <div class="modal-form-row" id="spResults" style="${stage === 'posted' ? '' : 'display:none;'}"><label class="modal-label">📈 Results</label>
+      <div class="sp-results">${SOCIAL_RESULT_KEYS.map(k => `<div><label class="modal-label">${k[0].toUpperCase() + k.slice(1)}</label><input class="modal-input" type="number" min="0" step="1" inputmode="numeric" name="res_${k}" value="${res[k] ?? ''}"></div>`).join('')}</div></div>`;
+  const notesHtml = isNew ? '' : `
+    <details class="sp-notes modal-form-row" id="spNotes"><summary>💬 Notes (<span id="spNoteCount">${nc}</span>)</summary>
       <div id="postNotesThread" class="notes-thread"><div class="muted">Loading…</div></div>
       <div class="note-add"><textarea class="modal-input" id="newNoteBody" rows="2" placeholder="Add a note for the team… (timestamped)"></textarea>
       <button type="button" class="hub-mini" id="addNoteBtn" data-post="${p.id}">Add note</button></div>
-      <button type="button" class="hub-mini danger" id="deletePostBtn" data-post="${p.id}" style="margin-top:8px;">Delete post</button>
-    </div>`;
-  }
-  openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[p.stage] || ''), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved), isNew ? 'Create post' : 'Save post');
-  if (!isNew) { loadPostNotes(p.id); loadPostTasks(p.id); loadPostAssets(p.id); }
+    </details>
+    <button type="button" class="hub-mini danger" id="deletePostBtn" data-post="${p.id}" style="margin-top:8px;">Delete post</button>`;
+  openKpi(isNew ? 'New post' : 'Edit post', isNew ? 'Plan a new piece of content' : escapeHtml(SOCIAL_STAGE_LABEL[stage] || stage), fields + notesHtml, () => savePost(p.id ? p : null, opts.onSaved, null, p), isNew ? 'Create post' : 'Save post');
+  social.editing = { post: p, onSaved: opts.onSaved };
+  // Unsaved-changes guard: compare against the form as it opened.
+  const snap = spFormSnapshot();
+  kpiCloseGuard = () => spFormSnapshot() !== snap;
+  if (!isNew) loadPostNotes(p.id);
   if (p.station_id) raLoadPostEpisode(p.station_id);
 }
+function spFormSnapshot() {
+  const body = $('kpiModalBody'); if (!body) return '';
+  return [...body.querySelectorAll('[name]')].map(el => el.name + '=' + el.value).join('\u0001');
+}
+// Copy with a 2-second "Copied" on the button that did it.
+async function spCopy(text, btn) {
+  if (!text) { toast('Nothing to copy yet', 'err'); return; }
+  try { await navigator.clipboard.writeText(text); }
+  catch (_) {
+    const ta = document.createElement('textarea'); ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } finally { ta.remove(); }
+  }
+  spFlash(btn, 'Copied');
+}
+function spFlash(btn, label) {
+  if (!btn) return;
+  if (!btn.dataset.label) btn.dataset.label = btn.textContent;
+  btn.textContent = label;
+  clearTimeout(btn._spT);
+  btn._spT = setTimeout(() => { btn.textContent = btn.dataset.label; delete btn.dataset.armed; }, 2000);
+}
+document.addEventListener('click', (e) => {
+  const sb2 = e.target.closest('#kpiModalBody [data-sp-seg] button');
+  if (sb2) {
+    const grp = sb2.closest('[data-sp-seg]');
+    grp.querySelectorAll('button').forEach(b => { b.classList.toggle('on', b === sb2); b.setAttribute('aria-checked', String(b === sb2)); });
+    const hid = $('kpiModalBody').querySelector(`[name="${grp.dataset.spSeg}"]`); if (hid) hid.value = sb2.dataset.val;
+    return;
+  }
+  const cp = e.target.closest('#kpiModalBody [data-sp-copy]');
+  if (cp) {
+    const claudeTxt = social.editing?.post?.claude_caption || '';
+    const txt = cp.dataset.spCopy === 'claude' ? claudeTxt : (kpiVal('caption') || claudeTxt);
+    spCopy(txt, cp); return;
+  }
+  const use = e.target.closest('#kpiModalBody [data-sp-use]');
+  if (use) {
+    const ta = $('kpiModalBody').querySelector('[name="caption"]');
+    const claudeTxt = social.editing?.post?.claude_caption || '';
+    if (!ta || !claudeTxt) return;
+    // Never overwrite Janelle's own words on one click: a non-empty Final that
+    // differs needs a second press within 2 seconds.
+    if (ta.value.trim() && ta.value.trim() !== claudeTxt.trim() && !use.dataset.armed) {
+      use.dataset.armed = '1'; spFlash(use, 'Replace final caption?'); return;
+    }
+    ta.value = claudeTxt; delete use.dataset.armed;
+    spFlash(use, 'Copied'); ta.focus(); return;
+  }
+  if (e.target.closest('#kpiModalBody [data-sp-approve]')) { spApprove(e.target.closest('[data-sp-approve]')); return; }
+});
+document.addEventListener('change', (e) => {
+  if (e.target.matches('#kpiModalBody [name="stage"]')) {
+    const r = $('spResults'); if (r) r.style.display = e.target.value === 'posted' ? '' : 'none';
+  }
+});
+document.addEventListener('toggle', (e) => {
+  if (e.target.id === 'spNotes' && e.target.open) { const t = $('postNotesThread'); if (t) t.scrollTop = t.scrollHeight; }
+}, true);
+async function spApprove(btn) {
+  const ed = social.editing; if (!ed || !ed.post || !ed.post.id) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
+  try { await savePost(ed.post, ed.onSaved, { stage: 'approved', copy_status: 'approved', approve: true }, ed.post); }
+  catch (err) { toast(err.message || String(err), 'err'); if (btn) { btn.disabled = false; btn.textContent = '✅ Approve'; } }
+}
+
 // Show the tagged radio episode + its recap notes on a post, so Janelle has the
 // recap material right where she drafts.
 async function raLoadPostEpisode(stationId) {
@@ -3285,33 +3403,54 @@ document.addEventListener('change', async (e) => {
   if (pid) loadPostTasks(pid);
 });
 
-async function savePost(existing, onSaved) {
+async function savePost(existing, onSaved, extra, seed) {
+  extra = extra || {};
   const title = kpiVal('title');
   if (!title) throw new Error('Title is required');
-  const channels = [...$('kpiModalBody').querySelectorAll('[data-chan]:checked')].map(b => b.value);
   const sf = kpiVal('scheduled_for');
-  const stage = kpiVal('stage') || 'idea';
+  const stage = extra.stage || kpiVal('stage') || 'idea';
+  // ONLY the fields the v2 editor shows. Hidden fields are left out of the
+  // patch so an edit can never blank them.
   const patch = {
-    title, channels, stage,
-    caption: kpiVal('caption') || null,
+    title, stage,
+    account: kpiVal('account') || 'come_with',
+    format: kpiVal('format') || null,
+    phase: kpiVal('phase') || 'general',
     brief: kpiVal('brief') || null,
-    draft_by: kpiVal('draft_by') || null,
-    review_by: kpiVal('review_by') || null,
-    series: kpiVal('series') || null,
-    scheduled_for: sf ? new Date(sf).toISOString() : null,
-    owner_id: kpiVal('owner_id') || null,
-    event_id: kpiVal('event_id') || null,
-    content_pillar: kpiVal('content_pillar') || null,
+    caption: kpiVal('caption') || null,
     asset_url: kpiVal('asset_url') || null,
-    asset_status: kpiVal('asset_status') || 'none',
-    link_url: kpiVal('link_url') || null,
-    cta: kpiVal('cta') || null,
+    scheduled_for: sf ? new Date(sf).toISOString() : null,
   };
+  if (extra.copy_status) patch.copy_status = extra.copy_status;
+  // Results only exist once it is posted; until then the row keeps whatever it has.
+  if (stage === 'posted') {
+    const r = {};
+    SOCIAL_RESULT_KEYS.forEach(k => { const v = kpiVal('res_' + k); if (v !== '') { const n = Number(v); if (Number.isFinite(n) && n >= 0) r[k] = Math.round(n); } });
+    patch.results = Object.keys(r).length ? r : null;
+  }
   if (stage === 'posted' && !(existing && existing.posted_at)) patch.posted_at = new Date().toISOString();
+  if (!existing) {
+    // A new post keeps whatever its seed carried (event hub, content center),
+    // and is Janelle's unless the seed says otherwise - same default as the
+    // connector, so Approve always has somebody to notify.
+    const s = seed || {};
+    const janelle = (socialPeople || []).find(pe => (pe.email || '').toLowerCase() === 'janelle@comewith.org');
+    Object.assign(patch, {
+      channels: s.channels || [], series: s.series || null, event_id: s.event_id || null,
+      owner_id: s.owner_id || (janelle && janelle.id) || null,
+    });
+  }
   const res = existing
     ? await sb.from('social_posts').update(patch).eq('id', existing.id)
     : await sb.from('social_posts').insert(patch);
   if (res.error) throw new Error(res.error.message);
+  if (extra.approve && existing) {
+    await addPostNoteBody(existing.id, '— Approved —');
+    if (existing.owner_id && existing.owner_id !== ME.id) {
+      await notify(existing.owner_id, 'approved', `Approved: ${title}`, 'Approved — ready to schedule.', 'post', existing.id);
+      toast('Approved — owner notified', 'ok');
+    } else toast(existing.owner_id ? 'Approved' : 'Approved (no owner to notify)', 'ok');
+  }
   closeKpi();
   if (onSaved) { await onSaved(); return; }
   if (document.querySelector('#panel-social-calendar.active')) await loadSocialCalendar();
@@ -3321,17 +3460,20 @@ async function loadPostNotes(postId) {
   const el = document.getElementById('postNotesThread');
   if (!el) return;
   const { data, error } = await sb.from('social_post_notes')
-    .select('id, body, created_at, author:profiles!author_id(full_name,email)')
+    .select('id, body, created_at, author_name, author:profiles!author_id(full_name,email)')
     .eq('post_id', postId).order('created_at', { ascending: true });
   if (error) { el.innerHTML = '<div class="muted">' + escapeHtml(error.message) + '</div>'; return; }
+  const cnt = $('spNoteCount'); if (cnt) cnt.textContent = String(data.length);
   if (!data.length) { el.innerHTML = '<div class="muted">No notes yet. Start the conversation.</div>'; return; }
   el.innerHTML = data.map(n => {
-    const who = n.author ? escapeHtml(n.author.full_name || n.author.email) : 'Unknown';
+    const who = escapeHtml(socialNoteAuthor(n));
     const when = new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
     return `<div class="note-item"><div class="note-head"><b>${who}</b> <span class="muted">${when}</span></div><div class="note-body">${escapeHtml(n.body)}</div></div>`;
   }).join('');
   el.scrollTop = el.scrollHeight;
 }
+// A note from the connector has no profile, only author_name ("Claude").
+const socialNoteAuthor = (n) => n.author_name || (n.author ? (n.author.full_name || n.author.email) : 'Unknown');
 
 // Insert a note with a given body (used by the workflow handshake to log the
 // request in the thread). author_id defaults via the row; RLS handles the rest.
@@ -3371,7 +3513,7 @@ async function exportSnapshot() {
   if (!posts.length) { toast('No posts in this view to share.', 'err'); return; }
   const ids = posts.map(p => p.id);
   const { data: notes, error } = await sb.from('social_post_notes')
-    .select('post_id, body, created_at, author:profiles!author_id(full_name,email)')
+    .select('post_id, body, created_at, author_name, author:profiles!author_id(full_name,email)')
     .in('post_id', ids).order('created_at', { ascending: true });
   if (error) { toast('Snapshot failed: ' + error.message, 'err'); return; }
   const byPost = {};
@@ -3393,7 +3535,7 @@ async function exportSnapshot() {
       const meta = [p.series, chans, p.owner ? (p.owner.full_name || p.owner.email) : '', p.content_pillar]
         .filter(Boolean).map(x => esc(x)).join(' &middot; ');
       const ns = (byPost[p.id] || []).map(n => {
-        const who = n.author ? esc(n.author.full_name || n.author.email) : 'Unknown';
+        const who = esc(socialNoteAuthor(n));
         const when = new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
         return `<div class="note"><span class="who">${who}</span> <span class="when">${esc(when)}</span><div class="nb">${esc(n.body)}</div></div>`;
       }).join('') || '<div class="nonote">No notes yet.</div>';
@@ -3522,7 +3664,7 @@ async function sendSocialCalendarEmail(posts) {
   const note = $('scNote')?.value || '';
   const ids = posts.map(p => p.id);
   const { data: notes } = await sb.from('social_post_notes')
-    .select('post_id, body, created_at, author:profiles!author_id(full_name,email)').in('post_id', ids).order('created_at', { ascending: true });
+    .select('post_id, body, created_at, author_name, author:profiles!author_id(full_name,email)').in('post_id', ids).order('created_at', { ascending: true });
   const byPost = {}; (notes || []).forEach(n => { (byPost[n.post_id] || (byPost[n.post_id] = [])).push(n); });
   const html = buildSocialEmailHtml(posts, byPost, note);
   const { error } = await sb.functions.invoke('send-notice', { body: { to, cc: cc.length ? cc : undefined, subject, html } });
@@ -3541,7 +3683,7 @@ function buildSocialEmailHtml(posts, byPost, note) {
       const chans = (p.channels || []).map(c => SOCIAL_CHAN_LABEL[c] || c).join(', ');
       const time = p.scheduled_for ? new Date(p.scheduled_for).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
       const meta = [p.series, chans, p.owner ? (p.owner.full_name || p.owner.email) : '', p.content_pillar].filter(Boolean).map(esc).join(' &middot; ');
-      const ns = (byPost[p.id] || []).map(n => { const who = n.author ? esc(n.author.full_name || n.author.email) : 'Unknown'; const when = new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); return `<div style="margin:5px 0;font:12px Arial,sans-serif;color:#444"><strong>${who}</strong> <span style="color:#999">${esc(when)}</span><br>${esc(n.body)}</div>`; }).join('') || '<div style="font:italic 12px Arial,sans-serif;color:#aaa">No notes yet.</div>';
+      const ns = (byPost[p.id] || []).map(n => { const who = esc(socialNoteAuthor(n)); const when = new Date(n.created_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }); return `<div style="margin:5px 0;font:12px Arial,sans-serif;color:#444"><strong>${who}</strong> <span style="color:#999">${esc(when)}</span><br>${esc(n.body)}</div>`; }).join('') || '<div style="font:italic 12px Arial,sans-serif;color:#aaa">No notes yet.</div>';
       sec += `<tr><td style="padding:8px 0"><table width="100%" cellpadding="0" cellspacing="0" style="border-left:4px solid ${color};background:#faf8f4;border-radius:6px"><tr><td style="padding:10px 12px">
         <span style="display:inline-block;background:${color};color:#fff;font:700 10px Arial,sans-serif;padding:2px 8px;border-radius:10px;text-transform:uppercase">${esc(SOCIAL_STAGE_LABEL[p.stage] || p.stage)}</span>${time ? ` <span style="color:#888;font:12px Arial,sans-serif">${esc(time)}</span>` : ''}
         <div style="font:700 15px Arial,sans-serif;color:#16243f;margin:6px 0 2px">${esc(p.title)}</div>
@@ -3576,15 +3718,17 @@ $('socialFilters').addEventListener('click', (e) => {
   if (e.target.closest('[data-scnotposted]')) {
     // A shortcut, not a filter of its own: it selects the stages that still owe
     // work. Pressing it again clears them, so it reads as a toggle.
-    const pre = ['idea', 'drafted', 'review', 'planned', 'scheduled'];
+    const pre = ['idea', 'drafted', 'ready', 'approved', 'scheduled', 'review', 'planned'];
     const now = social.fStage.slice().sort().join(',');
     social.fStage = now === pre.slice().sort().join(',') ? [] : pre.slice();
     renderSocial(); return;
   }
   if (e.target.closest('[data-scclear]')) {
-    social.q = ''; social.fStage = []; social.fSeries = []; social.fChan = [];
+    social.q = ''; social.fStage = []; social.fSeries = []; social.fChan = []; social.fPhase = []; social.fAccount = [];
+    social.needsReview = false;
     renderSocial();
   }
+  if (e.target.closest('[data-scneedsreview]')) { social.needsReview = !social.needsReview; renderSocial(); return; }
 });
 // Control Center is its own module now — the calendar's toggle just cycles the
 // three planning views.
@@ -3769,7 +3913,7 @@ function ccMultiDD(key, label, options) {
 function renderContentCenter() {
   const posts = ccFiltered();
   const seriesSet = [...new Set(cc.posts.map(p => p.series || '__none'))];
-  const stageOpts = SOCIAL_STAGES.map(s => [s, SOCIAL_STAGE_LABEL[s]]);
+  const stageOpts = socialStagesPresent(cc.posts).map(s => [s, SOCIAL_STAGE_LABEL[s]]);
   const seriesOpts = seriesSet.map(s => [s, s === '__none' ? 'General / none' : s]);
   const evIds = [...new Set(cc.posts.map(p => p.event_id || '__none'))];
   const evOpts = evIds.map(id => [id, id === '__none' ? 'No event' : ccEventName(id)]);
@@ -4056,7 +4200,7 @@ async function ccOpenWeekPlan() {
         const base = ccDatePlus(sunV, w * 7);
         for (const s of week) {
           const d = ccDatePlus(base, s.off);
-          rows.push({ title: s.title, stage: 'planned', channels: s.channels || ['instagram'], content_pillar: s.pillar || null, series: series || null, scheduled_for: new Date(d + 'T' + time).toISOString() });
+          rows.push({ title: s.title, stage: 'idea', channels: s.channels || ['instagram'], content_pillar: s.pillar || null, series: series || null, scheduled_for: new Date(d + 'T' + time).toISOString() });
         }
       }
       const { error } = await sb.from('social_posts').insert(rows);
@@ -4110,7 +4254,7 @@ function ccEditWeekPlan() {
 // prefilled + returns here on save).
 function ccSchedulePost(eventId) {
   const ev = cc.events.find(x => x.id === eventId);
-  openPostModal({ event_id: eventId, series: ev?.series || '', stage: 'planned', channels: ['instagram'] }, { onSaved: loadContentCenter });
+  openPostModal({ event_id: eventId, series: ev?.series || '', stage: 'idea', channels: ['instagram'] }, { onSaved: loadContentCenter });
 }
 async function ccPostsPopup(eventId) {
   const ev = cc.events.find(x => x.id === eventId);
@@ -6648,6 +6792,7 @@ $('kpiModalAlt').addEventListener('click', async () => {
 });
 
 function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
+  kpiCloseGuard = null;   // a guard belongs to the screen that set it
   kpiAlt(null, null);
   // Narrow is the default for every modal. The invoice editor re-asserts wide
   // straight after; without this reset, the small forms it opens on top of
@@ -6669,7 +6814,30 @@ function openKpi(title, sub, bodyHtml, submitFn, submitLabel = 'Save') {
   // Focus a TEXT field first (never a <select>) so the cursor lands in an editable box.
   setTimeout(() => { const f = $('kpiModalBody').querySelector('input:not([type=checkbox]):not([type=radio]):not([type=file]), textarea') || $('kpiModalBody').querySelector('select'); if (f) f.focus(); }, 60);
 }
-function closeKpi() { $('kpiModalOverlay').classList.remove('show'); kpiWide(false); kpiAlt(null, null); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
+// Unsaved-changes guard. A screen that wants one sets kpiCloseGuard (a function
+// returning true when the form is dirty) right after openKpi. Esc, ✕ and Cancel
+// go through requestCloseKpi, which shows an in-modal bar instead of a browser
+// confirm(). closeKpi() itself stays unconditional - a save closes through it.
+let kpiCloseGuard = null;
+function requestCloseKpi() {
+  const bar = document.getElementById('kpiGuardBar');
+  if (bar) { bar.remove(); return; }           // a second Esc = keep editing
+  if (kpiCloseGuard && kpiCloseGuard()) {
+    $('kpiModalBody').insertAdjacentHTML('afterbegin',
+      '<div class="sp-guard" id="kpiGuardBar" role="alert"><strong>Unsaved changes.</strong>' +
+      '<span style="flex:1;"></span><button type="button" class="hub-mini" data-kpiguard="keep">Keep editing</button>' +
+      '<button type="button" class="hub-mini danger" data-kpiguard="discard">Discard changes</button></div>');
+    $('kpiModalBody').scrollTop = 0;
+    const m = $('kpiModalOverlay').querySelector('.modal'); if (m) m.scrollTop = 0;
+    return;
+  }
+  closeKpi();
+}
+$('kpiModalOverlay').addEventListener('click', (e) => {
+  const g = e.target.closest('[data-kpiguard]'); if (!g) return;
+  if (g.dataset.kpiguard === 'discard') closeKpi(); else document.getElementById('kpiGuardBar')?.remove();
+});
+function closeKpi() { kpiCloseGuard = null; $('kpiModalOverlay').classList.remove('show'); kpiWide(false); kpiAlt(null, null); $('kpiModalBody').innerHTML = ''; kpiSubmit = null; const bp = document.getElementById('briefPopup'); if (bp) bp.remove(); const bn = document.getElementById('bpNetPopup'); if (bn) bn.remove(); }
 // Keep the floating brief reader in sync if the brief is edited while it's open.
 document.addEventListener('input', (e) => { if (e.target.matches('#kpiModalBody [name="brief"]')) { const b = document.getElementById('briefPopBody'); if (b) b.textContent = (e.target.value || '').trim() || '(No brief written yet — type it in the form.)'; } });
 const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${name}"]`); return el ? el.value.trim() : ''; };
@@ -6678,8 +6846,8 @@ const kpiVal = (name) => { const el = $('kpiModalBody').querySelector(`[name="${
 const kpiWide = (on) => { const m = $('kpiModalOverlay').querySelector('.modal'); if (m) m.classList.toggle('wide', !!on); };
 const refreshStratIfActive = () => { if (document.querySelector('#panel-strategy.active')) loadStrategy(); };
 
-$('kpiModalCancel').addEventListener('click', closeKpi);
-$('kpiModalX').addEventListener('click', closeKpi);
+$('kpiModalCancel').addEventListener('click', requestCloseKpi);
+$('kpiModalX').addEventListener('click', requestCloseKpi);
 // The main script is an ES module, so inline onclick can't reach its functions —
 // the Add-artist/venue modal wires its controls through delegation instead.
 $('kpiModalOverlay').addEventListener('click', (e) => { if (e.target.closest('[data-add-lookup]')) { e.preventDefault(); raAddLookup(); } });
@@ -6687,7 +6855,7 @@ $('kpiModalOverlay').addEventListener('change', (e) => { if (e.target.closest('[
 $('kpiModalOverlay').addEventListener('keydown', (e) => { if (e.key === 'Enter' && e.target.id === 'addName') { e.preventDefault(); e.stopPropagation(); raAddLookup(); } }, true);
 // No click-outside-to-close (a drag-select ending on the overlay was closing the
 // pop-out). Close only via Cancel / Save or Escape.
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) closeKpi(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('kpiModalOverlay').classList.contains('show')) requestCloseKpi(); });
 // Backspace outside a text field must NOT navigate the browser "back" (that closes
 // the dashboard / any open pop-out). CAPTURE phase at the window level so it fires
 // before everything and reliably cancels the default on every browser (Firefox still
@@ -10536,7 +10704,7 @@ function hubPostsHTML() {
         '<div class="li-sub">' + escapeHtml(when) +
         (p.content_pillar ? ' \u00b7 ' + escapeHtml(p.content_pillar) : '') + '</div></td>' +
       '<td>' + ccSel('data-sp-field="stage" data-id="' + escapeHtml(p.id) + '"',
-                     SOCIAL_STAGES.map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
+                     socialStageList(p.stage).map(k => [k, SOCIAL_STAGE_LABEL[k] || k]), p.stage,
                      'Where the post has got to') + '</td>' +
       '<td><input class="modal-input ev-inline cc-date" type="date" data-sp-field="scheduled_for" data-id="' +
         escapeHtml(p.id) + '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) +

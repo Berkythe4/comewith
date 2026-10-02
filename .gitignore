@@ -72,3 +72,6 @@ ebay_verification_token.txt
 # Verification stills — verify_episode.py regenerates these every run.
 Radio/**/_preview/
 # the tool packet is committed at Radio/CWR_render_tool.zip (no credentials in it)
+
+# social-mcp local test deps (npm i in that folder; see server.test.ts)
+supabase/functions/social-mcp/.test-deps/
