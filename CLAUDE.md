@@ -364,6 +364,32 @@ doubled every campaign's Sent and made the attribution lookup error, orphaning e
 later delivered/opened event (213 repaired it; LEARNINGS §71). Count every card by
 unique recipient, and never `.maybeSingle()` on a lookup another system can duplicate.
 
+## Social calendar v2 + the Claude connector (217, 2026-10-02)
+
+- **`social_posts.caption` IS the final caption** (relabelled "Final caption"; there is
+  no duplicate column). `claude_caption` is Claude's draft and is written **only** by the
+  `social-mcp` connector — a trigger refuses it from any signed-in user. "Use this"
+  copies the draft into `caption`; nothing in the dashboard writes `claude_caption`.
+- **Hidden ≠ dropped.** The v2 editor hides channels, series, event, owner,
+  drafter/approver, CTA, destination URL, asset status, tasks and attached content, and
+  `savePost()` writes **only the visible fields** so their data stays. Adding a field
+  back means adding it to the patch too. LEARNINGS §85.
+- **Stage pipeline: idea → drafted → ready → approved → scheduled → posted.** `review`,
+  `planned` and `archived` are still legal in the CHECK and still labelled; dropdowns
+  use `socialStageList(cur)` so a row holding one keeps it. Never narrow that CHECK.
+- **The connector (`supabase/functions/social-mcp`) has exactly five tools and no
+  delete.** It never writes `caption`, only edits posts at `idea`/`drafted`, creates
+  skeletons at `idea` owned by Janelle, signs notes `author_name = 'Claude'`. The rule is
+  enforced in the zod schema, in `tools.ts` and in the DB (§84) — keep all three.
+  Every call, refused ones included, goes to `connector_log`.
+- **The secret is the URL path segment** (`/functions/v1/social-mcp/<SOCIAL_MCP_SECRET>`,
+  deployed `verify_jwt = false`). It lives in the desktop `.env` and as a Supabase
+  secret, never in git. Rotating it = set a new secret + re-add the connector in claude.ai.
+- **After any connector change: `python scripts/e2e_social_mcp.py`** (live, on prod,
+  cleans up its test post) plus `node --test supabase/functions/social-mcp/tools.test.ts`
+  and the transport test (needs `.test-deps`, see `server.test.ts`). No LLM calls happen
+  in the site at render time — Claude writes through the connector, the site displays.
+
 ## Come With Radio (episodes live outside `events`)
 
 - **`station_no` is the SHOW counter; `edition_seq` is the episode number.** Two

@@ -2555,3 +2555,60 @@ on their profile"*. Same rule as §23 (never render a blank as zero) and the def
 filter rule in CLAUDE.md (say what you removed), applied to a filter the user turns
 on: **when a filter's field is partly empty, unknown is its own bucket in the report,
 never merged into "doesn't match".**
+
+---
+
+## Section 83 — A backfill's pre-check must have the same scope as its UPDATE (2026-10-02)
+
+Migration 217 mapped two legacy stages onto the new pipeline (`planned -> scheduled`,
+`review -> ready`). The pre-check said prod held **0** such rows, so the map was
+believed to touch nothing. It touched 9: the pre-check filtered `deleted_at is null`,
+the UPDATE did not, and 9 **soft-deleted** posts had been `planned`. History was
+rewritten on rows nobody could see. 218 restored them from the pre-apply backup.
+
+The dry run did not catch it because the dry run did exactly what the migration said;
+the error was in the belief about what it said. **Count with the UPDATE's own WHERE
+clause, not a convenient one** — and take the backup before the dry run, because the
+backup is what made the repair a one-line, evidence-backed migration instead of a guess.
+
+---
+
+## Section 84 — The Claude connector's boundary is enforced in three places, on purpose (2026-10-02)
+
+`social-mcp` lets Claude write to the social calendar from claude.ai. The rules
+(no deletes, never the final caption, never a post at `ready` or later) live in:
+1. **zod `.strict()` schemas** — an unexpected key (`caption`, `stage`) is refused,
+   never silently dropped;
+2. **`tools.ts`** — the stage rule, a write-list that does not contain `caption`, and a
+   conditional UPDATE (`... and stage = <what we read>`) so a human moving the post on
+   mid-call wins;
+3. **the database** — 217's trigger refuses `claude_caption` from any signed-in user,
+   so the draft column can only ever be the connector's, and the connector's own code
+   never names `caption`.
+
+Any one of these could be "the" guard. Each covers a different failure: a schema
+change, a code change, and a different writer. The connector runs as service role,
+which bypasses RLS, so code is the only thing between it and the table — that is
+exactly where belt-and-braces is cheap.
+
+**Logging sits OUTSIDE the SDK.** The MCP SDK validates input before the tool handler
+runs, so a rejected call (bad schema, an unknown tool like `delete_post`) never reached
+the code that logged. The first live E2E showed 4 log rows for 9 calls. The transport
+wrapper now logs any `tools/call` the tool layer did not. A log that records only the
+calls that succeeded in reaching the code is a log of the polite callers.
+
+**The secret is a URL path segment** because claude.ai's request-header auth is in beta
+for a limited set of organisations (checked against the connector docs 2026-10-02).
+`x-api-key` is accepted too, so the header route works the day it reaches this account.
+
+---
+
+## Section 85 — Hide a field by leaving it out of the SAVE, not just the form (2026-10-02)
+
+The v2 post editor hides channels, series, linked event, owner, drafter/approver, CTA,
+destination URL and asset status. Removing them from the form is not enough: the old
+save built its patch from every form field, so a missing input would have saved as
+`null`/`[]` and blanked the data the sprint promised to keep. The save now writes
+**only the fields the editor shows**, and the editor test asserts the patch's key set
+exactly. A new post still carries its seed's hidden fields (event hub, Content
+Center) and defaults its owner to Janelle, so Approve always has somebody to notify.

@@ -1,3 +1,63 @@
+# Carryover - 2026-10-02 (Social Calendar v2 + Claude connector - DESKTOP)
+
+**Closed 2026-10-02 on the DESKTOP.** No branch; everything is on `master` and
+deployed. The 2026-10-01 block below is the previous close and its START HERE list
+is **still open** - nothing in it was touched today.
+
+## >> START HERE NEXT SESSION
+
+**1. Keith adds the connector in claude.ai** (checklist in `reviews/session_2026-10-02.md`):
+Customize > Connectors > Add custom connector > paste
+`https://yaytdosxfhcqatmhctzk.supabase.co/functions/v1/social-mcp/<SOCIAL_MCP_SECRET>`
+(value in the desktop `.env`; never commit it) > No sign-in > enable in "Come With!".
+
+**2. When Keith says "connector is live"**, set up the two scheduled tasks
+(Monday 9am plan + draft, Friday 4pm results) - spec in the same review file.
+
+**3. Eyeball the new post editor on a phone.** Tested by harness + live E2E on prod,
+not in a browser (no browser pane for the dashboard here).
+
+## State summary
+
+- **Migrations 001-218**, all applied (`applied_migrations` top = 218). 217 social
+  calendar v2 (additive) + connector_log; 218 restores 9 soft-deleted posts 217's stage
+  map moved (LEARNINGS §83).
+- **Functions deployed:** `social-mcp` **v2** (new, verify_jwt off, secret in path).
+  Secret `SOCIAL_MCP_SECRET` set on prod and in the desktop `.env` only - the laptop
+  and Henry's machine do not have it; `scripts/e2e_social_mcp.py` needs it.
+- **LEARNINGS §85** is the latest (§83-85 added this session). CLAUDE.md gained a
+  "Social calendar v2 + the Claude connector" section.
+- **Anon-401 invariant verified** on all five financial views; `check_anon_exposure.py`
+  now sweeps social_posts / social_post_notes / connector_log - all clean.
+  `post_apply.sql` all PASS.
+- **git:** `master` pushed, `0 0` against origin. Machine: DESKTOP. Uncommitted on
+  purpose: Keith's unrelated working files (Receipts/, Radio/, Agreements/, ...) and
+  `backups/social_posts_pre217_2026-10-02.json` (local backup, like the other backups).
+
+## This session shipped
+
+- **Post editor v2**: title, account / format (segmented), date, phase, 2-line brief,
+  Claude's caption (read-only, Use this / Copy, drafted timestamp), Final caption (=
+  the existing `caption`, Copy final caption falls back to Claude's), asset link,
+  stage + Approve (bell to owner), notes collapsed with count, results at posted.
+  Hidden fields stay on the row (save writes visible fields only, §85). Esc / X /
+  Cancel hit an in-modal unsaved-changes guard.
+- **List**: Account / Format / Phase chips replace Channels / Pillar; 🤖 on posts Claude
+  drafted with no Final; Phase + Account filter chips; 🤖 Needs review shortcut.
+- **social-mcp** connector: list_posts, create_post_skeleton, update_post_draft,
+  add_note, get_results. No deletes, never `caption`, never ready+. Every call logged.
+- Tests: `node --test supabase/functions/social-mcp/tools.test.ts` (16),
+  transport `server.test.ts` (8), `scripts/test_social_editor.mjs`,
+  `scripts/test_content_center.mjs` updated, live `scripts/e2e_social_mcp.py` (17).
+
+## Parked / next
+
+- Radio auto-post still inserts `phase = general`; 17 of 25 CWR/radio-titled posts have
+  no series so stayed `general` - one bulk re-phase fixes it, not done unasked.
+- `scripts/test_task_email.mjs` fails on untouched HEAD as well - pre-existing.
+
+---
+
 # Carryover - 2026-10-01 (guest DJ link: NYC locals, venue filter, song sort - LAPTOP)
 
 **Closed 2026-10-01 on the LAPTOP.** No branch; everything is on `master` and
