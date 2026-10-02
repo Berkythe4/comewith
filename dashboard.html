@@ -1522,8 +1522,8 @@ tr.note-done .note-text { text-decoration: line-through; color: var(--mid); }
 .sp-chip.acct-di { border-color: #8362A8; color: #8362A8; }
 .sp-chip.acct-collab { border-color: #B5791F; color: #B5791F; }
 .sp-guard { border: 1px solid var(--red); background: rgba(193,59,42,0.08); border-radius: 8px; padding: 9px 11px; margin-bottom: 10px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 0.85rem; }
-.sp-results { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
-@media (max-width: 560px) { .sp-results { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.sp-results { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 560px) { .sp-results { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 details.sp-notes > summary { cursor: pointer; font-weight: 600; font-size: 0.85rem; padding: 4px 0; }
 /* Content list — the channel cell. Everything else (table, banding, chips,
    inline selects) is shared with the events list on purpose. */
@@ -2794,7 +2794,9 @@ const SOCIAL_FORMATS = ['reel', 'carousel', 'story', 'post'];
 const SOCIAL_FORMAT_LABEL = { reel: 'Reel', carousel: 'Carousel', story: 'Story', post: 'Post' };
 const SOCIAL_PHASES = ['awareness', 'sponsors', 'radio', 'convert', 'event', 'post', 'general'];
 const SOCIAL_PHASE_LABEL = { awareness: 'Awareness', sponsors: 'Sponsors', radio: 'Radio', convert: 'Convert', event: 'Event', post: 'Post-event', general: 'General' };
-const SOCIAL_RESULT_KEYS = ['views', 'likes', 'shares', 'saves'];
+// Same five metrics the connector's log_results writes. The editor rebuilds
+// `results` from these boxes on save, so a metric missing here would be wiped.
+const SOCIAL_RESULT_KEYS = ['views', 'likes', 'comments', 'shares', 'saves'];
 // Claude has drafted and nobody has written the final yet: Janelle's queue.
 const socialNeedsReview = (p) => !!(p.claude_caption && !(p.caption || '').trim());
 const SOCIAL_CHANNELS = ['instagram', 'tiktok', 'facebook', 'x', 'youtube', 'email', 'blog', 'other'];
@@ -3424,7 +3426,10 @@ async function savePost(existing, onSaved, extra, seed) {
   if (extra.copy_status) patch.copy_status = extra.copy_status;
   // Results only exist once it is posted; until then the row keeps whatever it has.
   if (stage === 'posted') {
+    // Keep any metric the editor has no box for, so a key added on the
+    // connector side first is never erased by a save here.
     const r = {};
+    Object.entries((existing && existing.results) || {}).forEach(([k, v]) => { if (SOCIAL_RESULT_KEYS.indexOf(k) < 0) r[k] = v; });
     SOCIAL_RESULT_KEYS.forEach(k => { const v = kpiVal('res_' + k); if (v !== '') { const n = Number(v); if (Number.isFinite(n) && n >= 0) r[k] = Math.round(n); } });
     patch.results = Object.keys(r).length ? r : null;
   }

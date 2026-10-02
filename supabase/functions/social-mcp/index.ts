@@ -1,8 +1,9 @@
 // social-mcp  (remote MCP server for claude.ai - SECRET-gated, no login)
 //
 // Gives Claude a narrow, safe handle on the social calendar so it can plan and
-// draft from claude.ai and from scheduled tasks. Five tools, no deletes, never
-// the final caption, never a post at `approved` or later. See tools.ts for the
+// draft from claude.ai and from scheduled tasks. Six tools, no deletes, never
+// the final caption. Drafting stops at `ready`; the one write on a later post is
+// log_results, which touches only `results` and only at `posted`. See tools.ts for the
 // rules and server.ts for the transport + secret.
 //
 // Deployed with verify_jwt = false (claude.ai sends no Supabase JWT); the

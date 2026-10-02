@@ -107,6 +107,15 @@ const EXISTING = { id: 'p1', owner_id: 'janelle', posted_at: null, channels: ['i
   ok(!!h.calls.update.patch.posted_at, 'marking posted stamps posted_at');
 }
 {
+  const h = harness({ ...FORM, stage: 'posted', res_comments: '12' });
+  await h.savePost({ ...EXISTING, results: { views: 1, comments: 3, reach: 5000 } }, null, null, EXISTING);
+  const r = h.calls.update.patch.results;
+  ok(r.comments === 12 && r.views === 1200, 'Comments is an editor box like the other four');
+  ok(r.reach === 5000, 'a metric the editor has no box for survives a save (never wiped)');
+  ok(JSON.stringify(consts.SOCIAL_RESULT_KEYS) === JSON.stringify(['views', 'likes', 'comments', 'shares', 'saves']),
+    'editor result boxes = the connector log_results metrics');
+}
+{
   const h = harness({ ...FORM, stage: 'posted', res_views: '', res_shares: '', res_saves: '' });
   await h.savePost({ ...EXISTING, posted_at: '2026-10-01T00:00:00Z' }, null, null, EXISTING);
   ok(h.calls.update.patch.results === null && !('posted_at' in h.calls.update.patch), 'all results cleared -> null; an existing posted_at is kept');

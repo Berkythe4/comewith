@@ -72,7 +72,7 @@ test("secret in the path or in an x-api-key header", async () => {
   assert.equal((await rpc(BASE, "tools/list", {}, { "x-api-key": SECRET })).status, 200);
 });
 
-test("initialize, then tools/list advertises exactly the five tools", async () => {
+test("initialize, then tools/list advertises exactly the six tools", async () => {
   const init = await rpc(`${BASE}/${SECRET}`, "initialize", {
     protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" },
   });
@@ -80,7 +80,7 @@ test("initialize, then tools/list advertises exactly the five tools", async () =
   assert.equal(init.body.result.serverInfo.name, "come-with-social");
   const r = await rpc(`${BASE}/${SECRET}`, "tools/list");
   const names = r.body.result.tools.map((t: any) => t.name).sort();
-  assert.deepEqual(names, ["add_note", "create_post_skeleton", "get_results", "list_posts", "update_post_draft"]);
+  assert.deepEqual(names, ["add_note", "create_post_skeleton", "get_results", "list_posts", "log_results", "update_post_draft"]);
   assert.ok(!names.some((n: string) => /delete|remove/.test(n)));
   const upd = r.body.result.tools.find((t: any) => t.name === "update_post_draft");
   assert.deepEqual(Object.keys(upd.inputSchema.properties).sort(), ["brief", "claude_caption", "id"]);
@@ -134,4 +134,32 @@ test("every call is logged - including ones rejected before a tool runs", async 
   assert.deepEqual(LOGS.map((l) => [l.tool, l.ok]), [["update_post_draft", false], ["delete_post", false], ["list_posts", true]]);
   assert.equal(LOGS[0].post_id, PID);
   assert.match(LOGS[1].detail, /rejected before the tool ran/);
+});
+
+test("log_results through the full stack: schema, stage rule, and the log", async () => {
+  LOGS.length = 0;
+  const r = await rpc(`${BASE}/${SECRET}`, "tools/list");
+  const lr = r.body.result.tools.find((t: any) => t.name === "log_results");
+  assert.deepEqual(Object.keys(lr.inputSchema.properties).sort(), ["comments", "id", "likes", "saves", "shares", "views"]);
+  assert.equal(lr.annotations.readOnlyHint, false);
+  // The fixture post is APPROVED: the stage rule refuses it.
+  const notPosted = await callTool("log_results", { id: PID, views: 10 });
+  assert.equal(notPosted.body.result.isError, true);
+  assert.match(notPosted.body.result.content[0].text, /only be logged on a posted post/);
+  // Any field beyond the five metrics is a schema refusal - it never reaches the tool.
+  for (const extra of [{ caption: "x" }, { stage: "posted" }, { results: { views: 1 } }, { views: -3 }, { views: 2.5 }]) {
+    const res = await callTool("log_results", { id: PID, views: 1, ...extra });
+    assert.ok(res.body.error || res.body.result?.isError, JSON.stringify(extra));
+  }
+  assert.equal(s.posts.get(PID)!.results, null);
+  assert.equal(s.posts.get(PID)!.caption, "final");
+  assert.equal(LOGS.length, 6, "every call logged, refusals included");
+  assert.ok(LOGS.every((l) => l.tool === "log_results" && l.ok === false && l.post_id === PID));
+  // Flip the fixture to posted: now it writes, and only results.
+  s.posts.get(PID)!.stage = "posted";
+  const okRes = await callTool("log_results", { id: PID, views: 100, comments: 4 });
+  assert.ok(!okRes.body.result.isError);
+  assert.deepEqual(s.posts.get(PID)!.results, { views: 100, comments: 4 });
+  assert.equal(s.posts.get(PID)!.caption, "final");
+  s.posts.get(PID)!.stage = "approved"; s.posts.get(PID)!.results = null;
 });

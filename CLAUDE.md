@@ -377,8 +377,11 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **Stage pipeline: idea → drafted → ready → approved → scheduled → posted.** `review`,
   `planned` and `archived` are still legal in the CHECK and still labelled; dropdowns
   use `socialStageList(cur)` so a row holding one keeps it. Never narrow that CHECK.
-- **The connector (`supabase/functions/social-mcp`) has exactly five tools and no
-  delete.** It never writes `caption`, only edits posts at `idea`/`drafted`, creates
+- **The connector (`supabase/functions/social-mcp`) has exactly six tools and no
+  delete.** `log_results` writes ONLY `results` (merged, never replaced) and only at
+  stage `posted`; the editor's result boxes must list the same five metrics (views,
+  likes, comments, shares, saves) or a save wipes the missing one. Otherwise it never
+  writes `caption`, only edits posts at `idea`/`drafted`, creates
   skeletons at `idea` owned by Janelle, signs notes `author_name = 'Claude'`. The rule is
   enforced in the zod schema, in `tools.ts` and in the DB (§84) — keep all three.
   Every call, refused ones included, goes to `connector_log`.

@@ -9,10 +9,11 @@
 // the secret gets a bare 404: the endpoint does not admit that it exists.
 import { createMcpHandler, McpServer } from "npm:@modelcontextprotocol/server@2.2.0";
 import { z } from "npm:zod@4";
-import { ACCOUNTS, FORMATS, PHASES, STAGES, runTool, type Store } from "./tools.ts";
+import { ACCOUNTS, FORMATS, MAX_METRIC, PHASES, STAGES, runTool, type Store } from "./tools.ts";
 
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD");
 const uuid = z.string().uuid();
+const metric = z.number().int().min(0).max(MAX_METRIC);
 
 // .strict() everywhere: an unexpected key (say `caption`, or `stage`) is a
 // refusal, never silently dropped.
@@ -38,6 +39,11 @@ export const SCHEMAS = {
   }).strict(),
   add_note: z.object({ id: uuid, text: z.string().min(1).max(4000) }).strict(),
   get_results: z.object({ from: day, to: day }).strict(),
+  log_results: z.object({
+    id: uuid,
+    views: metric.optional(), likes: metric.optional(), comments: metric.optional(),
+    shares: metric.optional(), saves: metric.optional(),
+  }).strict(),
 };
 
 const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
@@ -45,7 +51,8 @@ const DESCRIPTIONS: Record<keyof typeof SCHEMAS, string> = {
   create_post_skeleton: "Create a planned post. Always lands at stage 'idea', owned by Janelle. Refuses a second post with the same title on the same day.",
   update_post_draft: "Write a brief and/or Claude's caption on a post at stage idea or drafted. Writing a caption moves idea -> drafted. Never touches the final caption; refuses any post at ready or later.",
   add_note: "Add a note to a post's conversation thread, signed 'Claude'.",
-  get_results: "Read-only. Posted items between two dates with their results (views, likes, shares, saves) - for the Friday report.",
+  get_results: "Read-only. Posted items between two dates with their results (views, likes, comments, shares, saves) - for the Friday report.",
+  log_results: "Record a posted post's numbers (views, likes, comments, shares, saves - any subset, whole numbers). Only works at stage 'posted'; merges over numbers already logged and writes nothing but the results.",
 };
 
 const READ_ONLY = new Set(["list_posts", "get_results"]);

@@ -112,8 +112,8 @@ def main():
         check(st == 404, "bad secret -> 404")
         st, res = mcp("tools/list")
         names = sorted(t["name"] for t in res["result"]["tools"])
-        check(names == ["add_note", "create_post_skeleton", "get_results", "list_posts", "update_post_draft"],
-              "exactly five tools, none of them a delete")
+        check(names == ["add_note", "create_post_skeleton", "get_results", "list_posts", "log_results", "update_post_draft"],
+              "exactly six tools, none of them a delete")
 
         # ---- 1. skeleton ---------------------------------------------------
         r = tool("create_post_skeleton", {"title": TITLE, "scheduled_at": "2026-10-20T18:00:00-04:00",
@@ -175,6 +175,10 @@ rollback;""")
         alive = sql(f"select count(*)::int n from social_posts where id = '{pid}' and deleted_at is null")[0]["n"]
         check((r.get("_isError") or "_error" in r) and alive == 1, "   refused: delete attempt (no such tool; post still there)")
 
+        r = tool("log_results", {"id": pid, "views": 1})
+        check(r["_isError"] and "only be logged on a posted post" in json.dumps(r),
+              "   refused: log_results on a post that is not posted (approved)")
+
         # ---- 5. posted + results -------------------------------------------
         r = as_keith(f"""update social_posts set stage = 'posted', posted_at = now(),
   results = '{{"views": 1234, "likes": 56, "shares": 7, "saves": 8}}'::jsonb where id = '{pid}';""")
@@ -183,6 +187,17 @@ rollback;""")
         got = [p for p in res.get("posts", []) if p["id"] == pid]
         check("_error" not in r and len(got) == 1 and got[0]["results"] == {"views": 1234, "likes": 56, "shares": 7, "saves": 8},
               "5. posted + results entered -> get_results returns them")
+
+        before = sql(f"select md5(concat_ws('|', title, caption, stage, scheduled_for::text, owner_id::text, "
+                     f"claude_caption, brief, account, format, phase)) h from social_posts where id = '{pid}'")[0]["h"]
+        r = tool("log_results", {"id": pid, "views": 2000, "comments": 9})
+        row = sql(f"select results, md5(concat_ws('|', title, caption, stage, scheduled_for::text, owner_id::text, "
+                  f"claude_caption, brief, account, format, phase)) h from social_posts where id = '{pid}'")[0]
+        check(not r["_isError"] and row["results"] == {"views": 2000, "likes": 56, "comments": 9, "shares": 7, "saves": 8},
+              "log_results on a posted post -> merged into results (views updated, comments added, the rest kept)")
+        check(row["h"] == before, "   log_results wrote nothing but results")
+        r = tool("log_results", {"id": pid, "views": 1, "caption": "sneak"})
+        check(r.get("_isError") or "_error" in r, "   refused: log_results with another field")
 
         # ---- notes + log ---------------------------------------------------
         r = tool("add_note", {"id": pid, "text": "E2E: Claude was here."})
@@ -194,6 +209,8 @@ rollback;""")
         tools_ok = {(x["tool"], x["ok"]) for x in log}
         check(("create_post_skeleton", True) in tools_ok and ("update_post_draft", False) in tools_ok
               and ("add_note", True) in tools_ok and ("delete_post", False) in tools_ok
+              and ("log_results", True) in tools_ok
+              and sum(1 for x in log if x["tool"] == "log_results" and not x["ok"]) >= 2
               and sum(1 for x in log if x["tool"] == "update_post_draft" and not x["ok"]) >= 2,
               f"connector_log has every call, schema rejections and delete attempts included ({len(log)} rows)")
     finally:

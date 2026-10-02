@@ -224,3 +224,61 @@ test("there is no delete: any delete-shaped call is refused and logged", async (
   assert.equal(f.logs.length, 4);
   assert.ok(f.logs.every((l) => l.ok === false));
 });
+
+// ---- log_results -------------------------------------------------------------------
+test("log_results: writes ONLY results on a posted post, merging over what is logged", async () => {
+  const f = fakeStore([{ id: ID(1), stage: "posted", caption: "final", title: "Live one", results: { views: 900, likes: 40 } }]);
+  const out: any = await runTool(f.store, "log_results", { id: ID(1), views: 1200, comments: 12 });
+  assert.equal(out.ok, true);
+  assert.deepEqual(f.writes, [{ results: { views: 1200, likes: 40, comments: 12 } }], "the only write is the results field");
+  assert.deepEqual(f.posts.get(ID(1))!.results, { views: 1200, likes: 40, comments: 12 });
+  assert.equal(f.posts.get(ID(1))!.caption, "final");
+  assert.equal(f.posts.get(ID(1))!.stage, "posted");
+  assert.deepEqual(out.result.logged, { views: 1200, comments: 12 });
+  assert.deepEqual(f.logs.at(-1), { tool: "log_results", post_id: ID(1), ok: true });
+});
+
+test("log_results: REFUSES every stage that is not posted", async () => {
+  for (const stage of ["idea", "drafted", "ready", "approved", "scheduled", "review", "planned", "archived"]) {
+    const f = fakeStore([{ id: ID(1), stage }]);
+    const out: any = await runTool(f.store, "log_results", { id: ID(1), views: 10 });
+    assert.equal(out.refused, true, stage);
+    assert.match(out.error, /only be logged on a posted post/);
+    assert.equal(f.writes.length, 0, stage);
+    assert.equal(f.posts.get(ID(1))!.results, null, stage);
+    assert.deepEqual(f.logs, [{ tool: "log_results", post_id: ID(1), ok: false, detail: out.error }], "refusal logged");
+  }
+});
+
+test("log_results: REFUSES any other field - final caption, stage, results blob, title", async () => {
+  const f = fakeStore([{ id: ID(1), stage: "posted", caption: "keep me" }]);
+  for (const extra of [{ caption: "x" }, { final_caption: "x" }, { stage: "approved" }, { results: { views: 1 } },
+                       { title: "renamed" }, { brief: "b" }, { claude_caption: "c" }, { posted_at: "2026-01-01" }]) {
+    const out: any = await runTool(f.store, "log_results", { id: ID(1), views: 5, ...extra });
+    assert.equal(out.refused, true, JSON.stringify(extra));
+  }
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.posts.get(ID(1))!.caption, "keep me");
+  assert.equal(f.logs.length, 8);
+  assert.ok(f.logs.every((l) => l.ok === false));
+});
+
+test("log_results: refuses junk numbers, an empty call, and a missing or deleted post", async () => {
+  const f = fakeStore([{ id: ID(1), stage: "posted" }, { id: ID(2), stage: "posted", deleted_at: "x" }]);
+  for (const bad of [{ views: -1 }, { views: 1.5 }, { likes: "12" }, { saves: 2e9 }, {}]) {
+    const out: any = await runTool(f.store, "log_results", { id: ID(1), ...bad });
+    assert.equal(out.refused, true, JSON.stringify(bad));
+  }
+  assert.equal(((await runTool(f.store, "log_results", { id: ID(9), views: 1 })) as any).refused, true);
+  assert.equal(((await runTool(f.store, "log_results", { id: ID(2), views: 1 })) as any).refused, true);
+  assert.equal(f.writes.length, 0);
+});
+
+test("log_results: loses the race to a human moving the post off posted", async () => {
+  const f = fakeStore([{ id: ID(1), stage: "posted" }]);
+  const realGet = f.store.getPost;
+  f.store.getPost = async (id) => { const p = await realGet(id); f.posts.get(id)!.stage = "archived"; return p ? { ...p } : null; };
+  const out: any = await runTool(f.store, "log_results", { id: ID(1), views: 3 });
+  assert.equal(out.refused, true);
+  assert.equal(f.posts.get(ID(1))!.results, null);
+});

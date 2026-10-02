@@ -119,7 +119,7 @@ function assertPatchSafe(patch: Record<string, unknown>) {
   }
 }
 
-// ---- the five tools ----------------------------------------------------------
+// ---- the tools (log_results is further down) ----------------------------------------------------------
 export async function listPosts(store: Store, input: { from: string; to: string; stage?: string; account?: string }) {
   assertOnly(input, ["from", "to", "stage", "account"], "list_posts");
   const r = rangeIso(input.from, input.to);
@@ -197,7 +197,41 @@ export async function getResults(store: Store, input: { from: string; to: string
   };
 }
 
+// log_results writes the results field and NOTHING else, and only once a post
+// is posted. Metrics given are merged over what is on file, so logging comments
+// later never erases the views logged earlier.
+export const RESULT_METRICS = ["views", "likes", "comments", "shares", "saves"] as const;
+export const RESULTS_WRITABLE = new Set(["results"]);
+export const MAX_METRIC = 1_000_000_000;
+
+export async function logResults(store: Store, input: {
+  id: string; views?: number; likes?: number; comments?: number; shares?: number; saves?: number;
+}) {
+  assertOnly(input, ["id", ...RESULT_METRICS], "log_results");
+  const given: Record<string, number> = {};
+  for (const k of RESULT_METRICS) {
+    const v = (input as Record<string, unknown>)[k];
+    if (v === undefined) continue;
+    if (typeof v !== "number" || !Number.isInteger(v) || v < 0 || v > MAX_METRIC) {
+      throw new Refusal(`${k} must be a whole number from 0 to ${MAX_METRIC}`);
+    }
+    given[k] = v;
+  }
+  if (!Object.keys(given).length) throw new Refusal(`nothing to log - send at least one of ${RESULT_METRICS.join(", ")}`);
+  const p = await store.getPost(input.id);
+  if (!p || p.deleted_at) throw new Refusal(`no post ${input.id}`);
+  if (p.stage !== "posted") throw new Refusal(`"${p.title}" is at stage ${p.stage}; results can only be logged on a posted post`);
+  const patch = { results: { ...(p.results || {}), ...given } };
+  for (const k of Object.keys(patch)) {
+    if (!RESULTS_WRITABLE.has(k)) throw new Error(`internal: log_results tried to write ${k}`);
+  }
+  const out = await store.updatePostIfStage(p.id, "posted", patch);
+  if (!out) throw new Refusal(`"${p.title}" changed while this was being written; list it again and retry`);
+  return { updated: shapePost(out), logged: given };
+}
+
 export const TOOLS = {
+  log_results: logResults,
   list_posts: listPosts,
   create_post_skeleton: createPostSkeleton,
   update_post_draft: updatePostDraft,
