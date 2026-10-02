@@ -19,7 +19,7 @@ not in a browser (no browser pane for the dashboard here).
 
 ## State summary
 
-- **Migrations 001-218**, all applied (`applied_migrations` top = 218). 217 social
+- **Migrations 001-220**, all applied (`applied_migrations` top = 220; 219/220 below). 217 social
   calendar v2 (additive) + connector_log; 218 restores 9 soft-deleted posts 217's stage
   map moved (LEARNINGS §83).
 - **Functions deployed:** `social-mcp` **v2** (new, verify_jwt off, secret in path).
@@ -36,6 +36,13 @@ not in a browser (no browser pane for the dashboard here).
 
 ## This session shipped
 
+- **Later the same day: bulk re-classify + radio default (219, 220, sc-connect v40).**
+  29 live posts re-classified by id (25 radio, 4 named DI posts; 0 deleted rows, and
+  caption/stage/date/owner checksums identical). Both radio release-card paths now
+  create phase radio / come_with / reel. 6 radio posts flagged with no format (see
+  `reviews/session_2026-10-02.md`). Migrations now top out at **220**; `sc-connect` is
+  **v40** (it had been v39, not the v37 earlier notes said - the deployed bundle was
+  checked against the repo before redeploying). The connector secret was rotated.
 - **Post editor v2**: title, account / format (segmented), date, phase, 2-line brief,
   Claude's caption (read-only, Use this / Copy, drafted timestamp), Final caption (=
   the existing `caption`, Copy final caption falls back to Claude's), asset link,
@@ -52,8 +59,7 @@ not in a browser (no browser pane for the dashboard here).
 
 ## Parked / next
 
-- Radio auto-post still inserts `phase = general`; 17 of 25 CWR/radio-titled posts have
-  no series so stayed `general` - one bulk re-phase fixes it, not done unasked.
+- ~~Radio auto-post phase / unclassified CWR posts~~ - done in 219/220.
 - `scripts/test_task_email.mjs` fails on untouched HEAD as well - pre-existing.
 
 ---
