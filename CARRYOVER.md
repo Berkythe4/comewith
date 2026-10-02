@@ -6,13 +6,15 @@ is **still open** - nothing in it was touched today.
 
 ## >> START HERE NEXT SESSION
 
-**1. Keith adds the connector in claude.ai** (checklist in `reviews/session_2026-10-02.md`):
-Customize > Connectors > Add custom connector > paste
-`https://yaytdosxfhcqatmhctzk.supabase.co/functions/v1/social-mcp/<SOCIAL_MCP_SECRET>`
-(value in the desktop `.env`; never commit it) > No sign-in > enable in "Come With!".
+**1. Check the first scheduled runs.** Monday 9am (plan + draft) is the first real
+unattended use: afterwards, read `connector_log` and the new skeletons/drafts in the
+list (🤖 Needs review). If the CWR / DI3 rhythm is wrong, tighten the task prompt.
 
-**2. When Keith says "connector is live"**, set up the two scheduled tasks
-(Monday 9am plan + draft, Friday 4pm results) - spec in the same review file.
+**2. The connector IS added in claude.ai** (Keith, 2026-10-02 screenshot). The two
+scheduled tasks are claude.ai tasks, not Claude Code ones: paste-ready prompts were
+given in chat and are in the review file. Tool permissions were all "Needs approval";
+they must be "Always allow" for the tasks to run unattended. The Friday task can now
+also call `log_results`.
 
 **3. Eyeball the new post editor on a phone.** Tested by harness + live E2E on prod,
 not in a browser (no browser pane for the dashboard here).
@@ -22,10 +24,10 @@ not in a browser (no browser pane for the dashboard here).
 - **Migrations 001-220**, all applied (`applied_migrations` top = 220; 219/220 below). 217 social
   calendar v2 (additive) + connector_log; 218 restores 9 soft-deleted posts 217's stage
   map moved (LEARNINGS §83).
-- **Functions deployed:** `social-mcp` **v2** (new, verify_jwt off, secret in path).
+- **Functions deployed:** `social-mcp` **v5** (6 tools incl. log_results; verify_jwt off, secret in path, rotated once), `sc-connect` **v40**.
   Secret `SOCIAL_MCP_SECRET` set on prod and in the desktop `.env` only - the laptop
   and Henry's machine do not have it; `scripts/e2e_social_mcp.py` needs it.
-- **LEARNINGS §85** is the latest (§83-85 added this session). CLAUDE.md gained a
+- **LEARNINGS §86** is the latest (§83-86 added this session). CLAUDE.md gained a
   "Social calendar v2 + the Claude connector" section.
 - **Anon-401 invariant verified** on all five financial views; `check_anon_exposure.py`
   now sweeps social_posts / social_post_notes / connector_log - all clean.
@@ -36,6 +38,11 @@ not in a browser (no browser pane for the dashboard here).
 
 ## This session shipped
 
+- **Last: `log_results` on the connector (social-mcp v5).** Sixth tool: logs views /
+  likes / comments / shares / saves on a POSTED post, writes only `results` (merged),
+  every call logged. The editor gained a Comments box and now keeps result keys it has
+  no box for - otherwise an editor save would have wiped a logged comments count (§86).
+  Live E2E 21/21. In claude.ai the new tool defaults to Needs approval.
 - **Later the same day: bulk re-classify + radio default (219, 220, sc-connect v40).**
   29 live posts re-classified by id (25 radio, 4 named DI posts; 0 deleted rows, and
   caption/stage/date/owner checksums identical). Both radio release-card paths now

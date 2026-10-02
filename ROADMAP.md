@@ -458,13 +458,13 @@ the measured version of the same idea and did not replace it.
   results at posted, collapsed notes, in-modal unsaved-changes guard. Hidden fields
   kept on the row. List: account/format/phase chips, 🤖 needs-review, Phase + Account
   filters.
-- **`social-mcp`**: remote MCP server for claude.ai (5 tools, no deletes, never the
-  final caption, never ready+). **Next:** Keith adds the connector; then the Monday
+- **`social-mcp`**: remote MCP server for claude.ai (6 tools, no deletes, never the
+  final caption, drafting never past idea/drafted; `log_results` writes only results
+  on posted posts). **Next:** Keith adds the connector; then the Monday
   plan+draft and Friday results scheduled tasks (spec in `reviews/session_2026-10-02.md`).
-- Parked: the radio auto-post in `radio_publish_station()` still inserts with the
-  default `phase = 'general'`; and 17 of the 25 live posts whose title says CWR /
-  radio carry no `series`, so the series-keyed backfill left them `general` (one
-  bulk re-phase in the list fixes it; not done unasked).
+- Done same day: 219 re-classified 29 live posts; 220 + sc-connect v40 make radio
+  release cards born phase radio / come_with / reel. Still open: 6 radio posts have no
+  format (titles give no rule), listed in `reviews/session_2026-10-02.md`.
 
 ### ✅ Radio episode planning + DJ portal (130–132)
 - **Edit any episode** via Control Center ✎ Details; future **'planned' skeletons**;

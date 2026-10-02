@@ -2612,3 +2612,21 @@ save built its patch from every form field, so a missing input would have saved 
 **only the fields the editor shows**, and the editor test asserts the patch's key set
 exactly. A new post still carries its seed's hidden fields (event hub, Content
 Center) and defaults its owner to Janelle, so Approve always has somebody to notify.
+
+---
+
+## Section 86 — Two writers of one jsonb field must share its key list (2026-10-02)
+
+`social_posts.results` is written by two things: the post editor (one box per
+metric, rebuilt into the object on every save) and the connector's `log_results`.
+Adding `comments` to the connector alone would have looked finished and tested -
+and the first time anybody saved that post in the dashboard, the editor would have
+rebuilt `results` from its four boxes and silently deleted the comments count.
+
+A whole-field rewrite is a delete of every key the writer does not know about. Two
+fixes, both shipped: the editor's `SOCIAL_RESULT_KEYS` lists the same five metrics
+as `RESULT_METRICS` in `social-mcp/tools.ts` (the editor test asserts it), and the
+editor's save now carries over any key it has no box for. The connector merges
+rather than replaces for the same reason. **When a second writer adds a key to a
+shared jsonb field, check what the first writer does on save** - same shape as the
+`link_items` upsert trap in §64.
