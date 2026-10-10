@@ -318,6 +318,11 @@ brought up to the dashboard's standard.**
   with it. `rekordbox_clean.py` is now shared by both export parsers.
 - 🟡 **Ep 4 is tracklist-complete but not released** — no cover, descriptions,
   slug, mix or schedule; drop date was 2026-09-10.
+- 🟢 **Ep 6 (SHOW 10) released 2026-10-10** (2026-10-09 session) — rebuilt from four
+  deck exports, rendered, scheduled. The reconcile tool gained `--pair`, `--from`
+  (chips count from the drop date) and stopped clearing true future dates
+  (LEARNINGS §87–§88). 🟡 Backlog: the Go-live field accepts a SoundCloud short link
+  (§89); `make_cues.py` still counts shows from today.
 - 🟡 **`raRowScore` (dashboard) has a tested, unapplied one-line fix** for a false
   match that pairs a track with a different song on the artist name alone.
 

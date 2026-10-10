@@ -230,7 +230,7 @@ def credits_of(row):
     chip answers "why is this song in the show", and NOTES SS4 already says to
     use the other partner's booking when one half has no NYC date."""
     names = [p.strip() for p in SPLIT.split(row["artist"] or "") if len(p.strip()) > 1]
-    for x in re.findall(r"[\(\[]([^)\]]*?)\s*(?:remix|rework|edit|mix|version)[^)\]]*[\)\]]",
+    for x in re.findall(r"[\(\[]([^)\]]*?)\s*(?:remix|rework|edit|mix|version|bootleg|flip)[^)\]]*[\)\]]",
                         row["title"] or "", re.I):
         x = re.sub(r"\b(extended|original|radio|club|feat|ft|featuring)\b", " ", x, flags=re.I).strip()
         if len(x) <= 1 or QUALIFIER.match(x):
@@ -249,7 +249,7 @@ def credits_of(row):
     return out
 
 
-def show_chips(rows, ref):
+def show_chips(rows, ref, since="current_date"):
     """artist-key -> (date, venue) for every credited name with a FUTURE NYC show.
 
     Read from ra_events.lineup, NOT from ra_artists.next_event_date.
@@ -273,7 +273,7 @@ def show_chips(rows, ref):
     want = set()
     for r in rows:
         for n in credits_of(r):
-            want.add(norm(n).replace(" ", ""))
+            want.update(chip_keys(n))
     if not want:
         return {}
     vals = ", ".join("(%s)" % lit(w) for w in sorted(want))
@@ -288,19 +288,27 @@ def show_chips(rows, ref):
          "    from ra_events e"
          "    left join venues v on v.id = e.venue_id"
          "    cross join lateral jsonb_array_elements(coalesce(e.lineup,'[]'::jsonb)) l"
-         "   where e.event_date >= current_date"
+         "   where e.event_date >= %s"
          "     and coalesce(v.name, e.venue_name) is not null) "
          "select distinct on (w.k) w.k, ev.event_date, ev.venue "
          "  from want w join ev on ev.k = w.k "
-         " order by w.k, ev.event_date, (ev.venue ilike 'TBA') , ev.venue;" % vals)
+         " order by w.k, ev.event_date, (ev.venue ilike 'TBA') , ev.venue;" % (vals, since))
     return {r["k"]: (r["event_date"], r["venue"]) for r in sql(q, ref)}
+
+
+def chip_keys(n):
+    """Both spellings of a name's lookup key. norm() folds accents ("ceviche"),
+    but the SQL side only deletes non-ASCII ("cevich"), so an accented name
+    matched nothing and Ceviche's card drew no show line on SHOW 10."""
+    return {norm(n).replace(" ", ""), re.sub(r"[^a-z0-9]", "", (n or "").lower())} - {""}
 
 
 def chip_for(row, chips):
     for n in credits_of(row):
-        hit = chips.get(norm(n).replace(" ", ""))
-        if hit:
-            return hit
+        for k in chip_keys(n):
+            hit = chips.get(k)
+            if hit:
+                return hit
     return (None, None)
 
 
@@ -311,8 +319,20 @@ def main():
     ap.add_argument("--apply", action="store_true", help="actually write to prod")
     ap.add_argument("--keep-extras", action="store_true",
                     help="don't drop the songs that weren't played; trail them after")
+    ap.add_argument("--pair", action="append", default=[], metavar="N=TEXT",
+                    help="force export row N onto the station row whose 'artist - title' "
+                         "contains TEXT (case-insensitive, must be unique). For a pair the "
+                         "matcher can't see: same file, different tags.")
+    ap.add_argument("--from", dest="since", metavar="YYYY-MM-DD",
+                    help="count shows from this date (the drop date), not today -- a show "
+                         "between now and the drop has already happened when a listener hears it")
     ap.add_argument("--ref", default=PROD)
     a = ap.parse_args()
+    since = "current_date"
+    if a.since:
+        if not re.match(r"^\d{4}-\d{2}-\d{2}$", a.since):
+            raise SystemExit("--from wants YYYY-MM-DD")
+        since = "'%s'::date" % a.since
 
     rb = read_rekordbox(a.txt)
     if not rb:
@@ -333,8 +353,21 @@ def main():
 
     plan = {"reorder": [], "insert": [], "drop": []}
     used = set()
+    forced = {}
+    for spec in a.pair:
+        n, _, text = spec.partition("=")
+        hits = [d for d in db if text.lower() in
+                ("%s - %s" % (d["artist_name"] or "", d["title"] or "")).lower()]
+        if not n.strip().isdigit() or len(hits) != 1:
+            raise SystemExit("--pair %s: needs N=TEXT matching exactly one station row (got %d)"
+                             % (spec, len(hits)))
+        forced[int(n)] = hits[0]
+        used.add(hits[0]["id"])
     for i, r in enumerate(rb, 1):
         r["n"] = i
+        if i in forced:
+            plan["reorder"].append({"row": r, "db": forced[i], "score": "pair"})
+            continue
         best, bs = None, 0.0
         for d in db:
             if d["id"] in used:
@@ -353,9 +386,17 @@ def main():
     # for the KEPT rows too is the point: a chip written weeks ago can have gone
     # stale, and a date that has already passed on a "catch them live" card is
     # worse than no card line at all.
-    chips = show_chips(rb, a.ref)
+    chips = show_chips(rb, a.ref, since)
+    floor = a.since or sql("select current_date::text as d;", a.ref)[0]["d"]
     for m in plan["reorder"] + plan["insert"]:
         m["chip"] = chip_for(m["row"], chips)
+        # Nothing found, but the row already carries a date that is still ahead:
+        # keep it. That is a show entered by hand or matched on a name the lookup
+        # can't see ("Little Louie Vega"); clearing it would erase a true fact
+        # and the review used to call it "in the past" when it wasn't.
+        old = m.get("db") or {}
+        if not m["chip"][0] and old.get("show_date") and str(old["show_date"]) >= floor:
+            m["chip"] = (old["show_date"], old["show_venue"])
 
     # ---- review -------------------------------------------------------------
     print("=" * 96)
@@ -377,7 +418,7 @@ def main():
     for m in plan["reorder"]:
         r, d = m["row"], m["db"]
         print("  %2d  %.62s" % (r["n"], r["artist"] + " - " + r["title"]))
-        print("      was  %-58.58s  %.2f" % ((d["artist_name"] or "") + " - " + (d["title"] or ""), m["score"]))
+        print("      was  %-58.58s  %s" % ((d["artist_name"] or "") + " - " + (d["title"] or ""), m["score"]))
         print("      show %s" % chipstr(m, (d["show_date"], d["show_venue"])))
     print("\nNEW  (%d)   -- inserted as source='rekordbox'\n" % len(plan["insert"]))
     for m in plan["insert"]:
@@ -408,8 +449,12 @@ def main():
     for kind, m in walk:
       if kind == "keep":
         r, d = m["row"], m["db"]
+        # A guest DJ's own pick stays source='dj' -- that marker is what lets them
+        # remove it from dj.html, and Rekordbox only confirms they played it.
         sets = ["sort = %d" % sort, "title = %s" % lit(r["title"]),
-                "artist_name = %s" % lit(r["artist"]), "source = 'rekordbox'"]
+                "artist_name = %s" % lit(r["artist"])]
+        if d["source"] != "dj":
+            sets.append("source = 'rekordbox'")
         if r["bpm"]:
             sets.append("bpm = %d" % r["bpm"])
         sk, cam = key_fields(r["key"])

@@ -2630,3 +2630,49 @@ editor's save now carries over any key it has no box for. The connector merges
 rather than replaces for the same reason. **When a second writer adds a key to a
 shared jsonb field, check what the first writer does on save** - same shape as the
 `link_items` upsert trap in §64.
+
+---
+
+## Section 87 — Never clear a fact you cannot re-derive; and two normalisers of one key must agree (2026-10-09)
+
+`apply_station_from_rekordbox.py` re-derives every show chip from `ra_events.lineup`
+and CLEARS the chip when nothing is found, reporting it as "in the past". On Ep 6
+(SHOW 10) that would have wiped two TRUE future dates: Remniqe's Oct 22 show, which
+was entered by hand because no feed carried it, and Louie Vega's Oct 18 H0L0 show,
+which the lookup misses because the track credits "Little Louie Vega". A failed
+lookup is not evidence of no show. The tool now keeps an existing chip whose date is
+still ahead, and only clears one that has actually passed - which is what the review
+line always claimed to be doing.
+
+The same session found the matching itself disagreeing with itself: Python's
+`norm()` folds accents (`ceviche`), the SQL side only deletes non-ASCII (`cevich`),
+so every accented artist silently matched nothing. `chip_keys()` now offers both
+spellings, and `make_cues.py` uses it too. Same shape as `venueKey()` vs
+`normalize_venue_name()`: when one key is computed in two languages, they must
+agree, or the miss is silent.
+
+---
+
+## Section 88 — A show chip counts from the DROP date, not from today (2026-10-09)
+
+The chip promises "this artist plays NYC soon" to someone hearing the episode on its
+release day. Picking the soonest show from TODAY put Ceviché's Oct 9 Honey's date on
+an episode dropping Oct 10, and Honey Dijon's only date (Oct 10) is gone by any
+later drop. `apply_station_from_rekordbox.py --from YYYY-MM-DD` now counts from the
+drop date; same reasoning as the DJ crate window (LEARNINGS §78). `make_cues.py`
+still counts from today, so re-run it on or near release day, and move a chip whose
+show has passed before rendering (Ceviché was moved to Nov 10 by hand).
+
+---
+
+## Section 89 — A SoundCloud SHORT link on a scheduled episode is a two-hour silent hold, then a dead player (2026-10-10)
+
+Ep 6's `mix_sc_track_url` was pasted as `on.soundcloud.com/...`. With
+`ops.radio_sc_autopublic = false` (Keith schedules the release on SoundCloud),
+`radio-publish-due` waits until the stored URL oembeds. A short link never oembeds
+and does not canonicalise to the account's permalink, so the page would have waited
+the full `SC_GRACE_MIN` (120 min) and then published with a player that cannot load.
+Fixed on the row by storing the token-free canonical URL
+(`soundcloud.com/comewithnyc/cwr_ep-6`). The CLAUDE.md rule already says never store
+a short link; the gap is that the Go-live field accepts one. Parked: resolve short
+links on save there, the way the event editor does through `resolve-media`.

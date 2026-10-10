@@ -1,3 +1,81 @@
+# Carryover - 2026-10-09/10 (Radio Ep 6 / SHOW 10 released - LAPTOP)
+
+**Closed 2026-10-10 on the LAPTOP.** No branch; docs + one tool committed on
+`master`. No code that deploys was touched. The 2026-10-02 block below is the
+previous close and its START HERE list is **still open** - nothing in it was touched.
+
+## >> START HERE NEXT SESSION
+
+**1. Ep 6 goes live Sat 2026-10-10 10:01 ET (14:01 UTC), scheduled.** After it does,
+open the episode page and press play on BOTH players (SoundCloud + YouTube
+`Uxs6uGuy2_g`). Then check `station_notes` on SHOW 10 for anything
+`radio-publish-due` wrote. If Keith's SoundCloud release time is later than 10:01,
+the page holds up to 2h waiting for the embed (autopublic is off, by design).
+
+**2. Social Calendar - two Ep 6 posts are wrong:** "CWR Ep6 Release (Miss Vee)" is
+stage `posted` (Oct 8) although it had NOT gone out on 2026-10-09, and its caption
+still says "Curated by Miss Vee... on the controls" - the episode is now credited to
+Berky with track contributions from Miss Vee. "CWR Ep6 Recap" (Oct 13) has no
+caption. The connector cannot change stage or `caption`; fix in the dashboard.
+
+**3. The Ep 6 cover reads "EP.6 FT. MISS EVE"** (Eve, not Vee; and it is no longer
+"ft."). It is in the rendered video and on the site. Keith's call whether to fix.
+
+**4. Miss Vee is NOT `public_profile`.** She is not in Residents (verified against
+`v_public_artists`, 9 people), so "Mixed by" links nowhere for her. Keith believed
+she was on the page - ask.
+
+## State summary
+
+- **No migrations.** Repo and prod both top out at **220** (`applied_migrations`).
+- **No functions deployed.** Nothing in `dashboard.html` / site pages changed.
+- **LEARNINGS §89** is the latest (§87-89 added this session).
+- **Anon-401 invariant verified** on all five financial views
+  (`check_financial_views.py`); `check_anon_exposure.py` clean. No new tables/views.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- **git:** `master`, close commit pushed, `0 0` checked after the push. Machine:
+  LAPTOP. Still uncommitted on purpose: Keith's render work (`Radio/render/make_cues.py`
+  - which now also carries this session's `chip_keys` + listing-name fix -
+  `render_episode.py`, `templates.json`, `make_bg_loop.py`, `Radio/Episode 4|5|6/`,
+  `Radio/tracklists/`, `Radio/Documents/EP10_*`). `.gitignore` covers `*.mp4` but
+  NOT the 84 MB `Radio/Episode 6/CWR_Ep6_mix.m4a` - never `git add` that folder whole.
+
+## This session shipped
+
+- **SHOW 10 = Come With NYC Radio Ep6 rebuilt from the deck, four times.** Rekordbox
+  export (first 22 of 32) -> V2 (24, re-worked) -> V3 (Catch You By Surprise for Octo
+  Octa, who had no upcoming show; Rapture/Never Saw You Coming swapped) -> final 22
+  (I'm Just Ken and AINT NO REST skipped in the recording). Every card has an upcoming
+  NYC show; 13 unplayed picks logged `passed@10` and carried. Backups:
+  `backups/premerge_2026-10-09_show10_tracks{,_b,_c,_d}.json`.
+- **Six Miss Vee picks removed before V2** (Frenchy, Thomas Jack, Jamieson Ree, Jay
+  Bird, DJ KASH, Camp Lo) - none appears in any lineup we hold, past or future.
+- **Prod data, deliberately:** `mix_by` Miss Vee -> **Berky** (assigned DJ actor kept,
+  so her dj.html link still works); `desc_public` / `desc_sc` set to Keith's line
+  ("Mixed by Berky with track contributions from Miss Vee. Check Vee out at
+  Trans-Pecos on 10/23 and both Berky & Vee at Dance Infusion 11/14 @ Signal.") plus
+  the timed tracklist and 14 hashtags; `drop_date` 2026-10-08 -> 10-10;
+  `mix_duration_ms` 3999933; `mix_sc_track_url` short link -> canonical (§89).
+  One manual show added: `ra_events` `man:2026-10-22-remniqe-mood-ring`. Chips set
+  by hand: Ceviché -> 2026-11-10 Bossa Nova (Oct 9 had passed), Louie Vega -> 10-18 H0L0.
+- **Video rendered:** `CWR_Ep6_YouTube.mp4`, 66:40 = the recording, 1080p h264/aac,
+  frames pulled and looked at (intro "MIXED BY BERKY · SAT OCT 10", card, outro
+  "OCT 22"). Audio taken from Keith's screen-capture MP4 (video track is a blank DRM
+  placeholder). Everything copied to Keith's Rekordbox `Come_With_Radio/Epi.6/`.
+- **Tool fixes (committed):** `apply_station_from_rekordbox.py` gained `--pair N=TEXT`
+  (same file, different tags), keeps `source='dj'` on a guest's rows, `chip_keys()`
+  accent fix, credits bootleg/flip remixers, keeps a still-future chip instead of
+  clearing it, and `--from <drop date>` (§87, §88).
+
+## Parked / next
+
+- Go-live field accepts a SoundCloud short link; resolve on save via `resolve-media` (§89).
+- `make_cues.py` counts shows from today, not the drop date (§88) - give it `--from` too.
+- The "Dub" qualifier is not a remix credit in `credits_of()` (worked around by
+  crediting "Art Department, &ME"); "Little Louie Vega" does not match "Louie Vega".
+
+---
+
 # Carryover - 2026-10-02 (Social Calendar v2 + Claude connector - DESKTOP)
 
 **Closed 2026-10-02 on the DESKTOP.** No branch; everything is on `master` and
