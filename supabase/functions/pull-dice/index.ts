@@ -150,6 +150,9 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
+    // Every row this run writes carries a fetched_at at or after this instant, so
+    // "older than runStart" is exactly "not re-confirmed by this pull" (step 3).
+    const runStart = new Date().toISOString();
     const days = Math.min(180, Math.max(7, Number(b.days) || 42));
     const today = new Date().toISOString().slice(0, 10);
     // The window can START in the future. Planning an episode two months out and
@@ -262,12 +265,23 @@ Deno.serve(async (req) => {
     // Bounded at BOTH ends — this pull now covers [from, cutoff], which may be a
     // narrow window well into the future. Deleting everything from `today` on and
     // re-inserting only the window would throw away every dice show outside it.
-    await admin.from("ra_events").delete().eq("source", "dice")
-      .gte("event_date", from).lte("event_date", cutoff);
-    if (rows.length) {
-      const { error } = await admin.from("ra_events").upsert(rows, { onConflict: "ra_id" });
-      if (error) { console.error("dice ra_events:", error.message); return err(500, "Could not save DICE events: " + error.message); }
+    // SAVE FIRST, IN BATCHES, THEN DELETE. This used to delete the window and then
+    // upsert every row in one statement; each row fires the venue + lineup-from-title
+    // triggers, so a 90-day pull (~900 rows) hit the statement timeout AFTER the
+    // delete and left DICE with zero upcoming shows (2026-10-12). Now a failed batch
+    // returns with nothing deleted, and the delete only removes rows in the window
+    // that this run did not re-confirm (fetched_at older than runStart).
+    const SAVE_BATCH = 150;
+    for (let i = 0; i < rows.length; i += SAVE_BATCH) {
+      const { error } = await admin.from("ra_events").upsert(rows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
+      if (error) {
+        console.error("dice ra_events:", error.message);
+        return err(500, `Could not save DICE events (batch ${i / SAVE_BATCH + 1}): ${error.message}. Nothing was deleted; existing DICE shows are kept.`);
+      }
     }
+    const { error: delError } = await admin.from("ra_events").delete().eq("source", "dice")
+      .gte("event_date", from).lte("event_date", cutoff).lt("fetched_at", runStart);
+    if (delError) console.error("dice stale delete:", delError.message);
     // soundcloud / instagram / follower_count are deliberately NOT in this row. A column
     // in an upsert payload is overwritten on conflict, and this feed has no value for
     // them - sending null wiped every link sc-match had found, on every Refresh, so
@@ -276,8 +290,8 @@ Deno.serve(async (req) => {
     // its link.
     const artistRows = [...artistMap.values()];
     let artistError: string | null = null;
-    if (artistRows.length) {
-      const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
+    for (let i = 0; i < artistRows.length && !artistError; i += SAVE_BATCH) {
+      const { error: ae } = await admin.from("ra_artists").upsert(artistRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
       if (ae) { console.error("dice ra_artists:", ae.message); artistError = ae.message; }
     }
     // last_date makes a short pull obvious at a glance: if DICE only reaches a
