@@ -370,10 +370,12 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   no duplicate column). `claude_caption` is Claude's draft and is written **only** by the
   `social-mcp` connector — a trigger refuses it from any signed-in user. "Use this"
   copies the draft into `caption`; nothing in the dashboard writes `claude_caption`.
-- **Hidden ≠ dropped.** The v2 editor hides channels, series, event, owner,
+- **Hidden ≠ dropped.** The v2 editor hides channels, series, event,
   drafter/approver, CTA, destination URL, asset status, tasks and attached content, and
   `savePost()` writes **only the visible fields** so their data stays. Adding a field
-  back means adding it to the patch too. LEARNINGS §85.
+  back means adding it to the patch too. LEARNINGS §85. **Owner came back on 2026-10-12**
+  (Owner box + `owner_id` in the patch); anyone on the team can change owner and stage —
+  there is deliberately no per-person stage limit (Keith's call).
 - **Stage pipeline: idea → drafted → ready → approved → scheduled → posted.** `review`,
   `planned` and `archived` are still legal in the CHECK and still labelled; dropdowns
   use `socialStageList(cur)` so a row holding one keeps it. Never narrow that CHECK.

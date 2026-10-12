@@ -3167,7 +3167,7 @@ async function socialBulk(patch, label) {
 }
 async function ensureSocialLookups() {
   if (!socialPeople) {
-    const { data } = await sb.from('profiles').select('id,full_name,email').in('role', ['master_admin', 'sub_admin']).order('email');
+    const { data } = await sb.from('profiles').select('id,full_name,email,deleted_at').in('role', ['master_admin', 'sub_admin']).order('email');
     socialPeople = data || [];
   }
   if (!socialEvents) {
@@ -3179,8 +3179,8 @@ async function ensureSocialLookups() {
 // ---------------------------------------------------------------------------
 // The post editor, v2 (217). Cut down to what is actually used: two captions
 // (Claude's draft, read-only, and the FINAL one Janelle posts, which is the
-// existing `caption` column), plus account / format / phase / stage. Every
-// other field (channels, series, linked event, owner, drafter/approver, CTA,
+// existing `caption` column), plus account / format / phase / stage / owner. Every
+// other field (channels, series, linked event, drafter/approver, CTA,
 // destination URL, asset status, tasks, attached content) is HIDDEN, not
 // dropped: the save writes only the fields shown here, so their data stays on
 // the row untouched. Claude's caption is written only by the social-mcp
@@ -3204,6 +3204,17 @@ async function openPostModal(post, opts) {
   const stage = p.stage || 'idea';
   const stageOpts = socialStageList(stage).map(s => `<option value="${s}" ${stage === s ? 'selected' : ''}>${SOCIAL_STAGE_LABEL[s] || s}</option>`).join('');
   const phaseOpts = SOCIAL_PHASES.map(s => `<option value="${s}" ${(p.phase || 'general') === s ? 'selected' : ''}>${SOCIAL_PHASE_LABEL[s]}</option>`).join('');
+  // Owner: any active team member. A new post defaults to Janelle, same as the
+  // connector. A deactivated current owner stays listed so opening the post
+  // never silently reassigns it.
+  const janelleId = ((socialPeople || []).find(pe => (pe.email || '').toLowerCase() === 'janelle@comewith.org') || {}).id || '';
+  const ownerCur = isNew ? (p.owner_id || janelleId) : (p.owner_id || '');
+  const ownerList = (socialPeople || []).filter(pe => !pe.deleted_at || pe.id === ownerCur);
+  // An owner outside the team list (role changed since) must still be the
+  // selected value, or the next save would quietly unassign the post.
+  if (ownerCur && !ownerList.some(pe => pe.id === ownerCur)) ownerList.push({ id: ownerCur, full_name: (p.owner && (p.owner.full_name || p.owner.email)) || 'Current owner' });
+  const ownerOpts = '<option value="">— Unassigned —</option>' + ownerList
+    .map(pe => `<option value="${pe.id}" ${pe.id === ownerCur ? 'selected' : ''}>${escapeHtml(pe.full_name || pe.email)}</option>`).join('');
   const dtVal = p.scheduled_for ? new Date(new Date(p.scheduled_for).getTime() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16) : '';
   const nc = isNew ? 0 : (social.noteCounts[p.id] ?? (p.notes && p.notes[0] && p.notes[0].count) ?? 0);
   const res = (p.results && typeof p.results === 'object') ? p.results : {};
@@ -3229,9 +3240,13 @@ async function openPostModal(post, opts) {
       <textarea class="modal-input" name="caption" rows="5" placeholder="The caption that goes out…">${escapeHtml(p.caption || '')}</textarea>
       <div class="sp-btns"><button type="button" class="hub-mini" data-sp-copy="final" title="Copy for Meta Business Suite. If Final is empty, copies Claude's caption.">Copy final caption</button></div></div>
     <div class="modal-form-row"><label class="modal-label">Asset link <span class="li-sub">(Drive / OpusClip)</span></label><input class="modal-input" name="asset_url" value="${escapeHtml(p.asset_url || '')}" placeholder="https://…"></div>
-    <div class="modal-form-row"><label class="modal-label">Stage</label>
-      <div class="sp-btns" style="margin-top:0;"><select class="modal-input" name="stage" style="max-width:220px;">${stageOpts}</select>
-      ${!isNew && SP_DRAFTABLE.indexOf(stage) >= 0 ? `<button type="button" class="hub-mini" data-sp-approve title="Save as Approved and notify the owner (🔔)">✅ Approve</button>` : ''}</div></div>
+    <div class="modal-grid2">
+      <div><label class="modal-label">Stage</label>
+        <div class="sp-btns" style="margin-top:0;"><select class="modal-input" name="stage" style="max-width:220px;">${stageOpts}</select>
+        ${!isNew && SP_DRAFTABLE.indexOf(stage) >= 0 ? `<button type="button" class="hub-mini" data-sp-approve title="Save as Approved and notify the owner (🔔)">✅ Approve</button>` : ''}
+        ${!isNew && stage !== 'posted' ? `<button type="button" class="hub-mini" data-sp-posted title="Save as Posted, stamped now">📤 Mark as posted</button>` : ''}</div></div>
+      <div><label class="modal-label">Owner</label><select class="modal-input" name="owner_id">${ownerOpts}</select></div>
+    </div>
     <div class="modal-form-row" id="spResults" style="${stage === 'posted' ? '' : 'display:none;'}"><label class="modal-label">📈 Results</label>
       <div class="sp-results">${SOCIAL_RESULT_KEYS.map(k => `<div><label class="modal-label">${k[0].toUpperCase() + k.slice(1)}</label><input class="modal-input" type="number" min="0" step="1" inputmode="numeric" name="res_${k}" value="${res[k] ?? ''}"></div>`).join('')}</div></div>`;
   const notesHtml = isNew ? '' : `
@@ -3298,6 +3313,7 @@ document.addEventListener('click', (e) => {
     spFlash(use, 'Copied'); ta.focus(); return;
   }
   if (e.target.closest('#kpiModalBody [data-sp-approve]')) { spApprove(e.target.closest('[data-sp-approve]')); return; }
+  if (e.target.closest('#kpiModalBody [data-sp-posted]')) { spMarkPosted(e.target.closest('[data-sp-posted]')); return; }
 });
 document.addEventListener('change', (e) => {
   if (e.target.matches('#kpiModalBody [name="stage"]')) {
@@ -3312,6 +3328,13 @@ async function spApprove(btn) {
   if (btn) { btn.disabled = true; btn.textContent = 'Approving…'; }
   try { await savePost(ed.post, ed.onSaved, { stage: 'approved', copy_status: 'approved', approve: true }, ed.post); }
   catch (err) { toast(err.message || String(err), 'err'); if (btn) { btn.disabled = false; btn.textContent = '✅ Approve'; } }
+}
+// One click: save whatever is in the form as Posted, with posted_at = now.
+async function spMarkPosted(btn) {
+  const ed = social.editing; if (!ed || !ed.post || !ed.post.id) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try { await savePost(ed.post, ed.onSaved, { stage: 'posted', posted_now: true }, ed.post); toast('Marked as posted', 'ok'); }
+  catch (err) { toast(err.message || String(err), 'err'); if (btn) { btn.disabled = false; btn.textContent = '📤 Mark as posted'; } }
 }
 
 // Show the tagged radio episode + its recap notes on a post, so Janelle has the
@@ -3422,6 +3445,7 @@ async function savePost(existing, onSaved, extra, seed) {
     caption: kpiVal('caption') || null,
     asset_url: kpiVal('asset_url') || null,
     scheduled_for: sf ? new Date(sf).toISOString() : null,
+    owner_id: kpiVal('owner_id') || null,
   };
   if (extra.copy_status) patch.copy_status = extra.copy_status;
   // Results only exist once it is posted; until then the row keeps whatever it has.
@@ -3433,16 +3457,14 @@ async function savePost(existing, onSaved, extra, seed) {
     SOCIAL_RESULT_KEYS.forEach(k => { const v = kpiVal('res_' + k); if (v !== '') { const n = Number(v); if (Number.isFinite(n) && n >= 0) r[k] = Math.round(n); } });
     patch.results = Object.keys(r).length ? r : null;
   }
-  if (stage === 'posted' && !(existing && existing.posted_at)) patch.posted_at = new Date().toISOString();
+  if (stage === 'posted' && (extra.posted_now || !(existing && existing.posted_at))) patch.posted_at = new Date().toISOString();
   if (!existing) {
-    // A new post keeps whatever its seed carried (event hub, content center),
-    // and is Janelle's unless the seed says otherwise - same default as the
-    // connector, so Approve always has somebody to notify.
+    // A new post keeps whatever its seed carried (event hub, content center).
+    // Its owner comes from the Owner box, which opens on the seed's owner or
+    // Janelle - same default as the connector.
     const s = seed || {};
-    const janelle = (socialPeople || []).find(pe => (pe.email || '').toLowerCase() === 'janelle@comewith.org');
     Object.assign(patch, {
       channels: s.channels || [], series: s.series || null, event_id: s.event_id || null,
-      owner_id: s.owner_id || (janelle && janelle.id) || null,
     });
   }
   const res = existing
@@ -3451,10 +3473,11 @@ async function savePost(existing, onSaved, extra, seed) {
   if (res.error) throw new Error(res.error.message);
   if (extra.approve && existing) {
     await addPostNoteBody(existing.id, '— Approved —');
-    if (existing.owner_id && existing.owner_id !== ME.id) {
-      await notify(existing.owner_id, 'approved', `Approved: ${title}`, 'Approved — ready to schedule.', 'post', existing.id);
+    // Notify the owner as saved - the Owner box may have just changed it.
+    if (patch.owner_id && patch.owner_id !== ME.id) {
+      await notify(patch.owner_id, 'approved', `Approved: ${title}`, 'Approved — ready to schedule.', 'post', existing.id);
       toast('Approved — owner notified', 'ok');
-    } else toast(existing.owner_id ? 'Approved' : 'Approved (no owner to notify)', 'ok');
+    } else toast(patch.owner_id ? 'Approved' : 'Approved (no owner to notify)', 'ok');
   }
   closeKpi();
   if (onSaved) { await onSaved(); return; }
