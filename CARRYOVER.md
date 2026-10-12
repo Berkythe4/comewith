@@ -11,6 +11,11 @@ checked this session).
 `pull-ticketmaster` v27, re-verified with 90-day pulls (RA 959 events / 1,318 artists,
 TM 42 / 46, zero stale rows, SoundCloud links kept). Nothing left open here.
 
+**1b. (DONE same day) The pullers are now guarded end to end** - RA v36, TM v28,
+DICE v31 + dashboard toast. Empty -> 502 no writes; partial / capped / shrunk /
+out-of-scope pulls skip or bound the prune; artists retired, never deleted (§92).
+All guard paths tested on prod; full pulls lost no link, city or artist row.
+
 **2. Spot-check today's SoundCloud matches.** `sc-match` linked 210 of 220 new-bill
 artists (95%, unusually high). Open ten or so of the newly linked artists in the
 Build tab and confirm they are the right people before a crate goes out.
@@ -23,10 +28,10 @@ unit tests need `node`; neither ran here.
 
 - **No migrations.** Repo and prod both top out at **220** (verified live:
   `radio_publish_station` carries 220's change).
-- **Functions deployed:** `pull-dice` **v30**, `pull-ra-market` **v35**,
-  `pull-ticketmaster` **v27** - all committed.
+- **Functions deployed:** `pull-dice` **v31**, `pull-ra-market` **v36**,
+  `pull-ticketmaster` **v28** - all committed.
 - **Site:** `dashboard.html` changed (`c5169f7`), live on comewith.org (verified).
-- **LEARNINGS §91** is the latest (§90-91 added this session).
+- **LEARNINGS §92** is the latest (§90-92 added this session).
 - **Anon-401 invariant verified** on all five financial views
   (`check_financial_views.py`); `check_anon_exposure.py` clean. No new tables/views.
 - Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.

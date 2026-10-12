@@ -114,11 +114,9 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ costs }), { headers: JH });
     }
 
-    let area = Number(b.area) || 0;
-    if (!area) {
-      const { data: s } = await admin.from("site_content").select("value").eq("key", "ops.ra_area_id").maybeSingle();
-      area = Number(s?.value) || 8;
-    }
+    const { data: areaRow } = await admin.from("site_content").select("value").eq("key", "ops.ra_area_id").maybeSingle();
+    const homeArea = Number(areaRow?.value) || 8;
+    const area = Number(b.area) || homeArea;
     const days = Math.min(180, Math.max(7, Number(b.days) || 28));
     const maxPages = Math.min(40, Math.max(1, Number(b.maxPages) || 30)); // ~2000 events, enough to reach 3 months out
 
@@ -136,10 +134,14 @@ Deno.serve(async (req) => {
     const eventMap = new Map<string, Record<string, unknown>>(); // keyed by ra_id — RA repeats events across pages
     const artistMap = new Map<string, Record<string, unknown>>();
     let total = 0, pages = 0;
+    // True only when the listing ran out on its own. A page that came back with no
+    // data, or the maxPages cap, means rows past that point were never seen - and a
+    // prune would read "not seen" as "gone" and delete them.
+    let complete = false, incompleteWhy = "";
 
     for (let page = 1; page <= maxPages; page++) {
       const listings = await raFetch(area, dayFrom, dayTo, page);
-      if (!listings) break;
+      if (!listings) { incompleteWhy = `RA page ${page} came back without listings`; break; }
       total = listings.totalResults || 0;
       const items = listings.data || [];
       pages = page;
@@ -178,8 +180,23 @@ Deno.serve(async (req) => {
           }
         }
       }
-      if (items.length < 50 || page * 50 >= total) break;
+      if (items.length < 50 || page * 50 >= total) { complete = true; break; }
     }
+    if (!complete && !incompleteWhy) incompleteWhy = `stopped at the ${maxPages}-page cap with more listings left`;
+
+    // EMPTY IS NOT A RESULT. RA lists hundreds of NYC shows a week; zero rows means
+    // the query or the API changed, not that the city went quiet. Refuse before any
+    // write, so the existing window stands untouched.
+    if (eventMap.size === 0) {
+      return err(502, `RA returned no events for ${dayFrom} to ${dayTo}${incompleteWhy ? ` (${incompleteWhy})` : ""}. Nothing was saved or deleted; existing RA shows are kept.`);
+    }
+    // A sudden collapse is treated the same way for the prune: save what came, but
+    // do not delete on the strength of a pull that returned under half of what is
+    // already stored for this window.
+    const { count: existingInWindow } = await admin.from("ra_events").select("ra_id", { count: "exact", head: true })
+      .eq("source", "ra").gte("event_date", dayFrom).lte("event_date", dayTo);
+    const prior = existingInWindow || 0;
+    const shrunk = prior >= 20 && eventMap.size < prior * 0.5;
 
     // Replace the RA slice of the window only (leave Ticketmaster rows intact) by
     // SAVING FIRST, IN BATCHES, THEN PRUNING - never delete-then-save. The two are
@@ -230,17 +247,35 @@ Deno.serve(async (req) => {
       }
     }
     const arN = artistRows.length;
-    // Only now prune: RA rows in the window this run did not re-confirm.
-    const { error: de } = await admin.from("ra_events").delete().eq("source", "ra")
-      .gte("event_date", dayFrom).lte("event_date", dayTo).lt("fetched_at", runStart);
-    if (de) console.error("ra_events prune:", de.message);
-    const { error: dae } = await admin.from("ra_artists").delete().eq("source", "ra")
-      .gte("next_event_date", dayFrom).lte("next_event_date", dayTo).lt("fetched_at", runStart);
-    if (dae) console.error("ra_artists prune:", dae.message);
+    // Only now prune, and only on a pull that can be trusted to be the whole window.
+    // Events no longer listed are deleted. Artists are RETIRED, never deleted: the
+    // row holds the SoundCloud link sc-match found, the city and the partner flag,
+    // none of which RA re-sends - deleting it threw that away the first time an
+    // artist's show was cancelled. Cleared show fields take them out of the pool
+    // (every reader filters next_event_date >= today); the next pull that lists
+    // them again carries the link straight back.
+    // The prune is scoped by source, not by city, so a pull of any other RA area
+    // would read every NYC row as "not re-confirmed" and delete it.
+    const pruneSkipped = area !== homeArea ? `area ${area} is not the home area (${homeArea}); a prune would delete its shows`
+      : !complete ? incompleteWhy
+      : shrunk ? `pull returned ${eventMap.size} events where ${prior} were stored for this window`
+      : null;
+    let pruned = 0, retired = 0;
+    if (!pruneSkipped) {
+      const { error: de, count: dc } = await admin.from("ra_events").delete({ count: "exact" }).eq("source", "ra")
+        .gte("event_date", dayFrom).lte("event_date", dayTo).lt("fetched_at", runStart);
+      if (de) console.error("ra_events prune:", de.message); else pruned = dc || 0;
+      const { error: dae, count: ac } = await admin.from("ra_artists")
+        .update({ next_event_date: null, next_event_title: null, next_venue: null, next_cost: null, next_event_url: null }, { count: "exact" })
+        .eq("source", "ra").gte("next_event_date", dayFrom).lte("next_event_date", dayTo).lt("fetched_at", runStart);
+      if (dae) console.error("ra_artists retire:", dae.message); else retired = ac || 0;
+    }
 
     return new Response(JSON.stringify({
-      success: true, area, days, pages, total_available: total,
+      success: true, status: pruneSkipped ? "PARTIAL" : "OK", area, days, pages, total_available: total,
       events_saved: evN, artists_saved: arN, soundcloud_links_kept: carried,
+      // What the prune did, or why it did not run. Old rows kept is never silent.
+      pruned_events: pruned, retired_artists: retired, prune_skipped: pruneSkipped,
       artists_with_soundcloud: artistRows.filter((a) => a.soundcloud).length,
       // Echo the window actually pulled, and say so when RA had more pages than
       // maxPages allowed — a truncated pull must never read as a complete one.

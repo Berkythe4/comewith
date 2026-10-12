@@ -473,6 +473,13 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   window with `fetched_at < runStart`. `pull-ra-market` (v35) and `pull-ticketmaster`
   (v27) do the same since 2026-10-12, for events AND artists. Any new puller must too.
   LEARNINGS §90.
+- **A prune runs only on a pull that PROVES it saw the whole range** (RA v36, TM v28,
+  DICE v31). Empty result -> 502, no writes. A failed page/borough/search tag, a page
+  cap, a custom `cities` list or a non-home RA `area` -> save, skip the prune, say why
+  in `prune_skipped`. DICE cut short by its cap/deadline prunes only before the first
+  candidate it did not reach. Under half of what is stored -> no prune. And **artist
+  rows are RETIRED (show fields nulled), never deleted** - the row carries the sc-match
+  link, city and partner flag. Keep all of this in any new puller. LEARNINGS §92.
 - **A puller never sends a column it has no value for.** An upsert overwrites every
   column in its payload, so `soundcloud: null` from `pull-dice` / `pull-ticketmaster`
   wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage

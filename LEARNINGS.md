@@ -2714,3 +2714,41 @@ permission rule anywhere (no trigger, no hidden options), and the Owner box that
 limits (§84) are a different matter, about what Claude may touch, and are
 unchanged. Do not reintroduce a role-based stage ladder "for safety" without
 asking; it would block the person who actually runs the account.
+
+---
+
+## Section 92 — A prune trusts a pull only when the pull can prove it saw the whole window (2026-10-12)
+
+§90 fixed the ORDER (save, then prune). This fixes WHEN a prune may run at all,
+across `pull-ra-market` v36, `pull-ticketmaster` v28 and `pull-dice` v31. A prune
+reads "not re-confirmed by this run" as "gone", which is only true when the run
+saw everything in the range. The cases where it does not, each now refused:
+
+- **Empty.** A feed that answers 200 with zero shows is broken, not quiet. All
+  three return 502 before any write. (DICE already refused a blocked source, §72.)
+- **Partial.** RA's loop ended quietly on a page with no data and at `maxPages`;
+  TM broke out on a failed borough and capped at 5 pages a city; DICE broke out on a
+  failed search page per tag. Each now records the gap and skips the prune.
+- **Capped (DICE).** Candidates are soonest-first, so a run cut by the detail cap
+  or the deadline prunes only before the first candidate it did not reach
+  (`pruned_before`); it used to delete the far end it never looked at.
+- **Shrunk.** A pull returning under half of what is stored for the range (with
+  at least 20 stored) saves but does not prune, which catches an API that quietly
+  starts returning a fraction.
+- **Out of scope.** The prune is scoped by `source`, not by city: an RA call for
+  another `area`, or a TM call with a custom `cities` list, would have deleted
+  every NYC row it did not ask about. Both now skip the prune.
+
+And **artists are RETIRED, never deleted**: show fields cleared, row kept. The row
+is where the sc-match link, `city` and `is_partner` live, none of which a feed
+re-sends, so deleting it on a cancelled show threw the link away. Cleared
+`next_event_date` takes the artist out of every pool (all readers filter
+`>= today`); RA's carry-over restores the link when they are listed again. The
+first full run retired Luciano, Miss Monique and JDH with links intact.
+
+Every response says what the prune did (`pruned_events`, `retired_artists`) or why
+it did not (`prune_skipped`, status PARTIAL), and the dashboard's ↻ Pull shows
+toast names any feed that kept its old rows. Verified on prod: three empty
+cases 502 with no writes, a one-borough TM and a 2-page RA pull kept everything,
+a 40-detail DICE pull pruned only before Oct 16, and full 90-day pulls lost no
+link, city or artist row against a before/after snapshot.

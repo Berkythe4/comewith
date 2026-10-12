@@ -83,7 +83,7 @@ const MAX_PAGES = 12;
 //
 // Pages come back date-ascending, so once a whole page sits beyond the window
 // there is nothing later worth asking for.
-async function search(tag: string, cutoff: string, stats: { pages: number; lastStatus: string }): Promise<any[]> {
+async function search(tag: string, cutoff: string, stats: { pages: number; lastStatus: string; failed: string[] }): Promise<any[]> {
   const out: any[] = [];
   const seen = new Set<string>();
   let cursor: string | null = null;
@@ -92,7 +92,9 @@ async function search(tag: string, cutoff: string, stats: { pages: number; lastS
     const body: Record<string, unknown> = { tag, lat: NYC.lat, lng: NYC.lng };
     if (cursor) body.cursor = cursor;
     const [res] = await diceMany([{ path: "/unified_search", body }]);
-    if (!res.json) { stats.lastStatus = res.err; break; }
+    // A failed page is recorded, not just skipped: every later page of this tag goes
+    // unseen, and the prune must not read "unseen" as "gone".
+    if (!res.json) { stats.lastStatus = res.err; stats.failed.push(`${tag} page ${page + 1}`); break; }
     const j = res.json;
     stats.pages++;
 
@@ -166,7 +168,7 @@ Deno.serve(async (req) => {
 
     // 1. Collect candidate events across the genre tags (dedup by id).
     const cand = new Map<string, any>();
-    const searchStats = { pages: 0, lastStatus: "" };
+    const searchStats = { pages: 0, lastStatus: "", failed: [] as string[] };
     // Tags run in parallel: through the database each page is a queue-and-poll round
     // trip, so sequential tags would spend most of the wall clock waiting.
     const perTag = await Promise.all(TAGS.map((tag) => search(tag, cutoff, searchStats)));
@@ -260,6 +262,26 @@ Deno.serve(async (req) => {
     if (searchStats.pages === 0 || (ids.length > 0 && detailOk === 0)) {
       return err(502, `DICE is not answering (${searchStats.lastStatus || "detail calls all failed"}). Nothing was deleted; existing DICE shows are kept.`);
     }
+    // EMPTY IS NOT A RESULT either, even when DICE answered. Refuse before any write.
+    if (rows.length === 0) {
+      return err(502, `DICE returned no NYC shows for ${from} to ${cutoff} (${cand.size} candidates searched). Nothing was saved or deleted; existing DICE shows are kept.`);
+    }
+    // How far the prune may reach. Candidates are soonest-first, so a run cut short
+    // by the detail cap or the deadline has seen everything BEFORE the first
+    // candidate it did not reach, and nothing from that date on. Pruning past it
+    // deleted real shows the run simply never looked at.
+    const firstUnreached = inRange[scanned];
+    const pruneBefore = firstUnreached && dateOf(firstUnreached) ? dateOf(firstUnreached) : null;
+    let countQ = admin.from("ra_events").select("ra_id", { count: "exact", head: true })
+      .eq("source", "dice").gte("event_date", from);
+    countQ = pruneBefore ? countQ.lt("event_date", pruneBefore) : countQ.lte("event_date", cutoff);
+    const { count: existingInRange } = await countQ;
+    const prior = existingInRange || 0;
+    const savedInRange = pruneBefore ? rows.filter((r) => (r.event_date as string) < pruneBefore).length : rows.length;
+    const shrunk = prior >= 20 && savedInRange < prior * 0.5;
+    const pruneSkipped = searchStats.failed.length ? `search pages failed: ${searchStats.failed.join(", ")}`
+      : shrunk ? `pull returned ${savedInRange} shows where ${prior} were stored for this range`
+      : null;
 
     // 3. Replace ONLY the dice-sourced rows (never touch ra / tm).
     // Bounded at BOTH ends — this pull now covers [from, cutoff], which may be a
@@ -279,9 +301,14 @@ Deno.serve(async (req) => {
         return err(500, `Could not save DICE events (batch ${i / SAVE_BATCH + 1}): ${error.message}. Nothing was deleted; existing DICE shows are kept.`);
       }
     }
-    const { error: delError } = await admin.from("ra_events").delete().eq("source", "dice")
-      .gte("event_date", from).lte("event_date", cutoff).lt("fetched_at", runStart);
-    if (delError) console.error("dice stale delete:", delError.message);
+    let pruned = 0;
+    if (!pruneSkipped) {
+      let delQ = admin.from("ra_events").delete({ count: "exact" }).eq("source", "dice")
+        .gte("event_date", from).lt("fetched_at", runStart);
+      delQ = pruneBefore ? delQ.lt("event_date", pruneBefore) : delQ.lte("event_date", cutoff);
+      const { error: delError, count: dc } = await delQ;
+      if (delError) console.error("dice stale delete:", delError.message); else pruned = dc || 0;
+    }
     // soundcloud / instagram / follower_count are deliberately NOT in this row. A column
     // in an upsert payload is overwritten on conflict, and this feed has no value for
     // them - sending null wiped every link sc-match had found, on every Refresh, so
@@ -302,7 +329,9 @@ Deno.serve(async (req) => {
       // the cap or the clock has a known blind spot at the far end of the window
       // and the UI must show that as a problem, not a tick.
       success: true, source: "dice",
-      status: (droppedOverCap > 0 || timedOut || artistError) ? "PARTIAL" : "OK",
+      status: (droppedOverCap > 0 || timedOut || artistError || pruneSkipped) ? "PARTIAL" : "OK",
+      // What the prune did, how far it reached, or why it did not run.
+      pruned_events: pruned, prune_skipped: pruneSkipped, pruned_before: pruneBefore,
       candidates: cand.size, in_window_candidates: inRange.length,
       search_pages: searchStats.pages,
       detailed: ids.length, dropped_over_cap: droppedOverCap,

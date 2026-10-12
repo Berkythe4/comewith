@@ -72,6 +72,9 @@ Deno.serve(async (req) => {
     let grandTotal = 0;
     const perCity: Record<string, number> = {};
     let firstCall = true;
+    // Any borough that failed or hit the page cap leaves shows unseen, and the
+    // prune would read "unseen" as "gone". Collected here, they switch it off.
+    const incomplete: string[] = [];
     for (const city of cities) {
     let total = 0, cityKept = 0;
     for (let page = 0; page < 5; page++) {
@@ -82,7 +85,7 @@ Deno.serve(async (req) => {
       const r = await fetch(`https://app.ticketmaster.com/discovery/v2/events.json?${params}`, { headers: { "Accept": "application/json" } });
       // Only a dead FIRST call is fatal — one borough 404ing must not throw away
       // the four that answered.
-      if (!r.ok) { if (firstCall) return err(502, `Ticketmaster responded ${r.status}.`); break; }
+      if (!r.ok) { if (firstCall) return err(502, `Ticketmaster responded ${r.status}.`); incomplete.push(`${city} page ${page + 1}: HTTP ${r.status}`); break; }
       firstCall = false;
       const j = await r.json();
       total = j.page?.totalElements || 0;
@@ -125,6 +128,7 @@ Deno.serve(async (req) => {
         }
       }
       if (events.length < 100 || (page + 1) * 100 >= total) break;
+      if (page === 4) incomplete.push(`${city}: stopped at the 5-page cap with ${total} listed`);
     }
     grandTotal += total; perCity[city] = cityKept;
     }
@@ -133,6 +137,18 @@ Deno.serve(async (req) => {
     const map = new Map<string, Record<string, unknown>>();
     rows.forEach((r) => map.set(r.ra_id as string, r));
     const finalRows = [...map.values()].map(({ next_cost, ...r }) => r); // next_cost isn't an ra_events col
+    const fromDay = start.slice(0, 10), toDay = end.slice(0, 10);
+    // EMPTY IS NOT A RESULT. Refuse before any write so the existing window stands.
+    // (A genuinely empty window is possible for a very short range; keeping a few
+    // stale rows until the next real pull costs nothing, a wiped window does.)
+    if (finalRows.length === 0) {
+      return err(502, `Ticketmaster returned no Dance/Electronic shows for ${fromDay} to ${toDay} (${grandTotal} listed before the genre filter). Nothing was saved or deleted; existing Ticketmaster shows are kept.`);
+    }
+    // A sudden collapse: save what came, but do not prune on it.
+    const { count: existingInWindow } = await admin.from("ra_events").select("ra_id", { count: "exact", head: true })
+      .eq("source", "tm").gte("event_date", fromDay).lte("event_date", toDay);
+    const prior = existingInWindow || 0;
+    const shrunk = prior >= 20 && finalRows.length < prior * 0.5;
     // SAVE FIRST, IN BATCHES, THEN PRUNE - never delete-then-save. The two are
     // separate calls, not one transaction: pull-dice deleted its window, then timed
     // out on the save and left DICE empty (LEARNINGS §90). A failed batch returns
@@ -147,7 +163,7 @@ Deno.serve(async (req) => {
       }
     }
     const saved = finalRows.length;
-    // TM artists - a failed artist save is logged and skips only the artist prune,
+    // TM artists - a failed artist save is logged and skips only the artist retire,
     // as before it never failed the pull.
     const artistRows = [...artistMap.values()];
     let artistsOk = true;
@@ -155,17 +171,33 @@ Deno.serve(async (req) => {
       const { error: ae } = await admin.from("ra_artists").upsert(artistRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
       if (ae) { console.error("tm artist upsert:", ae.message); artistsOk = false; }
     }
-    const { error: de } = await admin.from("ra_events").delete().eq("source", "tm")
-      .gte("event_date", start.slice(0, 10)).lte("event_date", end.slice(0, 10)).lt("fetched_at", runStart);
-    if (de) console.error("tm prune:", de.message);
-    if (artistsOk) {
-      const { error: dae } = await admin.from("ra_artists").delete().eq("source", "tm")
-        .gte("next_event_date", start.slice(0, 10)).lte("next_event_date", end.slice(0, 10)).lt("fetched_at", runStart);
-      if (dae) console.error("tm artist prune:", dae.message);
+    // Prune only on a pull that saw the whole window. Events no longer listed are
+    // deleted; artists are RETIRED (show fields cleared), never deleted, so the
+    // SoundCloud link sc-match found survives a cancelled show.
+    // The prune is scoped by source, not by borough: a pull of only some cities
+    // would delete every show in the ones it did not ask about.
+    const customCities = (Array.isArray(b.cities) && b.cities.length) || !!b.city;
+    const pruneSkipped = customCities ? `custom city list (${cities.join(", ")}); a prune would delete the other boroughs`
+      : incomplete.length ? incomplete.join("; ")
+      : shrunk ? `pull returned ${finalRows.length} shows where ${prior} were stored for this window`
+      : null;
+    let pruned = 0, retired = 0;
+    if (!pruneSkipped) {
+      const { error: de, count: dc } = await admin.from("ra_events").delete({ count: "exact" }).eq("source", "tm")
+        .gte("event_date", fromDay).lte("event_date", toDay).lt("fetched_at", runStart);
+      if (de) console.error("tm prune:", de.message); else pruned = dc || 0;
+      if (artistsOk) {
+        const { error: dae, count: ac } = await admin.from("ra_artists")
+          .update({ next_event_date: null, next_event_title: null, next_venue: null, next_cost: null, next_event_url: null }, { count: "exact" })
+          .eq("source", "tm").gte("next_event_date", fromDay).lte("next_event_date", toDay).lt("fetched_at", runStart);
+        if (dae) console.error("tm artist retire:", dae.message); else retired = ac || 0;
+      }
     }
     return new Response(JSON.stringify({
-      success: true, source: "ticketmaster", cities, per_city: perCity,
+      success: true, source: "ticketmaster", status: pruneSkipped ? "PARTIAL" : "OK", cities, per_city: perCity,
       total_from_tm: grandTotal, edm_saved: saved,
+      pruned_events: pruned, retired_artists: retired, prune_skipped: pruneSkipped,
+      artist_error: artistsOk ? null : "artist save failed; artists not retired",
       from: start.slice(0, 10), to: end.slice(0, 10),
     }), { headers: JH });
   } catch (e) {

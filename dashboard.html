@@ -18974,7 +18974,12 @@ async function raRefresh(btn) {
     // were swallowed silently, so an outage and a genuine zero looked identical
     // and you'd plan a week off a pool that quietly lost a source.
     let tm = 0, dice = 0, dropped = 0, diceLast = null; const failed = [];
-    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days } }); if (r.error) throw r.error; tm = r.data?.edm_saved || 0; } catch (_) { failed.push('Ticketmaster'); }
+    // A pull that could not be trusted to be the whole window saves what it got but
+    // keeps the old rows instead of pruning them. Say so - a kept stale row and a
+    // pruned one look the same on the board otherwise.
+    const keptOld = [];
+    if (data.prune_skipped) keptOld.push('RA: ' + data.prune_skipped);
+    try { const r = await sb.functions.invoke('pull-ticketmaster', { body: { days } }); if (r.error) throw r.error; tm = r.data?.edm_saved || 0; if (r.data?.prune_skipped) keptOld.push('Ticketmaster: ' + r.data.prune_skipped); } catch (_) { failed.push('Ticketmaster'); }
     // DICE (source='dice') — reverse-engineered public endpoints, no key.
     // ~10 DICE shows a day in NYC, so ask for the window's worth of detail budget
     // rather than the old flat 240 — which bound exactly on the 8/15 pull and cut
@@ -18982,12 +18987,13 @@ async function raRefresh(btn) {
     // 900 = pull-dice's ceiling. Through the database (214) 600 lookups take ~30s, so the
     // old 600 cap only dropped the far end of the window (39 shows on 2026-09-30).
     const diceDetail = Math.min(900, Math.max(240, Math.ceil((new Date(winCut + 'T00:00:00Z') - new Date(winStart + 'T00:00:00Z')) / 86400000) * 14));
-    try { const r = await sb.functions.invoke('pull-dice', { body: { from: winStart, to: winCut, maxDetail: diceDetail } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; diceLast = r.data?.last_date || null; } catch (_) { failed.push('DICE'); }
+    try { const r = await sb.functions.invoke('pull-dice', { body: { from: winStart, to: winCut, maxDetail: diceDetail } }); if (r.error) throw r.error; dice = r.data?.saved || 0; dropped = r.data?.dropped_over_cap || 0; diceLast = r.data?.last_date || null; if (r.data?.prune_skipped) keptOld.push('DICE: ' + r.data.prune_skipped); } catch (_) { failed.push('DICE'); }
     toast(`Pulled ${data.events_saved} RA${tm ? ` + ${tm} Ticketmaster` : ''}${dice ? ` + ${dice} DICE` : ''} shows · ${data.artists_with_soundcloud} artists w/ SoundCloud`
       + ` · RA to ${data.to || '?'}, DICE ${winStart}→${winCut}${diceLast ? ` (reached ${diceLast})` : ''}`
       + (data.truncated ? ` · ⚠ RA had more listings than the page budget` : '')
       + (dropped ? ` · ⚠ ${dropped} DICE shows over the detail cap — narrow the window` : '')
-      + (failed.length ? ` · ⚠ ${failed.join(' + ')} didn't answer` : ''), (failed.length || dropped || data.truncated) ? 'err' : 'ok');
+      + (failed.length ? ` · ⚠ ${failed.join(' + ')} didn't answer` : '')
+      + (keptOld.length ? ` · ⚠ old shows kept, not pruned (${keptOld.join('; ')})` : ''), (failed.length || dropped || data.truncated || keptOld.length) ? 'err' : 'ok');
     raState.events = []; raState.venues = [];   // force fresh reload of the scene data
     if (document.querySelector('#panel-scene-map.active')) await loadSceneMap();
     else if (document.querySelector('#panel-market.active')) await loadMarket();
