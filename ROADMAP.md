@@ -1907,3 +1907,18 @@ passed. 183 artists carry a rotten `next_event_date` and the artist pool, Best
 Nights, the watchlist strip and now ↻ Show info all still read it. The Planning
 tab has never been opened in a browser; a published planning round is only half
 frozen.
+
+### 2026-10-12 (laptop)
+
+**Done — a full 90-day pool.** RA, DICE and Ticketmaster pulled 90 days out (RA 956
+to Jan 10, DICE 770 to Jan 8, TM 42), and every linked upcoming artist scanned:
+939 producers with music to audition, up from 534. The SHOW 10 "blocked on a scan"
+note above is superseded for any window inside the next 90 days.
+
+**Done — `pull-dice` v30 saves before it deletes.** LEARNINGS §90.
+
+**Done — social editor Owner box + Mark as posted.** No stage permissions, by
+Keith's call. LEARNINGS §91.
+
+**Parked — `pull-ra-market` / `pull-ticketmaster` still delete before saving.** Port
+the v30 pattern before either window grows.

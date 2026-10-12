@@ -2676,3 +2676,41 @@ Fixed on the row by storing the token-free canonical URL
 (`soundcloud.com/comewithnyc/cwr_ep-6`). The CLAUDE.md rule already says never store
 a short link; the gap is that the Go-live field accepts one. Parked: resolve short
 links on save there, the way the event editor does through `resolve-media`.
+
+---
+
+## Section 90 — Save before you delete; a puller's replace is not a transaction (2026-10-12)
+
+`pull-dice` replaced its window as two PostgREST calls: delete `[from, cutoff]`, then
+upsert every row in ONE statement. They are not one transaction. A 90-day pull
+(~900 rows, each firing the venue-resolve and lineup-from-title triggers on
+`ra_events`) hit the statement timeout on the upsert, after the delete had already
+committed, and DICE went from 332 upcoming shows to **zero** while the function
+answered 500. §72's guard ("a blocked source must never reach a delete") did not
+help: DICE had answered fine; it was our own write that failed.
+
+Fixed in `pull-dice` v30: upsert first, 150 rows a batch; any failed batch returns
+with nothing deleted; then delete only rows in the window this run did not
+re-confirm (`fetched_at < runStart`, captured before any row is built). Verified
+with the exact call that failed: 770 saved, zero stale rows left. Restored on the
+day by pulling DICE in four smaller windows, which works because each call's
+delete is bounded to its own range (CLAUDE.md, "bounded at BOTH ends").
+
+The rule: **a replace is save-then-prune, never delete-then-save**, and any write
+whose size grows with the window gets batched. Row triggers make a statement's cost
+grow with its row count, so a pull that has always fit can stop fitting the day its
+window widens. `pull-ra-market` and `pull-ticketmaster` still delete first; RA saves
+~960 rows in one statement today and is the next one to break (parked).
+
+---
+
+## Section 91 — Owner and stage are anyone's to change; no per-person stage ladder (2026-10-12)
+
+A sprint spec proposed limiting Janelle to stages up to "ready", with
+approved/scheduled/posted reserved for Keith. Keith turned that down: Janelle does
+not need his approval, and she schedules and posts herself. So there is no stage
+permission rule anywhere (no trigger, no hidden options), and the Owner box that
+§85 had hidden is back in the editor and in `savePost()`'s patch. The connector's
+limits (§84) are a different matter, about what Claude may touch, and are
+unchanged. Do not reintroduce a role-based stage ladder "for safety" without
+asking; it would block the person who actually runs the account.

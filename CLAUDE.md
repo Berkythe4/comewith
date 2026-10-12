@@ -465,6 +465,13 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **A blocked source must never reach a delete.** `pull-dice` returns 502 and deletes
   nothing when no search page or no detail call answers; before that, a 403 read as
   "zero shows" and a Refresh wiped every upcoming DICE event while reporting OK.
+- **A puller SAVES, then prunes - never deletes, then saves.** The delete and the upsert
+  are two PostgREST calls, not one transaction, so a save that fails after the delete
+  leaves the window empty. `pull-dice` did exactly that on a 90-day pull (one ~900-row
+  upsert, row triggers, statement timeout: DICE went to zero). v30 upserts in batches of
+  150, returns with nothing deleted if any batch fails, then deletes only rows in the
+  window with `fetched_at < runStart`. `pull-ra-market` and `pull-ticketmaster` still
+  delete first - port it before widening their windows. LEARNINGS §90.
 - **A puller never sends a column it has no value for.** An upsert overwrites every
   column in its payload, so `soundcloud: null` from `pull-dice` / `pull-ticketmaster`
   wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage

@@ -1,3 +1,74 @@
+# Carryover - 2026-10-12 (fresh 90-day pull, DICE save fix, social Owner box - LAPTOP)
+
+**Closed 2026-10-12 on the LAPTOP.** No branch; everything is on `master`, pushed and
+deployed. The 2026-10-09/10 block below is the previous close; its START HERE items
+**2-4 are still open** (item 1, the Ep 6 go-live, was due 2026-10-10 and was not
+checked this session).
+
+## >> START HERE NEXT SESSION
+
+**1. `pull-ra-market` (and `pull-ticketmaster`) still DELETE BEFORE THEY SAVE.** Same
+bug that wiped DICE today (LEARNINGS §90). RA saves ~960 rows in one upsert and is
+close to the statement timeout; a failure would empty the RA window. Port the
+`pull-dice` v30 pattern: batch the upsert, then prune `fetched_at < runStart`.
+
+**2. Spot-check today's SoundCloud matches.** `sc-match` linked 210 of 220 new-bill
+artists (95%, unusually high). Open ten or so of the newly linked artists in the
+Build tab and confirm they are the right people before a crate goes out.
+
+**3. Run `python scripts/e2e_social_mcp.py` on the DESKTOP.** The connector was not
+changed, but its e2e test needs `SOCIAL_MCP_SECRET` (desktop `.env` only) and its
+unit tests need `node`; neither ran here.
+
+## State summary
+
+- **No migrations.** Repo and prod both top out at **220** (verified live:
+  `radio_publish_station` carries 220's change).
+- **Functions deployed:** `pull-dice` **v30** (committed `2773321`).
+- **Site:** `dashboard.html` changed (`c5169f7`), live on comewith.org (verified).
+- **LEARNINGS §91** is the latest (§90-91 added this session).
+- **Anon-401 invariant verified** on all five financial views
+  (`check_financial_views.py`); `check_anon_exposure.py` clean. No new tables/views.
+- Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.
+- **git:** `master`, close commit pushed, `0 0` checked after the push. Machine:
+  LAPTOP. Keith's Radio render work is still uncommitted on purpose (see the block
+  below for the list, and never `git add` `Radio/Episode 6/` whole - 84 MB m4a).
+
+## This session shipped
+
+- **Fresh 90-day pull of all three feeds.** Before (last pull 2026-09-30): RA 633
+  upcoming to Dec 29, DICE 332 to Nov 11, TM 35 to Dec 11. After: **RA 956 to Jan 10,
+  DICE 770 to Jan 8, TM 42 to Dec 31.** DICE weeks 4-12 went 8 -> ~270 shows.
+- **DICE was wiped mid-pull and restored.** The 90-day `pull-dice` deleted its window
+  then timed out saving ~900 rows in one statement (§90). Restored the same hour by
+  pulling in four bounded windows, then fixed and deployed (v30), re-verified with the
+  full 90-day call: 770 saved, no stale rows.
+- **SoundCloud: match + scan for the new pool.** 210 of 220 new-bill artists without a
+  link were matched; all 382 linked-but-never-scanned upcoming artists were read.
+  Artists with an upcoming NYC show 1,083 -> **1,570**; linked 1,466 (93%), every link
+  scanned; producers with music to audition **534 -> 939**. The scan covered the whole
+  90 days, not one episode's window.
+- **Social editor: Owner box + Mark as posted** (`c5169f7`). Owner dropdown (active
+  team, defaults to Janelle on a new post, keeps an off-list current owner selected),
+  `owner_id` in `savePost()`'s patch, "📤 Mark as posted" (stage posted, `posted_at`
+  now), Approve notifies the owner as saved. No migration; **no per-person stage
+  limit**, Keith's call (§91). Smoke-tested as Janelle on prod in a rolled-back txn.
+- **Prod data:** post `eb27c520` "Boost DI2 throwback reel" -> owner Keith, stage
+  posted (was drafted / Janelle). Dry-run first.
+- How the pulls were run, for next time: a scratchpad script read the service-role key
+  from vault (`gear_watch_srk`) into memory and called the functions over plain HTTP
+  (never `net.http_post` for `pull-dice`). Nothing was written to disk or printed.
+
+## Parked / next
+
+- `pull-ra-market` / `pull-ticketmaster` save-before-delete (START HERE 1). The older
+  "pull-ra-market failed once with 'Could not save events'" note is probably this
+  same timeout.
+- The dashboard's "↻ Pull shows" now works for long DICE windows, but its DICE detail
+  budget is `min(900, days x 14)`; 90 days of DICE was 770 today, close to the ceiling.
+
+---
+
 # Carryover - 2026-10-09/10 (Radio Ep 6 / SHOW 10 released - LAPTOP)
 
 **Closed 2026-10-10 on the LAPTOP.** No branch; docs + one tool committed on
