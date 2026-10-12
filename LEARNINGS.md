@@ -2752,3 +2752,42 @@ toast names any feed that kept its old rows. Verified on prod: three empty
 cases 502 with no writes, a one-borough TM and a 2-page RA pull kept everything,
 a 40-detail DICE pull pruned only before Oct 16, and full 90-day pulls lost no
 link, city or artist row against a before/after snapshot.
+
+---
+
+## Section 93 — An exact NAME is not an exact ARTIST; sc-match writes only what it can stand behind (2026-10-12)
+
+Spot-checking the 129 DICE/TM SoundCloud links read on 2026-10-12 found ~15 wrong
+or empty. Four separate causes, all in `sc-match`:
+
+1. **`full_name` counted as a match.** It is the account holder's REAL name:
+   "Lil' John Roberts" (Atlanta) has full name John Roberts, and an account called
+   `leae` has full name Marc Rebillet. Both were written as exact.
+2. **Affix stripping counted as exact.** "DJ MINK" matched "mink" by dropping "dj".
+3. **Followers outranked tracks.** Two exact "Glassjaw" accounts; the empty
+   `officialglassjaw` beat the band's 52-track `glassjawofficial`.
+4. **No floor.** A 0-track, 1-follower profile was written as readily as Bonobo.
+
+v22 tiers it. A candidate is WRITTEN only if its handle or display name equals the
+query as-is, it has tracks, and it is verified or has 500+ followers (the bar the
+function already used to call a match "high"), with no second exact profile of
+comparable size. Everything else comes back `needs_review` with the candidate and
+a reason, never written; the Add-artist form still pre-fills it for a person.
+Removing only the loose hits was not enough: "John Roberts", "mink" and "Nymph"
+then fell to OTHER strangers whose handle was exactly the name. On a common name,
+a small unverified profile is a guess.
+
+The cost is deliberate: small local acts no longer self-link and need a person.
+That is the side to err on (Martin's Kettama report, 2026-07-30): a wrong link puts
+a stranger's songs in the crate, where they can be auditioned and BOUGHT.
+
+Still uncaught: a real artist whose display name carries a tagline ("Rrose ╪ Eaux",
+"KETTAMA (G-TOWN FOREVER)") while a lesser exact-name account exists. Rrose was set
+by hand. Hand-set links on DICE/TM rows are safe, since those feeds never send one
+and sc-match only fills blanks; on an RA row, RA's own link still wins.
+
+Data fixed the same day: 12 links cleared (Nymph, Bcables, Chase Manhattan, Elise
+Petersen, hrushka, Marc Rebillet, Vida Libre, John Roberts, mink, Public Circuit,
+Tina Hand, adney), Rrose -> `rrose1921`, Glassjaw -> `glassjawofficial`, both scanned.
+Kristine Barilli kept: RA itself lists that (empty) profile as hers. The ~224 RA-row
+links that came from sc-match were NOT checked; nothing records which they are.

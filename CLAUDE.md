@@ -490,6 +490,12 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   "followers" for sorting is the SCAN's `sc_artist_cache.followers`, and an "RA
   followers" label/sort only reads `follower_count` where `source='ra'`. Sorting on it
   raw put 50 Cent (2.2M on SoundCloud) under RA acts with a few thousand.
+- **`sc-match` writes a SoundCloud link only when it can stand behind it (v22).** The
+  handle or display name must equal the name as-is (never `full_name`, which is a real
+  name, and never only after stripping "DJ"/"music"), the profile must have tracks, and
+  be verified or have 500+ followers, with no exact-name rival of similar size.
+  Anything else returns `needs_review` and is NOT written. Do not loosen this to raise
+  the match rate: a wrong link puts a stranger's songs in the crate. LEARNINGS §93.
 - **Buzz lives in `assets/buzz.js` — one copy, imported by `dashboard.html` AND
   `dj.html`.** `dj-station` sends the raw inputs (`buzz_in`) and the page scores them,
   so the guest crate ranks exactly like the dashboard. Change the formula there only;

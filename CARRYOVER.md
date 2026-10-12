@@ -16,9 +16,10 @@ DICE v31 + dashboard toast. Empty -> 502 no writes; partial / capped / shrunk /
 out-of-scope pulls skip or bound the prune; artists retired, never deleted (§92).
 All guard paths tested on prod; full pulls lost no link, city or artist row.
 
-**2. Spot-check today's SoundCloud matches.** `sc-match` linked 210 of 220 new-bill
-artists (95%, unusually high). Open ten or so of the newly linked artists in the
-Build tab and confirm they are the right people before a crate goes out.
+**2. (DONE same day) SoundCloud matches spot-checked and sc-match tightened (v22).**
+12 bad links cleared, Rrose + Glassjaw corrected (§93). Still open: the ~224 RA-row
+links sc-match made were not checked, and `needs_review` results have no UI yet -
+they only show up in the Add-artist form.
 
 **3. Run `python scripts/e2e_social_mcp.py` on the DESKTOP.** The connector was not
 changed, but its e2e test needs `SOCIAL_MCP_SECRET` (desktop `.env` only) and its
@@ -29,9 +30,9 @@ unit tests need `node`; neither ran here.
 - **No migrations.** Repo and prod both top out at **220** (verified live:
   `radio_publish_station` carries 220's change).
 - **Functions deployed:** `pull-dice` **v31**, `pull-ra-market` **v36**,
-  `pull-ticketmaster` **v28** - all committed.
+  `pull-ticketmaster` **v28**, `sc-match` **v22** - all committed.
 - **Site:** `dashboard.html` changed (`c5169f7`), live on comewith.org (verified).
-- **LEARNINGS §92** is the latest (§90-92 added this session).
+- **LEARNINGS §93** is the latest (§90-93 added this session).
 - **Anon-401 invariant verified** on all five financial views
   (`check_financial_views.py`); `check_anon_exposure.py` clean. No new tables/views.
 - Roles unchanged: `master_admin` = Keith, Martin, Henry; `sub_admin` = Janelle, Liz.

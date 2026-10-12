@@ -7,14 +7,17 @@
 // ra_artists.soundcloud so the normal sc-enrich scan can read their tracks.
 //
 // Matching is CONSERVATIVE on purpose — a wrong profile poisons the radio with
-// some stranger's music. We only accept a candidate whose handle / display name
-// / full name NORMALIZES to the query (diacritics + punctuation stripped), and
-// among those prefer verified, then most followers, then has-tracks. No exact
-// normalized match → matched:false (we'd rather miss than mis-assign).
+// some stranger's music. We only WRITE a candidate whose handle or display name
+// NORMALIZES to the query exactly (diacritics + punctuation stripped) and that
+// has tracks; among those prefer verified, then has-tracks, then followers.
+// Affix-only or real-name-only hits, and empty profiles, come back as
+// needs_review with the candidate and are never written (we'd rather miss than
+// mis-assign).
 //
 // Body: { names: string[] (<=30), write?: boolean (default true) }
 // Returns: { results: [{ name, matched, soundcloud, username, followers,
-//            verified, track_count, confidence }], client_id_ok }
+//            verified, track_count, confidence, needs_review?, review_reason? }],
+//            matched, needs_review, client_id_ok }
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -104,20 +107,53 @@ Deno.serve(async (req) => {
         const js = await r.json().catch(() => ({}));
         const cands: any[] = Array.isArray(js.collection) ? js.collection : [];
 
-        // Keep only candidates whose handle/display/full name normalizes to the
-        // query (after allowing an official-style affix).
-        const exact = cands.filter((c) => {
-          const forms = [c.permalink, c.username, c.full_name].map((f: string) => stripAffix(norm(f || ""), q));
-          return forms.includes(q);
-        });
-        exact.sort((a, b) =>
+        // Two tiers (2026-10-12 spot-check, LEARNINGS §93). STRICT: the display name
+        // or the handle normalizes to the query as-is. LOOSE: it only matches after
+        // stripping an affix ("DJ MINK" for "mink", "artistmusic"), or only the
+        // FULL NAME matches - full_name is a person's real name, so "Lil' John
+        // Roberts" (full name John Roberts) and an account called "leae" (full name
+        // Marc Rebillet) passed as exact. A loose hit is never written; it comes
+        // back as needs_review with the candidate, for a person to confirm.
+        const strictOf = (c: any) => [c.permalink, c.username].map((f: string) => norm(f || "")).includes(q);
+        const looseOf = (c: any) => [c.permalink, c.username, c.full_name].map((f: string) => stripAffix(norm(f || ""), q)).includes(q);
+        // Among equals prefer verified, then a profile with TRACKS, then followers:
+        // followers-first picked an empty "officialglassjaw" over the band's
+        // 52-track account, and an empty profile gives the crate nothing.
+        const rank = (a: any, b: any) =>
           (Number(!!b.verified) - Number(!!a.verified)) ||
+          (Number((b.track_count || 0) > 0) - Number((a.track_count || 0) > 0)) ||
           ((b.followers_count || 0) - (a.followers_count || 0)) ||
-          ((b.track_count || 0) - (a.track_count || 0)));
-        const best = exact[0];
+          ((b.track_count || 0) - (a.track_count || 0));
+        const strict = cands.filter(strictOf).sort(rank);
+        const loose = cands.filter((c) => !strictOf(c) && looseOf(c)).sort(rank);
+        const best = strict[0] || loose[0];
 
         if (!best) { results.push({ name, matched: false }); continue; }
         const soundcloud = (best.permalink_url || "").replace("://www.", "://");
+        // Not confident enough to write: a loose-only match, or a profile with no
+        // tracks (Martin, 2026-07-30: "low follower count and no songs" = wrong
+        // profile). Returned with the candidate so the Add-artist form can offer it.
+        // And a small unverified profile is a GUESS on any common name: with the
+        // loose hits gone, "John Roberts", "mink" and "Nymph" still each had some
+        // stranger whose handle was exactly the name. Below the bar that already
+        // defines "high" confidence (verified, or 500+ followers), or with a
+        // second exact profile of comparable size, a person decides.
+        const fl = best.followers_count || 0;
+        const rival = strict[1] && (strict[1].followers_count || 0) >= fl * 0.5 && (strict[1].track_count || 0) > 0;
+        const reviewWhy = !strict[0] ? "name matches only loosely (affix or real name)"
+          : (best.track_count || 0) === 0 ? "profile has no tracks"
+          : !best.verified && fl < 500 ? `small unverified profile (${fl} followers)`
+          : !best.verified && rival ? "two exact-name profiles of similar size"
+          : null;
+        if (reviewWhy) {
+          results.push({
+            name, matched: false, needs_review: true, review_reason: reviewWhy, soundcloud,
+            username: best.username || best.permalink, followers: best.followers_count || 0,
+            verified: !!best.verified, track_count: best.track_count || 0,
+            city: (best.city || "").toString().trim() || null, confidence: "low",
+          });
+          continue;
+        }
         const city = (best.city || "").toString().trim() || null;   // SoundCloud profile city
         const country = (best.country_code || best.country || "").toString().trim() || null;
         // confidence: verified or a real following reads as a safe, strong match.
@@ -140,7 +176,8 @@ Deno.serve(async (req) => {
     }
 
     const matched = results.filter((r) => r.matched).length;
-    return new Response(JSON.stringify({ results, matched, total: names.length, client_id_ok: true }), { headers: JH });
+    const needsReview = results.filter((r) => r.needs_review).length;
+    return new Response(JSON.stringify({ results, matched, needs_review: needsReview, total: names.length, client_id_ok: true }), { headers: JH });
   } catch (e) {
     console.error("sc-match:", e instanceof Error ? e.message : String(e));
     return err(500, "match failed");
