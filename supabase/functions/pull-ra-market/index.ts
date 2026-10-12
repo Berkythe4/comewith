@@ -82,6 +82,9 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
+    // Every row this run writes carries a fetched_at at or after this instant, so
+    // "older than runStart" is exactly "not re-confirmed by this pull" (the prune).
+    const runStart = new Date().toISOString();
 
     // Deep price check: { prices: [ra_event_id, …] } → { costs: { id: "from $20" } }.
     // The listings query's `cost` is usually empty, but the event-detail tickets
@@ -178,14 +181,13 @@ Deno.serve(async (req) => {
       if (items.length < 50 || page * 50 >= total) break;
     }
 
-    // Replace the RA slice of the window only (leave Ticketmaster rows intact).
-    // Bounded at BOTH ends. The pull covers [dayFrom, dayTo]; deleting from
-    // dayFrom forward and re-inserting only that range would discard every RA row
-    // beyond it the moment the window stops being "today + everything".
-    const { error: de } = await admin.from("ra_events").delete().eq("source", "ra")
-      .gte("event_date", dayFrom).lte("event_date", dayTo);
-    if (de) { console.error("ra_events delete:", de.message); return err(500, "Could not clear old RA events: " + de.message); }
-    // Carry over what OTHER tools added before this delete-and-reinsert erases it.
+    // Replace the RA slice of the window only (leave Ticketmaster rows intact) by
+    // SAVING FIRST, IN BATCHES, THEN PRUNING - never delete-then-save. The two are
+    // separate calls, not one transaction: pull-dice deleted its window, then timed
+    // out saving ~900 rows in one statement and left DICE empty (LEARNINGS §90).
+    // The prune is bounded at BOTH ends: the pull covers [dayFrom, dayTo], and
+    // anything outside it was not asked about, so it must not be touched.
+    // Carry over what OTHER tools added, since the upsert overwrites these columns.
     // RA sends a SoundCloud link for most artists but not all; sc-match fills the
     // rest (plus `city`), and `is_partner` is a person's ruling. Re-inserting only
     // RA's fields wiped all of that on every pull (the pull-dice/pull-ticketmaster
@@ -209,21 +211,32 @@ Deno.serve(async (req) => {
       row.city = k?.city ?? null;
       row.is_partner = k?.is_partner ?? false;
     }
-    await admin.from("ra_artists").delete().eq("source", "ra")
-      .gte("next_event_date", dayFrom).lte("next_event_date", dayTo);
-    let evN = 0, arN = 0;
+    const SAVE_BATCH = 150;
     const eventRows = [...eventMap.values()];
-    if (eventRows.length) {
-      const { error: e1 } = await admin.from("ra_events").upsert(eventRows, { onConflict: "ra_id" });
-      if (e1) { console.error("ra_events upsert:", e1.message); return err(500, "Could not save events: " + e1.message); }
-      evN = eventRows.length;
+    for (let i = 0; i < eventRows.length; i += SAVE_BATCH) {
+      const { error: e1 } = await admin.from("ra_events").upsert(eventRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
+      if (e1) {
+        console.error("ra_events upsert:", e1.message);
+        return err(500, `Could not save events (batch ${i / SAVE_BATCH + 1}): ${e1.message}. Nothing was deleted; existing RA shows are kept.`);
+      }
     }
+    const evN = eventRows.length;
     const artistRows = [...artistMap.values()];
-    if (artistRows.length) {
-      const { error: e2 } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
-      if (e2) { console.error("ra_artists upsert:", e2.message); return err(500, "Could not save artists: " + e2.message); }
-      arN = artistRows.length;
+    for (let i = 0; i < artistRows.length; i += SAVE_BATCH) {
+      const { error: e2 } = await admin.from("ra_artists").upsert(artistRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
+      if (e2) {
+        console.error("ra_artists upsert:", e2.message);
+        return err(500, `Could not save artists (batch ${i / SAVE_BATCH + 1}): ${e2.message}. Nothing was deleted.`);
+      }
     }
+    const arN = artistRows.length;
+    // Only now prune: RA rows in the window this run did not re-confirm.
+    const { error: de } = await admin.from("ra_events").delete().eq("source", "ra")
+      .gte("event_date", dayFrom).lte("event_date", dayTo).lt("fetched_at", runStart);
+    if (de) console.error("ra_events prune:", de.message);
+    const { error: dae } = await admin.from("ra_artists").delete().eq("source", "ra")
+      .gte("next_event_date", dayFrom).lte("next_event_date", dayTo).lt("fetched_at", runStart);
+    if (dae) console.error("ra_artists prune:", dae.message);
 
     return new Response(JSON.stringify({
       success: true, area, days, pages, total_available: total,

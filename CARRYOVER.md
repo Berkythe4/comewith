@@ -7,10 +7,9 @@ checked this session).
 
 ## >> START HERE NEXT SESSION
 
-**1. `pull-ra-market` (and `pull-ticketmaster`) still DELETE BEFORE THEY SAVE.** Same
-bug that wiped DICE today (LEARNINGS §90). RA saves ~960 rows in one upsert and is
-close to the statement timeout; a failure would empty the RA window. Port the
-`pull-dice` v30 pattern: batch the upsert, then prune `fetched_at < runStart`.
+**1. (DONE same day) RA and TM now save before they prune** - `pull-ra-market` v35,
+`pull-ticketmaster` v27, re-verified with 90-day pulls (RA 959 events / 1,318 artists,
+TM 42 / 46, zero stale rows, SoundCloud links kept). Nothing left open here.
 
 **2. Spot-check today's SoundCloud matches.** `sc-match` linked 210 of 220 new-bill
 artists (95%, unusually high). Open ten or so of the newly linked artists in the
@@ -24,7 +23,8 @@ unit tests need `node`; neither ran here.
 
 - **No migrations.** Repo and prod both top out at **220** (verified live:
   `radio_publish_station` carries 220's change).
-- **Functions deployed:** `pull-dice` **v30** (committed `2773321`).
+- **Functions deployed:** `pull-dice` **v30**, `pull-ra-market` **v35**,
+  `pull-ticketmaster` **v27** - all committed.
 - **Site:** `dashboard.html` changed (`c5169f7`), live on comewith.org (verified).
 - **LEARNINGS §91** is the latest (§90-91 added this session).
 - **Anon-401 invariant verified** on all five financial views
@@ -61,9 +61,9 @@ unit tests need `node`; neither ran here.
 
 ## Parked / next
 
-- `pull-ra-market` / `pull-ticketmaster` save-before-delete (START HERE 1). The older
-  "pull-ra-market failed once with 'Could not save events'" note is probably this
-  same timeout.
+- The older "pull-ra-market failed once with 'Could not save events'" note was
+  probably the single-statement timeout fixed today; if it recurs, the error now names
+  the batch and confirms nothing was deleted.
 - The dashboard's "↻ Pull shows" now works for long DICE windows, but its DICE detail
   budget is `min(900, days x 14)`; 90 days of DICE was 770 today, close to the ceiling.
 

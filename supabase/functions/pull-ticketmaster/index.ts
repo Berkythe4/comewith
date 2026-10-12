@@ -41,6 +41,9 @@ Deno.serve(async (req) => {
 
   try {
     const b = await req.json().catch(() => ({}));
+    // Every row this run writes carries a fetched_at at or after this instant, so
+    // "older than runStart" is exactly "not re-confirmed by this pull" (the prune).
+    const runStart = new Date().toISOString();
     const days = Math.min(180, Math.max(7, Number(b.days) || 42));
     // `city` is a LITERAL city-name match at Ticketmaster's end, and NYC is five
     // of them. Asking only for "New York" returned Manhattan and nothing else —
@@ -130,25 +133,35 @@ Deno.serve(async (req) => {
     const map = new Map<string, Record<string, unknown>>();
     rows.forEach((r) => map.set(r.ra_id as string, r));
     const finalRows = [...map.values()].map(({ next_cost, ...r }) => r); // next_cost isn't an ra_events col
-    // Bounded at BOTH ends. This used to delete every tm row from `start` forward
-    // and re-insert only what this pull returned — fine while the pull was always
-    // [today, today+90], fatal once the window can be narrower or start later:
-    // pulling a 4-week window would have deleted every tm show beyond it.
-    await admin.from("ra_events").delete().eq("source", "tm")
-      .gte("event_date", start.slice(0, 10)).lte("event_date", end.slice(0, 10));
-    let saved = 0;
-    if (finalRows.length) {
-      const { error } = await admin.from("ra_events").upsert(finalRows, { onConflict: "ra_id" });
-      if (error) { console.error("tm upsert:", error.message); return err(500, "Could not save Ticketmaster events."); }
-      saved = finalRows.length;
+    // SAVE FIRST, IN BATCHES, THEN PRUNE - never delete-then-save. The two are
+    // separate calls, not one transaction: pull-dice deleted its window, then timed
+    // out on the save and left DICE empty (LEARNINGS §90). A failed batch returns
+    // with nothing deleted. The prune is bounded at BOTH ends, so a narrow or
+    // later window never touches tm shows outside what it asked about.
+    const SAVE_BATCH = 150;
+    for (let i = 0; i < finalRows.length; i += SAVE_BATCH) {
+      const { error } = await admin.from("ra_events").upsert(finalRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
+      if (error) {
+        console.error("tm upsert:", error.message);
+        return err(500, "Could not save Ticketmaster events. Nothing was deleted; existing Ticketmaster shows are kept.");
+      }
     }
-    // TM artists
-    await admin.from("ra_artists").delete().eq("source", "tm")
-      .gte("next_event_date", start.slice(0, 10)).lte("next_event_date", end.slice(0, 10));
+    const saved = finalRows.length;
+    // TM artists - a failed artist save is logged and skips only the artist prune,
+    // as before it never failed the pull.
     const artistRows = [...artistMap.values()];
-    if (artistRows.length) {
-      const { error: ae } = await admin.from("ra_artists").upsert(artistRows, { onConflict: "ra_id" });
-      if (ae) console.error("tm artist upsert:", ae.message);
+    let artistsOk = true;
+    for (let i = 0; i < artistRows.length && artistsOk; i += SAVE_BATCH) {
+      const { error: ae } = await admin.from("ra_artists").upsert(artistRows.slice(i, i + SAVE_BATCH), { onConflict: "ra_id" });
+      if (ae) { console.error("tm artist upsert:", ae.message); artistsOk = false; }
+    }
+    const { error: de } = await admin.from("ra_events").delete().eq("source", "tm")
+      .gte("event_date", start.slice(0, 10)).lte("event_date", end.slice(0, 10)).lt("fetched_at", runStart);
+    if (de) console.error("tm prune:", de.message);
+    if (artistsOk) {
+      const { error: dae } = await admin.from("ra_artists").delete().eq("source", "tm")
+        .gte("next_event_date", start.slice(0, 10)).lte("next_event_date", end.slice(0, 10)).lt("fetched_at", runStart);
+      if (dae) console.error("tm artist prune:", dae.message);
     }
     return new Response(JSON.stringify({
       success: true, source: "ticketmaster", cities, per_city: perCity,

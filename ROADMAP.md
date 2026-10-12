@@ -1920,5 +1920,5 @@ note above is superseded for any window inside the next 90 days.
 **Done — social editor Owner box + Mark as posted.** No stage permissions, by
 Keith's call. LEARNINGS §91.
 
-**Parked — `pull-ra-market` / `pull-ticketmaster` still delete before saving.** Port
-the v30 pattern before either window grows.
+**Done — `pull-ra-market` v35 / `pull-ticketmaster` v27 save before they prune**, same
+pattern as `pull-dice` v30.

@@ -470,8 +470,9 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   leaves the window empty. `pull-dice` did exactly that on a 90-day pull (one ~900-row
   upsert, row triggers, statement timeout: DICE went to zero). v30 upserts in batches of
   150, returns with nothing deleted if any batch fails, then deletes only rows in the
-  window with `fetched_at < runStart`. `pull-ra-market` and `pull-ticketmaster` still
-  delete first - port it before widening their windows. LEARNINGS §90.
+  window with `fetched_at < runStart`. `pull-ra-market` (v35) and `pull-ticketmaster`
+  (v27) do the same since 2026-10-12, for events AND artists. Any new puller must too.
+  LEARNINGS §90.
 - **A puller never sends a column it has no value for.** An upsert overwrites every
   column in its payload, so `soundcloud: null` from `pull-dice` / `pull-ticketmaster`
   wiped every link `sc-match` had found, on every Refresh — DICE headliners (Vintage
