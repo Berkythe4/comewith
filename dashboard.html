@@ -766,6 +766,13 @@ table.cc-table .li-sub { font-size: 0.68rem; margin-top: 2px; }
 .cc-sel { font-size: 0.72rem; padding: 3px 4px; max-width: 132px; }
 .cc-in { font-size: 0.72rem; padding: 3px 5px; }
 .cc-dur { width: 66px; } .cc-date { width: 128px; }
+/* Artist tags: any number of chips, then a picker that adds one more. */
+.cc-tags { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; min-width: 140px; }
+.cc-tag { display: inline-flex; align-items: center; gap: 2px; font-size: 0.68rem; white-space: nowrap;
+  padding: 1px 2px 1px 7px; border: 1px solid var(--border-strong); border-radius: 9px; background: var(--off); }
+.cc-tag button { background: none; border: none; color: var(--mid); cursor: pointer; font-size: .64rem; padding: 0 3px; }
+.cc-tag button:hover { color: var(--red); }
+.cc-tag-add { max-width: 112px; }
 /* The name: a link first, editable second. */
 .cc-title { display: inline-flex; align-items: center; gap: 4px; max-width: 340px; }
 .cc-title-link { color: var(--ink); text-decoration: none; border-bottom: 1px solid var(--border-strong);
@@ -7667,12 +7674,15 @@ function recapArtistSelect(sel) {
 // stages one. Read it through this one helper so the two sides cannot drift.
 const recapIsPublic = (v) => !v || v.is_public !== false;
 
-function recapVidRow(label, url, artistId, isPublic) {
+// The select here is the FIRST artist only; any others (221) ride along in
+// data-artist-ids so saving the modal never drops tags set on the Content tab.
+function recapVidRow(label, url, artistId, isPublic, artistIds) {
   const pub = isPublic !== false;
-  return `<div class="recap-vid-row${pub ? '' : ' staged'}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
+  const ids = ccArtistIds({ artist_id: artistId, artist_ids: artistIds });
+  return `<div class="recap-vid-row${pub ? '' : ' staged'}" data-artist-ids="${escapeHtml(JSON.stringify(ids))}" style="display:flex;gap:6px;margin-bottom:6px;align-items:center;flex-wrap:wrap;">
     <input class="modal-input recap-vid-label" value="${escapeHtml(label || '')}" placeholder="Watch the recap" style="flex:0 0 24%;min-width:130px;">
     <input class="modal-input recap-vid-url" type="url" value="${escapeHtml(url || '')}" placeholder="https://youtu.be/… or https://soundcloud.com/…" style="flex:1;min-width:170px;">
-    ${recapArtistSelect(artistId || '')}
+    ${recapArtistSelect(ids[0] || '')}${ids.length > 1 ? `<span class="li-sub" title="Edit every tag on the event's Content tab">+${ids.length - 1} more</span>` : ''}
     <select class="hub-status-sel recap-vid-pub" style="flex:0 0 auto;max-width:126px;"
       title="Staged means it is saved here but never sent to the site — use it while the track is still private">
       <option value="1"${pub ? ' selected' : ''}>\uD83C\uDF10 On the site</option>
@@ -7684,7 +7694,7 @@ function recapVidRow(label, url, artistId, isPublic) {
 function recapVidRows(list) {
   let arr = [];
   try { arr = Array.isArray(list) ? list : (typeof list === 'string' ? JSON.parse(list) : []); } catch (_) { arr = []; }
-  return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id, recapIsPublic(v))).join('');
+  return arr.map(v => recapVidRow(v && v.label, v && v.url, v && v.artist_id, recapIsPublic(v), v && v.artist_ids)).join('');
 }
 // Add / remove rows + on-demand link check (delegated, attached once).
 document.addEventListener('click', (e) => {
@@ -7892,8 +7902,15 @@ async function submitEditEvent(id) {
       url: (r.querySelector('.recap-vid-url')?.value || '').trim(),
       is_public: (r.querySelector('.recap-vid-pub')?.value || '1') === '1',
     };
-    const aid = (r.querySelector('.recap-vid-artist')?.value || '').trim();
-    if (aid) o.artist_id = aid;   // tags this content to an artist's profile
+    // The select edits the FIRST tag; the rest are kept as they were.
+    let ids = [];
+    try { ids = JSON.parse(r.dataset.artistIds || '[]'); } catch (_) { ids = []; }
+    const asel = r.querySelector('.recap-vid-artist');
+    const aid = (asel?.value || '').trim();
+    // A first tag this dropdown cannot show reads as blank - that is not a removal.
+    const shown = !ids[0] || (asel && [...asel.options].some(o => o.value === ids[0]));
+    if (shown) ids = (aid ? [aid] : []).concat(ids.slice(1).filter(x => x !== aid));
+    if (ids.length) { o.artist_ids = ids; o.artist_id = ids[0]; }   // tags it to those artists' profiles
     return o;
   }).filter(v => v.url);
   // Root-cause guard: only publicly-embeddable links get saved. Normalizes good
@@ -10539,7 +10556,7 @@ const PHOTO_BASE = SUPABASE_URL + '/storage/v1/object/public/event-photos/';
 // One writer per table, so a field can be added to a row above without touching
 // anything else. Each saves the single field that changed and nothing more.
 async function hubAssetPatch(id, field, raw) {
-  const val = field === 'artist_id' ? (raw || null) : (raw.trim() === '' ? null : raw.trim());
+  const val = raw.trim() === '' ? null : raw.trim();
   const { error } = await sb.from('content_assets').update({ [field]: val }).eq('id', id);
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
   const a = (hub.assets || []).find(x => x.id === id); if (a) a[field] = val;
@@ -10574,7 +10591,8 @@ async function hubAssetPromote(id) {
   const res = await resolveMediaUrls([a.url]);
   const r = res && res[0];
   const item = { label: a.label || 'Watch the recap', url: (r && r.ok && r.url) ? r.url : a.url, is_public: false };
-  if (a.artist_id) item.artist_id = a.artist_id;
+  const aids = ccArtistIds(a);
+  if (aids.length) { item.artist_ids = aids; item.artist_id = aids[0]; }
   if (!(await hubSaveRecap(vids.concat([item])))) return;
   toast(r && !r.ok
     ? 'Added as STAGED \u2014 it will not play yet: ' + (r.reason || 'the link is not public')
@@ -10659,12 +10677,102 @@ const ccPostBand = (p) => p.posted_at || p.stage === 'posted' ? 'cc-done'
 
 // ---- Content control center: shared bits ------------------------------------
 const hubUrlHost = (u) => { try { return new URL(u).host.replace(/^www\./, ''); } catch (_) { return ''; } };
-function hubActorSelect(attr, sel, blank) {
-  return '<select class="hub-status-sel cc-sel" ' + attr + ' title="Tag the artist this is about - it shows on their profile">' +
-    '<option value="">' + escapeHtml(blank) + '</option>' +
-    (hub._artists || []).map(a => '<option value="' + escapeHtml(a.id) + '"' +
-      (a.id === sel ? ' selected' : '') + '>' + escapeHtml(a.display_name) + '</option>').join('') +
-    '</select>';
+// ---- Artist tags (221) -----------------------------------------------------
+// Every kind of content carries MANY artists in `artist_ids`. Recap items and
+// library assets also keep the old single `artist_id`, mirrored to artist_ids[0]
+// so anything still reading the singular key keeps seeing the first one. Read
+// through ccArtistIds() so a row saved before 221 still shows its one tag.
+function ccArtistIds(o) {
+  const ids = Array.isArray(o && o.artist_ids) ? o.artist_ids.filter(Boolean) : [];
+  if (o && o.artist_id && !ids.includes(o.artist_id)) ids.unshift(o.artist_id);
+  return ids;
+}
+function hubArtistName(id) {
+  const a = (hub._artists || []).find(x => x.id === id) || (hub._people || []).find(x => x.id === id);
+  return a ? a.display_name : 'unknown artist';
+}
+// Picker options with this event's lineup first - the people a piece of event
+// content is almost always about.
+function hubArtistOptions(exclude) {
+  const lu = hub._lineupIds || new Set();
+  const avail = (hub._artists || []).filter(a => !exclude.includes(a.id));
+  const opt = a => '<option value="' + escapeHtml(a.id) + '">' + escapeHtml(a.display_name) + '</option>';
+  const lineup = avail.filter(a => lu.has(a.id));
+  if (!lineup.length) return avail.map(opt).join('');
+  return '<optgroup label="On this event">' + lineup.map(opt).join('') + '</optgroup>' +
+    '<optgroup label="Everyone">' + avail.filter(a => !lu.has(a.id)).map(opt).join('') + '</optgroup>';
+}
+// ref = 'cv:<index>' recap item | 'ca:<id>' asset | 'sp:<id>' post | 'ph:<id>' photo
+function hubArtistTags(ref, ids) {
+  return '<div class="cc-tags">' + ids.map(id => '<span class="cc-tag">' + escapeHtml(hubArtistName(id)) +
+      '<button type="button" data-tag-rm="' + escapeHtml(ref) + '" data-aid="' + escapeHtml(id) +
+      '" title="Untag">✕</button></span>').join('') +
+    '<select class="hub-status-sel cc-sel cc-tag-add" data-tag-add="' + escapeHtml(ref) +
+      '" title="Tag an artist this is about — tag as many as are in it">' +
+    '<option value="">' + (ids.length ? '+ artist' : '+ tag artist') + '</option>' +
+    hubArtistOptions(ids) + '</select></div>';
+}
+// Every taggable item on the event, with its current tags.
+function hubContentRefs() {
+  return [].concat(
+    hubRecapList().map((v, i) => ({ ref: 'cv:' + i, ids: ccArtistIds(v) })),
+    (hub.assets || []).filter(a => !a._legacy).map(a => ({ ref: 'ca:' + a.id, ids: ccArtistIds(a) })),
+    (hub.eventPosts || []).map(p => ({ ref: 'sp:' + p.id, ids: ccArtistIds(p) })),
+    (hub.photos || []).map(p => ({ ref: 'ph:' + p.id, ids: ccArtistIds(p) })));
+}
+const HUB_TAG_TABLE = { ca: 'content_assets', sp: 'social_posts', ph: 'event_photos' };
+// One writer for every kind. Recap items are batched by the caller (`vids`) so a
+// bulk tag is one save of the array, not one per item racing the others.
+async function hubSetArtists(ref, ids, vids) {
+  const kind = ref.slice(0, 2), key = ref.slice(3);
+  if (kind === 'cv') {
+    const list = vids || hubRecapList();
+    const v = list[+key]; if (!v) return false;
+    v.artist_ids = ids;
+    if (ids[0]) v.artist_id = ids[0]; else delete v.artist_id;
+    return vids ? true : hubSaveRecap(list);
+  }
+  const patch = { artist_ids: ids };
+  if (kind === 'ca') patch.artist_id = ids[0] || null;
+  const { error } = await sb.from(HUB_TAG_TABLE[kind]).update(patch).eq('id', key);
+  if (error) { toast('Could not save: ' + error.message, 'err'); return false; }
+  const rows = kind === 'ca' ? hub.assets : kind === 'sp' ? hub.eventPosts : hub.photos;
+  const row = (rows || []).find(x => x.id === key); if (row) Object.assign(row, patch);
+  return true;
+}
+async function hubTagAll(aid, add) {
+  if (!aid) { toast('Pick an artist first', 'err'); return; }
+  const name = hubArtistName(aid);
+  const refs = hubContentRefs().filter(r => add ? !r.ids.includes(aid) : r.ids.includes(aid));
+  if (!refs.length) { toast(add ? 'Everything is already tagged with ' + name : name + ' is not tagged on anything', 'ok'); return; }
+  if (!confirm((add ? 'Tag ' + name + ' on ' : 'Remove ' + name + ' from ') + refs.length +
+      ' item' + (refs.length === 1 ? '' : 's') + ' on this event?')) return;
+  const vids = hubRecapList();
+  const next = r => add ? r.ids.concat([aid]) : r.ids.filter(x => x !== aid);
+  const cv = refs.filter(r => r.ref.startsWith('cv:'));
+  cv.forEach(r => hubSetArtists(r.ref, next(r), vids));
+  const res = await Promise.all(refs.filter(r => !r.ref.startsWith('cv:')).map(r => hubSetArtists(r.ref, next(r))));
+  const cvOk = cv.length ? await hubSaveRecap(vids) : true;
+  const ok = res.filter(Boolean).length + (cvOk ? cv.length : 0);
+  toast(ok + ' of ' + refs.length + (add ? ' tagged with ' : ' untagged from ') + name, ok === refs.length ? 'ok' : 'err');
+  hubSecPhotos();
+}
+// The bulk bar: one artist onto (or off) everything on the event at once.
+function hubTagBarHTML() {
+  const refs = hubContentRefs();
+  const untagged = refs.filter(r => !r.ids.length).length;
+  return '<div class="hub-card" style="padding:10px 12px;margin:10px 0;">' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">' +
+      '<strong style="font-size:.82rem;">🏷 Artists</strong>' +
+      '<select class="hub-status-sel" id="ccTagWho" style="min-width:190px;">' +
+        '<option value="">— pick an artist —</option>' + hubArtistOptions([]) + '</select>' +
+      '<button class="hub-mini" id="ccTagAll"' + (refs.length ? '' : ' disabled') + '>Tag on all ' + refs.length + '</button>' +
+      '<button class="hub-mini" id="ccUntagAll"' + (refs.length ? '' : ' disabled') + '>Remove from all</button>' +
+    '</div>' +
+    '<div class="kpi-hint" style="margin:6px 0 0;">Each recap link, library asset, post and photo can carry any number of artists — use <b>+ artist</b> on a row, or tag one artist on everything here at once. ' +
+      (refs.length ? (untagged ? '<strong>' + untagged + '</strong> of ' + refs.length + ' item' + (refs.length === 1 ? ' has' : 's have') + ' no artist.' : 'Every item has at least one artist.') : '') +
+      ' Recap links that are on the site also show on each tagged artist’s profile; everything else stays internal.</div>' +
+  '</div>';
 }
 const CA_KIND = [['full', 'Full length'], ['clip', 'Social clip']];
 const CA_MEDIA = [['video', 'Video'], ['audio', 'Audio'], ['image', 'Image'], ['other', 'Other']];
@@ -10699,7 +10807,7 @@ function hubAssetsHTML() {
       '<td><input class="modal-input ev-inline cc-dur" data-ca-field="duration_note" data-id="' +
         escapeHtml(a.id) + '" value="' + escapeHtml(a.duration_note || '') +
         '" placeholder="0:30" title="How long it runs"></td>' +
-      '<td>' + hubActorSelect('data-ca-field="artist_id" data-id="' + escapeHtml(a.id) + '"', a.artist_id, 'no artist') + '</td>' +
+      '<td>' + hubArtistTags('ca:' + a.id, ccArtistIds(a)) + '</td>' +
       '<td class="cc-act">' +
         (a.url && !onSite
           ? '<button class="hub-mini" data-ca-promote="' + escapeHtml(a.id) +
@@ -10715,7 +10823,7 @@ function hubAssetsHTML() {
     '<button class="hub-mini" data-hub-addasset="clip">\u2795 Clip</button></span></div>' +
     '<div class="section-sub">Masters, raw cuts and social clips. Internal \u2014 nothing here reaches the site until you send it to the list above.</div>' +
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-    '<th>Name</th><th>Where it is</th><th>Type</th><th>Media</th><th>Length</th><th>Artist</th><th class="cc-act"></th>' +
+    '<th>Name</th><th>Where it is</th><th>Type</th><th>Media</th><th>Length</th><th>Artists</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
@@ -10738,16 +10846,17 @@ function hubPostsHTML() {
         escapeHtml(p.id) + '" value="' + escapeHtml((p.scheduled_for || '').slice(0, 10)) +
         '" title="When it goes out"></td>' +
       '<td class="li-sub">' + escapeHtml((p.channels || []).join(', ') || '\u2014') + '</td>' +
+      '<td>' + hubArtistTags('sp:' + p.id, ccArtistIds(p)) + '</td>' +
       '<td class="cc-act"><button class="hub-mini" data-hub-postedit="' + escapeHtml(p.id) +
         '" title="Caption, channels, assets, CTA">Brief \u2192</button></td></tr>';
-  }).join('') || '<tr><td colspan="5" class="muted" style="padding:12px;">No posts for this event yet.</td></tr>';
+  }).join('') || '<tr><td colspan="6" class="muted" style="padding:12px;">No posts for this event yet.</td></tr>';
   return '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">\uD83D\uDCE3 Social posts</h3>' +
     '<span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">' +
     '<span class="li-sub">' + posts.length + '</span>' +
     '<button class="hub-mini" data-hub-postnew>\u2795 Create</button>' +
     '<button class="hub-mini" data-hub-postlink>\uD83D\uDD17 Link existing</button></span></div>' +
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Channels</th><th class="cc-act"></th>' +
+    '<th>Post</th><th>Stage</th><th>Scheduled</th><th>Channels</th><th>Artists</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
@@ -10788,7 +10897,7 @@ function hubRecapVideosHTML() {
         (pub ? '\uD83C\uDF10 On the site' : '\u25CB Staged') + '</span>' +
         '<div class="li-sub">' + escapeHtml(hubUrlHost(v.url)) + '</div></td>' +
       '<td class="li-sub">' + escapeHtml(mediaKindLabel(v.url)) + '</td>' +
-      '<td>' + hubActorSelect('data-cv-artist="' + i + '"', v.artist_id, 'no artist') + '</td>' +
+      '<td>' + hubArtistTags('cv:' + i, ccArtistIds(v)) + '</td>' +
       '<td><select class="hub-status-sel ev-inline" data-cv-pub="' + i + '" ' +
         'title="Staged keeps it here and off the site \u2014 use it while the track is still private">' +
         '<option value="1"' + (pub ? ' selected' : '') + '>\uD83C\uDF10 On the site</option>' +
@@ -10805,7 +10914,7 @@ function hubRecapVideosHTML() {
       ? ' <b>This event is not featured</b>, so none of its recap content is public yet either way.'
       : '') + '</div>' +
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
-    '<th>Name</th><th>Kind</th><th>Artist</th><th>On the site</th><th class="cc-act"></th>' +
+    '<th>Name</th><th>Kind</th><th>Artists</th><th>On the site</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + body + '</tbody></table></div>';
 }
 
@@ -10849,7 +10958,7 @@ async function hubRecapAdd() {
 
 async function hubSecPhotos() {
   const { data, error } = await sb.from('event_photos')
-    .select('id, storage_path, thumb_path, caption, sort_order, is_public, photographer_actor_id, credit_line, shot_on')
+    .select('id, storage_path, thumb_path, caption, sort_order, is_public, photographer_actor_id, credit_line, shot_on, artist_ids')
     .eq('event_id', hub.eventId).order('sort_order').order('created_at');
   if (error) throw error;
   hub.photos = data || [];
@@ -10867,6 +10976,9 @@ async function hubSecPhotos() {
     hub._artists = (ar || []).map(r => r.actor).filter(a => a && !seen.has(a.id) && seen.add(a.id))
       .sort((a, b) => (a.display_name || '').localeCompare(b.display_name || ''));
   }
+  // This event's lineup heads every artist picker on the tab.
+  const { data: lu } = await sb.from('event_participants').select('actor_id').eq('event_id', hub.eventId);
+  hub._lineupIds = new Set((lu || []).map(r => r.actor_id).filter(Boolean));
   const pname = {}; hub._people.forEach(a => pname[a.id] = a.display_name);
   const uncredited = hub.photos.filter(x => !x.photographer_actor_id).length;
   // The badge is on a section called CONTENT, so it counts content - videos,
@@ -10882,6 +10994,7 @@ async function hubSecPhotos() {
         <option value="">${p.photographer_actor_id ? 'remove credit' : '\u2014 no photographer \u2014'}</option>
         ${hub._people.map(a => `<option value="${escapeHtml(a.id)}"${p.photographer_actor_id === a.id ? ' selected' : ''}>${escapeHtml(a.display_name)}</option>`).join('')}
       </select>
+      <div style="margin-bottom:6px;">${hubArtistTags('ph:' + p.id, ccArtistIds(p))}</div>
       <div style="display:flex;gap:6px;align-items:center;">
         <label style="display:flex;gap:5px;align-items:center;cursor:pointer;font-size:.8em;" title="Show in the public gallery"><input type="checkbox" data-ph-pub="${escapeHtml(p.id)}"${p.is_public ? ' checked' : ''} style="width:auto;margin:0;"> on site</label>
         <span style="flex:1"></span>
@@ -10899,12 +11012,12 @@ async function hubSecPhotos() {
   const vids = Array.isArray(ev.recap_videos) ? ev.recap_videos.filter(v => v && v.url) : [];
   if (ev.youtube_url && !vids.some(v => v.url === ev.youtube_url)) vids.unshift({ label: 'Recap video', url: ev.youtube_url });
   const { data: posts } = await sb.from('social_posts')
-    .select('id,title,stage,channels,scheduled_for,posted_at,link_url,asset_url,content_pillar')
+    .select('id,title,stage,channels,scheduled_for,posted_at,link_url,asset_url,content_pillar,artist_ids')
     .eq('event_id', hub.eventId).is('deleted_at', null).order('scheduled_for', { nullsFirst: false });
   hub.eventPosts = posts || [];
   // Content assets (full-length + social clips) for this event, merged with the
   // legacy recap-video links so nothing is hidden.
-  const { data: caRows } = await sb.from('content_assets').select('id,kind,media,url,label,is_public,duration_note').eq('event_id', hub.eventId).order('created_at', { ascending: false });
+  const { data: caRows } = await sb.from('content_assets').select('id,kind,media,url,label,is_public,duration_note,artist_id,artist_ids').eq('event_id', hub.eventId).order('created_at', { ascending: false });
   hub.assets = caRows || [];
   // Counted here, not earlier: assets and posts are loaded just above, and the
   // badge is meant to say how much CONTENT this event has, not how many photos.
@@ -10921,6 +11034,7 @@ async function hubSecPhotos() {
         <button class="hub-btn ghost" data-hub-postlink>🔗 Link existing post</button>
       </span></div>
     ${hubContentCardsHTML()}
+    ${hubTagBarHTML()}
     ${hubRecapVideosHTML()}
     ${hubAssetsHTML()}
     ${hubPostsHTML()}
@@ -10992,6 +11106,8 @@ function hubPhotosWire() {
   body.querySelectorAll('[data-hub-postlink]').forEach(b => b.addEventListener('click', hubLinkExistingPost));
   body.querySelectorAll('[data-hub-addasset]').forEach(b => b.addEventListener('click', () =>
     openAssetModal({ event_id: hub.eventId, kind: b.dataset.hubAddasset, label: hub.event?.name, defaultLabel: (hub.event?.name || '') + (b.dataset.hubAddasset === 'clip' ? ' — clip' : '') }, back)));
+  $('ccTagAll')?.addEventListener('click', () => hubTagAll(($('ccTagWho') || {}).value, true));
+  $('ccUntagAll')?.addEventListener('click', () => hubTagAll(($('ccTagWho') || {}).value, false));
   const drop = $('phDrop'), input = $('phFile'), grid = $('phGrid');
   drop.addEventListener('click', () => input.click());
   drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.style.borderColor = 'var(--accent, #5b7fb3)'; });
@@ -11865,13 +11981,14 @@ $('panel-eventhub').addEventListener('change', (e) => {
   if (caf) { hubAssetPatch(caf.dataset.id, caf.dataset.caField, caf.value); return; }
   const spf = e.target.closest('[data-sp-field]');
   if (spf) { hubPostPatch(spf.dataset.id, spf.dataset.spField, spf.value); return; }
-  const cva = e.target.closest('[data-cv-artist]');
-  if (cva) {
-    const vids = hubRecapList();
-    const i = +cva.dataset.cvArtist;
-    if (!vids[i]) return;
-    if (cva.value) vids[i].artist_id = cva.value; else delete vids[i].artist_id;
-    hubSaveRecap(vids).then(ok => { if (ok) toast(cva.value ? 'Tagged' : 'Tag removed', 'ok'); });
+  const tadd = e.target.closest('[data-tag-add]');
+  if (tadd) {
+    const ref = tadd.dataset.tagAdd, aid = tadd.value;
+    const cur = hubContentRefs().find(r => r.ref === ref);
+    if (!aid || !cur || cur.ids.includes(aid)) return;
+    hubSetArtists(ref, cur.ids.concat([aid])).then(ok => {
+      if (ok) { toast('Tagged ' + hubArtistName(aid), 'ok'); hubSecPhotos(); }
+    });
     return;
   }
   const cvl = e.target.closest('[data-cv-label]');
@@ -11888,6 +12005,15 @@ $('panel-eventhub').addEventListener('click', (e) => {
   if (ia) { invOpenFromAnywhere(ia.dataset.invopenany); return; }
   const sec = e.target.closest('[data-hub-sec]'); if (sec) { hubGoSection(sec.dataset.hubSec); return; }
   const st = e.target.closest('[data-hub-stage]'); if (st) { hubSetStage(st.dataset.hubStage); return; }
+  const trm = e.target.closest('[data-tag-rm]');
+  if (trm) {
+    const ref = trm.dataset.tagRm, aid = trm.dataset.aid;
+    const cur = hubContentRefs().find(r => r.ref === ref); if (!cur) return;
+    hubSetArtists(ref, cur.ids.filter(x => x !== aid)).then(ok => {
+      if (ok) { toast('Untagged ' + hubArtistName(aid), 'ok'); hubSecPhotos(); }
+    });
+    return;
+  }
   // Inline Money section uses the shared money add/delete markup.
   if (hub.section === 'money' && moneyLinkLocalClick(e, $('hubSecBody'))) return;
   if (hub.section === 'money' && e.target.closest(MONEY_UI_SEL)) { moneyUiClick(e, $('hubSecBody')); return; }
