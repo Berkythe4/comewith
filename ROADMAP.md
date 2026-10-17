@@ -207,6 +207,18 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-10-17 (artist tags on all event content)
+
+**Several artists can now be tagged on every piece of event content (221).**
+
+- 🟢 **`artist_ids` on recap links, library assets, posts and photos.** The event hub's
+  Content tab has chips per row plus tag-on-all. The Content Center has an Artists
+  column with bulk tag, Pipeline tags, and an Artists box in the post composer and in
+  Add content. LEARNINGS §94.
+- 🟢 **`v_artist_content` skips staged recap items**: a latent leak, 0 rows on the day.
+- ⚪ **Parked:** a Content Center artist filter; tagged photos/clips on `artist.html`;
+  dropping the mirrored legacy `artist_id`.
+
 ## Current state — reconciled 2026-10-01 (guest DJ link filters; the 09-12 close landed)
 
 **Three requests from training the first guest DJ, plus a stalled merge cleared.**

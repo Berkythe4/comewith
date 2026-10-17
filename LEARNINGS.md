@@ -2791,3 +2791,57 @@ Petersen, hrushka, Marc Rebillet, Vida Libre, John Roberts, mink, Public Circuit
 Tina Hand, adney), Rrose -> `rrose1921`, Glassjaw -> `glassjawofficial`, both scanned.
 Kristine Barilli kept: RA itself lists that (empty) profile as hers. The ~224 RA-row
 links that came from sc-match were NOT checked; nothing records which they are.
+
+---
+
+## Section 94 — Content carries MANY artists, as an array; a box that cannot know the tags must not be drawn (2026-10-17)
+
+Keith asked to tag several artists on every piece of event content. Before 221 a
+recap item and a library asset held ONE `artist_id`, and posts and photos held none.
+Migration 221 gives all four kinds `artist_ids`: a `uuid[]` on `content_assets`,
+`social_posts` and `event_photos`, and a json array on each `events.recap_videos`
+item.
+
+**An array, not a join table.** Recap videos are jsonb items with no id of their own,
+so a join table could not reach them without first giving them ids. One shape
+everywhere keeps the dashboard to one writer per surface. Actors are soft-deleted,
+so a missing foreign key cannot leave a dangling id by deletion.
+
+**The old singular key stays, mirrored.** `artist_id` = `artist_ids[0]` on recap items
+and assets, written by every dashboard writer, so anything still reading the singular
+key sees the first artist. Rows were not rewritten. `ccArtistIds()` reads both shapes
+and `v_artist_content` unions both. Do not drop `artist_id` without first grepping
+every reader.
+
+**A form only writes the tags if it could read them first.** The post composer is
+opened from several surfaces, and some of them load posts with a narrow select. An
+Artists box drawn from a post loaded without `artist_ids` would open showing nobody,
+and the next save would untag the post. So `openPostModal` fetches the column when
+it is missing. If that fetch fails, the box is not drawn, and `savePost` writes
+`artist_ids` only when the box exists. The event edit modal is the same case in a
+different form. Its single dropdown edits only the FIRST tag; the rest ride along in
+`data-artist-ids`, and a first tag the dropdown cannot show is kept, not cleared.
+This is §85 again ("hidden ≠ dropped"): never write a field the form could not read.
+
+**What tagging publishes.** Only recap links that are on the site appear on an
+artist's profile (`v_artist_content`). That view never checked `is_public`, so tagging
+a STAGED track would have published it on the artist's page while the event page hid
+it. 221 gates it (0 rows were affected on the day). Tags on photos, posts and assets
+are internal until something deliberately reads them publicly.
+
+---
+
+## Section 95 — A FRESH public SoundCloud upload can oembed-404 for a minute or two (2026-10-17)
+
+The rule so far: an oembed 404 means the track is private or wrong, and it fails
+silently on the site. On 2026-10-17, `veeday-7-11` was uploaded at 18:39 UTC and
+added to the 7/11 event at 18:40. Its oembed returned 404 while the page HTML already
+said `sharing: public`, `embeddable_by: all`, `state: finished`. Minutes later the
+oembed and `w.soundcloud.com/player` both answered 200, with nothing changed.
+
+So a 404 right after an upload is not proof the link is broken. Before telling Keith
+a link is dead, read the track page's `sharing` / `embeddable_by` / `state`. If those
+are all good, re-check the oembed a few minutes later. `resolve-media` stores such a
+link as STAGED, and that is the right outcome; switching it on later works. A browser
+that loaded the event page during that window may keep a blank player until a hard
+refresh.

@@ -1,3 +1,64 @@
+# Carryover - 2026-10-17 (multi-artist content tags, 221 - DESKTOP)
+
+**Closed 2026-10-17 on the DESKTOP.** No branch; everything is on `master`, pushed and
+deployed. The 2026-10-12 block below is the previous close. Its START HERE item 3
+(desktop e2e of the social connector) is **still open**; it was not run this session.
+
+## >> START HERE NEXT SESSION
+
+**1. Look at the artist tags on the live dashboard.** Nothing was clicked through in a
+browser; the checks were the syntax check, a prod dry run and a rolled-back RLS smoke
+test. Check these:
+- An event's Content tab: chips, "+ artist", and the 🏷 bar's Tag on all / Remove from all.
+- The Content Center's Posts table: the Artists column and the "Tag artist…" bulk action.
+- The Pipeline's expanded event detail.
+- The Artists box in the post composer and in Add content.
+
+**2. Run `python scripts/e2e_social_mcp.py` here on the desktop** (carried from 10-12).
+`social_posts` gained `artist_ids` today. The connector neither reads nor writes it,
+but this is the machine that holds the secret.
+
+## State summary
+
+- **Migrations: repo and prod both top out at 221** (`221_content_multi_artist.sql`,
+  applied with `db.py`, dry run first, recorded).
+- **Site:** `dashboard.html` changed in `eee3141` + `dbbb305`, pushed (Netlify).
+- **LEARNINGS §95** is the latest (§94-95 added this session).
+- **Anon invariant:** `check_financial_views.py` all five 401; `check_anon_exposure.py`
+  clean (`v_artist_content` public as intended; `event_photos` 401; `social_posts`
+  RLS-empty). `post_apply.sql` all PASS. 221 adds no new table or view.
+- Roles unchanged. Machine: DESKTOP. No edge functions deployed.
+
+## This session shipped
+
+- **221: `artist_ids` on all event content** - `uuid[]` on `content_assets`,
+  `social_posts` and `event_photos` (not null, default `{}`, no-null check, GIN index),
+  plus a json array on recap items. `artist_id` is kept and mirrored to `[0]`.
+  `v_artist_content` expands both keys and **now skips staged recap items** (it never
+  checked `is_public`). It still returns the same 14 rows. §94.
+- **Event hub, Content tab:** every recap link, library asset, post and photo carries
+  artist chips with "+ artist" (lineup first), plus a 🏷 bar that tags or untags one
+  artist across the whole event. The event edit modal keeps the extra tags (§94).
+- **Content Center:** an Artists column and a bulk "Tag artist…" on the Posts table
+  (visible selected rows only). Tags on each full-length item, clip and post in the
+  Pipeline detail. An Artists box in the post composer and in Add content.
+  `ARTIST_PICK` / `artistTagsHTML()` are shared by both surfaces.
+- **7/11 SoundCloud links checked:** both are live and embedding. VeeDay's oembed 404'd
+  for about a minute after upload, then answered 200 (§95).
+- **Not repo work:** `ComeWith_7-11_KRNeY_Final.mp3` and `ComeWith_7-11_VeeDay_FINAL.mp3`
+  (320k) were made beside the MP4s in `Videos\DaVinci Video Projects\7-11`.
+
+## Parked / next
+
+- Tags on photos, posts and assets are internal. Showing tagged photos or clips on
+  `artist.html` would be a new public read, needing its own view and an anon-sweep entry.
+- There is no artist FILTER in the Content Center yet ("everything X is in").
+  `artist_ids` has GIN indexes ready for it.
+- The legacy `content_assets.artist_id` / recap `artist_id` could be dropped once
+  nothing reads them. Grep first, and treat it as a destructive change that ships with its UI (§46).
+
+---
+
 # Carryover - 2026-10-12 (fresh 90-day pull, DICE save fix, social Owner box - LAPTOP)
 
 **Closed 2026-10-12 on the LAPTOP.** No branch; everything is on `master`, pushed and
