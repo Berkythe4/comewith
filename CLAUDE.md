@@ -767,7 +767,21 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   until something server-renders the `<head>`. Do not add a per-page OG field to
   the editor before that exists — it would be a control that changes nothing.
 
-## Weekly radio release (see `Radio/NOTES_WEEKLY_RELEASE.md`)
+## Weekly radio release (see `COMEWITHRADIO/NOTES_WEEKLY_RELEASE.md`)
+
+- **The radio folder is `COMEWITHRADIO/`** (renamed from `Radio/` on 2026-10-19, on
+  purpose). Older docs and comments saying `Radio/...` mean this folder. Tools resolve it
+  through `_paths.radio_dir()`, which also accepts `Radio/` because the guest-DJ tool
+  packet still unpacks that way. Its `.gitignore` media guards are under the new name;
+  never `git add` an Episode folder wholesale.
+- **Dry-run the scheduled publish before every drop**:
+  `radio-publish-due?dry=1&station=N` (secret: read it from the `radio-publish-due` cron
+  command, never print it). It touches nothing and reads what the stored link actually
+  IS. SHOW 11 looked ready while its SoundCloud field held the YouTube URL and no
+  go-live was set. LEARNINGS §97.
+- **A track card names EVERY upcoming show** (`all_shows.py` → `cues_with_shows.py`),
+  and a "Dance Infusion" show makes it an orange spotlight card. The card rule lives once,
+  in `preview_cards.card_for()`. LEARNINGS §96.
 
 - **A private SoundCloud track will NOT embed.** `oembed` 404s on it, so the site's
   player renders nothing — and a `200` on the track PAGE proves nothing. EP 1 shipped
@@ -798,7 +812,7 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **Beatport access tokens live 600s FROM MINT**, not from copy; take one off a live
   request header, not `localStorage`. The **cart API works** — see the APIs map for
   the item shape.
-- Episode material lives in **`Radio/Week N/`**, MP4 included. Show name in the video
+- Episode material lives in **`COMEWITHRADIO/Episode N/`**, MP4 included (git-ignored). Show name in the video
   header is **Come With NYC Radio**.
 
 ## Media / recap links (must be publicly embeddable)

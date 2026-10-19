@@ -1,6 +1,6 @@
 ---
 name: project-radio-weekly-release-runbook
-description: Radio/NOTES_WEEKLY_RELEASE.md is the weekly episode runbook — read it before touching a release; key traps summarised here
+description: COMEWITHRADIO/NOTES_WEEKLY_RELEASE.md (was Radio/, renamed 2026-10-19) is the weekly episode runbook — read it before touching a release; key traps summarised here
 metadata: 
   node_type: memory
   type: reference
@@ -34,8 +34,18 @@ The traps that cost the most time on EP 2:
   pulling a real frame**, never by reading the code.
 - `weekly_prep.py` rewrites the cues every run; it now carries times forward by
   artist+title then by POSITION (export titles differ from the DB's cleaned ones).
-- MP4 and all week material live in **`Radio/Week N/`**. Header title is **Come With
+- MP4 and all episode material live in **`COMEWITHRADIO/Episode N/`** (the folder was `Radio/` until
+  2026-10-19; Keith renamed it on purpose; tools use `_paths.radio_dir()`). Header title is **Come With
   NYC Radio** (`--title`). Artwork must be **square** — portrait letterboxes.
+
+Added 2026-10-19 (Ep 7 / SHOW 11):
+- **Dry-run the publish before every drop**: `radio-publish-due?dry=1&station=N` (secret is in
+  the cron command). SHOW 11's SoundCloud field held the YouTube URL and go-live was unset.
+- **Cards name every upcoming show** (`all_shows.py` -> `cues_with_shows.py`); a Dance
+  Infusion show makes an orange spotlight card. Keith liked both (and the 12/31 &ME catch).
+- **Read the text of any art before putting it on screen**: the DI3 flier misspells Emmy
+  Adelle as "Adele"; Keith said don't use it.
+- Compute weekdays, never write them from memory (a draft said "Wed 10/22"; it's a Thursday).
 
 Related: [[project_radio_scheduled_release]], [[project_radio_release_pipeline]],
 [[project_beatport_cart_api]].

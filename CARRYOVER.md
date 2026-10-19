@@ -1,3 +1,75 @@
+# Carryover - 2026-10-19 (Radio Ep 7 / SHOW 11, Emmy Adelle + DI #3 spotlight - DESKTOP)
+
+**Closed 2026-10-19 on the DESKTOP.** No branch; everything is on `master`, pushed. No
+site file changed (radio tools + docs only), so the Netlify rebuild serves identical
+pages. The 2026-10-17 block below is the previous close. Its START HERE items 1-2 (look at
+the artist tags on the live dashboard; run `scripts/e2e_social_mcp.py`) are **still open**.
+
+**`Radio/` is now `COMEWITHRADIO/`** (Keith renamed it on purpose). Git records the
+rename. Tools find the folder through `_paths.radio_dir()` (new name first, `Radio` for
+the guest-DJ packet), and `Make Radio MP4.bat` uses `%RD%`. Old docs that say
+`Radio/...` mean `COMEWITHRADIO/...`.
+
+## >> START HERE NEXT SESSION
+
+**1. Thu 2026-10-22 after 3:00 PM ET: check the Ep 7 drop.** SHOW 11 is scheduled to go
+live at 19:00 UTC (= the YouTube premiere). The SoundCloud track 2420632227 is private
+and scheduled by Keith for the same time; `radio-publish-due` also flips it public.
+- Open the episode page and press play on BOTH players.
+- Read `station_notes` on SHOW 11.
+- Confirm the YouTube premiere is the **v2** MP4, the one with the DI-logo closing
+  slide (it can't be checked until it plays; it reported `lengthSeconds 0` while upcoming).
+- Dry run any time before the drop: `radio-publish-due?dry=1&station=11` (secret is in
+  the cron command; §97). On 10-19 it read "already embeddable".
+
+**2. Social Calendar (Keith):** move "CWR Ep7 Release" from 11:04 AM to 3 PM ET or later
+(the connector can't change times). The Oct 25 lineup carousel needs a CORRECTED flier:
+the DI3 flier spells her "EMMY ADELE". She is Emmy **Adelle** (@emmyyadelle).
+
+**3. YouTube description (Keith):** change "our fundraiser for the MS Society:" to "our
+fundraiser: ... 100% of your $25 ticket goes to the National MS Society." The site and
+the SoundCloud track already say this.
+
+## State summary
+
+- **Migrations: repo and prod both top out at 221.** None this session.
+- **Prod data written (no schema):** SHOW 11 synced to the played Rekordbox order (19
+  tracks; 36 unplayed logged passed@11 and carried; backup
+  `backups/premerge_2026-10-18_show11_tracks.json`). A manual DI #3 show for Emmy
+  (`ra_events man:2026-11-14-emmy-adelle-signal`, `ra_artists man_emmy-adelle` with her
+  SoundCloud/IG). SHOW 11 has its descriptions, the SC url + track id, the YouTube url,
+  the duration and `scheduled_go_live`. The SoundCloud track's description was updated
+  through the API (description only).
+- **LEARNINGS §98** is the latest (§96-98 added this session).
+- **Anon invariant:** `check_financial_views.py` all five 401; `check_anon_exposure.py`
+  clean. No new table or view.
+- Roles unchanged. Machine: DESKTOP. No edge functions deployed.
+
+## This session shipped
+
+- **Ep 7 released (scheduled):** `COMEWITHRADIO/Episode 7/` holds the cues, times, shows
+  JSON, upload text and checklist. Also there, untracked: `CWR_Ep7_mix.mp3` (320k, made
+  from Keith's MP4, whose name was `CWR_Ep2_V1.mp4`), `CWR_Ep7_YouTube_v2.mp4` and the
+  thumbnails. `OLD_DO_NOT_UPLOAD_...flier.mp4` is the superseded render.
+- **Multi-show cards + DI spotlight** (§96): `all_shows.py`, `preview_cards.py`,
+  `cues_with_shows.py`; `render_card` draws several shows and an orange Dance Infusion
+  spotlight; `--outro-promo` puts our own night on the closing slide.
+- **Âme/&ME key collision fixed** in `show_chips()` and `all_shows.py` (§98).
+- **Caught before the drop** (§97): SoundCloud field held the YouTube link; go-live was
+  never scheduled; a social draft said "Wed 10/22" (it's Thursday); the release post sat
+  before the premiere; the flier misspells the headliner.
+- **Radio folder rename** committed, with `.gitignore` media guards for the new name.
+
+## Parked / next
+
+- **Public episode page shows one show per track.** The cards show all of them plus the DI
+  tag; the site would need a `shows` list per track (and get-station / radio.html work).
+- **Dashboard: validate the SoundCloud box holds a soundcloud.com URL** (§97).
+- `CWR_render_tool.zip` was not rebuilt; it predates the multi-show cards.
+- Fermin Suero Jr.'s handle is unknown (the release brief asks to tag him).
+
+---
+
 # Carryover - 2026-10-17 (multi-artist content tags, 221 - DESKTOP)
 
 **Closed 2026-10-17 on the DESKTOP.** No branch; everything is on `master`, pushed and

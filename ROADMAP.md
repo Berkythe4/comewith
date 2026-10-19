@@ -1934,3 +1934,17 @@ Keith's call. LEARNINGS §91.
 
 **Done — `pull-ra-market` v35 / `pull-ticketmaster` v27 save before they prune**, same
 pattern as `pull-dice` v30.
+
+### 2026-10-19 (desktop)
+
+**Done — Radio Ep 7 / SHOW 11 scheduled** for Thu 10/22 3 PM ET, spotlighting Emmy
+Adelle ahead of Dance Infusion #3. Cards now name every upcoming show per track, and a
+Dance Infusion show turns a card into an orange spotlight (LEARNINGS §96). The
+pre-drop dry run is now a standing step (§97). The Âme/&ME key collision is fixed (§98).
+
+**Done — `Radio/` renamed `COMEWITHRADIO/`** (Keith's call). The tools accept both names.
+
+**Backlog.** Show multiple shows and the DI tag on the PUBLIC episode page (a `shows`
+list per track through `get-station` → `radio.html`). Validate that the dashboard's
+SoundCloud box holds a soundcloud.com URL. Rebuild `CWR_render_tool.zip` with the
+multi-show cards.

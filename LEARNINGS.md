@@ -2845,3 +2845,68 @@ are all good, re-check the oembed a few minutes later. `resolve-media` stores su
 link as STAGED, and that is the right outcome; switching it on later works. A browser
 that loaded the event page during that window may keep a blank player until a hard
 refresh.
+
+---
+
+## Section 96 — A radio card names EVERY show, and our own night is a SPOTLIGHT (2026-10-19)
+
+`sc_playlist_tracks` holds one `show_date` / `show_venue` per track, and the sync tool
+writes the soonest show of the first credited name it can match. A track can say more
+than that. "Tijuana (Vintage Culture Remix)" is Bedouin's song AND Vintage Culture's
+remix, and both were playing NYC within two weeks of the drop. On Ep 7, three cards
+carried two or three shows (one was a 12/31 &ME date nobody had noticed).
+
+`all_shows.py` lists every upcoming show for every credited artist, from the
+`ra_events.lineup` index and counted from the DROP date (§68, §78). `render_card` draws
+up to three compact rows, then "+ N MORE". The same night at the same room from two
+feeds is collapsed **on the card only**, keeping RA's spelling ("ONE 77" / "One77
+Brooklyn"). The database ruling stays a person's call in `v_venue_name_review`; never
+auto-merge a fuzzy venue (§63).
+
+A show whose title starts with "Dance Infusion" turns that card into a spotlight: an
+orange ring (MS Society orange, `SPOT`), the DI sticker, a filled chip and a fundraiser
+line. The card then leads with OUR night only. `preview_cards.card_for()` decides this
+and `cues_with_shows.py` imports it, so the video draws exactly the PNGs that were
+reviewed. Two copies of that rule would drift on the first wording change.
+
+Not done: the PUBLIC episode page still shows one show per track. Showing all of them
+there means a site change, which is not built.
+
+---
+
+## Section 97 — Dry-run the scheduled publish BEFORE the drop; it reads what a stored link IS (2026-10-19)
+
+SHOW 11 was "ready" by every visible sign. Then `radio-publish-due?dry=1&station=11`
+answered "Stored mix link didn't resolve on your account". The SoundCloud field held
+the **YouTube** URL, pasted into both boxes, and `scheduled_go_live` had never been set.
+The page would have published on time with no SoundCloud player and no warning
+anyone would read until after the drop. The real upload was found through `/me/tracks`
+(length equal to the mix to the millisecond). The schedule was set to the YouTube
+premiere time. A second dry run read "already embeddable".
+
+The rule: **before every drop, run the dry run for that station.** It touches nothing.
+Its secret lives in the `radio-publish-due` cron command, so read it from there and
+never print it. A non-empty field is not a correct field: check the HOST of a stored
+media link. The dashboard does not validate that the SoundCloud box holds a
+SoundCloud URL. That validation is parked.
+
+The same pass found two date errors in the social drafts. "Ep7 dropping Wed 10/22"
+(10/22/2026 is a Thursday) was going out that afternoon. The release post was
+scheduled four hours before the premiere. **Compute a weekday; never write one from
+memory.** Check that a release post goes out after the mix is live.
+
+---
+
+## Section 98 — A key that DELETES characters collides; the accent-FOLDED key must agree too (2026-10-19)
+
+The lineup lookup keys a name as `lower(regexp_replace(name, '[^a-zA-Z0-9]', ''))`. That
+deletes non-ASCII, so "Âme" keys as "me", exactly like "&ME", a different act. Ep 7's
+&ME remix nearly credited &ME with Âme's Time Warp date. `chip_keys()` already carried
+both spellings so that an accented name could match at all (§ Ceviche, SHOW 10).
+Matching in both directions is what let the wrong act in.
+
+The fix, in both `all_shows.py` and `show_chips()`: the listing's own name, folded the
+same way `norm()` folds credits ("ame"), must be one of the credited keys. If it isn't,
+the row is somebody else's show. The general lesson is that any normalisation which
+DROPS characters (rather than folding them) merges names it has no evidence are the
+same. Treat its matches as candidates, and confirm them with a key that keeps more.
