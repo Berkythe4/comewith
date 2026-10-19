@@ -19,9 +19,10 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import render_episode as R
+from _paths import radio_dir
 
-COVER = os.path.join(ROOT, "Radio", "Artwork", "Radio_Thumbnail.jpg")
-OUT   = os.path.join(ROOT, "Radio", "Video", "_preview")
+COVER = os.path.join(radio_dir(ROOT), "Artwork", "Radio_Thumbnail.jpg")
+OUT   = os.path.join(radio_dir(ROOT), "Video", "_preview")
 os.makedirs(OUT, exist_ok=True)
 
 # Episode meta (EP1, from prod). next_date = the following Thursday's drop.

@@ -59,6 +59,35 @@ Radio/Elements-26/render/final2/
 Radio/Elements-26/render/henryck/
 Radio/Video/_preview/
 
+# Radio/ was renamed COMEWITHRADIO/ on 2026-10-19 (Keith, on purpose). The same
+# media guards, under the new name -- without them one `git add` of the folder
+# stages every mix master and render (Episode 7 alone is a 3.2 GB MP4).
+COMEWITHRADIO/**/*.wav
+COMEWITHRADIO/**/*.WAV
+COMEWITHRADIO/**/*.mp4
+COMEWITHRADIO/**/*.MP4
+COMEWITHRADIO/**/*.mp3
+COMEWITHRADIO/**/*.mov
+COMEWITHRADIO/**/*.m4a
+COMEWITHRADIO/**/*.flac
+COMEWITHRADIO/**/*.aac
+COMEWITHRADIO/**/*.aiff
+COMEWITHRADIO/**/*.zip
+COMEWITHRADIO/**/Audio_Video_Final/
+COMEWITHRADIO/**/Cover Art/
+COMEWITHRADIO/**/_preview/
+COMEWITHRADIO/**/__pycache__/
+COMEWITHRADIO/**/card_previews/
+COMEWITHRADIO/**/Tracks/
+COMEWITHRADIO/**/desktop.ini
+COMEWITHRADIO/render/EP*_cues.csv
+COMEWITHRADIO/Elements-26/render/element_slides/
+COMEWITHRADIO/Elements-26/render/frames/
+COMEWITHRADIO/Elements-26/render/proto/
+COMEWITHRADIO/Elements-26/render/final/
+COMEWITHRADIO/Elements-26/render/final2/
+COMEWITHRADIO/Elements-26/render/henryck/
+
 # Gear Watch scan output (listing data, regenerated on every run)
 gearwatch_results.html
 

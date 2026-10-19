@@ -36,7 +36,7 @@ import argparse, io, os, sys, zipfile
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from _paths import episode_dir
+from _paths import episode_dir, radio_dir
 
 try: sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception: pass
@@ -49,10 +49,10 @@ TOOL = [
     "_have_times.py", "_check_cover.py", "templates.json", "tap_times.html",
 ]
 ALSO = [
-    ("Radio/Make Radio MP4.bat", "Make Radio MP4.bat"),
+    ("Make Radio MP4.bat", "Make Radio MP4.bat"),
     # The visual one. Double-click it — it is the first thing to read.
-    ("Radio/RUN_SHEET.html", "RUN_SHEET.html"),
-    ("Radio/Artwork/Radio_Thumbnail.jpg", "Radio/Artwork/Radio_Thumbnail.jpg"),
+    ("RUN_SHEET.html", "RUN_SHEET.html"),
+    ("Artwork/Radio_Thumbnail.jpg", "Radio/Artwork/Radio_Thumbnail.jpg"),
 ]
 # Files an episode folder needs to render with no database.
 EPISODE_KEEP = (".csv", ".json", ".txt", ".png", ".jpg", ".jpeg", ".webp")
@@ -132,7 +132,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--episode", "--week", dest="episode", action="append",
                     help="also bundle this episode's folder (repeatable)")
-    ap.add_argument("--out", default=os.path.join(ROOT, "Radio", "CWR_render_tool.zip"))
+    ap.add_argument("--out", default=os.path.join(radio_dir(ROOT), "CWR_render_tool.zip"))
     a = ap.parse_args()
 
     n = 0
@@ -143,7 +143,7 @@ def main():
                 print("  (missing, skipped: %s)" % f)
             n += got
         for src, arc in ALSO:
-            n += add(z, os.path.join(ROOT, src), arc)
+            n += add(z, os.path.join(radio_dir(ROOT), src), arc)  # src is inside the radio folder; arc keeps the packet's Radio/ layout
         z.writestr("SETUP.txt", SETUP)
         n += 1
 

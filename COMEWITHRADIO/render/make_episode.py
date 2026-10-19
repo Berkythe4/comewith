@@ -29,7 +29,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 PY = sys.executable
 sys.path.insert(0, HERE)
-from _paths import episode_dir
+from _paths import episode_dir, radio_dir
 
 def run(args):
     r = subprocess.run(args, cwd=ROOT)
@@ -155,7 +155,7 @@ def main():
     ap.add_argument("--station", type=int)
     ap.add_argument("--cues")
     ap.add_argument("--history")
-    ap.add_argument("--cover", default=os.path.join(ROOT, "Radio", "Artwork", "Radio_Thumbnail.jpg"))
+    ap.add_argument("--cover", default=os.path.join(radio_dir(ROOT), "Artwork", "Radio_Thumbnail.jpg"))
     ap.add_argument("--out")
     ap.add_argument("--next-date", dest="next_date_in",
                     help="the NEXT episode's drop date, YYYY-MM-DD. Beats whatever "

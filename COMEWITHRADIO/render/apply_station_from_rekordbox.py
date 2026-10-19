@@ -284,16 +284,26 @@ def show_chips(rows, ref, since="current_date"):
          "ev as ("
          "  select e.event_date,"
          "         coalesce(v.name, e.venue_name) as venue,"
+         "         l->>'name' as lname,"
          "         lower(regexp_replace(l->>'name','[^a-zA-Z0-9]','','g')) as k"
          "    from ra_events e"
          "    left join venues v on v.id = e.venue_id"
          "    cross join lateral jsonb_array_elements(coalesce(e.lineup,'[]'::jsonb)) l"
          "   where e.event_date >= %s"
          "     and coalesce(v.name, e.venue_name) is not null) "
-         "select distinct on (w.k) w.k, ev.event_date, ev.venue "
+         "select w.k, ev.lname, ev.event_date, ev.venue "
          "  from want w join ev on ev.k = w.k "
          " order by w.k, ev.event_date, (ev.venue ilike 'TBA') , ev.venue;" % (vals, since))
-    return {r["k"]: (r["event_date"], r["venue"]) for r in sql(q, ref)}
+    out = {}
+    for r in sql(q, ref):
+        # The SQL key DELETES non-ASCII, so "Âme" keys as "me" -- the same as
+        # "&ME", a different act (SHOW 11 nearly credited &ME with Âme's Time
+        # Warp date). The listing's accent-FOLDED key ("ame") must be one we
+        # credited too, or the row is somebody else's show.
+        if norm(r["lname"]).replace(" ", "") not in want:
+            continue
+        out.setdefault(r["k"], (r["event_date"], r["venue"]))   # rows arrive soonest first
+    return out
 
 
 def chip_keys(n):

@@ -550,6 +550,11 @@ HEADER_Y = 66                     # top of the show-name / NOW PLAYING row
 CONTENT_TOP = HEADER_Y + 40       # first pixel the track block may use
 BAND_Y = 792                      # divider rule; the two lines hang below it
 BAND_URL = "COMEWITH.ORG/RADIO"
+DI_LOGO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                       "Artwork", "DI_badge.jpg")  # see di_badge(); DI_logo.png = line-art fallback
+# Spotlight accent for our own night. Orange = the MS Society's colour (Dance
+# Infusion raises for it), and the DI thumbnail's own orange.
+SPOT = (244, 123, 32)
 
 # The chosen wording. Line 1 leads with the address; line 2 is the menu of what
 # is actually there, in the same order the page presents it.
@@ -581,16 +586,80 @@ def draw_band(d):
         x += d.textlength(words, font=f2)
 
 
-def chip(draw, x, y, text, fnt, accent=False):
+def chip(draw, x, y, text, fnt, accent=False, pad=(30, 18), hot=False):
+    # hot = the spotlight chip, filled in SPOT
     tw = draw.textlength(text, font=fnt)
     ascent, descent = fnt.getmetrics(); th = ascent + descent
-    padx, pady = 30, 18
+    padx, pady = pad
+    if hot:     # filled pink: the one chip on a card that is OUR show
+        draw.rounded_rectangle([x, y, x + tw + 2 * padx, y + th + 2 * pady],
+                               radius=(th + 2 * pady) // 2, fill=SPOT)
+        draw.text((x + padx, y + pady), text, font=fnt, fill=BG_BOT)
+        return x + tw + 2 * padx
     col = LIME if accent else CREAM
     border = LIME_DK if accent else LINE
     draw.rounded_rectangle([x, y, x + tw + 2 * padx, y + th + 2 * pady],
                            radius=(th + 2 * pady) // 2, outline=border, width=2)
     draw.text((x + padx, y + pady), text, font=fnt, fill=col)
     return x + tw + 2 * padx
+
+def chip_h(fnt, pad=(30, 18)):
+    a, d = fnt.getmetrics()
+    return a + d + 2 * pad[1]
+
+def track_shows(track):
+    """Every upcoming show on a card: the cues `shows` column (JSON list of
+    {date, venue, artists}, from all_shows.py) when present, else the single
+    show_date/show_venue pair every older cues file carries."""
+    raw = track.get("shows")
+    if isinstance(raw, list):
+        return raw
+    if raw:
+        try:
+            return json.loads(raw)
+        except Exception:
+            pass
+    d, v = (track.get("show_date") or "").strip(), (track.get("show_venue") or "").strip()
+    return [{"date": d, "venue": v, "artists": []}] if (d or v) else []
+
+_DI_BADGE = {}
+def di_badge(size):
+    """The Dance Infusion mark as a round sticker, ringed in SPOT.
+
+    DI_LOGO may be a full-bleed image (the purple/orange DI thumbnail) -- it is
+    centre-cropped to a circle -- or transparent line art, which disappears on
+    the purple ground and so goes on a cream disc instead."""
+    if size in _DI_BADGE:
+        return _DI_BADGE[size]
+    ring = max(5, size // 26)
+    disc = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse([0, 0, size - 1, size - 1], fill=255)
+    if os.path.exists(DI_LOGO):
+        lg = Image.open(DI_LOGO)
+        if lg.mode in ("RGBA", "LA", "P") and lg.convert("RGBA").getextrema()[3][0] < 255:
+            ImageDraw.Draw(disc).ellipse([0, 0, size - 1, size - 1], fill=CREAM + (255,))
+            inner = int(size * 0.74)
+            lg = lg.convert("RGBA").resize((inner, inner), Image.LANCZOS)
+            disc.alpha_composite(lg, ((size - inner) // 2, (size - inner) // 2 + size // 40))
+        else:
+            # Full-bleed art: keep ALL of it -- a circle crop cut "Infusion" in
+            # half. A rounded rectangle at the image's own aspect, `size` wide.
+            lg = lg.convert("RGB")
+            h = int(round(size * lg.height / lg.width))
+            lg = lg.resize((size, h), Image.LANCZOS)
+            disc = Image.new("RGBA", (size, h), (0, 0, 0, 0))
+            m = Image.new("L", (size, h), 0)
+            ImageDraw.Draw(m).rounded_rectangle([0, 0, size - 1, h - 1], radius=size // 9, fill=255)
+            disc.paste(lg, (0, 0), m)
+            ImageDraw.Draw(disc).rounded_rectangle([ring // 2, ring // 2, size - 1 - ring // 2, h - 1 - ring // 2],
+                                                   radius=size // 9, outline=SPOT + (255,), width=ring)
+            _DI_BADGE[size] = disc
+            return disc
+    ImageDraw.Draw(disc).ellipse([ring // 2, ring // 2, size - 1 - ring // 2, size - 1 - ring // 2],
+                                 outline=SPOT + (255,), width=ring)
+    _DI_BADGE[size] = disc
+    return disc
 
 def truncate(draw, text, fnt, maxw):
     if draw.textlength(text, font=fnt) <= maxw:
@@ -651,15 +720,66 @@ def render_card(bg, cover, track, idx, ntracks, ep_label, title_text, nxt, out_p
         chy = cy + 348
     else:
         chy = cy + 300
-    # chips: the artist's upcoming show — date + venue (what viewers care about)
-    chx = mx
-    dt = fmt_show_date(track.get("show_date"))
-    if dt:
-        chx = chip(d, chx, chy, dt, F_mono(34), accent=True) + 22
-    ven = (track.get("show_venue") or "").strip()
-    if ven:
-        ven = truncate(d, ven, F_mono(34), (mx + mw) - chx - 90)
-        chip(d, chx, chy, ven, F_mono(34))
+    # chips: the artists' upcoming shows — date + venue (what viewers care about).
+    # One show keeps the original big chips. Several (a song by one act remixed by
+    # another, both in town) stack as compact rows, each naming who is playing.
+    shows = track_shows(track)
+    spot = (track.get("spotlight") or "").strip()
+    credit = (track.get("artist") or "").lower()
+    if spot:
+        # Our own night. Pink ring on the cover, the DI mark stuck on its corner,
+        # and the event named in a filled pink chip ahead of the date.
+        d.rounded_rectangle([cx - 12, cy - 12, cx + cs + 12, cy + cs + 12],
+                            radius=46, outline=SPOT, width=6)
+        b = di_badge(250)
+        im.paste(b, (cx + cs - b.width + 70, cy + cs - b.height + 56), b)
+        f = F_mono(34)
+        chx = chip(d, mx, chy, spot.upper(), F_monob(34), hot=True) + 22
+        if shows:
+            s = shows[0]
+            dt = fmt_show_date(s.get("date"))
+            if dt:
+                chx = chip(d, chx, chy, dt, f, accent=True) + 22
+            ven = (s.get("venue") or "").strip()
+            if ven:
+                chip(d, chx, chy, truncate(d, ven, f, (mx + mw) - chx - 60), f)
+        tag = (track.get("spotlight_line") or "").strip()
+        if tag:
+            d.text((mx, chy + chip_h(f) + 26), truncate(d, tag.upper(), F_monob(30), mw),
+                   font=F_monob(30), fill=SPOT)
+    elif len(shows) == 1:
+        s = shows[0]
+        chx = mx
+        dt = fmt_show_date(s.get("date"))
+        if dt:
+            chx = chip(d, chx, chy, dt, F_mono(34), accent=True) + 22
+        ven = (s.get("venue") or "").strip()
+        who = [a for a in (s.get("artists") or []) if a.lower() not in credit]
+        if ven:
+            room = (mx + mw) - chx - 60
+            if who:
+                room -= d.textlength("   " + ", ".join(who), font=F_mono(30)) + 10
+            chx = chip(d, chx, chy, truncate(d, ven, F_mono(34), max(room, 160)), F_mono(34)) + 22
+        if who:   # the remixer is the one in town -- say so, or the chip reads as the artist's
+            d.text((chx, chy + 22), ", ".join(who), font=F_mono(30), fill=DIM)
+    elif shows:
+        f, pad = F_mono(28), (22, 10)
+        rh = chip_h(f, pad) + 12
+        rows = shows[:3] if len(shows) <= 3 else shows[:2]
+        y = chy
+        for s in rows:
+            chx = chip(d, mx, y, fmt_show_date(s.get("date")) or "TBA", f, accent=True, pad=pad) + 16
+            ven = (s.get("venue") or "").strip()
+            who = ", ".join(s.get("artists") or [])
+            wl = d.textlength(who, font=f) + 24 if who else 0
+            if ven:
+                chx = chip(d, chx, y, truncate(d, ven, f, (mx + mw) - chx - wl - 50), f, pad=pad) + 16
+            if who:
+                d.text((chx, y + pad[1]), who, font=f, fill=DIM)
+            y += rh
+        if len(shows) > 3:
+            d.text((mx + 6, y + pad[1]), "+ %d MORE NYC SHOWS — COMEWITH.ORG/RADIO" % (len(shows) - 2),
+                   font=f, fill=FAINT)
 
     draw_band(d)
 
@@ -907,6 +1027,66 @@ def draw_outro(bg, cover_sm, next_date, stage):
         _ctext(d, cx, 892, ED["tease"], F_mono(30), DIM)
     return im.convert("RGB")
 
+# ---- CLOSING, PROMO VARIANT: a flier for our own night beside the thanks ------
+# --outro-promo swaps the closing for this. The flier is portrait, so it takes
+# the left of the frame whole (never cropped -- it is somebody's artwork) and
+# the copy stacks on the right. Accent is SPOT, same as the spotlight cards.
+PROMO = None    # set in main(): {"image","chip","lead","when","where"}
+
+def _promo_art(path, box_w, box_h):
+    """Fit (never crop) inside box_w x box_h: a portrait flier fills the height,
+    a landscape logo the width."""
+    im = Image.open(path).convert("RGB")
+    k = min(box_w / im.width, box_h / im.height)
+    w, h = round(im.width * k), round(im.height * k)
+    im = im.resize((w, h), Image.LANCZOS)
+    mask = Image.new("L", (w, h), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, w, h], 22, fill=255)
+    out = Image.new("RGBA", (w, h), (0, 0, 0, 0)); out.paste(im, (0, 0), mask)
+    return out
+
+def draw_outro_promo(bg, cover_sm, next_date, stage):
+    im = bg.copy(); d = ImageDraw.Draw(im)
+    art = _promo_art(PROMO["image"], 720, 900)
+    ax, ay = 120 + (720 - art.width) // 2, (H - art.height) // 2
+    d.rounded_rectangle([ax - 6, ay - 6, ax + art.width + 6, ay + art.height + 6],
+                        radius=28, outline=SPOT, width=4)
+    im.paste(art, (ax, ay), art)
+    left = 120 + 720 + 90
+    cx = (left + W - 90) // 2
+    tag = "● THAT'S THE SHOW"
+    tw = d.textlength(tag, font=F_monob(28))
+    d.text((cx - tw / 2, 96), tag, font=F_monob(28), fill=LIME)
+    _ctext(d, cx, 146, "THANK YOU FOR", F_disp(66), CREAM)
+    _ctext(d, cx, 226, "PLUGGING IN.", F_disp(66), CREAM)
+    if stage >= 1:
+        _cdivider(d, cx, 350)
+        _ctext(d, cx, 380, PROMO["lead"], F_body(40), CREAM)
+        chip_t = PROMO["chip"].upper()
+        f = F_disp(52)
+        cw = d.textlength(chip_t, font=f)
+        d.rounded_rectangle([cx - cw / 2 - 34, 446, cx + cw / 2 + 34, 446 + 92],
+                            radius=46, fill=SPOT)
+        d.text((cx - cw / 2, 446 + 14), chip_t, font=f, fill=BG_BOT)
+    if stage >= 2:
+        _ctext(d, cx, 566, PROMO["when"].upper(), F_monob(40), SPOT)
+        _ctext(d, cx, 620, PROMO["where"].upper(), F_mono(34), CREAM)
+    if stage >= 3:
+        _ctext(d, cx, 696, "Tickets + the mix to replay at", F_body(36), DIM)
+        _ctext(d, cx, 744, "comewith.org", F_disp(60), LIME)
+    if stage >= 4:
+        _ctext(d, cx, 850, "Follow @comewithnyc so you never miss a drop.", F_body(32), DIM)
+        nd = fmt_md(next_date)
+        txt = ED["next_label"] + ((" · " + nd.upper()) if nd else "")
+        f2 = F_mono(32)
+        tw2 = d.textlength(txt, font=f2)
+        d.rounded_rectangle([cx - tw2 / 2 - 26, 906, cx + tw2 / 2 + 26, 906 + 64],
+                            radius=32, outline=LIME_DK, width=2)
+        d.text((cx - tw2 / 2, 906 + 15), txt, font=f2, fill=LIME)
+    return im.convert("RGB")
+
+PROMO_BEATS = [2.0, 2.6, 2.4, 2.4, 2.6, 8.0]     # stages 0..4, then hold@4
+
 # reveal cadence (seconds per beat); last beat is the full-slide hold.
 INTRO_BEATS = [1.7, 1.7, 2.4, 2.4, 2.4, 5.0]     # stages 0,1,2,3,4, then hold@4
 OUTRO_BEATS = [1.8, 2.4, 2.2, 2.2, 2.6, 2.2, 5.0]  # stages 0..5, then hold@5
@@ -949,13 +1129,14 @@ def build_outro(work, bg, cover_sm, next_date, total_secs):
     # The tease is the last reveal. With it blank that beat would show a slide
     # identical to the one before it — a couple of seconds where the video looks
     # frozen — so the beat is dropped rather than held.
-    beats = outro_beats()
+    beats = list(PROMO_BEATS) if PROMO else outro_beats()
+    draw = draw_outro_promo if PROMO else draw_outro
     scale = total_secs / sum(beats)
     out = []
     for i, base in enumerate(beats):
         stage = min(i, len(beats) - 2)            # last beat = hold on the final stage
         png = os.path.join(work, "outro_%02d.png" % i)
-        draw_outro(bg, cover_sm, next_date, stage).save(png)
+        draw(bg, cover_sm, next_date, stage).save(png)
         out.append((png, max(0.1, base * scale)))
     return out
 
@@ -996,10 +1177,21 @@ def main():
                     help="extra seconds the FULLY assembled intro slide stays up, on top of "
                          "--intro-secs. Reveal pacing is unaffected. 0 restores the old timing.")
     ap.add_argument("--outro-secs", type=float, default=16.0)
+    # A flier for our own night as the closing slide (draw_outro_promo).
+    ap.add_argument("--outro-promo", help="flier image -> promo closing slide")
+    ap.add_argument("--promo-chip", default="DANCE INFUSION")
+    ap.add_argument("--promo-lead", default="Catch us live at our fundraiser")
+    ap.add_argument("--promo-when", default="")
+    ap.add_argument("--promo-where", default="")
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
 
-    global ED
+    global ED, PROMO
+    if a.outro_promo:
+        if not os.path.exists(a.outro_promo):
+            raise SystemExit("Missing file: " + a.outro_promo)
+        PROMO = {"image": a.outro_promo, "chip": a.promo_chip, "lead": a.promo_lead,
+                 "when": a.promo_when, "where": a.promo_where}
     # Copy of the table, not the table itself — an override has to apply to THIS
     # render only, or a future caller that renders two episodes in one process
     # inherits the finale's wording on the wrong one.

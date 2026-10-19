@@ -20,6 +20,8 @@ Output columns:  idx,start,artist,title,bpm,song_key,camelot,duration_ms
 import argparse, csv, json, os, sys, urllib.request, urllib.error
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _paths import radio_dir
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
 
 def env():
@@ -68,10 +70,10 @@ def main():
     if a.out:
         out = a.out
     elif a.week:
-        wk = os.path.join(ROOT, "Radio", "Week %s" % a.week); os.makedirs(wk, exist_ok=True)
+        wk = os.path.join(radio_dir(ROOT), "Week %s" % a.week); os.makedirs(wk, exist_ok=True)
         out = os.path.join(wk, "EP%s_cues.csv" % station_no)
     else:
-        out = os.path.join(ROOT, "Radio", "render", "EP%s_cues.csv" % station_no)
+        out = os.path.join(radio_dir(ROOT), "render", "EP%s_cues.csv" % station_no)
     with open(out, "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["idx", "start", "artist", "title", "bpm", "song_key", "camelot",

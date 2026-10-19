@@ -23,9 +23,9 @@ except Exception: pass
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _paths import episode_dir
-DOCS = os.path.join(ROOT, "Radio", "Documents")
-RENDER = os.path.join(ROOT, "Radio", "render")
+from _paths import episode_dir, radio_dir
+DOCS = os.path.join(radio_dir(ROOT), "Documents")
+RENDER = os.path.join(radio_dir(ROOT), "render")
 UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36"
 
 def env():

@@ -1,0 +1,37 @@
+EP 7 - COME WITH NYC RADIO : TRACK START TIMES
+======================================================================================
+MIX FILE   : (audio still transferring - 1:10:23)
+MIX LENGTH : 70:23
+TRACKLIST  : CWR_Ep7_V2.txt (Rekordbox export - 19 tracks, play order)
+
+HOW TO FILL THIS IN
+  1. Type the time each track STARTS, right after the '=' sign.  Format mm:ss
+  2. Within ~15 seconds is close enough - I snap it to the exact drop by audio.
+  3. Track 1 is almost always 0:00.
+  4. Do NOT reorder the lines. Save the file, then tell me it's done.
+  5. Unsure about one? Put a ? after it, e.g.  7 = 15:25?
+
+The 'guess' is ARITHMETIC ONLY - track lengths scaled to fit the mix.
+It is NOT from listening. A starting point, not an answer.
+
+--------------------------------------------------------------------------------------
+ 1 =  00:00       Empire Of The Sun, Vintage Culture - Cherry Blossom  (Vintage Culture Remix)               [7:35 long | guess 0:00]
+ 2 =  03:30       Alan Fitzpatrick, Ronnie Spiteri - On My Mind (Enzo is Burning Extended Mix)               [5:10 long | guess 4:38]
+ 3 =  06:30       Emmy Adelle - Pour Another Drink  (Extended Mix)                                           [4:47 long | guess 7:48]
+ 4 =  10:10       Meduza - Friends (ARTBAT Remix Extended)                                                   [6:05 long | guess 10:44]
+ 5 =  13:55       Bedouin - Tijuana (Vintage Culture Remix)                                                  [5:58 long | guess 14:27]
+ 6 =  18:09       Andhim - Never Let You Go (Original Mix)                                                   [6:07 long | guess 18:07]
+ 7 =  22:35       Maleh, Shimza - Fight To Love feat. Maleh (Louie Vega Remix)                               [11:26 long | guess 21:52]
+ 8 =  27:12       Know Good - Money (Know Good Flip)                                                         [2:57 long | guess 28:52]
+ 9 =  30:05       Super Flu, Andhim - Mr. Bass feat. Super Flu (Original Mix)                                [7:41 long | guess 30:40]
+10 =  32:40       Emmy Adelle - Polaroids  (Extended Mix)                                                    [4:10 long | guess 35:23]
+11 =  36:02       Emmy Adelle - Latch  (Extended Mix)                                                        [2:50 long | guess 37:56]
+12 =  38:07       Shouse - Love Tonight (Vintage Culture & Kiko Franco Remix)                                [6:26 long | guess 39:40]
+13 =  42:42       Emmy Adelle, Fermin Suero Jr. - Trap Queen (ft. Fermin)  (Extended Mix)                    [4:33 long | guess 43:36]
+14 =  45:55       Thee Cool Cats - Don't Kill My Vibe (Vintage Culture Remix)                                [7:56 long | guess 46:24]
+15 =  47:54       Adam Beyer, Bart Skils, Massano, DORIANN - Your Mind (Massano & Doriann Remix)             [5:05 long | guess 51:15]
+16 =  52:17       Bedouin, Chico Castillo - Flore Chico feat. Chico Castillo (Harry Romero Remix)            [6:23 long | guess 54:22]
+17 =  56:40       Justice, Tame Impala, Kaytranada - Neverender (Kaytranada Remix)                           [4:45 long | guess 58:17]
+18 =  59:53       Aloe Blacc, Shimza - Darling (Extended Mix)                                                [6:36 long | guess 61:11]
+19 =  1:04:43       Guy Gerber - What To Do (&ME Remix)                                                        [8:24 long | guess 65:14]
+--------------------------------------------------------------------------------------

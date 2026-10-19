@@ -24,11 +24,15 @@ rem The repo root is whichever folder contains Radio\render. This file works
 rem sitting in the Comewith folder OR inside Radio\ -- find the root instead of
 rem assuming one, because `cd /d "%~dp0"` silently makes every relative path
 rem below resolve against the wrong place when the file gets moved.
-if not exist "Radio\render\make_episode.py" if exist "render\make_episode.py" cd ..
-if not exist "Radio\render\make_episode.py" (
+rem The radio folder is COMEWITHRADIO in the repo (renamed 2026-10-19) and
+rem Radio inside the tool packet sent to guest DJs; %RD% is whichever exists.
+if exist "render\make_episode.py" cd ..
+set "RD=COMEWITHRADIO"
+if not exist "%RD%\render\make_episode.py" set "RD=Radio"
+if not exist "%RD%\render\make_episode.py" (
   echo.
-  echo   ** Cannot find Radio\render\ from here.
-  echo      Keep this file in the Comewith folder, or inside Radio\.
+  echo   ** Cannot find COMEWITHRADIO\render\ or Radio\render\ from here.
+  echo      Keep this file in the Comewith folder, or inside the radio folder.
   echo.
   pause
   exit /b 1
@@ -50,12 +54,12 @@ if "%EP%"=="" goto :nothing
 
 rem Folders are "Episode N". "Week N" is the old name and is still accepted
 rem so a folder that never got renamed keeps working.
-set "WK=Radio\Episode %EP%"
-if not exist "%WK%\" if exist "Radio\Week %EP%\" set "WK=Radio\Week %EP%"
+set "WK=%RD%\Episode %EP%"
+if not exist "%WK%\" if exist "%RD%\Week %EP%\" set "WK=%RD%\Week %EP%"
 if not exist "%WK%\" (
   echo.
   echo   ** There is no folder "%WK%".
-  echo      Make "Radio\Episode %EP%", then put the mix and tracklist inside.
+  echo      Make "%RD%\Episode %EP%", then put the mix and tracklist inside.
   goto :done
 )
 
@@ -112,11 +116,11 @@ if not defined ART for %%E in (jpg jpeg png webp) do (
   if not defined ART for %%F in ("%WK%\*.%%E") do if exist "%%~fF" set "ART=%%~fF"
 )
 if "!ART!"=="" (
-  set "ART=%CD%\Radio\Artwork\Radio_Thumbnail.jpg"
+  set "ART=%CD%\%RD%\Artwork\Radio_Thumbnail.jpg"
   echo   artwork    : station default ^(no episode cover found^)
 ) else (
   for %%F in ("!ART!") do echo   artwork    : %%~nxF
-  python Radio\render\_check_cover.py "!ART!"
+  python %RD%\render\_check_cover.py "!ART!"
 )
 
 rem ---- 4. the next drop date ------------------------------------------------
@@ -134,7 +138,7 @@ rem ---- 5. build the cues from the tracklist + the database -------------------
 echo.
 echo   Matching your tracklist against the dashboard
 echo   ---------------------------------------------------------------
-python Radio\render\tracklist_from_txt.py --week %EP% --out-cues
+python %RD%\render\tracklist_from_txt.py --week %EP% --out-cues
 if errorlevel 1 (
   echo.
   echo   ** Could not build the tracklist. See above.
@@ -156,7 +160,7 @@ echo.
 set "SITE="
 set /p "SITE=  Update the WEBSITE's tracklist order to match too? (y/N): "
 if /i "!SITE!"=="Y" (
-  python Radio\render\tracklist_from_txt.py --week %EP% --write-order
+  python %RD%\render\tracklist_from_txt.py --week %EP% --write-order
   if errorlevel 1 echo   ** Site order not updated -- see above. Carrying on with the render.
 )
 
@@ -166,7 +170,7 @@ echo   Rendering. An hour-long mix takes about 15 minutes -- leave it alone.
 echo   ---------------------------------------------------------------
 echo.
 
-python Radio\render\make_episode.py --week %EP% --cover "!ART!" --cues "%WK%\EP%EP%_cues.csv" !NEXTARG!
+python %RD%\render\make_episode.py --week %EP% --cover "!ART!" --cues "%WK%\EP%EP%_cues.csv" !NEXTARG!
 if errorlevel 1 (
   echo.
   echo   ** The render stopped. The message above says why.
@@ -176,7 +180,7 @@ if errorlevel 1 (
 echo.
 echo   Checking what came out
 echo   ---------------------------------------------------------------
-python Radio\render\verify_episode.py --week %EP%
+python %RD%\render\verify_episode.py --week %EP%
 if errorlevel 1 (
   echo.
   echo   ** Verification FAILED -- do not upload this yet.
@@ -187,7 +191,7 @@ rem ---- 8. the tags to paste when uploading -----------------------------------
 echo.
 echo   Tags for YouTube + SoundCloud
 echo   ---------------------------------------------------------------
-python Radio\render\make_tags.py --episode %EP%
+python %RD%\render\make_tags.py --episode %EP%
 
 echo.
 echo   ===============================================================

@@ -21,7 +21,7 @@ except Exception: pass
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
-from _paths import episode_dir
+from _paths import episode_dir, radio_dir
 
 OK, BAD = "  ok  ", " FAIL "
 
@@ -79,7 +79,7 @@ def main():
 
     wk = None
     if a.week:
-        wk = episode_dir(ROOT, a.week) or os.path.join(ROOT, "Radio", "Episode %s" % a.week)
+        wk = episode_dir(ROOT, a.week) or os.path.join(radio_dir(ROOT), "Episode %s" % a.week)
         a.mp4 = a.mp4 or find(wk, ["CWR_Ep*_YouTube.mp4", "*.mp4"])
         a.audio = a.audio or find(wk, ["*.wav", "*.WAV", "*.aiff", "*.flac", "*.mp3", "*.m4a"])
     if not a.mp4 or not os.path.exists(a.mp4):
