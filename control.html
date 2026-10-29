@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex, nofollow" />
+<title>Event Control Center · Come With</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+<link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inconsolata:wght@300;400;500;700&display=swap" rel="stylesheet" />
+<!--
+  Event Control Center — admin only. One page for every Come With event, with a
+  fundraising layer that switches on per event (event_control.fundraising).
+
+  * Data lives where it always has (ticketing, guest_event_attendance,
+    sponsorships, third_party_donations, budget_lines, expenses, tasks) plus the
+    four tables from migration 222. Nothing here holds a number of its own.
+  * All maths is in assets/control-center.js (tested: scripts/test_control_center.mjs).
+  * Same Supabase session as dashboard.html (same origin, same storage), so
+    signing in there signs in here. RLS is the gate: admin-only tables, and money
+    writes stay master-only exactly as in the dashboard.
+  * Never linked from a public page. No guest data reaches any public route.
+-->
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --ink: #EDE4D3; --bg: #140A17; --surface: #1E1326; --surface-2: #281A33; --off: #241229;
+  --red: #E84A86; --red-dk: #D13A72; --lime: #A7E02E; --mid: #AB9FB0;
+  --border: rgba(237,228,211,0.12); --border-strong: rgba(237,228,211,0.26);
+  --green: #9BD64A; --green-bg: #233015; --amber: #E9B949; --amber-bg: #36290F;
+  --blue: #7DB8FF; --blue-bg: #14253A; --line: #3A2640;
+}
+html { -webkit-text-size-adjust: 100%; }
+body { background: var(--bg); color: var(--ink); font-family: 'Inconsolata', monospace; font-size: 15px; min-height: 100vh; }
+a { color: var(--lime); }
+button { font: inherit; color: inherit; }
+input, select, textarea {
+  font-family: 'Inconsolata', monospace; font-size: 0.95rem; color: var(--ink);
+  background: var(--surface); border: 1px solid var(--border-strong); padding: 7px 9px; min-width: 0;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--red); }
+input[type=number] { width: 7em; }
+input[type=checkbox] { width: auto; accent-color: var(--red); }
+.h { font-family: 'Bebas Neue', sans-serif; letter-spacing: 0.06em; font-weight: 400; }
+
+/* ---- top bar ---- */
+.top { position: sticky; top: 0; z-index: 20; background: #0D0710; border-bottom: 1px solid var(--border); }
+.top-row { display: flex; align-items: center; gap: 12px; padding: 10px 16px; flex-wrap: wrap; }
+.brand { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; letter-spacing: 0.08em; white-space: nowrap; }
+.brand span { color: var(--red); }
+.top select { max-width: 100%; flex: 1 1 260px; font-size: 0.95rem; }
+.top .who { margin-left: auto; color: var(--mid); font-size: 0.8rem; white-space: nowrap; }
+.tabs { display: flex; gap: 2px; overflow-x: auto; padding: 0 12px; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  background: none; border: none; border-bottom: 2px solid transparent; padding: 10px 12px; cursor: pointer;
+  font-family: 'Bebas Neue', sans-serif; font-size: 1.02rem; letter-spacing: 0.07em; color: var(--mid); white-space: nowrap;
+}
+.tabs button.active { color: var(--ink); border-bottom-color: var(--red); }
+.tabs button .n { font-family: 'Inconsolata', monospace; font-size: 0.7rem; color: var(--amber); margin-left: 4px; }
+
+main { max-width: 1180px; margin: 0 auto; padding: 18px 16px 80px; }
+.sec-head { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.sec-head h1 { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.05em; font-weight: 400; }
+.sec-head .sub { color: var(--mid); font-size: 0.85rem; }
+.sec-head .right { margin-left: auto; display: flex; gap: 8px; flex-wrap: wrap; }
+
+.card { background: var(--surface); border: 1px solid var(--border); padding: 14px; margin-bottom: 14px; }
+.card > h2 { font-family: 'Bebas Neue', sans-serif; font-size: 1.2rem; letter-spacing: 0.07em; font-weight: 400; margin-bottom: 10px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.card > h2 .meta { font-family: 'Inconsolata', monospace; font-size: 0.78rem; color: var(--mid); letter-spacing: 0; }
+.grid { display: grid; gap: 14px; }
+.g2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.g3 { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+
+.kpis { display: grid; grid-template-columns: repeat(auto-fill, minmax(165px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.kpi { background: var(--surface); border: 1px solid var(--border); padding: 12px; min-height: 92px; }
+.kpi .l { font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mid); }
+.kpi .v { font-family: 'Bebas Neue', sans-serif; font-size: 2rem; letter-spacing: 0.03em; line-height: 1.1; margin-top: 4px; }
+.kpi .s { font-size: 0.78rem; color: var(--mid); margin-top: 2px; }
+.kpi.warn { border-color: var(--amber); } .kpi.good { border-color: var(--green); }
+.tbd { color: var(--amber); font-style: normal; }
+
+.btn {
+  font-family: 'Bebas Neue', sans-serif; font-size: 0.95rem; letter-spacing: 0.06em;
+  padding: 8px 14px; background: var(--red); color: #fff; border: none; cursor: pointer; min-height: 38px;
+}
+.btn:hover:not(:disabled) { background: var(--red-dk); }
+.btn.ghost { background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong); }
+.btn.ghost:hover { border-color: var(--red); color: var(--red); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.mini { font-size: 0.74rem; padding: 4px 9px; background: none; border: 1px solid var(--border-strong); cursor: pointer; min-height: 30px; }
+.mini:hover { border-color: var(--red); color: var(--red); }
+.mini.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+th { text-align: left; font-weight: 500; font-size: 0.7rem; letter-spacing: 0.08em; text-transform: uppercase; color: var(--mid); padding: 7px 8px; background: var(--off); border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 7px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.total td { font-weight: 700; border-top: 1px solid var(--border-strong); }
+.tbl-wrap { overflow-x: auto; }
+.muted { color: var(--mid); }
+.small { font-size: 0.8rem; }
+.pill { display: inline-block; font-size: 0.7rem; padding: 2px 7px; border: 1px solid var(--border-strong); letter-spacing: 0.04em; white-space: nowrap; }
+.pill.ok { color: var(--green); border-color: var(--green); background: var(--green-bg); }
+.pill.warn { color: var(--amber); border-color: var(--amber); background: var(--amber-bg); }
+.pill.info { color: var(--blue); border-color: var(--blue); background: var(--blue-bg); }
+.pill.bad { color: #ff9ec4; border-color: var(--red); background: rgba(232,74,134,0.16); }
+
+.bar { position: relative; height: 22px; background: var(--off); border: 1px solid var(--border); margin: 8px 0 4px; }
+.bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--lime); }
+.bar > i.alt { background: rgba(167,224,46,0.35); }
+.bar > b { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--ink); }
+.bar-legend { display: flex; justify-content: space-between; font-size: 0.78rem; color: var(--mid); gap: 8px; flex-wrap: wrap; }
+
+.note { font-size: 0.82rem; color: var(--mid); line-height: 1.45; }
+.state { padding: 18px; border: 1px dashed var(--border-strong); color: var(--mid); text-align: center; }
+.state.err { border-color: var(--red); color: #ff9ec4; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row > label { font-size: 0.8rem; color: var(--mid); display: flex; flex-direction: column; gap: 3px; }
+.stack > * + * { margin-top: 8px; }
+.list { list-style: none; }
+.list li { padding: 8px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.list li:last-child { border-bottom: none; }
+.list li .grow { flex: 1 1 200px; min-width: 0; }
+
+/* ---- sponsors ---- */
+.sp-card { background: var(--surface); border: 1px solid var(--border); padding: 14px; }
+.sp-card.paid { border-color: var(--green); }
+.sp-top { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.sp-name { font-family: 'Bebas Neue', sans-serif; font-size: 1.35rem; letter-spacing: 0.05em; }
+.sp-facts { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 12px; margin: 10px 0; font-size: 0.85rem; }
+.sp-facts span { color: var(--mid); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; display: block; }
+.slot { display: flex; gap: 8px; align-items: center; padding: 6px 0; border-top: 1px solid var(--border); font-size: 0.88rem; }
+.slot .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.slot.open .nm { color: var(--mid); font-style: italic; }
+.slot input[type=number] { width: 4.2em; padding: 4px 6px; }
+
+/* ---- door (phone first) ---- */
+.door-bar { position: sticky; top: 0; z-index: 10; background: var(--bg); padding: 8px 0 10px; }
+.door-search { width: 100%; font-size: 1.15rem; padding: 12px 14px; }
+.door-counts { display: flex; gap: 14px; font-size: 0.9rem; margin: 8px 0; flex-wrap: wrap; }
+.door-counts b { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.03em; color: var(--lime); }
+.chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; }
+.chips button { background: var(--surface); border: 1px solid var(--border-strong); padding: 6px 11px; font-size: 0.82rem; cursor: pointer; white-space: nowrap; min-height: 34px; }
+.chips button.on { background: var(--red); border-color: var(--red); color: #fff; }
+.door-row { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid var(--border); min-height: 64px; }
+.door-row.in { opacity: 0.62; }
+.door-row .who { flex: 1; min-width: 0; }
+.door-row .who .nm { font-size: 1.08rem; font-weight: 700; overflow-wrap: anywhere; }
+.door-row .who .mt { font-size: 0.78rem; color: var(--mid); margin-top: 2px; overflow-wrap: anywhere; }
+.ci { min-width: 104px; min-height: 52px; font-family: 'Bebas Neue', sans-serif; font-size: 1.15rem; letter-spacing: 0.06em; border: none; background: var(--lime); color: #142004; cursor: pointer; flex-shrink: 0; }
+.ci.done { background: var(--surface-2); color: var(--green); border: 1px solid var(--green); font-size: 0.95rem; }
+.qty-ctl { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.qty-ctl button { width: 40px; height: 52px; font-size: 1.3rem; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
+.qty-ctl .q { min-width: 46px; text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; }
+
+/* ---- modal ---- */
+.ov { position: fixed; inset: 0; background: rgba(5,2,7,0.78); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; }
+.modal { background: var(--surface); border: 1px solid var(--border-strong); width: 100%; max-width: 720px; padding: 18px; }
+.modal h3 { font-family: 'Bebas Neue', sans-serif; font-size: 1.5rem; letter-spacing: 0.05em; font-weight: 400; margin-bottom: 10px; }
+.modal .foot { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; flex-wrap: wrap; }
+
+.toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--surface-2); border: 1px solid var(--border-strong); padding: 10px 16px; z-index: 60; font-size: 0.9rem; max-width: calc(100vw - 32px); }
+.toast.ok { border-color: var(--green); } .toast.err { border-color: var(--red); }
+
+.login { max-width: 460px; margin: 12vh auto; padding: 0 16px; text-align: center; }
+.login .brand { font-size: 2.2rem; margin-bottom: 14px; }
+
+/* ---- exec update (light "paper", also what prints) ---- */
+.paper { background: #fff; color: #1b1420; padding: 28px; font-family: 'Inconsolata', monospace; }
+.paper h1 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 2.2rem; letter-spacing: 0.04em; }
+.paper h2 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 1.25rem; letter-spacing: 0.07em; margin: 20px 0 8px; border-bottom: 2px solid #E84A86; padding-bottom: 3px; }
+.paper .ps { color: #6b6070; font-size: 0.85rem; }
+.paper .pk { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; margin-top: 14px; }
+.paper .pk > div { border: 1px solid #e3dce6; padding: 10px; }
+.paper .pk .l { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.08em; color: #6b6070; }
+.paper .pk .v { font-family: 'Bebas Neue', sans-serif; font-size: 1.7rem; }
+.paper .pk .d { font-size: 0.75rem; color: #2f7d18; }
+.paper ul { padding-left: 18px; } .paper li { margin: 4px 0; }
+.paper .tbdp { color: #a8730a; }
+
+#printArea { display: none; }
+@media print {
+  @page { margin: 14mm; }
+  body { background: #fff !important; color: #000; }
+  body > *:not(#printArea) { display: none !important; }
+  #printArea { display: block !important; }
+  .paper { padding: 0; }
+  .door-print table { font-size: 10.5pt; } .door-print td, .door-print th { color: #000; background: none; border-bottom: 1px solid #bbb; padding: 4px 6px; }
+  .door-print .box { display: inline-block; width: 12px; height: 12px; border: 1px solid #000; }
+}
+
+@media (max-width: 560px) {
+  .top .who { display: none; }
+  .sec-head h1 { font-size: 1.6rem; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+  .kpi .v { font-size: 1.6rem; }
+  .g2, .g3 { grid-template-columns: 1fr; }
+  .card { padding: 12px; }
+  .paper { padding: 16px; }
+}
+</style>
+</head>
+<body>
+
+<div id="app"><div class="state" style="margin:20vh auto;max-width:300px">Loading…</div></div>
+<div id="printArea"></div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+import * as CC from './assets/control-center.js';
+
+const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const sb = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+  auth: { detectSessionInUrl: true, persistSession: true, autoRefreshToken: true },
+});
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const money = (n, dp = 0) => n == null ? '<em class="tbd">TBD</em>' : (n < 0 ? '−' : '') + '$' + Math.abs(Number(n)).toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: 2 });
+const moneyTxt = (n) => n == null ? 'TBD' : (n < 0 ? '-' : '') + '$' + Math.abs(Number(n)).toLocaleString('en-US', { maximumFractionDigits: 2 });
+const pct = (n) => n == null ? '—' : (Math.round(n * 10) / 10) + '%';
+const int = (n) => n == null ? '<em class="tbd">TBD</em>' : Number(n).toLocaleString('en-US');
+const fmtDate = (d) => d ? new Date(String(d).slice(0, 10) + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) : '—';
+const fmtWhen = (t) => t ? new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+const fmtTime = (t) => t ? new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }) : '';
+const fmtClock = (hhmm) => { if (!hhmm) return null; const [h, m] = hhmm.split(':').map(Number); return new Date(2000, 0, 1, h, m).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }); };
+const todayIso = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+
+function toast(msg, kind = 'ok') {
+  const t = document.createElement('div');
+  t.className = 'toast ' + kind; t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), kind === 'err' ? 6000 : 2600);
+}
+const must = (r, what) => { if (r && r.error) throw new Error((what ? what + ': ' : '') + r.error.message); return r && r.data; };
+
+// PostgREST max_rows is 1000 on prod and truncation is SILENT (CLAUDE.md §18):
+// page everything that can grow, ordered by the primary key.
+async function sbAll(build, pk = 'id') {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await build().order(pk).range(from, from + 999);
+    if (r.error) throw r.error;
+    out.push(...(r.data || []));
+    if (!r.data || r.data.length < 1000) return out;
+  }
+}
+async function inChunks(ids, fn, size = 150) {
+  const out = [];
+  for (let i = 0; i < ids.length; i += size) out.push(...(await fn(ids.slice(i, i + size))));
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const SECTIONS = [
+  ['command', 'Command'], ['tickets', 'Tickets'], ['drinks', 'Drinks'], ['sponsors', 'Sponsors'],
+  ['door', 'Guests / Door'], ['audience', 'Audience'], ['finance', 'Finance'], ['exec', 'Exec update'],
+];
+const S = {
+  me: null, isMaster: false, events: [], eventId: null, sec: 'command',
+  d: null,          // loaded event data
+  calc: null,       // derived numbers
+  aud: null,        // audience data (lazy)
+  door: { q: '', filter: 'all', addOpen: false },
+  scen: null, audScope: 'all', audTab: 'lapsed',
+  pollTimer: null,
+};
+
+// ---------------------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------------------
+async function boot() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return renderLogin();
+  const prof = await sb.from('profiles').select('id, full_name, email, role, deleted_at').eq('id', session.user.id).single();
+  if (prof.error || !prof.data) return renderLogin('Signed in, but your profile could not be read.');
+  const p = prof.data;
+  if (p.deleted_at || !['master_admin', 'sub_admin'].includes(p.role)) return renderLogin('This tool is for Come With admins. Your account does not have admin access.');
+  S.me = p; S.isMaster = p.role === 'master_admin';
+
+  const evs = await sb.from('events').select('id, slug, name, series, event_date, status, type').is('deleted_at', null).order('event_date', { ascending: false });
+  S.events = must(evs, 'Events') || [];
+  const qs = new URLSearchParams(location.search);
+  const want = qs.get('event');
+  const hit = want && S.events.find(e => e.id === want || e.slug === want);
+  const today = todayIso();
+  const upcoming = S.events.filter(e => e.event_date >= today && e.status !== 'cancelled').sort((a, b) => a.event_date.localeCompare(b.event_date));
+  S.eventId = (hit || upcoming.find(e => e.series === 'Dance Infusion') || upcoming[0] || S.events[0] || {}).id;
+  const h = location.hash.replace('#', '');
+  if (SECTIONS.some(([k]) => k === h)) S.sec = h;
+  renderShell();
+  await loadEvent();
+}
+
+function renderLogin(msg) {
+  $('app').innerHTML = `<div class="login">
+    <div class="brand">COME WITH <span>·</span> CONTROL</div>
+    <p class="note" style="margin-bottom:16px">${esc(msg || 'Sign in on the dashboard first. This page uses the same login, so you will land back here signed in.')}</p>
+    <a class="btn" style="display:inline-block;text-decoration:none" href="dashboard.html">Open the dashboard to sign in</a>
+    <p class="note" style="margin-top:14px">Then come back to <code>control.html</code>.</p></div>`;
+}
+
+function renderShell() {
+  const today = todayIso();
+  const opt = (e) => `<option value="${e.id}" ${e.id === S.eventId ? 'selected' : ''}>${esc(e.event_date)} · ${esc(e.name)}${e.series === 'Dance Infusion' ? ' ♥' : ''}</option>`;
+  const up = S.events.filter(e => e.event_date >= today).sort((a, b) => a.event_date.localeCompare(b.event_date));
+  const past = S.events.filter(e => e.event_date < today);
+  $('app').innerHTML = `
+    <header class="top">
+      <div class="top-row">
+        <div class="brand">COME WITH <span>·</span> CONTROL</div>
+        <select id="evPick" aria-label="Event">
+          <optgroup label="Upcoming">${up.map(opt).join('')}</optgroup>
+          <optgroup label="Past">${past.map(opt).join('')}</optgroup>
+        </select>
+        <div class="who">${esc(S.me.full_name || S.me.email)} · ${esc(S.me.role.replace('_', ' '))} · <a href="dashboard.html">Dashboard</a></div>
+      </div>
+      <nav class="tabs" id="tabs"></nav>
+    </header>
+    <main id="main"><div class="state">Loading event…</div></main>`;
+  $('evPick').addEventListener('change', async (e) => {
+    S.eventId = e.target.value; S.aud = null; S.scen = null;
+    history.replaceState(null, '', '?event=' + encodeURIComponent(eventSlug()) + '#' + S.sec);
+    $('main').innerHTML = '<div class="state">Loading event…</div>';
+    await loadEvent();
+  });
+  renderTabs();
+}
+const eventSlug = () => { const e = S.events.find(x => x.id === S.eventId); return (e && e.slug) || S.eventId; };
+
+function renderTabs() {
+  const c = S.calc;
+  const badge = { command: c && c.blockers.length, door: c && c.door.people };
+  $('tabs').innerHTML = SECTIONS.map(([k, l]) =>
+    `<button data-sec="${k}" class="${k === S.sec ? 'active' : ''}">${l}${badge[k] ? `<span class="n">${badge[k]}</span>` : ''}</button>`).join('');
+  const act = $('tabs').querySelector('.active');
+  if (act) act.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  $('tabs').onclick = (e) => {
+    const b = e.target.closest('[data-sec]'); if (!b) return;
+    S.sec = b.dataset.sec;
+    history.replaceState(null, '', '?event=' + encodeURIComponent(eventSlug()) + '#' + S.sec);
+    renderTabs(); render();
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Load
+// ---------------------------------------------------------------------------
+async function loadEvent() {
+  const id = S.eventId;
+  if (!id) { $('main').innerHTML = '<div class="state">No events yet.</div>'; return; }
+  try {
+    const [ev, ctl, tiers, tk, don, spo, gea, alloc, tasks, bl, exp, inc, upd] = await Promise.all([
+      sb.from('events').select('*').eq('id', id).single(),
+      sb.from('event_control').select('*').eq('event_id', id).maybeSingle(),
+      sb.from('event_ticket_tiers').select('*').eq('event_id', id).order('sort_order'),
+      sbAll(() => sb.from('ticketing').select('id, guest_id, tier_id, ticket_type, amount_paid, quantity, source, external_id, purchased_at, created_at').eq('event_id', id)).then(data => ({ data }), error => ({ error })),
+      sb.from('third_party_donations').select('*').eq('event_id', id).order('date', { ascending: false }),
+      sb.from('sponsorships').select('*, actor:actors(id, display_name, email)').eq('event_id', id).order('created_at'),
+      sbAll(() => sb.from('guest_event_attendance').select('*').eq('event_id', id)).then(data => ({ data }), error => ({ error })),
+      sb.from('event_drink_allocations').select('*').eq('event_id', id).order('created_at'),
+      sb.from('tasks').select('id, title, description, status, priority, due_date, milestone, updated_at, created_at').eq('event_id', id).is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }),
+      sb.from('budget_lines').select('*').eq('event_id', id).eq('scope', 'event').is('deleted_at', null).order('planned_amount', { ascending: false }),
+      sb.from('expenses').select('id, date, amount, category, vendor, description, status, expected_amount, settled_at, due_date').eq('event_id', id).is('deleted_at', null).order('date'),
+      sb.from('income').select('id, date, amount, category, description, status, expected_amount').eq('event_id', id).is('deleted_at', null).order('date'),
+      sb.from('event_exec_updates').select('*').eq('event_id', id).order('created_at', { ascending: false }).limit(20),
+    ]);
+    const event = must(ev, 'Event');
+    let venue = null;
+    if (event.venue_id) venue = (await sb.from('venues').select('id, name, address, city').eq('id', event.venue_id).maybeSingle()).data;
+    const geaRows = must(gea, 'Door list') || [];
+    const gids = [...new Set(geaRows.map(r => r.guest_id))];
+    const guests = await inChunks(gids, async (ids) => must(await sb.from('guests').select('id, full_name, email').in('id', ids), 'Guests') || []);
+    const gBy = Object.fromEntries(guests.map(g => [g.id, g]));
+    for (const r of geaRows) { const g = gBy[r.guest_id] || {}; r.name = g.full_name || '(no name)'; r.email = g.email || null; }
+    // Money tables are gated by can_see_event_financials(): a sub_admin sees
+    // nothing until the event's financials are released. Say so instead of
+    // rendering $0 (an empty answer is not a zero).
+    const moneyHidden = !S.isMaster && !event.financials_released;
+    S.d = {
+      event, venue, controlRow: must(ctl, 'Event settings'), tiers: must(tiers, 'Tiers') || [],
+      ticketing: must(tk, 'Tickets') || [], donations: must(don, 'Donations') || [],
+      sponsorships: must(spo, 'Sponsors') || [], gea: geaRows, allocations: must(alloc, 'Drink allocations') || [],
+      tasks: must(tasks, 'Tasks') || [], budget: must(bl, 'Planned costs') || [], expenses: must(exp, 'Expenses') || [],
+      income: must(inc, 'Income') || [], updates: must(upd, 'Exec updates') || [], moneyHidden,
+    };
+    compute();
+    renderTabs(); render();
+    $('evPick').value = id;
+  } catch (err) {
+    $('main').innerHTML = `<div class="state err">Could not load this event: ${esc(err.message || err)}</div>`;
+  }
+}
+
+function compute() {
+  const d = S.d;
+  const control = CC.controlFor(d.event, d.controlRow);
+  const tk = CC.ticketStats(d.ticketing, d.tiers);
+  const don = CC.donationStats(d.donations);
+  const sp = CC.sponsorStats(d.sponsorships, d.gea);
+  const mm = CC.missionMath({ tk, don, sp, control });
+  const drinks = CC.drinkLedger({ sp, tiers: d.tiers.filter(t => t.active !== false), tk, gea: d.gea, allocations: d.allocations, control, barMinimum: d.event.bar_minimum });
+  const door = CC.doorStats(d.gea);
+  const blockers = d.tasks.filter(t => t.status === 'blocked');
+  const plannedCost = d.budget.filter(b => b.direction === 'expense').reduce((a, b) => a + (b.amount_tbd ? 0 : Number(b.planned_amount || 0)), 0);
+  const actualCost = d.expenses.reduce((a, e) => a + Number(e.amount || 0), 0);
+  S.calc = { control, tk, don, sp, mm, drinks, door, blockers, plannedCost, actualCost, fund: control.fundraising };
+}
+
+async function reload(sec) { if (sec) S.sec = sec; await loadEvent(); }
+
+// ---------------------------------------------------------------------------
+// Render dispatch
+// ---------------------------------------------------------------------------
+function render() {
+  clearInterval(S.pollTimer); S.pollTimer = null;
+  const fn = { command: rCommand, tickets: rTickets, drinks: rDrinks, sponsors: rSponsors, door: rDoor,
+               audience: rAudience, finance: rFinance, exec: rExec }[S.sec];
+  const m = $('main');
+  try { m.innerHTML = fn(); } catch (err) { m.innerHTML = `<div class="state err">${esc(err.message)}</div>`; console.error(err); }
+  if (S.sec === 'door') wireDoor();
+  if (S.sec === 'finance') wireScenario();
+  if (S.sec === 'audience') loadAudience();
+}
+
+const head = (title, sub, right = '') => `<div class="sec-head"><h1>${title}</h1><span class="sub">${sub || ''}</span><div class="right">${right}</div></div>`;
+const masterOnly = (html) => S.isMaster ? html : '';
+const hiddenMoney = () => S.d.moneyHidden ? `<div class="state" style="margin-bottom:14px">Money for this event is hidden from your role until a master admin releases its financials (the dashboard's financial gate). Counts below exclude it.</div>` : '';
+const kpi = (l, v, s = '', cls = '') => `<div class="kpi ${cls}"><div class="l">${l}</div><div class="v">${v}</div>${s ? `<div class="s">${s}</div>` : ''}</div>`;
+
+// ---------------------------------------------------------------------------
+// 1. Command
+// ---------------------------------------------------------------------------
+function rCommand() {
+  const { event: e, venue, tiers } = S.d; const c = S.calc; const ctl = c.control;
+  const days = CC.daysUntil(e.event_date);
+  const cd = days == null ? '—' : days > 0 ? `${days} day${days === 1 ? '' : 's'} to go` : days === 0 ? 'Tonight' : `${-days} days ago`;
+  const timeBlocker = c.blockers.some(b => /time/i.test(b.title));
+  const doors = fmtClock(e.doors_time), end = fmtClock(e.end_time);
+  const when = doors ? `Doors ${doors}${end ? '–' + end : ''}${timeBlocker ? ' <span class="pill warn">unconfirmed</span>' : ''}` : '<em class="tbd">time TBD</em>';
+  const tierK = tiers.filter(t => t.active !== false).map(t => {
+    const b = c.tk.byTier[t.id] || { qty: 0 };
+    return `${esc(t.label)}: <b>${b.qty}</b>`;
+  }).join(' · ') || 'no tiers set';
+  const mm = c.mm, target = ctl.mission_target_pct;
+  const pctCls = mm.pct == null || target == null ? '' : mm.pct >= target ? 'good' : 'warn';
+  const dr = c.drinks;
+  return head(esc(e.name), `${fmtDate(e.event_date)} · ${esc(venue ? venue.name + (venue.address ? ', ' + venue.address : '') : 'venue TBD')} · ${when}`,
+      `<span class="pill ${c.fund ? 'ok' : ''}">Fundraising ${c.fund ? 'on' : 'off'}</span>${masterOnly('<button class="mini" data-act="settings">Event settings</button>')}`) +
+    hiddenMoney() +
+    `<div class="kpis">
+      ${kpi('Countdown', esc(cd), fmtDate(e.event_date), days != null && days <= 7 && days >= 0 ? 'warn' : '')}
+      ${kpi('Tickets sold', int(c.tk.qty), tierK)}
+      ${c.fund ? kpi(`$ to ${esc(ctl.beneficiary || 'the mission')}`, money(mm.toMission), mm.missionUnknownQty ? `<span class="tbd">${mm.missionUnknownQty} tickets have no tier yet</span>` : 'so far, from tickets + donations') : kpi('Ticket revenue', money(c.tk.revenue))}
+      ${kpi('Sponsor cash', money(c.sp.pledged), `${money(c.sp.paid)} paid · ${c.sp.unpaidCount} unpaid`, c.sp.unpaidCount ? 'warn' : '')}
+      ${kpi('Comps assigned', `${c.sp.compsUsed}/${c.sp.compsTotal}`, 'sponsor comps named')}
+      ${kpi('Door list', int(c.door.people), `${c.door.inside} checked in · ${c.door.comps} comps`)}
+      ${c.fund ? kpi('% to the mission', pct(mm.pct), target != null ? `target ${target}%` : 'no target set', pctCls) : ''}
+    </div>
+    <div class="grid g2">
+      <div class="card"><h2>Bar minimum <span class="meta">every drink ticket counts, whatever its source</span></h2>${barMinBlock(dr)}</div>
+      <div class="card"><h2>Blockers <span class="meta">${c.blockers.length} open · tasks with status “blocked”, also on Calendar &amp; Tasks</span></h2>
+        <ul class="list">${c.blockers.map(b => `<li><div class="grow"><b>${esc(b.title)}</b>${b.description ? `<div class="small muted">${esc(b.description)}</div>` : ''}</div>
+          <button class="mini" data-act="unblock" data-id="${b.id}">Resolved</button></li>`).join('') || '<li class="muted">No blockers. 🎉</li>'}</ul>
+        <div class="row" style="margin-top:10px"><input id="newBlocker" placeholder="Add a blocker…" style="flex:1"><button class="btn ghost" data-act="addBlocker">Add</button></div>
+      </div>
+    </div>`;
+}
+
+function barMinBlock(dr) {
+  if (dr.barMinimum == null) return '<div class="state">No bar minimum on this event. Set it in Event settings.</div>';
+  if (dr.barPct == null) return `<p>Bar minimum <b>${money(dr.barMinimum)}</b>. ${int(dr.allocated)} drink tickets allocated${dr.tbdLines ? ` (+${dr.tbdLines} lines TBD)` : ''}.</p>
+    <p class="note" style="margin-top:6px">Progress can't be measured until the $ value of one drink ticket is set (Drinks → venue terms). It is not shown as 0%.</p>`;
+  const w = Math.min(100, dr.barPct), lw = dr.lockedBarPct == null ? 0 : Math.min(100, dr.lockedBarPct);
+  return `<div class="bar">${lw ? `<i class="alt" style="width:${lw}%"></i>` : ''}<i style="width:${w}%"></i></div>
+    <div class="bar-legend"><span>${money(dr.barValue)} allocated (${int(dr.allocated)} × ${money(S.calc.control.drink_ticket_value, 2)})</span><span>${pct(dr.barPct)} of ${money(dr.barMinimum)}</span></div>
+    ${dr.lockedValue != null ? `<p class="note" style="margin-top:6px">Locked with venue: ${int(dr.locked)} tickets = ${money(dr.lockedValue)} (${pct(dr.lockedBarPct)}). Short of the minimum by ${money(Math.max(0, dr.barMinimum - dr.lockedValue))}.</p>` : '<p class="note" style="margin-top:6px">No count locked with the venue yet.</p>'}
+    ${dr.tbdLines ? `<p class="note"><span class="tbd">${dr.tbdLines} allocation line${dr.tbdLines === 1 ? ' is' : 's are'} TBD</span> and not in the bar yet.</p>` : ''}`;
+}
+
+// ---------------------------------------------------------------------------
+// 2. Tickets
+// ---------------------------------------------------------------------------
+const IMPORT_SOURCES = [
+  { key: 'zeffy', label: 'Zeffy', hint: 'Zeffy → Payments → Export (XLSX or CSV). Ticket lines, extra donations and sponsorship payments are separated.', fund: false },
+  { key: 'resident_advisor', label: 'Resident Advisor', hint: 'RA → Event → Ticket list export (CSV with Barcode + Billing name). Same keys as the event hub importer, so the two never double-count.', fund: false },
+  { key: 'ms_diy', label: 'MS Society DIY', hint: 'DIY page → Transactions export. Incentives become tickets, the rest donations; all of it goes to the Society directly.', fund: true },
+];
+
+function rTickets() {
+  const { tiers } = S.d; const c = S.calc, fund = c.fund;
+  const srcs = Object.keys(c.tk.bySource);
+  const live = tiers.filter(t => t.active !== false);
+  const tierRows = live.map(t => {
+    const b = c.tk.byTier[t.id] || { qty: 0, revenue: 0, mission: 0, bySource: {} };
+    const sp = CC.tierSplit(t);
+    return `<tr>
+      <td><input value="${esc(t.label)}" data-tier="${t.id}" data-f="label" style="width:9em"></td>
+      <td class="num"><input type="number" step="0.01" min="0" value="${t.price}" data-tier="${t.id}" data-f="price" style="width:5.5em"></td>
+      ${fund ? `<td class="num"><input type="number" step="0.01" min="0" value="${t.to_mission}" data-tier="${t.id}" data-f="to_mission" style="width:5.5em"></td>
+      <td>${money(sp.production, 2)} <input value="${esc(t.production_label || '')}" placeholder="name this portion" data-tier="${t.id}" data-f="production_label" style="width:11em"></td>` : ''}
+      <td class="num"><input type="number" min="0" value="${t.drink_tickets ?? ''}" placeholder="TBD" data-tier="${t.id}" data-f="drink_tickets" style="width:4.5em"></td>
+      <td class="num">${b.qty}</td><td class="num">${money(b.revenue, 2)}</td>${fund ? `<td class="num">${money(b.mission, 2)}</td>` : ''}
+      <td>${masterOnly(`<button class="mini danger" data-act="tierOff" data-id="${t.id}" title="Retire this tier (kept for history)">✕</button>`)}</td></tr>`;
+  }).join('');
+  const matrix = srcs.length ? `<table><thead><tr><th>Tier</th>${srcs.map(s => `<th class="num">${esc(CC.SOURCE_LABELS[s] || s)}</th>`).join('')}<th class="num">Total</th></tr></thead><tbody>
+      ${live.map(t => { const b = c.tk.byTier[t.id] || { bySource: {}, qty: 0 }; return `<tr><td>${esc(t.label)}</td>${srcs.map(s => `<td class="num">${b.bySource[s] || 0}</td>`).join('')}<td class="num"><b>${b.qty}</b></td></tr>`; }).join('')}
+      <tr class="total"><td>All tickets</td>${srcs.map(s => `<td class="num">${c.tk.bySource[s].qty}</td>`).join('')}<td class="num">${c.tk.qty}</td></tr>
+      <tr><td class="muted">Revenue</td>${srcs.map(s => `<td class="num">${money(c.tk.bySource[s].revenue, 2)}</td>`).join('')}<td class="num">${money(c.tk.revenue, 2)}</td></tr>
+    </tbody></table>` : '<div class="state">No ticket sales recorded yet. Upload an export below.</div>';
+  const unassigned = c.tk.unassigned.length ? `<div class="card" style="border-color:var(--amber)"><h2>Ticket types with no tier <span class="meta">their mission split is unknown until assigned — not counted as $0</span></h2>
+      <ul class="list">${c.tk.unassigned.map(u => `<li><div class="grow"><b>${esc(u.ticket_type)}</b> <span class="muted small">${u.qty} sold · ${money(u.revenue, 2)}</span></div>
+        <select data-assign="${esc(u.ticket_type)}"><option value="">Assign to tier…</option>${live.map(t => `<option value="${t.id}">${esc(t.label)}</option>`).join('')}</select></li>`).join('')}</ul></div>` : '';
+  const last = (src) => {
+    const t = c.tk.bySource[src] && c.tk.bySource[src].last;
+    const proc = CC.DONATION_PROCESSOR[src]; const dl = proc && c.don.byProcessor[proc] && c.don.byProcessor[proc].last;
+    const m = [t, dl].filter(Boolean).sort().pop();
+    return m ? 'last new row ' + fmtWhen(m) : 'never imported';
+  };
+  const cards = IMPORT_SOURCES.filter(s => fund || !s.fund).map(s => `<div class="card"><h2>${s.label} <span class="meta">${last(s.key)}</span></h2>
+      <p class="note">${s.hint}</p>
+      <div class="row" style="margin-top:10px">${S.isMaster ? `<input type="file" accept=".csv,.xlsx,.xls,text/csv" data-import="${s.key}">` : '<span class="muted small">Imports write ticket money, which is master-admin only.</span>'}</div></div>`).join('');
+  return head('Tickets', fund ? 'Tiers and their split. The production portion is always price − to mission.' : 'Tiers and sales by source.',
+      masterOnly('<button class="btn ghost" data-act="addTier">+ Tier</button>')) + hiddenMoney() +
+    `<div class="card"><h2>Tiers <span class="meta">edits save when you leave the box</span></h2><div class="tbl-wrap"><table>
+      <thead><tr><th>Tier</th><th class="num">Price</th>${fund ? '<th class="num">To mission</th><th>Production portion</th>' : ''}<th class="num">Drinks incl.</th><th class="num">Sold</th><th class="num">Revenue</th>${fund ? '<th class="num">To mission</th>' : ''}<th></th></tr></thead>
+      <tbody>${tierRows || `<tr><td colspan="9" class="muted">No tiers. Add one to start mapping sales.</td></tr>`}</tbody></table></div>
+      ${!S.isMaster ? '<p class="note" style="margin-top:8px">Tier edits are open to admins; ticket money is master-only.</p>' : ''}</div>
+    ${unassigned}
+    <div class="card"><h2>Sales by source</h2><div class="tbl-wrap">${matrix}</div></div>
+    <div class="grid g3">${cards}</div>
+    <p class="note">Imports dedupe on each source's own key (RA barcode, Zeffy receipt / payment, DIY line) and match people by email first, name second. A ticket type that maps to no tier is held back until you map it.</p>`;
+}
+
+// ---------------------------------------------------------------------------
+// 3. Drinks
+// ---------------------------------------------------------------------------
+function rDrinks() {
+  const c = S.calc, dr = c.drinks, ctl = c.control;
+  const lines = dr.lines.map(l => `<tr><td><span class="pill">${esc(CC.DRINK_CATS[l.cat] || l.cat)}</span></td><td>${esc(l.label)}</td>
+      <td class="num">${l.tbd && !l.tickets ? '<em class="tbd">TBD</em>' : int(l.tickets)}${l.tbd && l.tickets ? ' <em class="tbd">+TBD</em>' : ''}</td><td class="small muted">${esc(l.note || '')}</td>
+      <td>${l.id ? `<button class="mini danger" data-act="allocDel" data-id="${l.id}">✕</button>` : ''}</td></tr>`).join('');
+  return head('Drink tickets', 'Allocated vs the count locked with the venue. Sponsor tickets handed to a guest are part of that sponsor’s package, never added on top.') +
+    `<div class="kpis">
+      ${kpi('Allocated', int(dr.allocated), dr.tbdLines ? `<span class="tbd">+ ${dr.tbdLines} TBD lines</span>` : 'all lines known')}
+      ${kpi('Locked with venue', int(dr.locked), dr.locked == null ? 'not locked yet' : '')}
+      ${kpi('Remaining', dr.remaining == null ? '<em class="tbd">—</em>' : int(dr.remaining), dr.remaining != null && dr.remaining < 0 ? 'over the locked count' : '', dr.remaining != null && dr.remaining < 0 ? 'warn' : '')}
+      ${kpi('Overflow', dr.overflow == null ? '<em class="tbd">—</em>' : int(dr.overflow), 'allocated beyond locked', dr.overflow ? 'warn' : '')}
+      ${kpi('Toward bar min', dr.barValue == null ? '<em class="tbd">TBD</em>' : money(dr.barValue), dr.barPct == null ? 'needs $ per ticket' : pct(dr.barPct) + ' of ' + moneyTxt(dr.barMinimum))}
+    </div>
+    <div class="grid g2">
+      <div class="card"><h2>Venue terms</h2><div class="row">
+        <label>Locked count<input type="number" min="0" id="dLocked" value="${ctl.drink_tickets_locked ?? ''}" placeholder="TBD"></label>
+        <label>$ per ticket toward bar min<input type="number" min="0" step="0.01" id="dValue" value="${ctl.drink_ticket_value ?? ''}" placeholder="TBD"></label>
+        <label>Bar minimum<input type="number" min="0" step="1" id="dBarMin" value="${S.d.event.bar_minimum ?? ''}" placeholder="none" ${S.isMaster ? '' : 'disabled'}></label>
+        <button class="btn" data-act="saveDrinkTerms">Save</button></div>
+        <p class="note" style="margin-top:8px">Blank means not agreed yet. It renders as TBD and is never treated as 0.</p></div>
+      <div class="card"><h2>Add a block allocation <span class="meta">tickets nobody is named on yet</span></h2><div class="row">
+        <select id="aCat">${['dj', 'staff', 'volunteer', 'comp', 'purchased', 'other'].map(k => `<option value="${k}">${CC.DRINK_CATS[k]}</option>`).join('')}</select>
+        <input id="aLabel" placeholder="Label (e.g. DJ pool)" style="flex:1 1 140px"><input id="aN" type="number" min="0" placeholder="#" style="width:5em">
+        <button class="btn ghost" data-act="allocAdd">Add</button></div>
+        <p class="note" style="margin-top:8px">Per-person tickets (a DJ, a volunteer) go on their door-list row instead (Guests / Door).</p></div>
+    </div>
+    <div class="card"><h2>Ledger</h2><div class="tbl-wrap"><table><thead><tr><th>Source</th><th>Line</th><th class="num">Tickets</th><th>Detail</th><th></th></tr></thead>
+      <tbody>${lines || '<tr><td colspan="5" class="muted">Nothing allocated yet.</td></tr>'}<tr class="total"><td colspan="2">Allocated</td><td class="num">${int(dr.allocated)}</td><td colspan="2">${dr.locked != null ? `of ${dr.locked} locked` : ''}</td></tr></tbody></table></div></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// 4. Sponsors
+// ---------------------------------------------------------------------------
+function rSponsors() {
+  const c = S.calc;
+  const cards = c.sp.cards.map(k => {
+    const s = k.s, name = (s.actor && s.actor.display_name) || 'Sponsor';
+    const slots = k.slots.map(g => `<div class="slot"><span class="nm" title="${esc(g.email || '')}">${esc(g.name)}</span>
+        <label class="small muted">🍹<input type="number" min="0" value="${g.drink_tickets || 0}" data-gea="${g.id}" data-f="drink_tickets"></label>
+        <button class="mini danger" data-act="slotDel" data-id="${g.id}" title="Remove from this comp">✕</button></div>`).join('');
+    const open = Array.from({ length: k.compsOpen }, (_, i) => `<div class="slot open"><span class="nm">Open comp ${k.compsUsed + i + 1}</span></div>`).join('');
+    const ro = S.isMaster ? '' : 'disabled';
+    return `<div class="sp-card ${k.paid ? 'paid' : ''}">
+      <div class="sp-top"><div><div class="sp-name">${esc(name)}</div>${s.notes ? `<div class="small muted">${esc(s.notes)}</div>` : ''}</div>
+        <select data-sp="${s.id}" data-f="status" ${ro}>${['pending', 'confirmed', 'paid', 'cancelled'].map(v => `<option ${v === s.status ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+      <div class="sp-facts">
+        <div><span>Tier</span><input value="${esc(s.tier || '')}" data-sp="${s.id}" data-f="tier" style="width:100%" ${ro}></div>
+        <div><span>Cash</span><input type="number" min="0" value="${s.cash_amount}" data-sp="${s.id}" data-f="cash_amount" style="width:100%" ${ro}></div>
+        <div><span>Comps (total)</span><input type="number" min="0" value="${s.entry_tickets}" data-sp="${s.id}" data-f="entry_tickets" style="width:100%" ${ro}></div>
+        <div><span>Drink package</span>${s.drink_tickets_tbd ? `<button class="mini" data-act="spDrinkSet" data-id="${s.id}" ${ro}>TBD — set</button>` : `<input type="number" min="0" value="${s.drink_tickets}" data-sp="${s.id}" data-f="drink_tickets" style="width:100%" ${ro}>`}</div>
+      </div>
+      <div class="small" style="margin-bottom:6px">Comps <b>${k.compsUsed}/${k.compsTotal}</b> named · Drinks ${k.drinkPackage == null ? `<em class="tbd">package TBD</em>, ${k.drinksHanded} handed out` : `${k.drinksHanded} handed out, <b>${k.drinksLeftover}</b> left${k.drinksLeftover < 0 ? ' <span class="pill warn">over package</span>' : ''}`}</div>
+      ${slots}${open}
+      ${k.compsOpen > 0 ? `<div class="row" style="margin-top:8px"><input placeholder="Name" data-slotname="${s.id}" style="flex:1 1 120px"><input placeholder="Email (optional)" type="email" data-slotemail="${s.id}" style="flex:1 1 140px"><button class="mini" data-act="slotAdd" data-id="${s.id}">Assign comp</button></div>` : ''}
+    </div>`;
+  }).join('');
+  return head('Sponsors', `${c.sp.cards.length} sponsors · ${money(c.sp.pledged)} pledged · ${money(c.sp.paid)} paid`, masterOnly('<button class="btn ghost" data-act="addSponsor">+ Sponsor</button>')) + hiddenMoney() +
+    (cards ? `<div class="grid g3">${cards}</div>` : '<div class="state">No sponsors on this event.</div>') +
+    `<p class="note" style="margin-top:12px">A comp's drink tickets are part of the sponsor's package: the ledger counts the larger of the package and what's been handed out, never both. Named comps appear on the door list.${S.isMaster ? '' : ' Sponsor terms are master-admin only; anyone can name comps.'}</p>`;
+}
+
+// ---------------------------------------------------------------------------
+// 5. Guests / Door
+// ---------------------------------------------------------------------------
+const spName = (id) => { const s = S.d.sponsorships.find(x => x.id === id); return s ? ((s.actor && s.actor.display_name) || 'Sponsor') : ''; };
+const tierName = (id) => { const t = S.d.tiers.find(x => x.id === id); return t ? t.label : ''; };
+
+function doorRows() {
+  let rows = S.d.gea.slice();
+  const f = S.door.filter;
+  if (f === 'out') rows = rows.filter(r => !r.checked_in_at && !r.attended);
+  if (f === 'in') rows = rows.filter(r => r.checked_in_at || r.attended);
+  if (f === 'comp') rows = rows.filter(r => ['comp', 'sponsor_comp', 'guest_list'].includes(r.entry_type));
+  if (f === 'crew') rows = rows.filter(r => ['dj', 'artist', 'staff', 'volunteer', 'vendor'].includes(r.entry_type));
+  rows = CC.searchDoor(rows, S.door.q);
+  return rows.sort((a, b) => a.name.localeCompare(b.name));
+}
+function doorRowHtml(r) {
+  const q = Math.max(1, Number(r.quantity) || 1), inN = Number(r.scan_count) || (r.checked_in_at || r.attended ? q : 0);
+  const isIn = !!(r.checked_in_at || r.attended);
+  const meta = [CC.ENTRY_TYPES[r.entry_type] || r.ticket_type || 'Guest', r.sponsorship_id ? spName(r.sponsorship_id) : '', r.tier_id ? tierName(r.tier_id) : '',
+    q > 1 ? `party of ${q}` : '', Number(r.drink_tickets) ? `🍹 ${r.drink_tickets}` : '', r.email || '', isIn && r.checked_in_at ? 'in ' + fmtTime(r.checked_in_at) : ''].filter(Boolean).map(esc).join(' · ');
+  const ctl = q > 1
+    ? `<div class="qty-ctl"><button data-act="admit" data-id="${r.id}" data-d="-1" aria-label="One less">−</button><span class="q">${inN}/${q}</span><button data-act="admit" data-id="${r.id}" data-d="1" aria-label="Admit one">+</button></div>`
+    : `<button class="ci ${isIn ? 'done' : ''}" data-act="${isIn ? 'checkout' : 'checkin'}" data-id="${r.id}">${isIn ? '✓ IN' : 'CHECK IN'}</button>`;
+  return `<div class="door-row ${isIn && inN >= q ? 'in' : ''}" data-row="${r.id}"><div class="who"><div class="nm">${esc(r.name)}</div><div class="mt">${meta}</div></div>${ctl}</div>`;
+}
+function rDoor() {
+  const c = S.calc, d = c.door;
+  const sps = S.d.sponsorships.filter(s => s.status !== 'cancelled');
+  return head('Guests / Door', `<span id="dcSub">${d.people} on the list · ${d.inside} in</span>`,
+      `<button class="btn ghost" data-act="doorAdd">+ Guest</button><button class="btn ghost" data-act="doorCsv">CSV</button><button class="btn ghost" data-act="doorPrint">Print</button>`) +
+    `<div id="doorAddBox" class="card" style="display:${S.door.addOpen ? 'block' : 'none'}"><h2>Add to the door list</h2>
+      <div class="row">
+        <input id="gName" placeholder="Name *" style="flex:2 1 180px" autocomplete="off">
+        <input id="gEmail" type="email" placeholder="Email (optional)" style="flex:2 1 180px" autocomplete="off">
+        <select id="gType">${Object.entries(CC.ENTRY_TYPES).filter(([k]) => k !== 'ticket').map(([k, v]) => `<option value="${k}" ${k === 'guest_list' ? 'selected' : ''}>${v}</option>`).join('')}<option value="ticket">Ticket (bought elsewhere)</option></select>
+        <select id="gSponsor"><option value="">No sponsor</option>${sps.map(s => `<option value="${s.id}">${esc((s.actor && s.actor.display_name) || 'Sponsor')}</option>`).join('')}</select>
+        <input id="gQty" type="number" min="1" value="1" title="Party size" style="width:4.5em">
+        <input id="gDrinks" type="number" min="0" value="0" title="Drink tickets" style="width:4.5em">
+        <input id="gSource" placeholder="Source (optional)" style="flex:1 1 120px">
+        <button class="btn" data-act="doorSave">Add</button>
+      </div><p class="note" style="margin-top:6px">Matches an existing person by email first, then name, so returning guests keep their history. Picking a sponsor uses one of that sponsor's comps. Party size and 🍹 drink tickets are optional.</p></div>
+    <div class="door-bar">
+      <input class="door-search" id="doorQ" type="search" placeholder="Search name or email…" value="${esc(S.door.q)}" autocomplete="off" enterkeyhint="search">
+      <div class="door-counts"><span><b id="dcIn">${d.inside}</b> in</span><span><b id="dcExp">${d.people}</b> expected</span><span><b id="dcTo">${Math.max(0, d.people - d.inside)}</b> to come</span><span class="muted small" id="dcSync">live · refreshes every 15s</span></div>
+      <div class="chips" id="doorChips">${[['all', 'All'], ['out', 'Not in'], ['in', 'In'], ['comp', 'Comps'], ['crew', 'Crew / DJs']].map(([k, l]) => `<button data-f="${k}" class="${S.door.filter === k ? 'on' : ''}">${l}</button>`).join('')}</div>
+    </div>
+    <div id="doorList">${doorRows().map(doorRowHtml).join('') || '<div class="state">Nobody matches.</div>'}</div>`;
+}
+function wireDoor() {
+  // stick the search bar just under the header, whatever height it wrapped to
+  const top = document.querySelector('.top'), bar = document.querySelector('.door-bar');
+  if (top && bar) bar.style.top = top.offsetHeight + 'px';
+  const q = $('doorQ');
+  q.addEventListener('input', () => { S.door.q = q.value; $('doorList').innerHTML = doorRows().map(doorRowHtml).join('') || '<div class="state">Nobody matches.</div>'; });
+  $('doorChips').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-f]'); if (!b) return;
+    S.door.filter = b.dataset.f;
+    for (const x of $('doorChips').children) x.classList.toggle('on', x === b);
+    $('doorList').innerHTML = doorRows().map(doorRowHtml).join('') || '<div class="state">Nobody matches.</div>';
+  });
+  // Several phones can work one door. Re-read the list quietly so a check-in on
+  // another phone shows here within 15s; never while someone is typing a guest.
+  S.pollTimer = setInterval(async () => {
+    if (S.sec !== 'door' || document.hidden || (document.activeElement && document.activeElement.closest('#doorAddBox'))) return;
+    try {
+      const rows = await sbAll(() => sb.from('guest_event_attendance').select('id, guest_id, checked_in_at, attended, scan_count, quantity, drink_tickets, entry_type, sponsorship_id, tier_id').eq('event_id', S.eventId));
+      const by = Object.fromEntries(rows.map(r => [r.id, r]));
+      if (rows.length !== S.d.gea.length || S.d.gea.some(r => !by[r.id])) return reloadDoorQuiet();
+      let changed = false;
+      for (const r of S.d.gea) { const n = by[r.id]; if (n.checked_in_at !== r.checked_in_at || n.scan_count !== r.scan_count || n.attended !== r.attended) { Object.assign(r, n); changed = true; } }
+      if (changed) { compute(); $('doorList').innerHTML = doorRows().map(doorRowHtml).join(''); doorCounts(); }
+      $('dcSync').textContent = 'synced ' + fmtTime(new Date());
+    } catch (_) { $('dcSync').textContent = 'offline — tap-ins still save when back'; }
+  }, 15000);
+}
+function doorCounts() {
+  const d = S.calc.door, set = (id, v) => { const el = $(id); if (el) el.textContent = v; };
+  set('dcIn', d.inside); set('dcExp', d.people); set('dcTo', Math.max(0, d.people - d.inside));
+  set('dcSub', `${d.people} on the list · ${d.inside} in`);
+}
+async function reloadDoorQuiet() { const keepQ = S.door.q; await loadEvent(); S.door.q = keepQ; }
+
+async function setCheckIn(id, on, scans) {
+  const r = S.d.gea.find(x => x.id === id); if (!r) return;
+  const q = Math.max(1, Number(r.quantity) || 1);
+  const n = scans != null ? Math.max(0, Math.min(q, scans)) : (on ? q : 0);
+  const patch = n > 0
+    ? { attended: true, scan_count: n, checked_in_at: r.checked_in_at || new Date().toISOString(), checked_in_by: S.me.id }
+    : { attended: false, scan_count: 0, checked_in_at: null, checked_in_by: null };
+  const prev = { attended: r.attended, scan_count: r.scan_count, checked_in_at: r.checked_in_at, checked_in_by: r.checked_in_by };
+  Object.assign(r, patch); compute();                                   // optimistic: the door can't wait on a round trip
+  const el = document.querySelector(`[data-row="${id}"]`); if (el) el.outerHTML = doorRowHtml(r);
+  doorCounts();
+  const { error } = await sb.from('guest_event_attendance').update(patch).eq('id', id);
+  if (error) { Object.assign(r, prev); compute(); const el2 = document.querySelector(`[data-row="${id}"]`); if (el2) el2.outerHTML = doorRowHtml(r); doorCounts(); toast('Check-in did not save: ' + error.message, 'err'); }
+  else if (navigator.vibrate && n > 0) navigator.vibrate(30);
+}
+
+function doorExportRows() {
+  return S.d.gea.slice().sort((a, b) => a.name.localeCompare(b.name)).map(r => [
+    r.name, r.email || '', CC.ENTRY_TYPES[r.entry_type] || r.ticket_type || '', CC.SOURCE_LABELS[r.source] || r.source || '',
+    r.tier_id ? tierName(r.tier_id) : (r.ticket_type || ''), Math.max(1, Number(r.quantity) || 1), Number(r.drink_tickets) || 0,
+    r.sponsorship_id ? spName(r.sponsorship_id) : '', r.checked_in_at ? new Date(r.checked_in_at).toLocaleString() : (r.attended ? 'yes' : ''),
+  ]);
+}
+function download(name, text, type = 'text/csv;charset=utf-8') {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['﻿' + text], { type }));
+  a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+function printDoor() {
+  const e = S.d.event;
+  const rows = doorExportRows();
+  $('printArea').innerHTML = `<div class="paper door-print"><h1>${esc(e.name)} — door list</h1><div class="ps">${fmtDate(e.event_date)} · ${rows.length} entries · printed ${new Date().toLocaleString()}</div>
+    <table style="margin-top:12px"><thead><tr><th></th><th>Name</th><th>Type</th><th>Ticket / sponsor</th><th>Qty</th><th>🍹</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td><span class="box"></span></td><td>${esc(r[0])}</td><td>${esc(r[2])}</td><td>${esc(r[7] || r[4])}</td><td>${r[5]}</td><td>${r[6] || ''}</td></tr>`).join('')}</tbody></table></div>`;
+  window.print();
+}
+
+// ---------------------------------------------------------------------------
+// 6. Audience
+// ---------------------------------------------------------------------------
+function rAudience() {
+  return head('Audience', 'Everyone who has been to a Come With event, against this one.') + '<div id="audBody"><div class="state">Matching people across every event…</div></div>';
+}
+async function loadAudience() {
+  try {
+    if (!S.aud) {
+      const [gea, guests, subs] = await Promise.all([
+        sbAll(() => sb.from('guest_event_attendance').select('id, guest_id, event_id')),
+        sbAll(() => sb.from('guests').select('id, full_name, email, opted_in_mailing').is('deleted_at', null)),
+        sbAll(() => sb.from('subscribers').select('id, email, status')),
+      ]);
+      S.aud = { gea, guests, subs };
+    }
+    renderAudience();
+  } catch (err) { const b = $('audBody'); if (b) b.innerHTML = `<div class="state err">${esc(err.message)}</div>`; }
+}
+function renderAudience() {
+  const b = $('audBody'); if (!b || !S.aud) return;
+  const res = CC.audience({ gea: S.aud.gea, guests: S.aud.guests, events: S.events, currentEventId: S.eventId, scope: S.audScope });
+  const wb = CC.winbackList(res.lapsed, S.aud.subs, S.aud.guests);
+  const sendable = wb.filter(p => p.send);
+  S.audRes = { res, wb };
+  const e = S.d.event;
+  const pastEvents = S.events.filter(x => x.event_date < e.event_date);
+  const counts = {}; for (const r of S.aud.gea) counts[r.event_id] = (counts[r.event_id] || 0) + 1;
+  const list = (rows, showLast) => rows.length ? `<div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Email</th>${showLast ? '<th>Last event</th><th class="num">Past events</th>' : ''}</tr></thead><tbody>
+      ${rows.slice(0, 500).map(p => `<tr><td>${esc(p.name)}</td><td class="small">${esc(p.email || '—')}</td>${showLast ? `<td class="small">${p.last ? esc(p.last.name) + ' · ' + esc(p.last.event_date) : ''}</td><td class="num">${p.events.length}</td>` : ''}</tr>`).join('')}</tbody></table></div>
+      ${rows.length > 500 ? `<p class="note">Showing 500 of ${rows.length}; the CSV has all of them.</p>` : ''}` : '<div class="state">Nobody here.</div>';
+  const tab = S.audTab;
+  const statusCounts = {}; for (const p of wb) statusCounts[p.status] = (statusCounts[p.status] || 0) + 1;
+  b.innerHTML = `<div class="row" style="margin-bottom:12px"><span class="small muted">Count past attendance from</span>
+      <div class="chips" id="audScope"><button data-s="all" class="${S.audScope === 'all' ? 'on' : ''}">every Come With event</button><button data-s="series" class="${S.audScope === 'series' ? 'on' : ''}">${esc(e.series || 'this series')} only</button></div></div>
+    <div class="kpis">
+      ${kpi('Returning', res.returning.length, 'on this event + came before', 'good')}
+      ${kpi('New', res.fresh.length, 'on this event, first time')}
+      ${kpi('Lapsed', res.lapsed.length, 'came before, not on this event yet', res.lapsed.length ? 'warn' : '')}
+      ${kpi('Win-back sendable', sendable.length, 'lapsed + subscribed')}
+    </div>
+    <div class="card"><h2>Build audience <span class="meta">lapsed people a win-back email may go to</span></h2>
+      <p class="note">Only <b>subscribed</b> addresses are sendable. Unsubscribed and opted-out people are never included, and people with no subscription aren't auto-added. ${Object.entries(statusCounts).map(([k, v]) => `${v} ${esc(k)}`).join(' · ')}.</p>
+      <div class="row" style="margin-top:10px">
+        <button class="btn" data-act="audCsv" ${sendable.length ? '' : 'disabled'}>Export ${sendable.length} sendable (CSV)</button>
+        <button class="btn ghost" data-act="audSeg" ${sendable.length ? '' : 'disabled'}>Tag them “${esc(winbackSeg())}”</button>
+        <button class="mini" data-act="audCsvAll">Full lapsed list (all statuses)</button>
+      </div>
+      <p class="note" style="margin-top:8px">Then: Dashboard → Campaigns → segment <code>${esc(winbackSeg())}</code>, sent from berky@comewith.org through Resend as usual (the unsubscribe link is added by send-campaign).</p></div>
+    <div class="card"><h2>People</h2><div class="chips" id="audTabs" style="margin-bottom:10px">${[['lapsed', 'Lapsed'], ['returning', 'Returning'], ['fresh', 'New']].map(([k, l]) => `<button data-t="${k}" class="${tab === k ? 'on' : ''}">${l} (${res[k].length})</button>`).join('')}</div>
+      ${list(res[tab], tab !== 'fresh')}</div>
+    <div class="card"><h2>Import a past list <span class="meta">attendance only — no money is written to a past event</span></h2>
+      <p class="note">Adds people and their attendance to an earlier event so they count here (e.g. the DI #1 RA export). A past event's money is already reconciled, so tickets and donations are never written from this box. Files: RA ticket list or Zeffy export.</p>
+      <div class="row" style="margin-top:10px"><select id="pastEv">${pastEvents.map(x => `<option value="${x.id}">${esc(x.event_date)} · ${esc(x.name)} (${counts[x.id] || 0} on record)</option>`).join('')}</select>
+      ${S.isMaster ? '<input type="file" accept=".csv,.xlsx,text/csv" id="pastFile">' : '<span class="muted small">master admin only</span>'}</div></div>`;
+  $('audScope').onclick = (ev) => { const x = ev.target.closest('[data-s]'); if (!x) return; S.audScope = x.dataset.s; renderAudience(); };
+  $('audTabs').onclick = (ev) => { const x = ev.target.closest('[data-t]'); if (!x) return; S.audTab = x.dataset.t; renderAudience(); };
+  const pf = $('pastFile'); if (pf) pf.onchange = () => { const f = pf.files[0]; if (f) startImport(f, null, $('pastEv').value); pf.value = ''; };
+}
+const winbackSeg = () => (S.d.event.slug || 'event') + '-winback';
+
+// ---------------------------------------------------------------------------
+// 7. Finance
+// ---------------------------------------------------------------------------
+const EXPENSE_CATS = ['Venue', 'Marketing', 'Meals / Event Supplies', 'Contractors', 'Entertainment / Event', 'Equipment', 'Production', 'Platform fees', 'Operations', 'Travel', 'Software'];
+function rFinance() {
+  const d = S.d, c = S.calc, fund = c.fund;
+  const ledger = d.event.series === 'Dance Infusion' ? 'dance_infusion' : 'come_with';
+  const rev = [
+    ['Tickets', c.tk.revenue, `${c.tk.qty} sold`, 'received'],
+    ...Object.entries(c.don.byProcessor).map(([p, v]) => [`Donations · ${p}`, v.amount, `${v.n}`, 'received']),
+    ['Sponsor cash · paid', c.sp.paid, '', 'received'],
+    ['Sponsor cash · pending', c.sp.pledged - c.sp.paid, `${c.sp.unpaidCount} unpaid`, 'pending'],
+    ...d.income.map(i => [i.description || i.category, Number(i.amount || 0), i.category || '', i.status === 'received' ? 'received' : 'pending']),
+  ];
+  const revTotal = rev.reduce((a, r) => a + Number(r[1] || 0), 0);
+  // Planned (budget_lines) vs actual (expenses) by category: the reconciliation.
+  const cats = {};
+  for (const b of d.budget.filter(x => x.direction === 'expense')) {
+    const k = b.category || 'Uncategorised'; const x = cats[k] || (cats[k] = { planned: 0, tbd: 0, actual: 0, paid: 0, lines: [] });
+    if (b.amount_tbd) x.tbd++; else x.planned += Number(b.planned_amount || 0);
+    x.lines.push(b);
+  }
+  for (const e of d.expenses) {
+    const k = e.category || 'Uncategorised'; const x = cats[k] || (cats[k] = { planned: 0, tbd: 0, actual: 0, paid: 0, lines: [] });
+    x.actual += Number(e.amount || 0); if (e.status === 'paid') x.paid += Number(e.amount || 0);
+  }
+  const ro = S.isMaster ? '' : 'disabled';
+  const budgetRows = d.budget.filter(b => b.direction === 'expense').map(b => `<tr><td>${esc(b.label || b.category)}</td><td class="small muted">${esc(b.category)}</td>
+      <td class="num"><input type="number" min="0" step="1" value="${b.amount_tbd ? '' : b.planned_amount}" placeholder="TBD" data-bl="${b.id}" style="width:7em" ${ro}></td>
+      <td class="small muted">${esc(b.notes || '')}</td><td>${b.realized_at ? '<span class="pill ok">realised</span>' : ''}</td></tr>`).join('');
+  const expRows = d.expenses.map(e => `<tr><td>${esc(e.date)}</td><td>${esc(e.vendor || e.description || '')}</td><td class="small muted">${esc(e.category || '')}</td><td class="num">${money(e.amount, 2)}</td>
+      <td>${e.status === 'paid' ? '<span class="pill ok">paid</span>' : `<span class="pill warn">${esc(e.status)}</span>`}${S.isMaster && e.status !== 'paid' ? ` <button class="mini" data-act="expPaid" data-id="${e.id}">Mark paid</button>` : ''}</td></tr>`).join('');
+  const recon = Object.entries(cats).map(([k, x]) => {
+    const v = x.actual - x.planned;
+    return `<tr><td>${esc(k)}</td><td class="num">${x.planned || !x.tbd ? money(x.planned) : ''}${x.tbd ? ` <em class="tbd">${x.planned ? '+' : ''}${x.tbd} TBD</em>` : ''}</td><td class="num">${money(x.actual, 2)}</td><td class="num">${money(x.paid, 2)}</td>
+      <td class="num ${v > 0 ? 'tbd' : ''}">${x.planned || x.actual ? money(v, 2) : '—'}</td></tr>`;
+  }).join('');
+  const moneyRecon = [
+    ['Sponsor cash', c.sp.pledged, c.sp.paid],
+    ['Planned costs', c.plannedCost, c.actualCost],
+  ];
+  return head('Finance', fund ? 'Actuals, what was planned, and what-if.' : 'Actuals and what was planned.') + hiddenMoney() +
+    `<div class="grid g2">
+      <div class="card"><h2>Revenue <span class="meta">actual</span></h2><div class="tbl-wrap"><table><thead><tr><th>Line</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+        ${rev.map(r => `<tr><td>${esc(r[0])} <span class="small muted">${esc(r[2])}</span></td><td class="num">${money(r[1], 2)}</td><td>${r[3] === 'received' ? '<span class="pill ok">received</span>' : '<span class="pill warn">pending</span>'}</td></tr>`).join('')}
+        <tr class="total"><td>Total raised</td><td class="num">${money(revTotal, 2)}</td><td></td></tr>
+        ${fund ? `<tr><td>To ${esc(c.control.beneficiary || 'the mission')}</td><td class="num">${money(c.mm.toMission, 2)}</td><td>${pct(c.mm.pct)}</td></tr>
+        <tr><td>Production funds</td><td class="num">${money(c.mm.production, 2)}</td><td></td></tr>` : ''}
+      </tbody></table></div></div>
+      <div class="card"><h2>Reconciliation <span class="meta">expected vs actual</span></h2><div class="tbl-wrap"><table><thead><tr><th></th><th class="num">Expected</th><th class="num">Actual</th><th class="num">Gap</th></tr></thead><tbody>
+        ${moneyRecon.map(([l, a, b]) => `<tr><td>${l}</td><td class="num">${money(a, 2)}</td><td class="num">${money(b, 2)}</td><td class="num">${money(b - a, 2)}</td></tr>`).join('')}
+      </tbody></table></div>
+      <h2 class="h" style="font-size:1.05rem;margin:14px 0 6px">Costs by category</h2><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="num">Planned</th><th class="num">Actual</th><th class="num">Paid</th><th class="num">Over / under</th></tr></thead><tbody>
+        ${recon || '<tr><td colspan="5" class="muted">No costs planned or booked.</td></tr>'}</tbody></table></div></div>
+    </div>
+    <div class="grid g2">
+      <div class="card"><h2>Planned costs <span class="meta">the event hub's forecast column — never the P&amp;L</span></h2><div class="tbl-wrap"><table><thead><tr><th>Line</th><th>Category</th><th class="num">Planned</th><th>Note</th><th></th></tr></thead><tbody>
+        ${budgetRows || '<tr><td colspan="5" class="muted">None.</td></tr>'}</tbody></table></div>
+        ${masterOnly(`<div class="row" style="margin-top:10px"><input id="blLabel" placeholder="Planned cost" style="flex:1 1 140px"><select id="blCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="blAmt" type="number" min="0" placeholder="$ (blank = TBD)" style="width:9em"><button class="btn ghost" data-act="blAdd">Add</button></div>`)}</div>
+      <div class="card"><h2>Expenses <span class="meta">actual · ${money(c.actualCost, 2)}</span></h2><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Payee</th><th>Category</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+        ${expRows || '<tr><td colspan="5" class="muted">Nothing booked yet.</td></tr>'}</tbody></table></div>
+        ${masterOnly(`<div class="row" style="margin-top:10px"><input id="exDate" type="date" value="${todayIso()}"><input id="exVendor" placeholder="Payee" style="flex:1 1 120px"><select id="exCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="exAmt" type="number" min="0" step="0.01" placeholder="$" style="width:7em"><select id="exStatus"><option value="accrued">pending</option><option value="paid">paid</option></select><button class="btn ghost" data-act="exAdd" data-ledger="${ledger}">Add</button></div>`)}</div>
+    </div>
+    ${scenarioCard()}`;
+}
+
+function scenarioCard() {
+  const d = S.d, c = S.calc, fund = c.fund;
+  const tiers = d.tiers.filter(t => t.active !== false);
+  if (!S.scen) {
+    S.scen = { counts: Object.fromEntries(tiers.map(t => [t.id, (c.tk.byTier[t.id] || {}).qty || 0])), donations: c.don.mission, expenses: Math.max(c.plannedCost, c.actualCost) };
+  }
+  return `<div class="card" id="scenCard"><h2>Scenario planner <span class="meta">face value, no fees — sponsor cash (${money(c.sp.pledged)}) is included</span></h2>
+    <div class="row">${tiers.map(t => `<label>${esc(t.label)} count<input type="number" min="0" data-scen="${t.id}" value="${S.scen.counts[t.id] ?? 0}"></label>`).join('')}
+      ${fund ? `<label>Extra donations $<input type="number" min="0" data-scen="donations" value="${S.scen.donations}"></label>` : ''}
+      <label>Out-of-pocket expenses $<input type="number" min="0" data-scen="expenses" value="${S.scen.expenses}"></label>
+      <button class="mini" data-act="scenReset">Reset to actuals</button></div>
+    <div id="scenOut" style="margin-top:12px"></div></div>`;
+}
+function wireScenario() {
+  const card = $('scenCard'); if (!card) return;
+  const go = () => {
+    const c = S.calc, tiers = S.d.tiers.filter(t => t.active !== false);
+    const r = CC.scenario({ tiers, counts: S.scen.counts, extraDonations: c.fund ? S.scen.donations : 0, expenses: S.scen.expenses,
+                            sponsorCash: c.sp.pledged, compCredit: c.mm.compCredit, targetPct: c.fund ? c.control.mission_target_pct : null });
+    const t = r.target;
+    $('scenOut').innerHTML = `<div class="kpis">
+        ${c.fund ? kpi(`$ to ${esc(c.control.beneficiary || 'mission')}`, money(r.toMission)) : ''}
+        ${kpi('Production funds', money(r.production))}
+        ${kpi(r.covered >= 0 ? 'Expenses covered' : 'Expenses short', money(Math.abs(r.covered)), `against ${money(r.expenses)}`, r.covered >= 0 ? 'good' : 'warn')}
+        ${c.fund ? kpi('% to the mission', pct(r.pct), t != null ? (r.meetsTarget ? `meets ${t}% target` : `below ${t}% target`) : '', r.meetsTarget ? 'good' : 'warn') : ''}
+        ${kpi('Total raised', money(r.raised), `${r.tickets} tickets`)}
+      </div>
+      ${c.fund && r.pct != null ? `<div class="bar"><i style="width:${Math.min(100, r.pct)}%"></i>${t != null ? `<b style="left:${t}%" title="target"></b>` : ''}</div>
+      <div class="bar-legend"><span>% to the mission: ${pct(r.pct)}</span><span>${t != null ? `target marker at ${t}%` : ''}</span></div>` : ''}`;
+  };
+  card.addEventListener('input', (e) => {
+    const k = e.target.dataset.scen; if (!k) return;
+    const v = Math.max(0, Number(e.target.value) || 0);
+    if (k === 'donations' || k === 'expenses') S.scen[k] = v; else S.scen.counts[k] = v;
+    go();
+  });
+  go();
+}
+
+// ---------------------------------------------------------------------------
+// 8. Exec update
+// ---------------------------------------------------------------------------
+function currentSnapshot() {
+  const c = S.calc;
+  return CC.execSnapshot({ event: S.d.event, control: c.control, tk: c.tk, don: c.don, sp: c.sp, mm: c.mm, door: c.door, drinks: c.drinks, tasks: S.d.tasks });
+}
+function execPaperHtml() {
+  const e = S.d.event, c = S.calc, snap = currentSnapshot();
+  const prev = S.d.updates[0] || null;
+  const diff = CC.execDiff(snap, prev && prev.snapshot, S.d.tasks);
+  const days = CC.daysUntil(e.event_date);
+  const delta = (k, fmt = (x) => x) => diff.deltas[k] ? `<div class="d">${diff.deltas[k] > 0 ? '+' : ''}${fmt(diff.deltas[k])} since last</div>` : '';
+  const m$ = (n) => n == null ? '<span class="tbdp">TBD</span>' : moneyTxt(n);
+  const k = snap.kpis;
+  const miles = CC.nextMilestones(S.d.tasks, e.event_date, todayIso());
+  return `<div class="paper" id="execPaper">
+    <h1>${esc(e.name)} — exec update</h1>
+    <div class="ps">${fmtDate(e.event_date)}${S.d.venue ? ' · ' + esc(S.d.venue.name) : ''} · ${days != null && days >= 0 ? days + ' days out' : 'past'} · generated ${new Date().toLocaleString()}${diff.since ? ' · compared with the update of ' + fmtWhen(diff.since) : ''}</div>
+    <div class="pk">
+      <div><div class="l">Tickets sold</div><div class="v">${k.tickets}</div>${delta('tickets')}</div>
+      ${c.fund ? `<div><div class="l">To ${esc(c.control.beneficiary || 'the mission')}</div><div class="v">${m$(k.toMission)}</div>${delta('toMission', moneyTxt)}</div>
+      <div><div class="l">% to the mission</div><div class="v">${k.pct == null ? '—' : Math.round(k.pct) + '%'}</div><div class="ps">target ${k.target ?? '—'}%</div></div>` : `<div><div class="l">Ticket revenue</div><div class="v">${m$(k.ticketRevenue)}</div>${delta('ticketRevenue', moneyTxt)}</div>`}
+      <div><div class="l">Sponsor cash</div><div class="v">${m$(k.sponsorPledged)}</div><div class="ps">${m$(k.sponsorPaid)} paid</div></div>
+      <div><div class="l">Comps named</div><div class="v">${esc(k.comps)}</div></div>
+      <div><div class="l">Door list</div><div class="v">${k.door}</div>${delta('door')}</div>
+      <div><div class="l">Drink tickets</div><div class="v">${k.drinksAllocated}</div><div class="ps">${k.drinksLocked == null ? 'locked count TBD' : 'of ' + k.drinksLocked + ' locked'}${k.drinksTbd ? ` · <span class="tbdp">${k.drinksTbd} lines TBD</span>` : ''}</div></div>
+    </div>
+    <h2>Closed since last update</h2>
+    ${!diff.since ? '<p class="ps">This is the first saved update — next time this lists what closed in between.</p>'
+      : diff.closed.length ? `<ul>${diff.closed.map(t => `<li>${esc(t.title)}</li>`).join('')}</ul>` : '<p class="ps">Nothing closed.</p>'}
+    <h2>Blockers (${snap.blockers.length})</h2>
+    ${snap.blockers.length ? `<ul>${S.d.tasks.filter(t => t.status === 'blocked').map(t => `<li><b>${esc(t.title)}</b>${t.description ? ' — ' + esc(t.description) : ''}</li>`).join('')}</ul>` : '<p class="ps">None.</p>'}
+    <h2>Next milestones</h2>
+    ${miles.length ? `<ul>${miles.map(t => `<li>${esc(t.due_date)} — ${esc(t.title)}</li>`).join('')}</ul>` : '<p class="ps">No dated open tasks.</p>'}
+    <ul><li>${esc(e.event_date)} — ${esc(e.name)}</li></ul>
+    <div id="execNoteOut">${S.execNote ? `<h2>Note</h2><p style="white-space:pre-wrap">${esc(S.execNote)}</p>` : ''}</div>
+  </div>`;
+}
+function rExec() {
+  const prev = S.d.updates;
+  return head('Exec update', 'A snapshot for the core team. Save it when you send it, so the next one can say what closed in between.',
+      `<button class="btn ghost" data-act="execLink">Copy link</button><button class="btn ghost" data-act="execPdf">PDF</button><button class="btn" data-act="execSave">Save as sent</button>`) +
+    `<div class="card"><h2>Note for this update <span class="meta">optional, prints at the bottom</span></h2><textarea id="execNote" rows="3" style="width:100%">${esc(S.execNote || '')}</textarea></div>
+    <div id="execWrap">${execPaperHtml()}</div>
+    <div class="card" style="margin-top:14px"><h2>Saved updates</h2><ul class="list">${prev.map(u => `<li><div class="grow">${fmtWhen(u.created_at)}${u.note ? ' — <span class="muted">' + esc(u.note.slice(0, 120)) + '</span>' : ''}</div><span class="small muted">${u.snapshot && u.snapshot.kpis ? u.snapshot.kpis.tickets + ' tickets' : ''}</span></li>`).join('') || '<li class="muted">None yet.</li>'}</ul>
+    <p class="note">The link opens this page for admins only — it is not public. PDF uses your browser's “Save as PDF” on a light layout.</p></div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Imports
+// ---------------------------------------------------------------------------
+let XLSX_LIB = null;
+async function readRows(file) {
+  if (/\.xlsx?$/i.test(file.name)) {
+    if (!XLSX_LIB) XLSX_LIB = await import('https://cdn.jsdelivr.net/npm/xlsx@0.18.5/+esm');
+    const wb = XLSX_LIB.read(await file.arrayBuffer(), { type: 'array', cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames.includes('Export') ? 'Export' : wb.SheetNames[0]];
+    const raw = XLSX_LIB.utils.sheet_to_json(ws, { header: 1, defval: '', raw: false });
+    return { raw, headers: (raw[0] || []).map(String), rows: raw.slice(1).map(r => Object.fromEntries((raw[0] || []).map((h, i) => [String(h).trim(), r[i] ?? '']))) };
+  }
+  const text = await file.text();
+  const p = CC.parseCsv(text);
+  return { raw: CC.parseCsvRaw(text), headers: p.headers, rows: p.rows };
+}
+
+// source = 'zeffy' | 'resident_advisor' | 'ms_diy' (live event), or null + pastEventId (attendance only)
+async function startImport(file, source, pastEventId) {
+  try {
+    const data = await readRows(file);
+    let kind = source;
+    if (!kind) kind = CC.looksLikeRa(data.headers) ? 'resident_advisor' : CC.looksLikeZeffy(data.headers) ? 'zeffy' : null;
+    if (kind === 'zeffy' && !CC.looksLikeZeffy(data.headers)) throw new Error('That is not a Zeffy payments export (no "Total Amount" / "Payment Status" columns).');
+    if (kind === 'resident_advisor' && !CC.looksLikeRa(data.headers)) throw new Error('That is not an RA ticket list (no "Barcode" / "Billing name" columns).');
+    if (!kind) throw new Error('Could not tell what this file is. Use an RA ticket list or a Zeffy payments export.');
+    const parsed = kind === 'zeffy' ? CC.parseZeffy(data.rows) : kind === 'resident_advisor' ? CC.parseRa(data.rows) : CC.parseDiy(data.raw);
+    if (!parsed.sales.length) throw new Error('No rows could be read from this file.' + (parsed.skipped.length ? ' Skipped: ' + parsed.skipped.slice(0, 3).join('; ') : ''));
+    const targetId = pastEventId || S.eventId;
+    const event = pastEventId ? S.events.find(e => e.id === pastEventId) : S.d.event;
+    await previewImport({ file: file.name, kind, parsed, event, mode: pastEventId ? 'past' : 'live', targetId });
+  } catch (err) { toast(err.message || String(err), 'err'); }
+}
+
+async function importDb(eventId, sales) {
+  const emails = [...new Set(sales.map(s => s.email).filter(Boolean))];
+  const [guests, gea, tk, don, subs] = await Promise.all([
+    sbAll(() => sb.from('guests').select('id, full_name, email, opted_in_mailing').is('deleted_at', null)),
+    sbAll(() => sb.from('guest_event_attendance').select('id, guest_id, entry_type').eq('event_id', eventId)),
+    sbAll(() => sb.from('ticketing').select('id, source, external_id').eq('event_id', eventId)),
+    sbAll(() => sb.from('third_party_donations').select('id, payment_processor, external_ref').eq('event_id', eventId)),
+    inChunks(emails, async (ids) => must(await sb.from('subscribers').select('id, email, status').in('email', ids), 'Subscribers') || []),
+  ]);
+  return {
+    guests, eventGea: gea, subscribers: subs,
+    ticketKeys: new Set(tk.filter(r => r.external_id).map(r => r.source + '|' + r.external_id)),
+    donationKeys: new Set(don.filter(r => r.external_ref).map(r => r.payment_processor + '|' + r.external_ref)),
+    sponsorships: eventId === S.eventId ? S.d.sponsorships : [],
+  };
+}
+
+async function previewImport(ctx) {
+  const { parsed, event, mode, targetId, kind, file } = ctx;
+  const db = await importDb(targetId, parsed.sales);
+  const plan = CC.planImport({ sales: parsed.sales, tiers: mode === 'live' ? S.d.tiers.filter(t => t.active !== false) : [], event, db, mode });
+  const rp = plan.report;
+  const live = S.d.tiers.filter(t => t.active !== false);
+  const held = Object.entries(rp.unmatchedTiers);
+  const spPay = plan.sponsorPayments;
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="modal"><h3>Import ${esc(CC.SOURCE_LABELS[kind] || kind)} → ${esc(event.name)}</h3>
+    <p class="note">${esc(file)} · ${parsed.sales.length} rows read${parsed.skipped.length ? ` · ${parsed.skipped.length} skipped` : ''}${mode === 'past' ? ' · <b>attendance only</b>' : ''}</p>
+    <table style="margin-top:10px"><tbody>
+      ${mode === 'live' ? `<tr><td>New tickets</td><td class="num">${rp.tickets}</td><td class="small muted">${rp.ticketsSkipped} already imported</td></tr>
+      <tr><td>New donations</td><td class="num">${rp.donations}</td><td class="small muted">${rp.donationsSkipped} already imported</td></tr>` : ''}
+      <tr><td>People: new records</td><td class="num">${rp.newGuests}</td><td class="small muted">${rp.matchedByEmail} matched by email · ${rp.matchedByName} by name</td></tr>
+      <tr><td>New door-list rows</td><td class="num">${plan.geaInsert.length}</td><td class="small muted">${plan.geaRecompute.size} existing rows re-totalled</td></tr>
+      <tr><td>New mailing-list subscribers</td><td class="num">${plan.subscribers.length}</td><td class="small muted">tagged “${esc(plan.eventSeg)}” + “${esc(plan.brandSeg)}”; unsubscribed never re-added</td></tr>
+    </tbody></table>
+    ${held.length ? `<div class="card" style="margin-top:12px;border-color:var(--amber)"><h2>Held back: ticket types with no tier</h2>
+      <p class="note">These ${held.reduce((a, [, n]) => a + n, 0)} tickets will NOT be imported until mapped (their mission split would be unknown). Map them and re-check, or leave them out.</p>
+      ${held.map(([t, n]) => `<div class="row" style="margin-top:6px"><span style="flex:1">${esc(t)} <span class="muted small">× ${n}</span></span><select data-map="${esc(t)}"><option value="">Leave out</option>${live.map(x => `<option value="${x.id}">${esc(x.label)}</option>`).join('')}</select></div>`).join('')}
+      <div class="row" style="margin-top:8px"><button class="mini" data-imp="remap">Save mappings &amp; re-check</button></div></div>` : ''}
+    ${spPay.length ? `<div class="card" style="margin-top:12px"><h2>Sponsorship payments in this file</h2><ul class="list">${spPay.map(p => `<li><div class="grow">${esc(p.name)} · ${moneyTxt(p.amount)} · ${esc(p.ticket_type)}</div>${p.sponsorship ? (p.apply ? '<span class="pill ok">will mark paid</span>' : `<span class="pill info">${esc(p.sponsorship.status)}</span>`) : '<span class="pill warn">no matching sponsor — mark by hand</span>'}</li>`).join('')}</ul>
+      <p class="note">Never imported as tickets. A matching sponsor whose payment covers its cash is marked paid.</p></div>` : ''}
+    ${rp.flags.length || parsed.skipped.length ? `<details style="margin-top:10px"><summary class="small">Notes (${rp.flags.length + parsed.skipped.length})</summary><ul class="small muted" style="padding-left:18px;margin-top:6px">${[...rp.flags, ...parsed.skipped].map(x => `<li>${esc(x)}</li>`).join('')}</ul></details>` : ''}
+    <div class="foot"><span class="small muted" id="impStatus" style="margin-right:auto"></span><button class="btn ghost" data-imp="cancel">Cancel</button><button class="btn" data-imp="run">Import</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', async (e) => {
+    const a = e.target.closest('[data-imp]'); if (!a && e.target !== ov) return;
+    if (e.target === ov || a.dataset.imp === 'cancel') { ov.remove(); return; }
+    if (a.dataset.imp === 'remap') {
+      const maps = [...ov.querySelectorAll('[data-map]')].filter(s => s.value);
+      for (const s of maps) {
+        const t = S.d.tiers.find(x => x.id === s.value);
+        const aliases = [...new Set([...(t.aliases || []), CC.normName(s.dataset.map)])];
+        const r = await sb.from('event_ticket_tiers').update({ aliases }).eq('id', t.id);
+        if (r.error) return toast(r.error.message, 'err');
+        t.aliases = aliases;
+      }
+      ov.remove(); return previewImport(ctx);
+    }
+    if (a.dataset.imp === 'run') {
+      a.disabled = true;
+      const say = (m) => { $('impStatus').textContent = m; };
+      try { const done = await runImport(plan, targetId, say); ov.remove(); importReport(done); }
+      catch (err) { say(''); a.disabled = false; toast('Import failed: ' + (err.message || err), 'err'); }
+    }
+  });
+}
+
+async function runImport(plan, eventId, say) {
+  const done = [], errors = [];
+  const ins = async (table, rows, cols, what) => {
+    const out = [];
+    for (let i = 0; i < rows.length; i += 200) {
+      const r = await sb.from(table).insert(rows.slice(i, i + 200)).select(cols);
+      if (r.error) errors.push(`${what}: ${r.error.message}`); else out.push(...(r.data || []));
+    }
+    return out;
+  };
+  say('People…');
+  const created = await ins('guests', plan.guestsToCreate.map(({ key, ...rest }) => rest), 'id, full_name, email', 'People');
+  const keyToId = new Map(created.map(r => [r.email ? 'e:' + r.email.toLowerCase() : 'n:' + CC.normName(r.full_name), r.id]));
+  const rid = (o) => o.guestId || keyToId.get(o.guestKey) || null;
+  if (created.length) done.push(`👤 ${created.length} new people`);
+
+  if (plan.ticketing.length) {
+    say('Tickets…');
+    const tk = await ins('ticketing', plan.ticketing.map(o => ({ event_id: eventId, guest_id: rid(o), ticket_type: o.ticket_type, amount_paid: o.amount_paid,
+      quantity: o.quantity, source: o.source, external_id: o.external_id, purchased_at: o.purchased_at || null, tier_id: o.tier_id, notes: o.notes || null })), 'id', 'Tickets');
+    if (tk.length) done.push(`🎟 ${tk.length} ticket rows`);
+  }
+  if (plan.donations.length) {
+    say('Donations…');
+    const dn = await ins('third_party_donations', plan.donations.map(o => ({ event_id: eventId, ...o })), 'id', 'Donations');
+    if (dn.length) done.push(`💝 ${dn.length} donations (${moneyTxt(plan.donations.reduce((a, x) => a + x.amount, 0))})`);
+  }
+  say('Door list…');
+  const geaRows = plan.geaInsert.map(o => ({ event_id: eventId, guest_id: rid(o), entry_type: o.entry_type, source: o.source, ticket_type: o.ticket_type,
+    quantity: o.quantity, amount_spent: o.amount_spent, tier_id: plan.mode === 'live' ? (plan.ticketing.find(t => (t.guestId || t.guestKey) === (o.guestId || o.guestKey)) || {}).tier_id || null : null }))
+    .filter(r => r.guest_id);
+  const geaIns = await ins('guest_event_attendance', geaRows, 'id', 'Door list');
+  if (geaIns.length) done.push(`🚪 ${geaIns.length} added to the door list`);
+  // Existing ticket-holder rows: party size = their tickets for this event, so a
+  // second order adds to the first rather than replacing it. Comp / crew rows
+  // keep their own count.
+  if (plan.mode === 'live' && plan.geaRecompute.size) {
+    const ids = [...plan.geaRecompute];
+    const tks = await inChunks(ids, async (g) => must(await sb.from('ticketing').select('guest_id, quantity, amount_paid, tier_id').eq('event_id', eventId).in('guest_id', g), 'Tickets') || []);
+    const rows = await inChunks(ids, async (g) => must(await sb.from('guest_event_attendance').select('id, guest_id, entry_type').eq('event_id', eventId).in('guest_id', g), 'Door list') || []);
+    for (const r of rows) {
+      if (r.entry_type && r.entry_type !== 'ticket') continue;
+      const mine = tks.filter(t => t.guest_id === r.guest_id); if (!mine.length) continue;
+      const up = await sb.from('guest_event_attendance').update({ quantity: mine.reduce((a, t) => a + (t.quantity || 1), 0),
+        amount_spent: mine.reduce((a, t) => a + Number(t.amount_paid || 0), 0), tier_id: mine[mine.length - 1].tier_id, entry_type: 'ticket' }).eq('id', r.id);
+      if (up.error) errors.push('Door list totals: ' + up.error.message);
+    }
+  }
+  if (plan.sponsorPayments.some(p => p.apply)) {
+    say('Sponsors…');
+    for (const p of plan.sponsorPayments.filter(x => x.apply)) {
+      const r = await sb.from('sponsorships').update({ status: 'paid' }).eq('id', p.sponsorship.id);
+      if (r.error) errors.push('Sponsor paid: ' + r.error.message); else done.push(`💼 ${(p.sponsorship.actor && p.sponsorship.actor.display_name) || p.name} marked paid (${moneyTxt(p.amount)})`);
+    }
+  }
+  say('Mailing list…');
+  const nowIso = new Date().toISOString();
+  const tag = 'event-import:' + plan.eventSeg;
+  const newSubs = await ins('subscribers', plan.subscribers.map(s => ({ email: s.email, full_name: s.full_name, status: 'subscribed', source: tag, confirmed_at: nowIso, guest_id: rid(s) })), 'id, email', 'Subscribers');
+  if (newSubs.length) done.push(`📧 ${newSubs.length} new subscribers`);
+  const emails = [...plan.segmentEmails];
+  if (emails.length) {
+    const subs = await inChunks(emails, async (g) => must(await sb.from('subscribers').select('id, email, status').in('email', g), 'Subscribers') || []);
+    const sids = subs.filter(s => s.status === 'subscribed').map(s => s.id);
+    const have = new Set((await inChunks(sids, async (g) => must(await sb.from('subscriber_segments').select('subscriber_id, segment').in('subscriber_id', g), 'Segments') || [])).map(r => r.subscriber_id + '|' + r.segment));
+    const segRows = [];
+    for (const sid of sids) for (const seg of [plan.eventSeg, plan.brandSeg]) if (!have.has(sid + '|' + seg)) { have.add(sid + '|' + seg); segRows.push({ subscriber_id: sid, segment: seg }); }
+    const si = await ins('subscriber_segments', segRows, 'id', 'Segments');
+    if (si.length) done.push(`🏷 ${si.length} segment tags`);
+  }
+  if (plan.held.length) done.push(`⏸ ${plan.held.length} rows held back (no tier) — not imported`);
+  if (!done.length) done.push('Nothing new — this file was already imported.');
+  S.aud = null;
+  await loadEvent();
+  return { done, errors };
+}
+function importReport({ done, errors }) {
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="modal"><h3>${errors.length ? 'Import finished with errors' : 'Import complete'}</h3><ul class="list">${done.map(x => `<li>${esc(x)}</li>`).join('')}</ul>
+    ${errors.length ? `<div class="state err" style="margin-top:10px;text-align:left">${errors.map(esc).join('<br>')}</div>` : ''}<div class="foot"><button class="btn" data-x>OK</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', (e) => { if (e.target === ov || e.target.closest('[data-x]')) ov.remove(); });
+}
+
+// ---------------------------------------------------------------------------
+// People helper: find by email, then name; else create
+// ---------------------------------------------------------------------------
+async function findOrCreateGuest(name, email, source) {
+  email = (email || '').trim().toLowerCase() || null; name = (name || '').trim();
+  if (email) {
+    const r = await sb.from('guests').select('id, full_name, email').ilike('email', email).is('deleted_at', null).limit(1);
+    if (r.data && r.data[0]) return r.data[0];
+  }
+  if (name) {
+    const r = await sb.from('guests').select('id, full_name, email').ilike('full_name', name.replace(/[%_]/g, '\\$&')).is('deleted_at', null).limit(5);
+    const hit = (r.data || []).find(g => CC.normName(g.full_name) === CC.normName(name) && (!email || !g.email || g.email.toLowerCase() === email));
+    if (hit) { if (email && !hit.email) await sb.from('guests').update({ email }).eq('id', hit.id); return hit; }
+  }
+  return must(await sb.from('guests').insert({ full_name: name, email, source: source || 'control-center' }).select('id, full_name, email').single(), 'New person');
+}
+async function addToDoor({ name, email, entry_type, sponsorship_id, quantity = 1, drink_tickets = 0, source }) {
+  if (!name) throw new Error('Name is required');
+  const g = await findOrCreateGuest(name, email, 'control-center:' + (S.d.event.slug || ''));
+  if (S.d.gea.some(r => r.guest_id === g.id)) throw new Error(`${g.full_name} is already on this door list`);
+  if (sponsorship_id) {
+    const k = S.calc.sp.cards.find(c => c.s.id === sponsorship_id);
+    if (k && k.compsOpen <= 0) throw new Error(`${spName(sponsorship_id)} has no comps left`);
+  }
+  must(await sb.from('guest_event_attendance').insert({ event_id: S.eventId, guest_id: g.id, entry_type, sponsorship_id: sponsorship_id || null,
+    quantity: Math.max(1, quantity), drink_tickets: Math.max(0, drink_tickets), source: source || (sponsorship_id ? 'sponsor' : 'manual'),
+    ticket_type: CC.ENTRY_TYPES[entry_type] || null }), 'Door list');
+  return g;
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+const num = (v) => v === '' || v == null ? null : Number(v);
+async function saveControl(patch) {
+  const row = { event_id: S.eventId, fundraising: S.calc.control.fundraising, beneficiary: S.calc.control.beneficiary,
+                mission_target_pct: S.calc.control.mission_target_pct, ...(S.d.controlRow || {}), ...patch };
+  delete row.created_at; delete row.updated_at; delete row.updated_by;
+  must(await sb.from('event_control').upsert(row, { onConflict: 'event_id' }), 'Event settings');
+}
+
+function settingsModal() {
+  const c = S.calc.control, e = S.d.event;
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="modal"><h3>Event settings</h3><div class="stack">
+    <label class="row"><input type="checkbox" id="sFund" ${c.fundraising ? 'checked' : ''}> <span>Fundraising layer (mission split, % to the mission, DIY imports)</span></label>
+    <div class="row"><label>Beneficiary<input id="sBen" value="${esc(c.beneficiary || '')}" placeholder="e.g. National MS Society"></label>
+      <label>% to the mission target<input id="sTarget" type="number" min="0" max="100" value="${c.mission_target_pct ?? ''}"></label>
+      <label>$ to mission per sponsor comp<input id="sComp" type="number" min="0" step="0.01" value="${c.comp_mission_value ?? ''}" placeholder="none"></label></div>
+    <p class="note">“$ per sponsor comp” credits each sponsor entry to the mission out of sponsor cash (DI #2 counted $25 each). Blank = not credited.</p>
+    <div class="row"><label>Bar minimum ($)<input id="sBar" type="number" min="0" value="${e.bar_minimum ?? ''}"></label></div>
+    <p class="note">Date, time and venue are edited in the dashboard's event hub (Edit core fields), which owns the event record.</p>
+  </div><div class="foot"><button class="btn ghost" data-x>Cancel</button><button class="btn" data-save>Save</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', async (ev) => {
+    if (ev.target === ov || ev.target.closest('[data-x]')) return ov.remove();
+    if (!ev.target.closest('[data-save]')) return;
+    try {
+      await saveControl({ fundraising: $('sFund').checked, beneficiary: $('sBen').value.trim() || null, mission_target_pct: num($('sTarget').value), comp_mission_value: num($('sComp').value) });
+      const bar = num($('sBar').value);
+      if (bar !== (e.bar_minimum == null ? null : Number(e.bar_minimum))) must(await sb.from('events').update({ bar_minimum: bar }).eq('id', e.id), 'Bar minimum');
+      ov.remove(); toast('Saved'); await reload();
+    } catch (err) { toast(err.message, 'err'); }
+  });
+}
+
+async function addSponsorModal() {
+  const actors = must(await sb.from('actors').select('id, display_name, kind').is('deleted_at', null).order('display_name'), 'Actors') || [];
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="modal"><h3>Add a sponsor</h3><div class="stack">
+    <div class="row"><label style="flex:1">Who<input id="spWho" list="spActors" placeholder="Pick or type a new name" style="width:100%"></label><datalist id="spActors">${actors.map(a => `<option value="${esc(a.display_name)}">`).join('')}</datalist></div>
+    <div class="row"><label>Tier<input id="spTier" value="Champion"></label><label>Cash $<input id="spCash" type="number" min="0" value="500"></label><label>Comps<input id="spComps" type="number" min="0" value="0"></label>
+      <label>Drink package<input id="spDrinks" type="number" min="0" placeholder="TBD"></label></div>
+    <p class="note">A name that isn't already a contact becomes a new one (kind: organisation; change it in Actors if it's a person).</p></div>
+    <div class="foot"><button class="btn ghost" data-x>Cancel</button><button class="btn" data-save>Add</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.addEventListener('click', async (ev) => {
+    if (ev.target === ov || ev.target.closest('[data-x]')) return ov.remove();
+    if (!ev.target.closest('[data-save]')) return;
+    try {
+      const who = $('spWho').value.trim(); if (!who) throw new Error('Name required');
+      let a = actors.find(x => CC.normName(x.display_name) === CC.normName(who));
+      if (!a) a = must(await sb.from('actors').insert({ display_name: who, kind: 'org' }).select('id, display_name').single(), 'New contact');
+      const dr = num($('spDrinks').value);
+      must(await sb.from('sponsorships').insert({ event_id: S.eventId, actor_id: a.id, tier: $('spTier').value.trim() || null, cash_amount: Number($('spCash').value) || 0,
+        entry_tickets: Number($('spComps').value) || 0, drink_tickets: dr ?? 0, drink_tickets_tbd: dr == null, status: 'pending' }), 'Sponsor');
+      ov.remove(); toast('Sponsor added'); await reload();
+    } catch (err) { toast(err.message, 'err'); }
+  });
+}
+
+document.addEventListener('click', async (e) => {
+  const a = e.target.closest('[data-act]'); if (!a) return;
+  const id = a.dataset.id, act = a.dataset.act;
+  try {
+    switch (act) {
+      case 'settings': return settingsModal();
+      case 'addBlocker': {
+        const t = $('newBlocker').value.trim(); if (!t) return;
+        must(await sb.from('tasks').insert({ event_id: S.eventId, title: t, status: 'blocked', priority: 'high', source: 'manual' }), 'Blocker');
+        toast('Blocker added'); return reload();
+      }
+      case 'unblock':
+        must(await sb.from('tasks').update({ status: 'done' }).eq('id', id), 'Blocker');
+        toast('Resolved — marked done'); return reload();
+      case 'addTier': {
+        const n = S.d.tiers.length + 1;
+        must(await sb.from('event_ticket_tiers').insert({ event_id: S.eventId, label: 'New tier', price: 0, to_mission: 0, sort_order: n }), 'Tier');
+        return reload();
+      }
+      case 'tierOff':
+        if (!confirm('Retire this tier? Sales already on it keep it; it stops taking new matches.')) return;
+        must(await sb.from('event_ticket_tiers').update({ active: false }).eq('id', id), 'Tier');
+        return reload();
+      case 'saveDrinkTerms': {
+        await saveControl({ drink_tickets_locked: num($('dLocked').value), drink_ticket_value: num($('dValue').value) });
+        if (S.isMaster) {
+          const bar = num($('dBarMin').value);
+          if (bar !== (S.d.event.bar_minimum == null ? null : Number(S.d.event.bar_minimum))) must(await sb.from('events').update({ bar_minimum: bar }).eq('id', S.eventId), 'Bar minimum');
+        }
+        toast('Saved'); return reload();
+      }
+      case 'allocAdd': {
+        const n = Number($('aN').value); if (!(n > 0)) throw new Error('How many tickets?');
+        must(await sb.from('event_drink_allocations').insert({ event_id: S.eventId, category: $('aCat').value, label: $('aLabel').value.trim() || null, tickets: n }), 'Allocation');
+        return reload();
+      }
+      case 'allocDel':
+        if (!confirm('Remove this allocation?')) return;
+        must(await sb.from('event_drink_allocations').delete().eq('id', id), 'Allocation');
+        return reload();
+      case 'addSponsor': return addSponsorModal();
+      case 'spDrinkSet': {
+        const v = prompt('Drink tickets in this sponsor\'s package:'); if (v == null || v === '' || !(Number(v) >= 0)) return;
+        must(await sb.from('sponsorships').update({ drink_tickets: Number(v), drink_tickets_tbd: false }).eq('id', id), 'Sponsor');
+        return reload();
+      }
+      case 'slotAdd': {
+        const nm = document.querySelector(`[data-slotname="${id}"]`).value, em = document.querySelector(`[data-slotemail="${id}"]`).value;
+        await addToDoor({ name: nm, email: em, entry_type: 'sponsor_comp', sponsorship_id: id, source: 'sponsor' });
+        toast('Comp assigned'); return reload();
+      }
+      case 'slotDel':
+        if (!confirm('Take this person off the comp (and the door list)?')) return;
+        must(await sb.from('guest_event_attendance').delete().eq('id', id), 'Comp');
+        return reload();
+      case 'doorAdd': S.door.addOpen = !S.door.addOpen; $('doorAddBox').style.display = S.door.addOpen ? 'block' : 'none'; if (S.door.addOpen) $('gName').focus(); return;
+      case 'doorSave': {
+        const sid = $('gSponsor').value || null;
+        const type = sid && $('gType').value === 'guest_list' ? 'sponsor_comp' : $('gType').value;
+        const g = await addToDoor({ name: $('gName').value, email: $('gEmail').value, entry_type: type, sponsorship_id: sid,
+          quantity: Number($('gQty').value) || 1, drink_tickets: Number($('gDrinks').value) || 0, source: $('gSource').value.trim() || null });
+        toast(`${g.full_name} added`); S.door.addOpen = true; await reload();
+        $('gName').focus(); return;
+      }
+      case 'checkin': return setCheckIn(id, true);
+      case 'checkout': if (!confirm('Undo this check-in?')) return; return setCheckIn(id, false);
+      case 'admit': { const r = S.d.gea.find(x => x.id === id); const cur = Number(r.scan_count) || 0; return setCheckIn(id, null, cur + Number(a.dataset.d)); }
+      case 'doorCsv': return download(`${S.d.event.slug || 'event'}-door-list.csv`, CC.toCsv(['Name', 'Email', 'Type', 'Source', 'Ticket', 'Qty', 'Drink tickets', 'Sponsor', 'Checked in'], doorExportRows()));
+      case 'doorPrint': return printDoor();
+      case 'audCsv':
+      case 'audCsvAll': {
+        const rows = (act === 'audCsv' ? S.audRes.wb.filter(p => p.send) : S.audRes.wb).map(p => [p.email || '', p.name, p.last ? p.last.name : '', p.last ? p.last.event_date : '', p.events.length, p.status]);
+        return download(`${winbackSeg()}${act === 'audCsvAll' ? '-all' : ''}.csv`, CC.toCsv(['email', 'name', 'last_event', 'last_event_date', 'past_events', 'status'], rows));
+      }
+      case 'audSeg': {
+        const ids = S.audRes.wb.filter(p => p.send && p.subscriberId).map(p => p.subscriberId);
+        if (!confirm(`Tag ${ids.length} subscribed people with segment "${winbackSeg()}"? Nothing is sent.`)) return;
+        const seg = winbackSeg();
+        const have = new Set((await inChunks(ids, async (g) => must(await sb.from('subscriber_segments').select('subscriber_id').eq('segment', seg).in('subscriber_id', g), 'Segments') || [])).map(r => r.subscriber_id));
+        const rows = ids.filter(x => !have.has(x)).map(x => ({ subscriber_id: x, segment: seg }));
+        for (let i = 0; i < rows.length; i += 200) must(await sb.from('subscriber_segments').insert(rows.slice(i, i + 200)), 'Segments');
+        toast(`${rows.length} tagged (${have.size} already had it)`); return;
+      }
+      case 'blAdd': {
+        const amt = num($('blAmt').value);
+        must(await sb.from('budget_lines').insert({ event_id: S.eventId, scope: 'event', direction: 'expense', ledger: S.d.event.series === 'Dance Infusion' ? 'dance_infusion' : 'come_with',
+          category: $('blCat').value, label: $('blLabel').value.trim() || null, planned_amount: amt ?? 0, amount_tbd: amt == null }), 'Planned cost');
+        return reload();
+      }
+      case 'exAdd': {
+        const amt = Number($('exAmt').value); if (!(amt > 0)) throw new Error('Amount required');
+        must(await sb.from('expenses').insert({ event_id: S.eventId, date: $('exDate').value || todayIso(), amount: amt, category: $('exCat').value, vendor: $('exVendor').value.trim() || null,
+          status: $('exStatus').value, ledger: a.dataset.ledger, settled_at: $('exStatus').value === 'paid' ? new Date().toISOString() : null }), 'Expense');
+        toast('Expense added'); return reload();
+      }
+      case 'expPaid':
+        must(await sb.from('expenses').update({ status: 'paid', settled_at: new Date().toISOString() }).eq('id', id), 'Expense');
+        return reload();
+      case 'scenReset': S.scen = null; return render();
+      case 'execLink': {
+        const url = location.origin + location.pathname + '?event=' + encodeURIComponent(eventSlug()) + '#exec';
+        try { await navigator.clipboard.writeText(url); toast('Link copied (admins only)'); } catch (_) { prompt('Copy this link:', url); }
+        return;
+      }
+      case 'execPdf': $('printArea').innerHTML = execPaperHtml(); return window.print();
+      case 'execSave': {
+        const snap = currentSnapshot();
+        must(await sb.from('event_exec_updates').insert({ event_id: S.eventId, snapshot: snap, note: S.execNote || null }), 'Exec update');
+        toast('Saved — the next update compares against this one'); return reload();
+      }
+    }
+  } catch (err) { toast(err.message || String(err), 'err'); }
+});
+
+// Inline edits: save on change (blur), one row at a time.
+document.addEventListener('change', async (e) => {
+  const el = e.target;
+  try {
+    if (el.dataset.tier) {
+      const f = el.dataset.f; let v = el.value;
+      if (['price', 'to_mission'].includes(f)) v = Number(v) || 0;
+      if (f === 'drink_tickets') v = num(v);
+      if (f === 'production_label' || f === 'label') v = v.trim() || null;
+      if (f === 'label' && !v) throw new Error('A tier needs a name');
+      must(await sb.from('event_ticket_tiers').update({ [f]: v }).eq('id', el.dataset.tier), 'Tier');
+      toast('Saved'); return reload();
+    }
+    if (el.dataset.assign) {
+      const tierId = el.value; if (!tierId) return;
+      const t = S.d.tiers.find(x => x.id === tierId);
+      must(await sb.from('ticketing').update({ tier_id: tierId }).eq('event_id', S.eventId).eq('ticket_type', el.dataset.assign).is('tier_id', null), 'Tickets');
+      must(await sb.from('event_ticket_tiers').update({ aliases: [...new Set([...(t.aliases || []), CC.normName(el.dataset.assign)])] }).eq('id', tierId), 'Tier');
+      toast('Assigned — future imports match it too'); return reload();
+    }
+    if (el.dataset.sp) {
+      const f = el.dataset.f; let v = el.value;
+      if (['cash_amount', 'entry_tickets', 'drink_tickets'].includes(f)) v = Math.max(0, Number(v) || 0);
+      if (f === 'tier') v = v.trim() || null;
+      must(await sb.from('sponsorships').update({ [f]: v }).eq('id', el.dataset.sp), 'Sponsor');
+      toast('Saved'); return reload();
+    }
+    if (el.dataset.gea) {
+      must(await sb.from('guest_event_attendance').update({ drink_tickets: Math.max(0, Number(el.value) || 0) }).eq('id', el.dataset.gea), 'Drink tickets');
+      toast('Saved'); return reload();
+    }
+    if (el.dataset.bl) {
+      const v = num(el.value);
+      must(await sb.from('budget_lines').update({ planned_amount: v ?? 0, amount_tbd: v == null }).eq('id', el.dataset.bl), 'Planned cost');
+      toast('Saved'); return reload();
+    }
+    if (el.dataset.import) { const f = el.files[0]; el.value = ''; if (f) return startImport(f, el.dataset.import); }
+  } catch (err) { toast(err.message || String(err), 'err'); }
+});
+document.addEventListener('input', (e) => {
+  if (e.target.id === 'execNote') { S.execNote = e.target.value; const o = $('execNoteOut'); if (o) o.innerHTML = S.execNote ? `<h2>Note</h2><p style="white-space:pre-wrap">${esc(S.execNote)}</p>` : ''; }
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && e.target.id === 'newBlocker') document.querySelector('[data-act="addBlocker"]').click();
+  if (e.key === 'Enter' && e.target.closest && e.target.closest('#doorAddBox') && e.target.tagName === 'INPUT') document.querySelector('[data-act="doorSave"]').click();
+});
+document.addEventListener('visibilitychange', () => { if (!document.hidden && S.sec === 'door' && S.d) reloadDoorQuiet(); });
+
+sb.auth.onAuthStateChange((ev) => { if (ev === 'SIGNED_OUT') renderLogin(); });
+boot();
+</script>
+</body>
+</html>

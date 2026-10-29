@@ -2910,3 +2910,39 @@ same way `norm()` folds credits ("ame"), must be one of the credited keys. If it
 the row is somebody else's show. The general lesson is that any normalisation which
 DROPS characters (rather than folding them) merges names it has no evidence are the
 same. Treat its matches as candidates, and confirm them with a key that keeps more.
+
+---
+
+## Section 99 — Zeffy sells sponsorships through the ticket form; a "ticket" import double-counts sponsor cash (2026-10-29)
+
+Running the real DI #2 Zeffy export through the new Control Center importer read
+"1x Champion Sponsorship" ($500 × 3), "1x Leader Sponsorship" and a tequila bottle as
+tickets. The money is already on `sponsorships.cash_amount`, so importing it as
+`ticketing` counts the same $500 twice. Sponsorship lines are now `sponsor_payment`.
+They are matched to the sponsor card by name and mark it paid when the amount
+covers its cash. Any other line that maps to no tier is **held, not written**.
+A ticket with no tier has no mission split, and writing it would count it in
+revenue and leave it out of the mission total. Verified end to end: Zeffy net
+tickets come to $2,025 and donations to $455, both exactly the DI #2 reconciled
+figures.
+
+## Section 100 — A past event's attendance can be imported; its money cannot (2026-10-29)
+
+DI #1 holds three AGGREGATE RA `ticketing` rows with no `external_id`. Importing
+the per-barcode RA export against it would add a second copy of its revenue. Nothing
+could catch that: there is no key to match an aggregate row on. The Audience box
+"Import a past list" therefore runs the planner in `mode: 'past'`, which writes people,
+door rows and mailing segments only, and never tickets or donations. The general rule:
+**a reconciled event is closed to money imports**, and the only safe import into it is
+one that writes no money.
+
+## Section 101 — "TBD" got a boolean beside the number instead of a nullable number (2026-10-29)
+
+`sponsorships.drink_tickets` and `budget_lines.planned_amount` are NOT NULL DEFAULT 0.
+`v_event_summary`, `v_event_forecast`, `v_budget_variance` and `v_pl_monthly` were
+written assuming they are never null. Dropping NOT NULL would have been the "right"
+model and an unreviewed change to four money views. 222 adds `drink_tickets_tbd` /
+`amount_tbd` instead. Every view still reads 0, and only the surfaces that render
+the field (the Control Center, and the hub's forecast column, which now skips TBD
+lines) show TBD. When a NOT NULL column feeds views, add the "unknown" flag next to
+the number. Don't loosen the column.

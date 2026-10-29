@@ -8221,7 +8221,7 @@ async function loadMoneyData(id) {
     sbAll(() => sb.from('expenses').select('id, category').is('deleted_at', null), 'id'),
     sb.from('revenue_streams').select('label, applies_to, display_order').eq('active', true).order('display_order'),
     sb.from('budget_lines')
-      .select('id, category, direction, planned_amount, label, confidence, notes, realized_at, realized_income_id, realized_expense_id')
+      .select('id, category, direction, planned_amount, amount_tbd, label, confidence, notes, realized_at, realized_income_id, realized_expense_id')
       .eq('event_id', id).eq('scope', 'event').is('deleted_at', null).order('planned_amount', { ascending: false }),
     sb.from('v_invoices_list').select('*').eq('event_id', id).order('issue_date', { ascending: false }),
     sb.from('v_income_invoiced').select('*'),
@@ -8775,7 +8775,10 @@ function moneyLines(data) {
     tbl: 'expenses', id: r.id, section: 'cost', category: r.category || 'Uncategorised',
     label: r.vendor || r.description || r.category || 'Cost', amount: Number(r.amount || 0),
     state: moneyIsOwed('expenses', r) ? 'committed' : 'settled', date: r.date, row: r }));
-  ((data.fc && data.fc.data) || []).filter(r => !r.realized_at).forEach(r => push({
+  // amount_tbd (222): a planned cost with no number yet. It has nothing to add to
+  // a column, and a $0 forecast would claim it costs nothing - leave it out here;
+  // the Control Center lists it as TBD.
+  ((data.fc && data.fc.data) || []).filter(r => !r.realized_at && !r.amount_tbd).forEach(r => push({
     tbl: 'budget_lines', id: r.id, section: r.direction === 'income' ? 'revenue' : 'cost',
     category: r.category || 'Uncategorised', label: r.label || r.category || 'Forecast line',
     amount: Number(r.planned_amount || 0), state: 'forecast', row: r }));
@@ -9453,6 +9456,7 @@ function renderHubHead() {
       </div>
       ${stageStepper(e.stage)}
       <div class="hub-head-actions">
+        <a class="hub-btn" style="text-decoration:none;display:inline-block" href="control.html?event=${encodeURIComponent(e.slug || e.id)}" title="Event Control Center: tickets, door, sponsors, drinks, audience, finance, exec update">🎛 Control Center</a>
         <button class="hub-btn ghost" data-hub-action="edit-core">Edit core fields</button>
         <button class="hub-btn ghost" data-hub-action="occurrences" title="Turn this into a recurring series — clone it into future dated occurrences">🔁 Add occurrences</button>
         <button class="hub-btn ghost" data-hub-action="log-ig" title="Log follower counts — defaults to this event's date so it's back-dated to the event">Log IG followers</button>

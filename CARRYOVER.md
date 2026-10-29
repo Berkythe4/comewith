@@ -1,3 +1,71 @@
+# Carryover - 2026-10-29 (Event Control Center for DI #3 - DESKTOP)
+
+**Closed 2026-10-29 on the DESKTOP.** No branch; on `master`, pushed (Netlify deploys
+`control.html` and the hub button). The 2026-10-19 block below is the previous close.
+
+## >> START HERE NEXT SESSION
+
+**1. Open the Control Center on prod and click through it.** Dashboard → DI #3 event hub →
+"🎛 Control Center" (or `/control.html?event=dance-infusion-3`). It has only been run
+headless, against an in-memory copy of prod rows (all 8 sections at 1280px and 380px,
+real DI #2 Zeffy/RA/DIY files, check-in, add guest, exec save: all passed, 0 errors).
+Nothing has been written to prod through the UI yet.
+
+**2. Answer the TBDs (they're the 5 seeded blockers, plus two found here):**
+- the $ a drink ticket counts toward the $6,000 bar minimum (Drinks → venue terms;
+  DI #2 was $12). Bar progress stays unmeasured until it's set.
+- whether sponsor comps credit $25 each to MS (Event settings; DI #2 did it, 223 leaves it off).
+- **DI #3 `doors_time` = 15:00** (copied from DI #1); left alone because the site may read it.
+- **DI #1's date is 2025-09-08 in prod; the brief says Sep 6.** There is also a second row,
+  "Dance Infusion MS" (2025-09-08, completed). Both were left untouched.
+
+**3. Upload the real exports:** the DI #3 Zeffy + RA + MS DIY files (Tickets). The DI #1
+RA and 7/11 RA files go to Audience → "Import a past list" (attendance only, §100).
+7/11 is already fully imported (56); DI #1 has 28 people on record.
+
+## State summary
+
+- **Migrations: repo and prod both top out at 223** (dry run first, both recorded).
+  `post_apply.sql` all PASS; anon sweep clean, with the 4 new tables and
+  `guest_event_attendance` (never on the list before) added; the 5 financial views return 401.
+- **LEARNINGS §101** is the latest (§99-101 this session). CLAUDE.md has a new
+  "Event Control Center" section.
+- Tests: `scripts/test_control_center.mjs` 49/49; `test_import_engine.mjs` 51/51 (after
+  `parseCsvRaw` was split out of `parseCsv`).
+
+## This session shipped
+
+- **222**: `event_control`, `event_ticket_tiers`, `event_drink_allocations`,
+  `event_exec_updates`; door-list columns on `guest_event_attendance`; `ticketing.tier_id`
+  plus a unique `(event, source, external_id)`; `drink_tickets_tbd` and `amount_tbd`;
+  `third_party_donations.external_ref`. All additive.
+- **223**: the DI #3 seed (tiers $25/25 and $40/25+15 "Production support"; Pulse
+  Devices, Theresa Berkman and Savery & Martinez as $500 pending Champions with 4/3/4
+  comps; Patrick, Arnaldo and Alice named; 5 blockers; Signal bar min $6,000 + 3 TBD costs).
+- **control.html**: Command / Tickets / Drinks / Sponsors / Door / Audience / Finance /
+  Exec update; event switcher; fundraising layer per event.
+- **dashboard.html**: hub "🎛 Control Center" button; the forecast column skips `amount_tbd` lines.
+
+## Deviations from the brief (and why)
+
+- No Phase 1 stop: Keith said go.
+- A standalone page, not a dashboard tab: the door runs on phones, and the dashboard is 1.3 MB.
+- Existing tables were reused rather than duplicated.
+- DI #2's 97 JSON guests were **not** re-imported. 77 are in prod. The other 20 are
+  donors-only, performers, anonymous or placeholder rows, plus 7 no-email comps or
+  volunteers. Adding those to a closed, audited event changes its KPIs and adds no
+  sendable email.
+- Win-back tags a segment for the existing Campaigns sender rather than sending from here.
+
+## Parked / next
+
+- The dashboard's Sponsors list shows `drink_tickets` 0 for a TBD package (it doesn't read the flag yet).
+- No realtime on the door (15s poll instead).
+- No "paid on" date for sponsors.
+- Zeffy rows mixing a sponsorship with tickets are skipped, with a note to enter them by hand.
+
+---
+
 # Carryover - 2026-10-19 (Radio Ep 7 / SHOW 11, Emmy Adelle + DI #3 spotlight - DESKTOP)
 
 **Closed 2026-10-19 on the DESKTOP.** No branch; everything is on `master`, pushed. No

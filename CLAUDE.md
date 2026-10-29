@@ -402,6 +402,40 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   and the transport test (needs `.test-deps`, see `server.test.ts`). No LLM calls happen
   in the site at render time — Claude writes through the connector, the site displays.
 
+## Event Control Center (`control.html`, 222-223) — added 2026-10-29
+
+- **A standalone admin page, not a dashboard tab.** Same Supabase session (same origin),
+  so a dashboard login carries over. Linked from the event hub header ("🎛 Control
+  Center"); never from a public page. All maths lives in `assets/control-center.js`
+  (`node scripts/test_control_center.mjs`); the page only loads, renders and writes.
+- **It adds almost no storage of its own.** The door list IS `guest_event_attendance`
+  (one row per person per event; 222 added `entry_type`, `sponsorship_id`, `tier_id`,
+  `drink_tickets`, `checked_in_at/by`). Blockers ARE `tasks.status = 'blocked'`. Planned
+  costs ARE `budget_lines` scope `event`. New tables: `event_control` (fundraising switch,
+  beneficiary, target %, venue drink terms), `event_ticket_tiers`,
+  `event_drink_allocations`, `event_exec_updates`, all `is_admin()` and anon-revoked.
+- **The production portion of a tier is DERIVED** (`price - to_mission`), never stored.
+- **Drink tickets count once.** A sponsor's tickets handed to a guest (`gea.drink_tickets`
+  on a row with `sponsorship_id`) are PART of the package: the ledger counts
+  `max(package, handed)`. Per-person tickets on rows with no sponsor are added; tier
+  tickets are tier × sold. Bar-minimum progress needs `event_control.drink_ticket_value`
+  and is not shown until it is set (never 0%).
+- **Mission money:** tier `to_mission` × qty at FACE value (DI #2 rule, even when RA paid
+  out net of fees); `ms_diy` rows are wholly mission (the Society is paid directly);
+  donations count except `Founder out-of-pocket`. "% to the mission" = to mission ÷ total
+  raised. "Expense ratio" / "cost to raise" never appear on any page.
+- **Imports (Zeffy XLSX/CSV, RA ticket list, MS DIY) dedupe on the source key** (RA
+  barcode, same `resident_advisor` key as the hub importer; Zeffy receipt # or
+  date+time+buyer+amount; DIY line), and `ticketing (event, source, external_id)` is
+  unique since 222. People match on email, then name. Zeffy sponsorship lines are sponsor
+  payments, never tickets (§99). A ticket with no tier is HELD until it is mapped (the
+  mapping is saved as a tier alias). Past events take attendance only (§100).
+- **Win-back sends only to `subscribed` addresses**; it tags a `<slug>-winback` segment
+  that the Campaigns tab sends. It never subscribes anyone.
+- **Money writes stay master-only** (existing RLS); a sub_admin sees a "financials not
+  released" notice, not $0. **`amount_tbd` / `drink_tickets_tbd` mean "no number yet"**:
+  any surface that renders those columns must honour the flag (§101).
+
 ## Come With Radio (episodes live outside `events`)
 
 - **`station_no` is the SHOW counter; `edition_seq` is the episode number.** Two

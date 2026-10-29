@@ -23,6 +23,19 @@
 // ---- CSV ----
 
 export function parseCsv(text) {
+  const rows = parseCsvRaw(text);
+  if (!rows.length) return { headers: [], rows: [] };
+  const headers = rows[0].map(h => h.trim());
+  const out = rows.slice(1).map(r => {
+    const o = {};
+    headers.forEach((h, i) => { o[h] = (r[i] ?? '').trim(); });
+    return o;
+  });
+  return { headers, rows: out };
+}
+
+// Rows as arrays, no header row assumed (the MS Society DIY export has none).
+export function parseCsvRaw(text) {
   text = String(text || '').replace(/^﻿/, '');
   const rows = [];
   let field = '', row = [], inQ = false;
@@ -40,14 +53,7 @@ export function parseCsv(text) {
     else field += ch;
   }
   if (field !== '' || row.length) pushR();
-  if (!rows.length) return { headers: [], rows: [] };
-  const headers = rows[0].map(h => h.trim());
-  const out = rows.slice(1).map(r => {
-    const o = {};
-    headers.forEach((h, i) => { o[h] = (r[i] ?? '').trim(); });
-    return o;
-  });
-  return { headers, rows: out };
+  return rows;
 }
 
 // ---- Classification (by header signature) ----
