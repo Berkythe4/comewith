@@ -105,6 +105,14 @@ MUST_BE_EMPTY = [
     # --- link-in-bio pages (207) ---
     # The tables hold DRAFT pages - a slug and a set of links Keith has not
     # published yet. v_link_click_stats is how each link is performing.
+    # --- event control center (222) ---
+    # guest_event_attendance predates 222 but was never on this list; 222 made
+    # it the door list (check-ins, comps, drink tickets per person).
+    ("guest_event_attendance", "the door list - who came, comps, check-ins"),
+    ("event_control", "venue terms and fundraising targets"),
+    ("event_ticket_tiers", "ticket prices and the mission split"),
+    ("event_drink_allocations", "drink ticket allocations"),
+    ("event_exec_updates", "exec update snapshots"),
     # --- venue normalisation (208) ---
     ("venue_aliases", "which venue spellings map to which room"),
     ("v_venue_name_review", "the venue names still awaiting a ruling"),
