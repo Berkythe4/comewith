@@ -207,6 +207,37 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-10-29 (Event Control Center, DI #3 first)
+
+**One admin page runs any event, and its fundraising layer switches on per event (222-223).**
+
+- 🟢 **`control.html`**, with eight sections:
+  - Command
+  - Tickets: tiers, sales by source, imports from Zeffy, RA and MS DIY
+  - Drinks: ledger against the locked count and the bar minimum
+  - Sponsors: comp slots and drink packages
+  - Guests / Door: phone check-in
+  - Audience: returning / new / lapsed, plus a win-back segment
+  - Finance: actual, planned, reconciliation and a scenario planner
+  - Exec update: saved snapshots, a diff against the last one, a light PDF
+
+  It is linked from the event hub. Logic is in `assets/control-center.js` (49 tests).
+- 🟢 **222** adds the new tables and door-list columns on `guest_event_attendance`, plus
+  the unique `ticketing (event, source, external_id)`. It is additive. **223** seeds DI #3.
+  LEARNINGS §99-101.
+- 🟡 **Verified headless only**, against prod-shaped data. Still to do: the first prod
+  walk-through, and the real DI #3 imports.
+- ⚪ **Open with Keith:**
+  - the drink-ticket $ value toward the bar minimum, and the count to lock with Signal;
+  - whether sponsor comps credit $25 each to MS;
+  - DI #3's doors time (15:00, from DI #1) and DI #1's date (Sep 8 vs Sep 6);
+  - the duplicate "Dance Infusion MS" event row.
+- ⚪ **Parked:**
+  - door realtime (it polls every 15s);
+  - the dashboard Sponsors list does not read `drink_tickets_tbd`;
+  - a "paid on" date for sponsors;
+  - Zeffy rows that mix a sponsorship with tickets.
+
 ## Current state — reconciled 2026-10-17 (artist tags on all event content)
 
 **Several artists can now be tagged on every piece of event content (221).**
