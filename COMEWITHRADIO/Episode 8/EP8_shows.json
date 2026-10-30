@@ -1,0 +1,468 @@
+[
+ {
+  "n": 1,
+  "artist": "Pleasure Planet, Alex Kassian",
+  "title": "Alien (Alex Kassian's Sphinx Gate Mix)",
+  "credited": [
+   "Pleasure Planet",
+   "Alex Kassian",
+   "Alex Kassian's Sphinx Gate",
+   "Alex Kassian's Sphinx",
+   "Alex Kassian's",
+   "Alex"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-06",
+    "venue": "BASEMENT",
+    "title": "Aurora Halal / Altinbas / Roza Terenzi / Alex Kassian / Matas",
+    "url": "https://ra.co/events/2553711",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Alex Kassian"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 2,
+  "artist": "Locussolus, DJ Harvey",
+  "title": "Telephone (Mediterranean Mix)",
+  "credited": [
+   "Locussolus",
+   "DJ Harvey"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-13",
+    "venue": "Knockdown Center",
+    "title": "DJ Harvey",
+    "url": "https://ra.co/events/2513643",
+    "sources": [
+     "ra",
+     "dice"
+    ],
+    "artists": [
+     "DJ Harvey"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 3,
+  "artist": "Anish Kumar",
+  "title": "Passionfruit",
+  "credited": [
+   "Anish Kumar"
+  ],
+  "shows": [
+   {
+    "date": "2026-12-05",
+    "venue": "Knockdown Center",
+    "title": "Bonobo (DJ Set)",
+    "url": "https://ra.co/events/2552185",
+    "sources": [
+     "ra",
+     "dice"
+    ],
+    "artists": [
+     "Anish Kumar"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 4,
+  "artist": "Avalon Emerson",
+  "title": "Dreamliner",
+  "credited": [
+   "Avalon Emerson"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-05",
+    "venue": "Music Hall of Williamsburg",
+    "title": "Avalon Emerson & The Charm",
+    "url": "https://ra.co/events/2547806",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Avalon Emerson"
+    ]
+   },
+   {
+    "date": "2027-01-10",
+    "venue": "TBA",
+    "title": "Main Demo Event",
+    "url": "https://ra.co/events/2048590",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Avalon Emerson"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 5,
+  "artist": "Eli Escobar",
+  "title": "i'll wait all day (4 U)",
+  "credited": [
+   "Eli Escobar"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-06",
+    "venue": "House of Yes",
+    "title": "House of Grooves: Eli Escobar All Night + Sissies of Mercy",
+    "url": "https://ra.co/events/2471751",
+    "sources": [
+     "dice",
+     "ra"
+    ],
+    "artists": [
+     "Eli Escobar"
+    ]
+   },
+   {
+    "date": "2026-11-08",
+    "venue": "Bossa Nova Civic Club",
+    "title": "Eli Escobar ALL NIGHT",
+    "url": "https://ra.co/events/2553753",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Eli Escobar"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "venue": "SILO",
+    "title": "Eli Escobar / Bag Raiders",
+    "url": "https://ra.co/events/2521047",
+    "sources": [
+     "ra",
+     "dice"
+    ],
+    "artists": [
+     "Eli Escobar"
+    ],
+    "also_listed_as": [
+     "SILO Brooklyn "
+    ]
+   },
+   {
+    "date": "2026-11-29",
+    "venue": "Public Records",
+    "title": "The Atrium: Eli Escobar, Jen Cardini",
+    "url": "https://ra.co/events/2554830",
+    "sources": [
+     "dice",
+     "ra"
+    ],
+    "artists": [
+     "Eli Escobar"
+    ]
+   },
+   {
+    "date": "2026-12-04",
+    "venue": "House of Yes",
+    "title": "House of Grooves: Eli Escobar All Night + Sissies of Mercy",
+    "url": "https://ra.co/events/2471768",
+    "sources": [
+     "dice",
+     "ra"
+    ],
+    "artists": [
+     "Eli Escobar"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 6,
+  "artist": "Make A Dance",
+  "title": "Woof Doof",
+  "credited": [
+   "Make A Dance"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-13",
+    "venue": "Outer Heaven",
+    "title": "Outer Heaven presents: Make A Dance [All Night Long]",
+    "url": "https://ra.co/events/2544354",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Make A Dance"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 7,
+  "artist": "John Tejada & Laurel Halo",
+  "title": "Shade",
+  "credited": [
+   "John Tejada",
+   "Laurel Halo"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-20",
+    "venue": "Nowadays",
+    "title": "Laurel Halo All Night",
+    "url": "https://ra.co/events/2549121",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Laurel Halo"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 8,
+  "artist": "Kelly Lee Owens",
+  "title": "Melt!",
+  "credited": [
+   "Kelly Lee Owens"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-06",
+    "venue": "Good Room",
+    "title": "22 Years of FIXED ft Kelly Lee Owens (dj set), JDH & Dave P, Ivan Berko (all night)",
+    "url": "https://ra.co/events/2537429",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Kelly Lee Owens"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 9,
+  "artist": "Jen Cardini & Shonky",
+  "title": "August In Paris (Kasra V Remix)",
+  "credited": [
+   "Jen Cardini",
+   "Shonky",
+   "Kasra V",
+   "Kasra"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-29",
+    "venue": "Public Records",
+    "title": "The Atrium: Eli Escobar, Jen Cardini",
+    "url": "https://ra.co/events/2554830",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Jen Cardini"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 10,
+  "artist": "Kim Ann Foxman",
+  "title": "E4 Energy",
+  "credited": [
+   "Kim Ann Foxman"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-07",
+    "venue": "The Chocolate Factory",
+    "title": "Sights & Sounds: Zombies in Miami (live), Youandewan, Kim Ann Foxman, Nate Mohler (A/V set)",
+    "url": "https://ra.co/events/2444591",
+    "sources": [
+     "dice",
+     "ra"
+    ],
+    "artists": [
+     "Kim Ann Foxman"
+    ]
+   },
+   {
+    "date": "2026-11-14",
+    "venue": "BASEMENT",
+    "title": "Pornceptual: The Lady Machine/ Huamaniser/ KONZ/ LYDO/ Curses/ Kim Ann Foxman / Shaun J. Wright",
+    "url": "https://ra.co/events/2553746",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Kim Ann Foxman"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 11,
+  "artist": "Best Mate",
+  "title": "Situation Go Bang (Spank Remix)",
+  "credited": [
+   "Best Mate",
+   "Spank"
+  ],
+  "shows": []
+ },
+ {
+  "n": 12,
+  "artist": "Zombies in Miami",
+  "title": "Feeling The Heat",
+  "credited": [
+   "Zombies in Miami"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-07",
+    "venue": "The Chocolate Factory",
+    "title": "Sights & Sounds: Zombies In Miami (live), Youandewan, Kim Ann Foxman, Nate Mohler (A/V set)",
+    "url": "https://ra.co/events/2444591",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Zombies In Miami"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 13,
+  "artist": "Cormac",
+  "title": "Gone (Julie Desire Remix)",
+  "credited": [
+   "Cormac",
+   "Julie Desire",
+   "Julie"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-21",
+    "venue": "BASEMENT",
+    "title": "Function b2b Nastia Reigel / NEUX / Juana / Cormac / x3butterfly / Will Automagic",
+    "url": "https://ra.co/events/2553762",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Cormac"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 14,
+  "artist": "CURSES",
+  "title": "Crown Of Ruin (Extended Mix)",
+  "credited": [
+   "CURSES"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-14",
+    "venue": "BASEMENT",
+    "title": "Pornceptual: The Lady Machine/ Huamaniser/ KONZ/ LYDO/ Curses/ Kim Ann Foxman / Shaun J. Wright",
+    "url": "https://ra.co/events/2553746",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Curses"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 15,
+  "artist": "Roza Terenzi",
+  "title": "A2. Metal Glo (Luca Lozano + Mr. Ho remix)",
+  "credited": [
+   "Roza Terenzi",
+   "Luca Lozano + Mr. Ho",
+   "Luca Lozano + Mr.",
+   "Luca Lozano +",
+   "Luca"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-06",
+    "venue": "BASEMENT",
+    "title": "Aurora Halal / Altinbas / Roza Terenzi / Alex Kassian / Matas",
+    "url": "https://ra.co/events/2553711",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Roza Terenzi"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 16,
+  "artist": "Alex Kassian",
+  "title": "Leave Your Life (Lonely Hearts Mix)",
+  "credited": [
+   "Alex Kassian",
+   "Lonely Hearts",
+   "Lonely"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-06",
+    "venue": "BASEMENT",
+    "title": "Aurora Halal / Altinbas / Roza Terenzi / Alex Kassian / Matas",
+    "url": "https://ra.co/events/2553711",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Alex Kassian"
+    ]
+   }
+  ]
+ },
+ {
+  "n": 17,
+  "artist": "David Shaw and The Beat, Jennifer Cardini, Jen Cardini",
+  "title": "Sentiment Acide (Jennifer Cardini remix)",
+  "credited": [
+   "David Shaw",
+   "The Beat",
+   "Jennifer Cardini",
+   "Jen Cardini",
+   "Jennifer"
+  ],
+  "shows": [
+   {
+    "date": "2026-11-29",
+    "venue": "Public Records",
+    "title": "The Atrium: Eli Escobar, Jen Cardini",
+    "url": "https://ra.co/events/2554830",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Jen Cardini"
+    ]
+   }
+  ]
+ }
+]
