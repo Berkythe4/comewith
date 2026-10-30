@@ -19,7 +19,7 @@ Status key: [x] done  [ ] to do  [?] waiting on Keith
 
 ## B. Video
 - [x] Cues `EP8_cues.csv` (all shows per card); preview cards checked (1, 5, 11, 17)
-- [x] Render `CWR_Ep8_YouTube.mp4` with the SHOW 12 cover (`CWR_Ep8_cover.jpg`); next drop on the closing slide = 2026-11-12 (Ep 9 has no drop date yet)
+- [x] Render `CWR_Ep8_YouTube.mp4` with the SHOW 12 cover (`CWR_Ep8_cover.jpg`); next drop on the closing slide = 2026-11-19 (episodes are 2 weeks apart); intro reads GUEST MIX BY KRISTEN LONDON; closing slide adds "Follow Kristen London @kristenmlondon_dj"
 - [x] `CWR_Ep8_mix.mp3` (320 kbps) for SoundCloud
 - [?] Cover reads **EP.110626** (Fri 11/6) but the dashboard drop is **Thu 11/5**. Pick one
 

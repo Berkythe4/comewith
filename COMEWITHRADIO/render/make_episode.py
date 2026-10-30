@@ -167,6 +167,8 @@ def main():
                          "not the show — the NYC show is 'Come With NYC Radio'.")
     ap.add_argument("--edition-name", dest="edition_name",
                     help="for a special edition, e.g. 'Come With Elements Radio'")
+    ap.add_argument("--guest", action="store_true", help="guest DJ: intro credit reads GUEST MIX BY")
+    ap.add_argument("--follow", default="", help="guest DJ's handle for the closing slide, e.g. @kristenmlondon_dj")
     ap.add_argument("--dry", action="store_true")
     a = ap.parse_args()
 
@@ -284,6 +286,10 @@ def main():
            "--audio", a.audio, "--cover", a.cover, "--out", out, "--ep", ep_label,
            "--title", a.title, "--abitrate", "320k",
            "--mixed-by", mixed_by, "--drop-date", drop_date, "--next-date", next_date]
+    if a.guest:
+        cmd.append("--guest")
+    if a.follow:
+        cmd += ["--follow", a.follow]
     if tl_json:
         cmd += ["--json", tl_json, "--meta", cues]
     else:

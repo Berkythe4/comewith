@@ -973,7 +973,7 @@ def draw_intro(bg, cover_sm, ep_label, mixed_by, drop_date, stage):
     if stage >= 1:                                            # credits
         cred = "  ·  ".join([p for p in [
             ep_label.upper(),
-            ("MIXED BY " + mixed_by.upper()) if mixed_by else "",
+            (CREDIT_LABEL + " " + mixed_by.upper()) if mixed_by else "",
             fmt_show_date(drop_date).upper()] if p])
         _ctext(d, cx, 92 + cs + 176, cred, F_mono(30), DIM)
     if stage >= 2:
@@ -1010,7 +1010,13 @@ def draw_outro(bg, cover_sm, next_date, stage):
     if stage >= 2:
         _ctext(d, cx, 576, "comewith.org", F_disp(60), LIME)
     if stage >= 3:
-        _ctext(d, cx, 690, "Follow @comewithnyc so you never miss a drop.", F_body(40), DIM)
+        if FOLLOW_DJ:
+            # A guest's handle leads, in cream, with ours tucked under it -- both
+            # have to fit between comewith.org and the date pill at 772.
+            _ctext(d, cx, 672, FOLLOW_DJ, F_body(40), CREAM)
+            _ctext(d, cx, 722, "Follow @comewithnyc so you never miss a drop.", F_body(34), DIM)
+        else:
+            _ctext(d, cx, 690, "Follow @comewithnyc so you never miss a drop.", F_body(40), DIM)
     if stage >= 4:
         nd = fmt_md(next_date)
         txt = ED["next_label"] + ((" · " + nd.upper()) if nd else "")
@@ -1031,6 +1037,7 @@ def draw_outro(bg, cover_sm, next_date, stage):
 # --outro-promo swaps the closing for this. The flier is portrait, so it takes
 # the left of the frame whole (never cropped -- it is somebody's artwork) and
 # the copy stacks on the right. Accent is SPOT, same as the spotlight cards.
+CREDIT_LABEL, FOLLOW_DJ = "MIXED BY", ""   # set in main() (--guest, --follow)
 PROMO = None    # set in main(): {"image","chip","lead","when","where"}
 
 def _promo_art(path, box_w, box_h):
@@ -1183,10 +1190,18 @@ def main():
     ap.add_argument("--promo-lead", default="Catch us live at our fundraiser")
     ap.add_argument("--promo-when", default="")
     ap.add_argument("--promo-where", default="")
+    ap.add_argument("--guest", action="store_true",
+                    help="guest DJ episode: the intro credit reads GUEST MIX BY instead of MIXED BY")
+    ap.add_argument("--follow", default="",
+                    help="the DJ's handle, e.g. @kristenmlondon_dj -- adds a 'Follow <name>' line "
+                         "to the closing slide above ours")
     ap.add_argument("--dry", action="store_true", help="cards + 1s preview only")
     a = ap.parse_args()
 
-    global ED, PROMO
+    global ED, PROMO, CREDIT_LABEL, FOLLOW_DJ
+    CREDIT_LABEL = "GUEST MIX BY" if a.guest else "MIXED BY"
+    FOLLOW_DJ = ("Follow %s  %s" % (a.mixed_by, a.follow.strip())).replace("  ", " ") \
+        if a.follow.strip() else ""
     if a.outro_promo:
         if not os.path.exists(a.outro_promo):
             raise SystemExit("Missing file: " + a.outro_promo)
