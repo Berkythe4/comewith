@@ -4840,6 +4840,63 @@ async function processHeroImage(file, targetW = 1600) {
   } catch (_) { return await downscaleImage(file); }
 }
 
+// ---- Episode cover -> upload-ready files (✎ Details) ----
+// The stored cover is whatever was uploaded, downscaled to 1400px, and rarely
+// exactly square. SoundCloud wants a square (800px+), YouTube a 1280×720
+// thumbnail, both under 2 MB. Same recipe as COMEWITHRADIO/render/make_thumbs.py:
+// SoundCloud = centre square crop; YouTube = the WHOLE cover over a blurred,
+// darkened fill of itself, because a 16:9 crop beheads the tall Come With mark.
+async function raCoverDownload(kind, url, name, btn) {
+  const stem = String(name || 'cover').replace(/[^A-Za-z0-9]+/g, '_').replace(/^_|_$/g, '') || 'cover';
+  const label = btn ? btn.textContent : '';
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
+  const save = (blob, file) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  };
+  try {
+    // fetch, not a plain link: the bucket is another origin, so <a download> on
+    // the URL would just open the image instead of saving it.
+    const res = await fetch(url, { cache: 'no-store' });
+    if (!res.ok) throw new Error('could not fetch the cover (' + res.status + ')');
+    const src = await res.blob();
+    if (kind === 'orig') { save(src, stem + '_cover.' + ((src.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'))); return; }
+    const img = await createImageBitmap(src);
+    const c = document.createElement('canvas'), x = c.getContext('2d');
+    x.imageSmoothingQuality = 'high';
+    if (kind === 'sc') {
+      const s = Math.min(img.width, img.height), out = Math.max(800, s);
+      c.width = c.height = out;
+      x.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, 0, 0, out, out);
+    } else {
+      c.width = 1280; c.height = 720;
+      // Blur by shrinking then stretching: works in every browser, unlike
+      // ctx.filter, which older Safari ignores (it would draw a sharp backdrop).
+      const t = document.createElement('canvas'); t.width = 64; t.height = 36;
+      const s = Math.min(img.width, img.height);
+      t.getContext('2d').drawImage(img, (img.width - s) / 2, (img.height - s * 9 / 16) / 2, s, s * 9 / 16, 0, 0, 64, 36);
+      x.drawImage(t, 0, 0, 1280, 720);
+      x.fillStyle = 'rgba(0,0,0,0.28)'; x.fillRect(0, 0, 1280, 720);
+      const fh = 720, fw = Math.round(img.width * fh / img.height);
+      x.drawImage(img, (1280 - fw) / 2, 0, fw, fh);
+    }
+    let blob = null;
+    for (let q = 0.92; q > 0.4; q -= 0.06) {          // step down until under 2 MB
+      blob = await new Promise(r => c.toBlob(r, 'image/jpeg', q));
+      if (blob && blob.size <= 2 * 1024 * 1024) break;
+    }
+    save(blob, kind === 'sc' ? `${stem}_soundcloud_${c.width}.jpg` : `${stem}_youtube_1280x720.jpg`);
+    toast(kind === 'sc' ? `SoundCloud artwork saved (${c.width}×${c.height})` : 'YouTube thumbnail saved (1280×720)', 'ok');
+  } catch (e) {
+    toast('Cover download failed: ' + (e.message || e), 'err');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = label; }
+  }
+}
+
 // ---- Image downscale (so big phone photos fit the storage bucket) ----
 // Resizes a raster image to <= maxDim on its long edge and re-encodes as JPEG,
 // which takes a 10–15MB phone photo down to a few hundred KB. SVG/GIF pass
@@ -19023,7 +19080,7 @@ function renderMkTopArtists() {
 // the pop-out modal (Connect / Export) work too — the modal is not inside the panel.
 document.addEventListener('click', async (e) => {
   const t = e.target;
-  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-addshow],[data-ra-addshow-for],[data-ra-watchtoggle],[data-ra-pullbit],[data-ra-watchadd],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-exportmine],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccmixfind],[data-ra-detmixfind],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
+  if (!t.closest('[data-ra-refresh],[data-ra-matchsc],[data-ra-refreshall],[data-ra-scan],[data-ra-rescan],[data-ra-scancancel],[data-ra-weeks],[data-ra-prodtoggle],[data-ra-noscoggle],[data-ra-nyctoggle],[data-ra-addentity],[data-ra-addshow],[data-ra-addshow-for],[data-ra-watchtoggle],[data-ra-pullbit],[data-ra-watchadd],[data-ra-rename],[data-ra-play],[data-ra-songs],[data-ra-songsort],[data-ra-trackplay],[data-ra-addtrack],[data-ra-removetrack],[data-ra-plmove],[data-ra-playstation],[data-ra-copytracks],[data-ra-clearpl],[data-ra-export],[data-ra-exportmine],[data-ra-connect],[data-ra-publish],[data-ra-copytracklist],[data-ra-preview],[data-ra-sync],[data-ra-follow],[data-ra-unfollow],[data-ra-repost],[data-ra-unrepost],[data-ra-closeplayer],[data-ra-finalize],[data-ra-mixupload],[data-ra-mixlink],[data-ra-mixfind],[data-ra-genweek],[data-ra-mode],[data-ra-ccplan],[data-ra-ccedition],[data-ra-ccopen],[data-ra-ccdetails],[data-ra-ccschedule],[data-ra-ccmixfind],[data-ra-detmixfind],[data-ra-ccgenweek],[data-ra-cctaskadd],[data-ra-cctaskedit],[data-ra-ccnoteadd],[data-ra-ccclip],[data-ra-ccnotify],[data-ra-history],[data-ra-histfilter],[data-ra-hideplayed],[data-ra-unpub],[data-ra-repub],[data-ra-refreshshows],[data-ra-stationtoggle],[data-ra-clearsearch],[data-ra-clearfilters],[data-ra-rekordbox],[data-ra-addmanual],[data-ra-fsplaylist],[data-ra-edittrack],[data-ra-sources],[data-ra-bptoken],[data-ra-bpnet],[data-ra-bpcat],[data-ra-bpcattoken],[data-ra-bpplay],[data-ra-bpadd],[data-ra-energy],[data-ra-note],[data-ra-bpskip],[data-ra-copybuy],[data-ra-epdetails],[data-ra-coverclear],[data-ra-coverdl],[data-ra-showpick],[data-ra-schedule],[data-ra-unschedule]')) return;
   if (t.closest('[data-ra-stationtoggle]')) { const y = scrollPos(); raState.stationOpen = !raState.stationOpen; renderRaMarket(); scrollToPos(y); return; }
   if (t.closest('[data-ra-clearsearch]')) { raState.search = ''; renderRaMarket(); const el = document.querySelector('#panel-ra-market [data-ra-search]'); if (el) el.focus(); return; }
   if (t.closest('[data-ra-clearfilters]')) { raState.search = ''; raState.genre = ''; raState.venue = ''; raState.sourceFilter = ''; renderRaMarket(); return; }
@@ -19127,6 +19184,8 @@ document.addEventListener('click', async (e) => {
   }
   if (t.closest('[data-ra-copybuy]')) { raCopyBuyList(); return; }
   if (t.closest('[data-ra-epdetails]')) { raOpenEpisodeDetails(); return; }
+  const cdl = t.closest('[data-ra-coverdl]');
+  if (cdl) { raCoverDownload(cdl.dataset.raCoverdl, cdl.dataset.url, cdl.dataset.name, cdl); return; }
   if (t.closest('[data-ra-coverclear]')) {
     raState.coverCleared = true;
     const p = $('raCoverPrev'); if (p) p.style.backgroundImage = '';
@@ -21274,6 +21333,12 @@ async function raOpenEpisodeDetails() {
           <div class="kpi-hint" style="margin:3px 0 0;">Square works best — it's the artwork on the episode page, the radio hub card and anywhere the link is shared. Resized in your browser before upload. Leave empty to keep using the first track's artwork.</div>
         </div>
         ${pl.cover_url ? '<button type="button" class="hub-mini" data-ra-coverclear title="Go back to using the first track\'s artwork">✕ Remove</button>' : ''}
+        ${pl.cover_url ? `<div style="flex-basis:100%;display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+          <span class="li-sub">⬇ Download for upload:</span>
+          <button type="button" class="hub-mini" data-ra-coverdl="sc" data-url="${v(pl.cover_url)}" data-name="${v(pl.name || 'cover')}" title="Square JPG, under 2 MB">SoundCloud (square)</button>
+          <button type="button" class="hub-mini" data-ra-coverdl="yt" data-url="${v(pl.cover_url)}" data-name="${v(pl.name || 'cover')}" title="1280×720 JPG, under 2 MB: the whole cover over a blurred fill, so the logo is never cropped">YouTube thumbnail (16:9)</button>
+          <button type="button" class="hub-mini" data-ra-coverdl="orig" data-url="${v(pl.cover_url)}" data-name="${v(pl.name || 'cover')}" title="Exactly the file stored here">Original</button>
+        </div>` : ''}
       </div></div>
     <div class="form-row"><label>Page description — what listeners read on the episode page</label>
       <textarea name="ep_desc_public" class="modal-textarea" rows="4" placeholder="Every artist in this mix is playing NYC in the coming weeks — each track shows the date, venue and price of their show. Come dance.">${v(pl.desc_public)}</textarea></div>
