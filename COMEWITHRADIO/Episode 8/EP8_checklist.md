@@ -10,7 +10,7 @@ Status key: [x] done  [ ] to do  [?] waiting on Keith
 - [x] SHOW 12 synced to the 17 played tracks, in order (`apply_station_from_rekordbox.py`, pairs for #1/#2 so their SoundCloud links survive)
 - [x] 50 unplayed picks logged passed@12 and carried to the next show. Backup: `backups/presync_2026-10-30_show12_tracks.json`
 - [x] Show chips from `ra_events.lineup`, counted from the drop date. Aliases set by hand: #1 Alex Kassian (remixer, BASEMENT 11/6), #2 Locussolus = DJ Harvey (Knockdown 11/13), #17 Jennifer = Jen Cardini (Public Records 11/29)
-- [x] #11 Best Mate (Spank Remix): NO NYC show in any feed under either name; card and page draw no show line
+- [x] #11 Best Mate (Spank Remix): Best Mate is a duo that includes **Will Automagic** (2026-11-02). Alias set by hand like #1/#2/#17: chip = Brooklyn Pacha 11/7 (Louie Vega, ra.co/events/2557249); card also names BASEMENT 11/21 (ra.co/events/2553762, same night as #13 Cormac). Added to the "Catch them live" line in `desc_public` + `EP8_youtube.txt`; cues/shows regenerated, MP4 re-rendered
 - [x] Her brief saved as the public description (`desc_public`, verbatim from the docx) + `desc_sc` + `recap_notes` + `mix_duration_ms`
 - [x] Read back through `get-station` (token): 17 tracks, brief, "Mixed by" links to her profile
 - [ ] Keith: eyeball SHOW 12 in the dashboard

@@ -313,13 +313,39 @@
  },
  {
   "n": 11,
-  "artist": "Best Mate",
+  "artist": "Best Mate, Will Automagic",
   "title": "Situation Go Bang (Spank Remix)",
   "credited": [
    "Best Mate",
+   "Will Automagic",
    "Spank"
   ],
-  "shows": []
+  "shows": [
+   {
+    "date": "2026-11-07",
+    "venue": "Brooklyn Pacha",
+    "title": "Louie Vega, Oscar G, SURPRISE GUEST + MORE",
+    "url": "https://ra.co/events/2557249",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Will Automagic"
+    ]
+   },
+   {
+    "date": "2026-11-21",
+    "venue": "BASEMENT",
+    "title": "Function b2b Nastia Reigel / NEUX / Juana / Cormac / x3butterfly / Will Automagic",
+    "url": "https://ra.co/events/2553762",
+    "sources": [
+     "ra"
+    ],
+    "artists": [
+     "Will Automagic"
+    ]
+   }
+  ]
  },
  {
   "n": 12,
