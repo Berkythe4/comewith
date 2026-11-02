@@ -6,7 +6,7 @@ Files to upload (this folder):
   Artwork    : CWR_Ep8_cover.jpg      (the cover on SHOW 12, from the episode details page)
   The SoundCloud description below is also saved on SHOW 12 (desc_sc), hashtags included.
 Upload the SoundCloud track PRIVATE (or scheduled) - the site makes it public at the drop.
-Drop: Thu Nov 5, 2026 (dashboard). NB the cover art reads EP.110626 (Fri 11/6) - pick one.
+Drop: Thu Nov 5, 2026 (dashboard). The cover art reads EP.110626 (Fri 11/6) - left as is on purpose (Keith, 2026-11-02).
 
 
 ------------------------------------------------------------------ TITLE
