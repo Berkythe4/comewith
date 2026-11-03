@@ -23,11 +23,11 @@ Status key: [x] done  [ ] to do  [?] waiting on Keith
 - [x] `CWR_Ep8_mix.mp3` (320 kbps) for SoundCloud
 - [x] Cover reads **EP.110626** (Fri 11/6); drop stays **Thu 11/5**. Keith 2026-11-02: 11/5 is correct, cover art stays as is
 
-## C. Upload + schedule (Keith)
-- [ ] YouTube: upload the MP4, scheduled premiere at the drop (text in `EP8_youtube.txt`)
-- [ ] SoundCloud: upload the MP3 PRIVATE / scheduled, same time; cover art; description from `EP8_youtube.txt`
-- [ ] Then: SC url + track id (`find_mix`, never paste), YouTube url, `scheduled_go_live` on SHOW 12
-- [ ] Dry run `radio-publish-due?dry=1&station=12` before the drop (§97)
+## C. Upload + schedule (DONE 2026-11-03)
+- [x] YouTube: Keith uploaded iaPdU8cj3x8 = scheduled premiere Thu 11/5 3:00 PM ET (20:00 UTC; read off the watch page: isUpcoming, startTimestamp)
+- [x] SoundCloud: Keith uploaded track 2429271267 PRIVATE + scheduled; found via `find_mix` (/me/tracks), length matches to the ms (4,154,514)
+- [x] SHOW 12: SC url (Keith, = the found track's permalink) + track id + YouTube url (cleaned of `?si=`) + `scheduled_go_live` 2026-11-05 20:00 UTC
+- [x] Dry run `radio-publish-due?dry=1&station=12`: due 1, no warning; "sharing=private, left alone (SoundCloud owns the release)". The page waits for SoundCloud's own release (up to 120 min, then publishes anyway with a `station_notes` warning). SC's scheduled time should be the same 3 PM ET
 - [ ] Social: release post at/after go-live; tag @kristenmlondon_dj
 
 ## D. After it goes live
