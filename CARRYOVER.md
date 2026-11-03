@@ -1,3 +1,22 @@
+# Carryover - 2026-11-03 (Radio Ep 8 / SHOW 12 scheduled - DESKTOP, Quick Close)
+
+**Closed 2026-11-03 on the DESKTOP.** No branch; on `master`, pushed. No migration, no
+site file changed. The 2026-10-29 block below is the previous close; its START HERE
+(Control Center click-through, DI #3 TBDs, real exports) is **still open**.
+
+## This session shipped
+- Radio Ep 8 (SHOW 12, guest Kristen London) is scheduled: SC track 2429271267 (private,
+  SoundCloud-scheduled) + YouTube premiere iaPdU8cj3x8 linked; `scheduled_go_live`
+  2026-11-05 20:00 UTC (3 PM ET); `radio-publish-due` dry run clean (defers to SoundCloud's
+  own release, 120-min grace). All 17 tracks carry a show (#11 Best Mate = Will Automagic).
+  Detail in `COMEWITHRADIO/Episode 8/EP8_checklist.md`. Financial views 401, anon sweep clean.
+
+## Next (radio)
+- Keith: confirm SoundCloud's scheduled time is also 3 PM ET; release post at/after go-live
+  tagging @kristenmlondon_dj; after the drop, press play on both players + read `station_notes`.
+
+---
+
 # Carryover - 2026-10-29 (Event Control Center for DI #3 - DESKTOP)
 
 **Closed 2026-10-29 on the DESKTOP.** No branch; on `master`, pushed (Netlify deploys
