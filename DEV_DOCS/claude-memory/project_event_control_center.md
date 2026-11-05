@@ -1,6 +1,6 @@
 ---
 name: project-event-control-center
-description: "Event Control Center (control.html, migr 222-223) shipped 2026-10-29 for DI #3 — standalone admin page, 8 sections, door list = guest_event_attendance, tested headless only (not yet clicked by Keith on prod)"
+description: "Event Control Center (control.html) — 222-223 built it 2026-10-29; 224-228 (2026-11-04/05) loaded DI #3 real data and REBUILT it (Where we stand, Chase list, RSVPs, grouped guest list); one eventRoster() shared with the hub Customers tab; render harness exists"
 metadata:
   node_type: memory
   type: project
@@ -22,3 +22,5 @@ Open questions for Keith:
 - a duplicate "Dance Infusion MS" event row
 
 See [[project-event-hub-and-di2-money]], [[project-event-import-tool]].
+
+**Update 2026-11-05 (224-228):** DI #3 now runs on real data: Zeffy, Partiful RSVPs (`event_rsvps`), sponsor fixes, Signal deposit, Keith's $1,500 contingent advance (`owner_advances`), lineup + Henry as producer, and every comp under its sponsor. Keith found the old page underwhelming, so it was rebuilt: hero, Where we stand, Chase list, Run of show, grouped Guest list and an RSVPs tab. `eventRoster()` in control-center.js is now the ONLY roster logic, used by both control.html and the hub Customers tab. To see the page locally, run `scripts/control_harness/render.py` (headless Edge can't go under ~477px, so the phone shot uses an iframe). Keith has not yet clicked through it on prod. Open items: JAS, open comps, Signal balance date, drink-ticket value. See [[project-event-hub-and-di2-money]].

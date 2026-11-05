@@ -2990,3 +2990,28 @@ beneath them. The rule: **when two screens list the same people, the matching
 logic lives in one tested function, and neither screen re-derives it.** A
 duplicate drifts the first time either one is edited. Linking a guest to its actor
 (227: Keith ↔ Berky) is part of the data, not a rendering fix.
+
+## Section 105 — A sponsor's comps count ENTRIES, not door rows (2026-11-05)
+
+`sponsorStats` counted `compsUsed` as the number of guest rows on a sponsorship.
+JayJay is one row with a party of 2. When Keith asked for JayJay and Amanda to
+become his comps (228, 3 entries), the card would have shown "2 of 3 used, 1 open",
+and the Chase list would have asked someone to name a comp that doesn't exist.
+`sponsorStats` and `eventRoster` now both count `quantity`. The door list already
+did. **Any count of comps, tickets or heads sums `quantity`, never rows**, the
+same rule as party size at the door.
+
+## Section 106 — control.html CAN be seen before it ships; a narrow headless screenshot lies (2026-11-05)
+
+CLAUDE.md said there was no local console check. There is:
+`scripts/control_harness/render.py` snapshots one event's prod rows (read-only),
+serves a copy of the page with the Supabase client swapped for a stub that answers
+from the snapshot, and screenshots it with headless Edge. It caught a real bug the
+syntax check could not see: crew sorted ABOVE the 3 PM set, because
+`localeCompare` collates `~` before digits. Two traps:
+- **Headless Edge will not lay out narrower than about 477px.** `--window-size=390`
+  crops the screenshot of a 477px layout, which looks exactly like horizontal
+  overflow. A probe read `clientWidth = 477`. The harness renders the phone shot
+  inside a 390px iframe, which gives a true phone viewport, and there the page fit.
+  Measure the viewport before blaming the CSS.
+- `_build/` holds guest names and emails. It is gitignored; keep it that way.

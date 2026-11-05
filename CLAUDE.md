@@ -447,6 +447,8 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   record, actors join via `guests.actor_id`, roles come from `entry_type`. Change the rules
   there only, never in either page (§104). Link a DJ's guest record to their actor or the
   lineup shows them twice.
+- **Comps count ENTRIES, not rows** (`quantity`): a comp party of 2 uses 2 of a sponsor's
+  comps, in `sponsorStats` and `eventRoster` alike (§105).
 - **`owner_advances` (225) is owner money that may be owed back. It is NOT income or
   sponsor cash.** Master-only, outside % to the mission, and it never converts itself:
   a closed status requires `resolved_at`, so a conversion is always a recorded decision (§103).
@@ -893,8 +895,11 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   `await`, so BOTH sides stopping on that same final line is the pass; the exit code
   already knows that. `node --check` on an extracted `.mjs` is the same idea where a
   runtime exists.
-- **There is no local console check** — the Browser pane can't open `file://` URLs. The
-  loop is `node --check` plus the deployed Netlify build.
+- **`control.html` has a local render check (§106):** `SBP_REF=yaytdosxfhcqatmhctzk python
+  scripts/control_harness/render.py [slug] [sections]` screenshots it from a prod snapshot via
+  a stub client + headless Edge. Headless Edge will not go narrower than ~477px; the phone shot
+  uses a 390px iframe. `_build/` holds guest PII and is gitignored. `dashboard.html` still has
+  no local check; the Browser pane can't open `file://` URLs.
 
 - **Patch scripts must write atomically.** `open(path, "w")` truncates *before* it
   writes; on 2026-08-19 an encoding error mid-write left `dashboard.html` at zero

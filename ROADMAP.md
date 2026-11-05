@@ -207,6 +207,25 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-11-05 (DI #3 live data + Control Center rebuild)
+
+**DI #3 runs on real data now, and the Control Center answers "are we going to make it".**
+
+- ✅ DI #3 data in prod (224-228): Zeffy through 11/4, sponsor corrections, Signal deposit,
+  owner advance, lineup with set times + Henry as producer, all comps named to their sponsor,
+  77 Partiful RSVPs as a separate layer.
+- ✅ New tables: `event_rsvps` (224), `owner_advances` (225, master-only); new column
+  `sponsorships.payment_refs` (224). All anon-blocked and on the sweep list.
+- ✅ `control.html` rebuilt: hero, Where we stand, Chase list, Run of show, grouped Guest list,
+  RSVPs tab with Partiful re-import, visual refresh. Verified headless with
+  `scripts/control_harness/render.py`, phone width included.
+- ✅ Event hub Customers tab reads the same `eventRoster()` (LEARNINGS §104).
+- 🟡 Keith has not yet clicked through either page on prod.
+- ⏭ Parked: owner-advance resolution after the night; Zeffy importer segment name
+  (slug vs `di-03-2026-11`); even revenue split on mixed Zeffy orders.
+
+---
+
 ## Current state — reconciled 2026-10-29 (Event Control Center, DI #3 first)
 
 **One admin page runs any event, and its fundraising layer switches on per event (222-223).**

@@ -1,29 +1,50 @@
-# Carryover - 2026-11-05 (DI #3 answers + Control Center rebuild - DESKTOP, Quick Close)
+# Carryover - 2026-11-05 (DI #3 import -> Control Center rebuild - DESKTOP, FULL Close)
 
-**Closed 2026-11-05 on the DESKTOP.** On `master`, pushed (Netlify deploys `control.html`
-+ `dashboard.html`). **Migrations 226 + 227 applied to prod** (dry run first, recorded).
+**Closed 2026-11-05 on the DESKTOP.** On `master`, pushed; Netlify serves it (verified
+live: `control.html`, `assets/control-center.js`, `dashboard.html`). No branch.
+This close covers the whole 11-04 -> 11-05 session; the 11-04 Quick block below is kept.
+
+## State summary
+- **Migrations: repo and prod both top out at 228** (`applied_migrations` 220-228, no drift).
+  224-228 all dry-run first (commit -> rollback), then applied and recorded.
+- **Prod invariants:** `post_apply.sql` all PASS; anon sweep clean incl. new `event_rsvps`
+  + `owner_advances` (401); all five financial views 401 (`check_financial_views.py`).
+- **LEARNINGS latest = §106** (§102-106 this session). CLAUDE.md Control Center section
+  carries RSVP layer, `payment_refs`, `owner_advances`, ONE roster, comps = entries.
+- **Tests:** `test_control_center.mjs` 80/80; `test_import_engine.mjs` 51/51.
+- **Visual check now exists:** `SBP_REF=yaytdosxfhcqatmhctzk python scripts/control_harness/render.py`
+  (prod snapshot -> stub client -> headless Edge; `_build/` = guest PII, gitignored). §106.
 
 ## This session shipped
-- **226**: Frick Frack BlackJack $500 to Shane Fonda (new actor, org = Frick Frack
-  BlackJack; accrued, dated 11/14, no due date); Meta Ads $150 paid by Keith personally
-  (owner-funded, dated 11/5); Ethan Pollak = Pulse comp 1/4; Terri -> existing Theresa
-  McGuinness record, Bill -> Bill McGuinness; Lorena Aragon -> Lorena Hunter (guest +
-  subscriber); Pat Donnelly guest; RSVP matches confirmed (all but JAS).
-- **227**: Keith Berkman guest linked to the Berky actor (one roster row).
-- **Control Center rebuilt**: gradient hero (countdown, tickets, guest list, Partiful,
-  $ to MS); "Where we stand" (raised vs expected costs, gap, owed back, levers);
-  Chase list; Run of show; Guest list grouped (sponsors with comps beneath, lineup by set
-  time, comps, tickets); new RSVPs tab (going-no-ticket, confirm matches, promoters,
-  Partiful re-import that keeps links). Visual refresh.
-- **Customers tab (event hub)** now reads the same `eventRoster()` (LEARNINGS §104),
-  grouped by default; DI #2 verified on it (77 on the list).
-- Verified by rendering control.html headless (Edge) against a prod snapshot with a stub
-  client; the harness lives in the session scratchpad only, not in the repo.
+- **224** DI #3 Zeffy + Partiful import; `event_rsvps`; `sponsorships.payment_refs`.
+- **225** `owner_advances`; Signal $3,000 deposit paid + $3,000 invoiced; Keith $500 paid; $1,500 advance.
+- **226** Frick Frack BlackJack $500 (Shane Fonda, accrued); Meta $150 paid by Keith; Ethan
+  = Pulse comp; Theresa + Bill McGuinness; Lorena Hunter; Pat Donnelly; RSVPs confirmed (not JAS).
+- **227** Keith's guest record linked to the Berky actor.
+- **228** Henry Zaradich on crew as producer (lineup + door, staff); JayJay (x2) + Amanda
+  Maldonado moved onto Keith's Champion (comps 0 -> 3).
+- **Control Center rebuilt:** hero, Where we stand (gap $5,405 as of today), Chase list, Run
+  of show, grouped Guest list (sponsors with comps beneath), RSVPs tab + Partiful re-import,
+  visual refresh. Event hub **Customers reads the same `eventRoster()`** (§104), grouped by default.
 
-## Open
-- JAS (RSVP) still unconfirmed. Pulse: 3 comps open; Savery/Martinez: 1 open.
-- Shane Fonda payment date; Signal balance due date; DJ drink tickets TBD.
-- Hub Customers grouped view not seen rendered (only syntax + DI #2 data check).
+## DI #3 numbers (prod, 2026-11-05)
+14 tickets / $395 · $400 to MS (16.4% of raised, target 60%) · sponsors $2,000 committed /
+$1,750 received · costs expected $7,450 (+2 TBD), paid $3,150 · owed back to Keith $1,500
+contingent · 30 on the guest list (27 people) · Partiful 32 going, 24 with no ticket.
+
+## >> START HERE NEXT SESSION
+1. Keith clicks through the new Control Center on prod (Command, Guest list, RSVPs) and the
+   hub Customers tab. The hub tab has NOT been seen rendered (only syntax + DI #2 data run).
+2. Open for Keith: JayJay's RSVP match (JAS); Pulse 3 comps + Savery/Martinez 1 open;
+   Signal balance due date; Shane Fonda pay date; drink-ticket count + $ value (bar progress);
+   DJ drink tickets; Martinez $250.
+3. Re-import Partiful from the RSVPs tab as new exports come in (links are kept).
+
+## Parked / next
+- Owner advance resolution after the event (repaid vs converted to donation - Keith decides).
+- The page Zeffy importer tags the slug `dance-infusion-3`; the DI segment convention is
+  `di-03-2026-11` (224 used the convention). Align when next touched.
+- A mixed Zeffy order still splits revenue evenly across items (mission is right; per-tier $ is not).
 
 ---
 
