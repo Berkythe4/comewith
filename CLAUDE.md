@@ -569,9 +569,25 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   listings") that only adds, never replaces. The artist split `RADIO_SPLIT_RE` exists
   in the view AND the dashboard - change both. Clubs are keyed by `venueIdent`
   (`v:<venue_id>`), never the label. Unlocated clubs and songs with no show are
-  LISTED under the map, not dropped. Elements Festival (98 songs) has no location.
-  232 merged only pure spelling duplicates; ROOMS inside a building (Elsewhere
-  Rooftop, Ruins at Knockdown) are still separate venues pending Keith's call. A club's songs export through the
+  LISTED, not dropped: clubs outside the NYC view (Elements Festival = Pocono
+  Raceway) or with no location sit in the map's "Off this map" tray.
+  **A room inside a building is ONE club** (Keith, 236): Elsewhere Rooftop/Hall/Zone
+  One → Elsewhere, Ruins → Knockdown Center, etc. `venue_name` keeps the room. A
+  separate BUSINESS at the same address (BASEMENT in Knockdown's building) is not a
+  room and stays its own club. Pins were checked against RA's venue address on
+  2026-11-05; the old July geocodes were off by up to 13 km for several clubs.
+- **Rekordbox / hand-added radio songs get a SoundCloud LINK, not a new id (236).**
+  `sc_link_id/sc_link_url` on `sc_playlist_tracks`, filled by
+  `scripts/link_radio_tracks_soundcloud.py` (artist's own uploads in the scan cache,
+  then SoundCloud search via `sc-connect search_tracks`; equal core title AND equal
+  version, uploader must be a credited artist). `sc_track_id` stays the identity.
+  The view's `sc_export_id`/`sc_url` use it, and so do the one-shot "Copy to my
+  SoundCloud" exports. **Not** ⇪ push / ↺ sync: sync-back keys on sc_track_id and
+  would read a linked id as a new song. Re-run the script after a Rekordbox import.
+  A song with no link shows a 🔍 SoundCloud search, never "not on SoundCloud".
+- **Map tiles are Esri's dark canvas (keyless).** CARTO `dark_all` started answering
+  every tile with an "API KEY REQUIRED" image at HTTP 200 - nothing errors, the map
+  just loses its streets. Check a tile's pixels, not its status. A club's songs export through the
   same one-shot "Copy to my SoundCloud" flow as a station: `sc_dj_exports` carries
   `track_ids` + `title` instead of `playlist_id` (231; exactly one of the two).
 - **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`

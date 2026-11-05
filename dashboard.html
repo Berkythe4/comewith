@@ -19502,7 +19502,12 @@ function sceneDrawMap(list, opts) {
   if (sceneMap) { try { sceneMap.remove(); } catch (_) {} sceneMap = null; }
   sceneMarkers = {}; sceneLines = [];
   sceneMap = L.map('sceneMapCanvas', { zoomControl: true, scrollWheelZoom: true }).setView([40.717, -73.955], 12);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', { attribution: '© OpenStreetMap © CARTO', subdomains: 'abcd', maxZoom: 19 }).addTo(sceneMap);
+  // Esri's dark canvas + its label layer, keyless. CARTO's dark_all (used until
+  // 2026-11-05) now answers every tile with an "API KEY REQUIRED" image - a 200, so
+  // nothing errored; the map just lost its streets.
+  const ESRI = 'https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/';
+  L.tileLayer(ESRI + 'World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', { attribution: 'Tiles © Esri — Esri, HERE, Garmin, © OpenStreetMap contributors', maxZoom: 16 }).addTo(sceneMap);
+  L.tileLayer(ESRI + 'World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', { maxZoom: 16, opacity: 0.8 }).addTo(sceneMap);
   // Quiet dots first so the lit ones draw on top.
   [...list].sort((a, b) => opts.lit(a) - opts.lit(b)).forEach(v => {
     const m = L.circleMarker([v.lat, v.lng], opts.style(v));
@@ -19510,9 +19515,23 @@ function sceneDrawMap(list, opts) {
     m.on('click', () => sceneSelect(v.key));
     m.addTo(sceneMap); sceneMarkers[v.key] = m;
   });
+  // Clubs the NYC view cannot show - out of town (Elements at Pocono Raceway) or with
+  // no location yet - get their own marked tray on the map instead of vanishing.
+  if (opts.offMap?.length) {
+    const tray = L.control({ position: 'bottomleft' });
+    tray.onAdd = () => {
+      const d = L.DomUtil.create('div', 'sm-tray');
+      d.innerHTML = `<div class="sm-tray-h">Off this map</div>` + opts.offMap.map(c => `<div class="sm-tray-i" data-sm-venue="${escapeHtml(c.key)}" title="${c.lat == null ? 'No location yet' : 'Out of town - click to fly there'}">${c.lat == null ? '?' : '↗'} ${escapeHtml(c.name)} <b>${c.songs || c.extra?.size || 0}</b>${c.area ? `<span>${escapeHtml(c.area)}</span>` : ''}</div>`).join('');
+      L.DomEvent.disableClickPropagation(d); L.DomEvent.disableScrollPropagation(d);
+      return d;
+    };
+    tray.addTo(sceneMap);
+  }
   if (sceneState.selected && sceneMarkers[sceneState.selected]) sceneSelect(sceneState.selected);
   setTimeout(() => { try { sceneMap.invalidateSize(); } catch (_) {} }, 120);   // container just became visible
 }
+// Roughly "is this in the city's view": within ~45 km of the map's centre.
+const sceneInNyc = (c) => c.lat != null && Math.abs(c.lat - 40.717) < 0.4 && Math.abs(c.lng + 73.955) < 0.5;
 function renderSceneMap() { return sceneState.mode === 'radio' ? renderSceneRadio() : renderSceneUpcoming(); }
 // ── Radio history, tracklist-first (233-235). The PRIMARY source is our own
 // tracklists: every aired song records the show it was picked for, and
@@ -19613,6 +19632,12 @@ function sceneInjectCss() {
   .sm-rank{display:grid;grid-template-columns:22px 1fr 110px;gap:8px;align-items:center;padding:5px 4px;border-radius:8px;cursor:pointer}
   .sm-rank:hover{background:rgba(255,255,255,.05)}
   .sm-rank .bar{height:8px;border-radius:4px;background:#a7e02e}
+  .sm-tray{background:rgba(15,8,20,.88);border:1px dashed rgba(167,224,46,.6);border-radius:10px;padding:6px 8px;max-width:230px;font-family:inherit;color:#ede4d3}
+  .sm-tray-h{font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;opacity:.7;margin-bottom:3px}
+  .sm-tray-i{cursor:pointer;font-size:.74rem;padding:3px 4px;border-radius:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sm-tray-i:hover{background:rgba(167,224,46,.15)}
+  .sm-tray-i b{color:#a7e02e;margin-left:4px}
+  .sm-tray-i span{display:block;font-size:.62rem;opacity:.6;padding-left:14px}
   @media (max-width:640px){.sm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-night{grid-template-columns:46px 1fr;gap:8px}.sm-tr{grid-template-columns:20px 36px 1fr}.sm-tr .r{display:none}.sm-rank{grid-template-columns:22px 1fr 60px}}`;
   document.head.appendChild(s);
 }
@@ -19621,7 +19646,7 @@ function renderSceneRadio() {
   const body = $('sceneMapBody');
   const T = sceneTL();
   const mapped = T.clubs.filter(c => c.lat != null && c.lng != null);
-  const unmapped = T.clubs.filter(c => c.lat == null || c.lng == null).sort((a, b) => b.songs - a.songs);
+  const unmapped = T.clubs.filter(c => !sceneInNyc(c)).sort((a, b) => b.songs - a.songs);   // out of town or unlocated: the map's tray
   const lit = new Set(T.clubs.map(c => c.key));
   const others = sceneState.showOthers ? (raState.venues || []).filter(v => v.lat != null && !lit.has('v:' + v.id)).map(v => ({ key: 'v:' + v.id, name: v.name, lat: v.lat, lng: v.lng, songs: 0, quiet: true, artists: new Set() })) : [];
   const rOpt = (v, l) => `<option value="${v}"${sceneState.range === v ? ' selected' : ''}>${l}</option>`;
@@ -19642,7 +19667,6 @@ function renderSceneRadio() {
       <b style="color:${RADIO_COLOR};">${primary.length} clubs</b> from our tracklists · ${placed} of ${T.scopedSongs} songs placed at a club${T.songs !== T.scopedSongs ? ' (' + T.songs + ' aired in all)' : ''} · dot size = radio songs${sceneState.listings ? ' · ringed dots = listings only' : ''}
     </div>
     <div id="sceneMapCanvas" style="height:min(60vh,560px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#0e1116;"></div>
-    ${unmapped.length ? `<div class="li-sub" style="margin-top:8px;">⚠ Not on the map (no location yet): ${unmapped.map(c => `${name(c)} (${c.songs || c.extra.size})`).join(' · ')}</div>` : ''}
     ${T.noVenue.length ? `<div class="li-sub" style="margin-top:4px;">${T.noVenue.length} song${T.noVenue.length === 1 ? ' has' : 's have'} no show recorded on the tracklist: ${T.noVenue.map(r => escapeHtml((r.artist_name || '?') + ' (SHOW ' + r.station_no + ')')).join(', ')}</div>` : ''}
     <div id="sceneMapInfo" style="margin-top:12px;">${top.length ? `<div class="sm-card"><div class="sm-sec" style="border-top:0;">
       <h4>Clubs by radio songs <span style="text-transform:none;letter-spacing:0;font-weight:normal;">· click one to open its nights and songs</span></h4>
@@ -19651,8 +19675,9 @@ function renderSceneRadio() {
           <div class="li-sub">${c.songs} song${c.songs === 1 ? '' : 's'} · ${c.nightList.length} night${c.nightList.length === 1 ? '' : 's'} · ${[...c.stations].sort((a, b) => a - b).map(n => 'SHOW ' + n).join(', ')}</div></div>
         <div class="bar" style="width:${Math.max(6, Math.round(100 * Math.sqrt(c.songs / maxTop)))}%;"></div></div>`).join('')}</div></div>`
       : '<div class="hub-empty">No tracklist songs fall in this range — widen the date or pick every aired show.</div>'}</div>`;
-  const maxS = Math.max(1, ...mapped.map(c => c.weight));
+  const maxS = Math.max(1, ...mapped.filter(sceneInNyc).map(c => c.weight));   // Elements (98, in PA) must not shrink every NYC dot
   sceneDrawMap([...mapped, ...others], {
+    offMap: unmapped,
     lit: (c) => c.quiet ? 0 : c.songs ? 2 : 1,
     style: (c) => c.quiet ? { radius: 3.5, color: '#6b6f78', weight: 1, fillColor: '#6b6f78', fillOpacity: 0.35 }
       : c.songs ? { radius: 6 + 20 * Math.sqrt(c.weight / maxS), color: RADIO_COLOR, weight: 2, fillColor: RADIO_COLOR, fillOpacity: 0.65 }
@@ -19684,27 +19709,36 @@ function sceneWebHtml(shared, what) {
   return web ? `<div class="li-sub" style="font-weight:700;margin-top:10px;">Connected venues <span style="font-weight:normal;">· share ${what} (green lines)</span></div>${web}` : `<div class="li-sub" style="margin-top:10px;">No shared-${what} links to other located venues yet.</div>`;
 }
 // Which songs are ticked for export. null = all exportable songs of the open club.
+// Keyed by sc_track_id (the song's identity); sceneExportIds() maps to what goes
+// into SoundCloud. A song "has SoundCloud" when it has an sc_export_id: its own id,
+// or the link scripts/link_radio_tracks_soundcloud.py found for a Rekordbox song.
+const sceneExportable = (c) => [...c.tracks.entries()].filter(([, t]) => t.r.sc_export_id).map(([id]) => id);
 function scenePicked(c) {
-  const all = [...c.tracks.keys()].filter(id => /^\d+$/.test(id));
+  const all = sceneExportable(c);
   return sceneState.picked ? all.filter(id => sceneState.picked.has(id)) : all;
 }
+const sceneExportIds = (c) => [...new Set(scenePicked(c).map(id => c.tracks.get(id).r.sc_export_id))];
 function sceneTrackRow(r, stations, picked, extraNote) {
-  const onSc = /^\d+$/.test(r.sc_track_id || '');
+  const url = r.sc_url || r.permalink_url || null;
+  const onSc = !!(r.sc_export_id || /^\d+$/.test(r.sc_track_id || ''));
   const ini = escapeHtml(((r.artist_name || r.title || '?').trim()[0] || '?').toUpperCase());
   const art = r.artwork_url ? `<img class="sm-art" src="${escapeHtml(r.artwork_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<div class="sm-art">${ini}</div>`;
   const meta = [r.bpm ? r.bpm + ' bpm' : '', r.camelot || '', ...(r.genres || []).slice(0, 1)].filter(Boolean).join(' · ');
-  return `<div class="sm-tr${onSc ? '' : ' off'}">
-    ${onSc ? `<input type="checkbox" data-sm-pick="${escapeHtml(r.sc_track_id)}"${picked ? ' checked' : ''} title="Include in the SoundCloud playlist">` : '<span title="Added from Rekordbox / by hand - not a SoundCloud track, so it cannot go in a SoundCloud playlist">·</span>'}
+  // No link found yet: a search, not a verdict - most of these ARE on SoundCloud as
+  // a flip/edit we could not match strictly enough to stand behind.
+  const find = `https://soundcloud.com/search/sounds?q=${encodeURIComponent(((r.artist_name || '').split(RADIO_SPLIT_RE)[0] + ' ' + (r.title || '').replace(/[([].*?[)\]]/g, '')).trim())}`;
+  return `<div class="sm-tr">
+    ${onSc ? `<input type="checkbox" data-sm-pick="${escapeHtml(r.sc_track_id)}"${picked ? ' checked' : ''} title="Include in the SoundCloud playlist">` : `<a href="${escapeHtml(find)}" target="_blank" rel="noopener" title="No SoundCloud link matched yet - search SoundCloud" style="text-decoration:none;">🔍</a>`}
     ${art}
-    <div class="sm-tt"><div class="t">${r.permalink_url ? `<a href="${escapeHtml(r.permalink_url)}" target="_blank" rel="noopener">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled')}</div>
-      <div class="a">${escapeHtml(r.artist_name || '')}${extraNote ? ' · ' + extraNote : ''}${onSc ? '' : ' · not on SoundCloud'}</div></div>
+    <div class="sm-tt"><div class="t">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled')}</div>
+      <div class="a">${escapeHtml(r.artist_name || '')}${extraNote ? ' · ' + extraNote : ''}</div></div>
     <div class="r">${[...stations].sort((a, b) => a - b).map(n => `<span class="sm-chip">SHOW ${n}</span>`).join(' ')}${meta ? `<div style="margin-top:3px;">${escapeHtml(meta)}</div>` : ''}</div>
   </div>`;
 }
 function renderSceneRadioInfo(c, shared) {
   const today = new Date().toISOString().slice(0, 10);
   const picked = new Set(scenePicked(c));
-  const exportable = [...c.tracks.keys()].filter(id => /^\d+$/.test(id)).length;
+  const exportable = sceneExportable(c).length;
   const nights = c.nightList.map(n => {
     const d = n.date ? new Date(n.date + 'T12:00:00') : null;
     const up = n.date && n.date >= today;
@@ -19736,7 +19770,7 @@ function renderSceneRadioInfo(c, shared) {
       </div>
     </div>
     ${c.songs ? `<div class="sm-bar">
-      <span class="sm-sel">${picked.size} of ${exportable} selected${exportable < c.songs ? ` · ${c.songs - exportable} not on SoundCloud` : ''}</span>
+      <span class="sm-sel">${picked.size} of ${exportable} selected${exportable < c.songs ? ` · ${c.songs - exportable} with no SoundCloud link yet (🔍)` : ''}</span>
       <button class="hub-btn ghost" data-sm-pickall="1">All</button><button class="hub-btn ghost" data-sm-pickall="0">None</button>
       <button class="hub-btn ghost" data-sm-copylist title="Copy the tracklist as text">⧉ Copy tracklist</button>
       ${exportable ? `<button class="hub-btn" data-sm-export="${escapeHtml(c.key)}"${picked.size ? '' : ' disabled'} title="Make a private playlist of the ticked songs in YOUR SoundCloud. SoundCloud asks you to approve Come With once; your login is never stored.">☁ Copy ${picked.size} to my SoundCloud</button>` : ''}
@@ -19808,7 +19842,7 @@ function renderSceneInfo(v, shared) {
 // track list carried on the export row instead of a station id.
 async function sceneExportClub(key) {
   const c = sceneTL().clubs.find(x => x.key === key); if (!c) return;
-  const ids = scenePicked(c);
+  const ids = sceneExportIds(c);
   const title = ('Come With Radio x ' + c.name).slice(0, 100);
   if (!ids.length) { toast('Tick at least one SoundCloud song', 'err'); return; }
   if (!confirm(`Put a private playlist "${title}" (${ids.length} songs) in YOUR SoundCloud?
@@ -19824,7 +19858,7 @@ SoundCloud will ask you to approve Come With, then bring you back here. Songs wh
 function sceneCopyTracklist() {
   const c = sceneTL().clubs.find(x => x.key === sceneState.selected); if (!c) return;
   const lines = [c.name, ''];
-  c.nightList.forEach(n => { lines.push(`${n.date || '?'} - ${n.title || 'Show'}${n.url ? ' ' + n.url : ''}`); n.rows.forEach(r => lines.push(`  ${r.artist_name || '?'} - ${r.title || 'untitled'} (SHOW ${r.station_no})${r.permalink_url ? ' ' + r.permalink_url : ''}`)); lines.push(''); });
+  c.nightList.forEach(n => { lines.push(`${n.date || '?'} - ${n.title || 'Show'}${n.url ? ' ' + n.url : ''}`); n.rows.forEach(r => lines.push(`  ${r.artist_name || '?'} - ${r.title || 'untitled'} (SHOW ${r.station_no})${(r.sc_url || r.permalink_url) ? ' ' + (r.sc_url || r.permalink_url) : ''}`)); lines.push(''); });
   navigator.clipboard.writeText(lines.join('\n')).then(() => toast('Tracklist copied', 'ok'), () => toast('Could not copy', 'err'));
 }
 $('panel-scene-map').addEventListener('click', (e) => {

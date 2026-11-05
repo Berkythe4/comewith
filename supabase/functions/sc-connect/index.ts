@@ -210,6 +210,33 @@ Deno.serve(async (req) => {
     return ok({ authorize_url: authorize });
   }
 
+  // Search SoundCloud for several songs at once (scripts/link_radio_tracks_soundcloud.py,
+  // 236). Returns raw candidates only - the caller decides what is a match, under
+  // strict rules, and writes nothing here. Uses the stored connection's token.
+  if (action === "search_tracks") {
+    const qs = (Array.isArray(body.queries) ? body.queries : []).slice(0, 25)
+      .map((q: { key?: unknown; q?: unknown }) => ({ key: String(q?.key ?? ""), q: String(q?.q ?? "").trim().slice(0, 200) }))
+      .filter((q: { key: string; q: string }) => q.key && q.q);
+    if (!qs.length) return err(400, "queries required");
+    const token = await freshToken();
+    if (!token) return err(401, "SoundCloud connection expired - reconnect.");
+    const results: Record<string, unknown[]> = {};
+    const failed: string[] = [];
+    for (let i = 0; i < qs.length; i += 5) {
+      await Promise.all(qs.slice(i, i + 5).map(async (q: { key: string; q: string }) => {
+        try {
+          const r = await fetch(`https://api.soundcloud.com/tracks?q=${encodeURIComponent(q.q)}&limit=20&linked_partitioning=true`,
+            { headers: { "Authorization": "OAuth " + token, "accept": SC_ACCEPT }, signal: AbortSignal.timeout(15000) });
+          if (!r.ok) { failed.push(q.key); return; }
+          const j = await r.json();
+          const list = Array.isArray(j) ? j : (j?.collection || []);
+          results[q.key] = list.map((t: any) => ({ id: t.id, title: t.title, permalink_url: t.permalink_url, username: t.user?.username || null, user_permalink: t.user?.permalink || null, playback_count: t.playback_count ?? null }));
+        } catch { failed.push(q.key); }
+      }));
+    }
+    return ok({ results, failed });
+  }
+
   // "Copy to MY SoundCloud" from the dashboard (migration 216). The same one-shot
   // flow a guest DJ uses: whoever is logged in approves on SoundCloud and gets their
   // own copy; nothing about their account is stored, and the stored singleton
@@ -252,9 +279,13 @@ Deno.serve(async (req) => {
     if (!playlistId && Array.isArray(body.track_ids) && djToken) {
       const ids = [...new Set(body.track_ids.map((x: unknown) => String(x ?? "")).filter((x: string) => /^\d+$/.test(x)))].slice(0, 500) as string[];
       if (!ids.length) return err(400, "No SoundCloud songs to export.");
-      const { data: named } = await admin.from("sc_playlist_tracks").select("sc_track_id, title").in("sc_track_id", ids);
+      const [{ data: named }, { data: linked }] = await Promise.all([
+        admin.from("sc_playlist_tracks").select("sc_track_id, title").in("sc_track_id", ids),
+        admin.from("sc_playlist_tracks").select("sc_link_id, title").in("sc_link_id", ids),   // 236 links
+      ]);
       const nm: Record<string, string> = {};
       (named || []).forEach((t) => { if (t.title && !nm[t.sc_track_id]) nm[t.sc_track_id] = t.title; });
+      (linked || []).forEach((t) => { if (t.title && t.sc_link_id && !nm[t.sc_link_id]) nm[t.sc_link_id] = t.title; });
       const built = await scBuildPlaylist(djToken, ids.map((id) => ({ id: Number(id), title: nm[id] || "track " + id })), {
         title: (body.title || "Come With Radio").toString().slice(0, 100),
         description: (body.description || `Built with Come With Radio (${SITE}/radio.html).`).toString().slice(0, 4000),
@@ -266,12 +297,15 @@ Deno.serve(async (req) => {
     if (!playlistId || !djToken) return err(400, "playlist_id and access_token required");
     const { data: pl } = await admin.from("sc_playlists").select("id, name, station_no").eq("id", playlistId).single();
     if (!pl) return err(404, "playlist not found");
-    const { data: tracks } = await admin.from("sc_playlist_tracks").select("sc_track_id, title").eq("playlist_id", playlistId).order("sort");
+    const { data: tracks } = await admin.from("sc_playlist_tracks").select("sc_track_id, sc_link_id, title").eq("playlist_id", playlistId).order("sort");
     const all = tracks || [];
-    // Songs a DJ typed in by hand (synthetic 'man_' ids) are not SoundCloud tracks
-    // and cannot go in a SoundCloud playlist; they are reported, never dropped quietly.
-    const offSc = all.filter((t) => !Number(t.sc_track_id)).map((t) => (t.title || "untitled").toString());
-    const wanted = all.map((t) => ({ id: Number(t.sc_track_id), title: (t.title || "track " + t.sc_track_id).toString() })).filter((t) => t.id);
+    // A song with a synthetic id (Rekordbox 'cue_' / hand-added 'man_') goes in by the
+    // SoundCloud link the matcher found for it (236), when there is one. One with no
+    // link is reported, never dropped quietly. (This is a one-shot copy with no
+    // sync-back, so a linked id cannot be mistaken for a new song later.)
+    const scId = (t: { sc_track_id: string; sc_link_id: string | null }) => Number(t.sc_track_id) || Number(t.sc_link_id) || 0;
+    const offSc = all.filter((t) => !scId(t)).map((t) => (t.title || "untitled").toString());
+    const wanted = all.map((t) => ({ id: scId(t), title: (t.title || "track " + t.sc_track_id).toString() })).filter((t) => t.id);
     if (!wanted.length) return err(400, "This episode has no SoundCloud songs to export yet.");
     const built = await scBuildPlaylist(djToken, wanted, {
       title: pl.name || `Come With Radio — SHOW ${pl.station_no ?? ""}`.trim(),
