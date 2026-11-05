@@ -19374,7 +19374,7 @@ async function raRefresh(btn) {
 // artist whose song has aired on a Come With Radio show - open a club to see those
 // songs and copy them to SoundCloud as a playlist. 'upcoming': the original map of
 // the next weeks' shows (raState.events), unchanged.
-let sceneMap = null, sceneMarkers = {}, sceneLines = [], sceneState = { mode: 'radio', range: 'all', station: '', showOthers: true, listings: true, picked: null, dv: 'club', dq: '', dsrc: 'all', focus: null, _web: null, sizeBy: 'shows', platform: '', minShows: 1, genre: '', onRadio: false, selected: null };
+let sceneMap = null, sceneMarkers = {}, sceneLines = [], sceneState = { mode: 'radio', range: 'all', station: '', showOthers: true, listings: true, picked: null, dv: 'club', dq: '', dsrc: 'all', focus: null, _web: null, _pickCtx: null, sizeBy: 'shows', platform: '', minShows: 1, genre: '', onRadio: false, selected: null };
 const RADIO_COLOR = '#a7e02e';   // distinct lime for venues hosting artists who've made the radio
 // The ONE rule for splitting a combined credit ("A, B & C", "A feat. B") into
 // individual artists. Used for the upcoming map's radio flag and the radio index.
@@ -19766,6 +19766,14 @@ function sceneInjectCss() {
   .sm-altsec .sm-ctbl tbody td{opacity:.8}
   .sm-find{text-decoration:none}
   .sm-dup{opacity:.6;font-weight:800}
+  .sm-master td{padding-top:6px;padding-bottom:6px}
+  .sm-master td.dt{white-space:nowrap;font-weight:700;font-size:.78rem;width:1%;padding-right:12px}
+  .sm-master td.dt.up{color:#a7e02e}
+  .sm-master td.dt span{display:block;font-size:.6rem;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+  .sm-ctx{font-size:.72rem;opacity:.7;margin:3px 0 0 42px;line-height:1.6}
+  .sm-ctx a{color:inherit}
+  .sm-ctx i{font-style:normal;opacity:.5;margin:0 2px}
+  .sm-ctx .sm-cl{font-size:.68rem}
   @media (max-width:640px){.sm-hide-sm{display:none}.sm-only-sm{display:block}.sm-song-t .t{max-width:200px}.sm-st-reset{margin-left:0}.sm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-night{grid-template-columns:46px 1fr;gap:8px}.sm-tr{grid-template-columns:20px 36px 1fr}.sm-tr .r{display:none}.sm-tbl .hide-sm{display:none}}`;
   document.head.appendChild(s);
 }
@@ -19885,6 +19893,7 @@ function sceneRenderData() {
     : '<div class="hub-empty" style="margin:14px;">Nothing matches — clear the filter.</div>';
   sceneApplyFocus(P);
   if (sceneState.selected && sceneState._web) sceneDrawWeb(false);   // an open club's web wins over the table's overlay
+  if (!sceneState.selected) sceneShowList();                          // a filter = its tracklist under the map   // an open club's web wins over the table's overlay
 }
 // Light the clubs the table is narrowed to; dim the rest. No narrowing = no overlay.
 function sceneApplyFocus(P) {
@@ -19910,8 +19919,8 @@ function sceneSelect(key) {
   shared.sort((a, b) => b.common.length - a.common.length);
   sceneState._web = { key, shared };
   sceneDrawWeb(true);
-  $('sceneMapInfo').innerHTML = sceneState.mode === 'radio' ? renderSceneRadioInfo(v, shared) : renderSceneInfo(v, shared);
-  if (sceneState.mode === 'radio') sceneRenderState();
+  if (sceneState.mode === 'radio') { sceneShowList(); sceneRenderState(); }
+  else $('sceneMapInfo').innerHTML = renderSceneInfo(v, shared);
   $('sceneMapInfo').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 // The web: the open club and every club sharing an artist with it, drawn so it reads
@@ -19962,34 +19971,6 @@ function sceneWebHtml(shared, what) {
   return `<div class="sm-web">${shared.slice(0, 18).map(s => `<span class="sm-webi" data-sm-venue="${escapeHtml(s.v.key)}" title="${escapeHtml(s.common.join(', '))}">
       <i style="width:${Math.round(10 + 30 * s.common.length / max)}px"></i>${escapeHtml(s.v.name)} <b>${s.common.length}</b></span>`).join('')}${shared.length > 18 ? `<span class="li-sub">+${shared.length - 18} more on the map</span>` : ''}</div>`;
 }
-// Which songs are ticked for export. null = the club's OWN picks (tracklist songs
-// with a SoundCloud id); songs via other shows start unticked and can be added.
-// Keyed by sc_track_id (identity); sceneExportIds() maps to sc_export_id - its own
-// id, or the link scripts/link_radio_tracks_soundcloud.py found (236).
-const sceneRowOf = (c, id) => c.tracks.get(id)?.r || c.altTracks.get(id) || null;
-const sceneExportable = (c) => [...c.tracks.entries()].filter(([, t]) => t.r.sc_export_id).map(([id]) => id);
-const sceneExportableAll = (c) => [...sceneExportable(c), ...[...c.altTracks.entries()].filter(([, r]) => r.sc_export_id).map(([id]) => id)];
-function scenePicked(c) {
-  return sceneState.picked ? sceneExportableAll(c).filter(id => sceneState.picked.has(id)) : sceneExportable(c);
-}
-const sceneExportIds = (c) => [...new Set(scenePicked(c).map(id => sceneRowOf(c, id)?.sc_export_id).filter(Boolean))];
-function sceneTrackRow(r, stations, picked, note) {
-  const url = r.sc_url || r.permalink_url || null;
-  const onSc = !!(r.sc_export_id || /^\d+$/.test(r.sc_track_id || ''));
-  const ini = escapeHtml(((r.artist_name || r.title || '?').trim()[0] || '?').toUpperCase());
-  const art = r.artwork_url ? `<img class="sm-art" src="${escapeHtml(r.artwork_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<div class="sm-art">${ini}</div>`;
-  const meta = [r.bpm ? r.bpm + ' bpm' : '', r.camelot || '', ...(r.genres || []).slice(0, 1)].filter(Boolean).join(' · ');
-  // No link found yet: a search, not a verdict - most of these ARE on SoundCloud as
-  // a flip/edit we could not match strictly enough to stand behind.
-  const find = `https://soundcloud.com/search/sounds?q=${encodeURIComponent(((r.artist_name || '').split(RADIO_SPLIT_RE)[0] + ' ' + (r.title || '').replace(/[([].*?[)\]]/g, '')).trim())}`;
-  return `<div class="sm-tr">
-    ${onSc ? `<input type="checkbox" data-sm-pick="${escapeHtml(r.sc_track_id)}"${picked ? ' checked' : ''} title="Include in the SoundCloud playlist">` : `<a href="${escapeHtml(find)}" target="_blank" rel="noopener" title="No SoundCloud link matched yet - search SoundCloud" style="text-decoration:none;">🔍</a>`}
-    ${art}
-    <div class="sm-tt"><div class="t">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled')}</div>
-      <div class="a">${escapeHtml(r.artist_name || '')}</div>${note ? `<div class="o">${note}</div>` : ''}</div>
-    <div class="r">${[...stations].sort((a, b) => a - b).map(n => `<span class="sm-chip">SHOW ${n}</span>`).join(' ')}${meta ? `<div style="margin-top:3px;">${escapeHtml(meta)}</div>` : ''}</div>
-  </div>`;
-}
 // What the map is showing RIGHT NOW, always in one place above it, each part with
 // its own obvious way out. (Keith: "closing a club or any filtering needs to be
 // more obvious".) Esc closes the club first, then clears the filter.
@@ -20011,8 +19992,9 @@ function sceneRenderState(litCount) {
 }
 function sceneCloseClub() {
   sceneState.selected = null; sceneState._web = null; sceneState.picked = null;
-  sceneClearWeb(); const info = $('sceneMapInfo'); if (info) info.innerHTML = '';
+  sceneClearWeb();
   sceneApplyFocus();
+  sceneShowList();   // a filter still on shows its own tracklist
 }
 function sceneClearFilter() {
   sceneState.focus = null; sceneState.dq = ''; sceneState.dsrc = 'all';
@@ -20055,68 +20037,124 @@ function scenePickCell(r, picked) {
   const q = ((r.artist_name || '').split(RADIO_SPLIT_RE)[0] + ' ' + (r.title || '').replace(/[([].*?[)\]]/g, '')).trim();
   return `<a class="sm-find" href="https://soundcloud.com/search/sounds?q=${encodeURIComponent(q)}" target="_blank" rel="noopener" title="No SoundCloud link matched yet - search SoundCloud">🔍</a>`;
 }
-function renderSceneRadioInfo(c, shared) {
+// ── The MASTER TRACKLIST (Keith, 2026-11-05): whatever is being looked at - an open
+// club, or a filter (a radio show, an artist, a song, a search) - becomes one list,
+// one row per song, in show-date order. Songs our tracklists picked are full
+// strength; songs that only reach this view via another show (listings) are dimmed
+// and say which show they were really picked for. One export bar for all of it.
+function sceneCtx() {
+  if (sceneState.mode !== 'radio') return null;
   const T = sceneTL();
-  const today = new Date().toISOString().slice(0, 10);
-  const picked = new Set(scenePicked(c));
-  const own = Object.values(c.nights).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-  const longDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Date unknown';
-  const srcOf = (n) => n.source ? platformOf(n.source).s : (n.url && /ra\.co/.test(n.url) ? 'RA' : n.url && /dice\.fm/.test(n.url) ? 'DICE' : '');
-  const party = (n, fallback) => { const t = n.title || fallback; return n.url ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener" title="Open the listing">${escapeHtml(t)} ↗</a>` : escapeHtml(t); };
+  let P, kind, title, sub, club = null;
+  if (sceneState.selected && T.byKey[sceneState.selected]) {
+    club = T.byKey[sceneState.selected];
+    P = T.P.filter(p => p.key === club.key);
+    kind = 'Club'; title = club.name;
+    sub = [club.area, club.address].filter(Boolean).join(' · ') || (club.lat == null ? 'No location yet, so not on the map' : 'NYC');
+  } else if (sceneNarrowed()) {
+    P = scenePFiltered();
+    const f = sceneState.focus;
+    kind = f ? ({ artist: 'Artist', show: 'Radio show', song: 'Song', club: 'Club' })[f.kind] : 'Filter';
+    title = f ? f.label : (sceneState.dq || '').trim() ? '“' + sceneState.dq.trim() + '”' : sceneState.dsrc === 'tl' ? 'Our tracklists only' : 'Other shows only';
+    sub = 'Every radio song in this view, in show order';
+  } else return null;
+  // One row per song: the tracklist placement leads; other placements become "also".
+  const by = new Map();
+  P.forEach(p => {
+    const id = p.r.sc_track_id, x = by.get(id);
+    if (!x) by.set(id, { r: p.r, p, also: [] });
+    else if (x.p.src === 'alt' && p.src === 'tl') { x.also.push(x.p); x.p = p; }
+    else x.also.push(p);
+  });
+  // "also" lists other club-nights only: not the row's own night again, and each
+  // club-night once (RA, DICE and TM often list the same night).
+  by.forEach(x => { const seen = new Set([x.p.key + '|' + x.p.date]); x.also = x.also.filter(a => { const k = a.key + '|' + a.date; if (seen.has(k)) return false; seen.add(k); return true; }); });
+  const rows = [...by.values()].sort((a, b) => (a.p.date || '9999').localeCompare(b.p.date || '9999') || a.r.station_no - b.r.station_no || (a.r.sort || 0) - (b.r.sort || 0));
+  const id = (club ? 'c:' + club.key : 'f:' + JSON.stringify([sceneState.focus, sceneState.dq, sceneState.dsrc])) + '|' + T.sig;
+  return { id, kind, title, sub, club, rows, P, clubs: new Set(P.map(p => p.key)).size };
+}
+// Ticked songs. Default: every SoundCloud-linked song from our tracklists; songs from
+// other shows start unticked. Reset whenever the view changes.
+const sceneCtxExp = (ctx, all) => ctx.rows.filter(x => x.r.sc_export_id && (all || x.p.src === 'tl')).map(x => x.r.sc_track_id);
+function sceneCtxPicked(ctx) {
+  if (sceneState._pickCtx !== ctx.id) { sceneState._pickCtx = ctx.id; sceneState.picked = null; }
+  return sceneState.picked ? sceneCtxExp(ctx, true).filter(id => sceneState.picked.has(id)) : sceneCtxExp(ctx, false);
+}
+function sceneShowList(keepScroll) {
+  const box = $('sceneMapInfo'); if (!box) return;
+  const ctx = sceneCtx();
+  const y = window.scrollY;
+  box.innerHTML = ctx ? renderSceneList(ctx) : '';
+  if (keepScroll) window.scrollTo(0, y);
+}
+function renderSceneList(ctx) {
+  const T = sceneTL(), today = new Date().toISOString().slice(0, 10);
+  const picked = new Set(sceneCtxPicked(ctx));
+  const nTl = ctx.rows.filter(x => x.p.src === 'tl').length, nAlt = ctx.rows.length - nTl;
+  const ownExp = sceneCtxExp(ctx, false).length, allExp = sceneCtxExp(ctx, true).length;
   const homeOf = (r) => { const k = r.venue_id ? 'v:' + r.venue_id : (r.show_venue ? 'n:' + venueKey(r.show_venue) : null); return { k, name: (k && T.byKey[k]?.name) || r.venue_name || r.show_venue || '?' }; };
-  const showChip = (n) => `<span class="sm-chip">SHOW ${n}</span>`;
-
-  // ① Picked for shows here, grouped by night.
-  const ownRows = own.map(n => {
-    const up = n.date && n.date >= today;
-    const meta = [srcOf(n), n.cost, n.attending ? fmtNum(n.attending) + ' going' : '', !n.title && !n.match ? 'party not in the listings' : ''].filter(Boolean).join(' · ');
-    const rows = n.rows.map(r => `<tr><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongLine(r, showChip(r.station_no))}</td></tr>`).join('');
-    const bill = n.altRows?.size ? [...n.altRows.values()].map(({ r, who }) => { const h = homeOf(r); return `<tr class="sm-altrow"><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongLine(r, showChip(r.station_no))}<div class="sm-why">also on this bill: ${escapeHtml([...who].join(', '))} · song was picked for ${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}${r.show_date ? ' ' + smDate(r.show_date) : ''}</div></td></tr>`; }).join('') : '';
-    // .fit: the header text never sets the table's width (the songs do); it wraps inside it.
-    return `<tbody><tr class="sm-nighthd"><td colspan="2"><div class="fit"><span class="d${up ? ' up' : ''}">${longDate(n.date)}${up ? ' · upcoming' : ''}</span><span class="p">${party(n, 'Show at ' + c.name)}</span>${meta ? `<span class="m">${escapeHtml(meta)}</span>` : ''}</div></td></tr>${rows}${bill}</tbody>`;
+  const clubLink = (k, name, alt) => k ? `<span class="sm-cl${alt ? ' alt' : ''}" data-sm-venue="${escapeHtml(k)}" title="Open this club">${escapeHtml(name)}</span>` : escapeHtml(name);
+  const partyLink = (p) => p.party ? (p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener" title="Open the listing">${escapeHtml(p.party)} ↗</a>` : escapeHtml(p.party)) : (p.url ? `<a href="${escapeHtml(p.url)}" target="_blank" rel="noopener">listing ↗</a>` : '');
+  const rows = ctx.rows.map(x => {
+    const { r, p } = x, alt = p.src === 'alt', up = p.date && p.date >= today;
+    const bits = [];
+    if (!ctx.club) bits.push(clubLink(p.key, T.byKey[p.key]?.name || '?', alt));
+    const pl = partyLink(p); if (pl) bits.push(pl);
+    if (alt) { const h = homeOf(r); bits.push(`<span class="sm-from">other show</span> ${escapeHtml(p.who.join(', '))} played here · song picked for ${clubLink(h.k, h.name, false)}${r.show_date ? ' ' + smDate(r.show_date) : ''}`); }
+    if (x.also.length) bits.push('also: ' + x.also.slice(0, 4).map(a => `${ctx.club ? '' : clubLink(a.key, T.byKey[a.key]?.name || '?', a.src === 'alt') + ' '}${smDate(a.date)}`).join(', ') + (x.also.length > 4 ? ' …' : ''));
+    return `<tr class="${alt ? 'sm-altrow' : ''}"><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td>
+      <td class="dt${up ? ' up' : ''}">${p.date ? smDate(p.date) : '—'}${up ? '<span>upcoming</span>' : ''}</td>
+      <td>${sceneSongLine(r, `<span class="sm-chip">SHOW ${r.station_no}</span>`)}${bits.length ? `<div class="sm-ctx">${bits.join(' <i>·</i> ')}</div>` : ''}</td></tr>`;
   }).join('');
-
-  // ② Also played here: other shows at this club by radio artists.
-  const altList = Object.values(c.alt).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-    .flatMap(n => [...n.rows.values()].map(x => ({ n, ...x })));
-  // A song already in ① (its artist played here again) is not a second pick: say so.
-  const altRows = altList.map(({ n, r, who }) => { const h = homeOf(r); const dup = c.tracks.has(r.sc_track_id); return `<tr><td class="pk">${dup ? '<span class="sm-dup" title="Same song as in ① above - tick it there">↑</span>' : scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}${dup ? '<div class="sm-why" style="margin-left:42px;">same song as above · its artist played here again</div>' : ''}</td>
-      <td><div>${escapeHtml([...who].join(', '))}</div><div class="sm-sub2">${longDate(n.date)} · ${party(n, 'show')}</div></td>
-      <td><div>${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}" title="Open that club">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}</div><div class="sm-sub2">${r.show_date ? smDate(r.show_date) + ' · ' : ''}SHOW ${r.station_no}</div></td></tr>`; }).join('');
-
-  const nOwn = c.songs, nAlt = altList.length;
-  const ownExp = sceneExportable(c).length, allExp = sceneExportableAll(c).length;
+  const closeBtn = ctx.club
+    ? `<button class="sm-closebig" data-sm-close title="Close this club (Esc)">✕ Close</button>`
+    : `<button class="sm-closebig" data-sm-unfocus title="Clear this filter (Esc)">✕ Clear</button>`;
+  const shared = ctx.club ? (sceneState._web?.shared || []) : [];
   return `<div class="sm-card sm-club">
     <div class="sm-head">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-        <div style="min-width:0;"><div class="sm-kicker">Club</div><h2 class="sm-title">${escapeHtml(c.name)}</h2>
-          <div class="sm-sub">${[c.area, c.address].filter(Boolean).map(escapeHtml).join(' · ') || (c.lat == null ? 'No location yet, so not on the map' : 'NYC')}</div></div>
-        <button class="sm-closebig" data-sm-close title="Close this club (Esc)">✕ Close</button></div>
+        <div style="min-width:0;"><div class="sm-kicker">${escapeHtml(ctx.kind)}</div><h2 class="sm-title">${escapeHtml(ctx.title)}</h2><div class="sm-sub">${escapeHtml(ctx.sub)}</div></div>
+        ${closeBtn}</div>
       <div class="sm-stats">
-        <div class="sm-stat"><b>${nOwn}</b><span>songs picked for shows here</span></div>
-        <div class="sm-stat"><b>${c.tlNights}</b><span>nights we picked for</span></div>
-        <div class="sm-stat"><b>${c.altSongs}</b><span>more via other shows</span></div>
-        <div class="sm-stat"><b>${shared.length}</b><span>connected clubs</span></div>
+        <div class="sm-stat"><b>${ctx.rows.length}</b><span>songs</span></div>
+        <div class="sm-stat"><b>${nTl}</b><span>picked for shows${ctx.club ? ' here' : ''}</span></div>
+        <div class="sm-stat"><b>${nAlt}</b><span>via other shows</span></div>
+        <div class="sm-stat"><b>${ctx.club ? shared.length : ctx.clubs}</b><span>${ctx.club ? 'connected clubs' : 'clubs'}</span></div>
       </div>
     </div>
-    ${shared.length ? `<div class="sm-sec"><h4>🕸 Connected clubs <span class="h4n">share radio artists with ${escapeHtml(c.name)} · the lines on the map · click to open</span></h4>${sceneWebHtml(shared, 'radio artists')}</div>` : ''}
+    ${shared.length ? `<div class="sm-sec"><h4>🕸 Connected clubs <span class="h4n">share radio artists with ${escapeHtml(ctx.title)} · the lines on the map · click to open</span></h4>${sceneWebHtml(shared, 'radio artists')}</div>` : ''}
     ${allExp ? `<div class="sm-bar">
       <span class="sm-sel"><b>${picked.size}</b> song${picked.size === 1 ? '' : 's'} selected</span>
-      <span class="sm-segsm"><button data-sm-pickall="own" title="Songs picked for shows here">Picked here (${ownExp})</button><button data-sm-pickall="all" title="Including songs from other shows">Everything (${allExp})</button><button data-sm-pickall="none">None</button></span>
-      <button class="hub-btn" data-sm-export="${escapeHtml(c.key)}"${picked.size ? '' : ' disabled'} title="Make a private playlist of the selected songs in YOUR SoundCloud. SoundCloud asks you to approve Come With once; your login is never stored.">☁ Copy ${picked.size} to my SoundCloud</button>
-      <button class="hub-btn ghost" data-sm-copylist title="Copy the list as text">⧉ Copy list</button>
-      ${c.venueId ? `<button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(c.name)}" title="Open this venue in the control center">Venue →</button>` : ''}
+      <span class="sm-segsm"><button data-sm-pickall="own" title="Songs our tracklists picked">Tracklist songs (${ownExp})</button><button data-sm-pickall="all" title="Including songs from other shows">Everything (${allExp})</button><button data-sm-pickall="none">None</button></span>
+      <button class="hub-btn" data-sm-export${picked.size ? '' : ' disabled'} title="Make a private playlist of the selected songs in YOUR SoundCloud. SoundCloud asks you to approve Come With once; your login is never stored.">☁ Copy ${picked.size} to my SoundCloud</button>
+      <button class="hub-btn ghost" data-sm-copylist title="Copy the tracklist as text">⧉ Copy list</button>
+      ${ctx.club?.venueId ? `<button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(ctx.club.name)}" title="Open this venue in the control center">Venue →</button>` : ''}
     </div>` : ''}
     <div class="sm-sec">
-      <h4>① Picked for shows here <span class="h4n">${nOwn} song${nOwn === 1 ? '' : 's'} · from our radio tracklists: the show each song was chosen for</span></h4>
-      ${own.length ? `<table class="sm-tbl sm-ctbl sm-own"><thead><tr><th class="pk"></th><th>Song · artist · radio show</th></tr></thead>${ownRows}</table>` : '<div class="li-sub">None in this range - this club only shows up through other shows.</div>'}
-      ${nOwn - ownExp > 0 ? `<div class="li-sub" style="margin-top:6px;">🔍 = no SoundCloud link matched yet; click it to search SoundCloud.</div>` : ''}
+      <h4>Tracklist <span class="h4n">${ctx.rows.length} song${ctx.rows.length === 1 ? '' : 's'} in show order${nAlt ? ' · dimmed = only via another show (listings), not our tracklists' : ''}${ctx.rows.length - allExp > 0 ? ' · 🔍 = no SoundCloud link yet' : ''}</span></h4>
+      ${ctx.rows.length ? `<table class="sm-tbl sm-ctbl sm-own sm-master"><tbody>${rows}</tbody></table>` : '<div class="li-sub">No songs in this view.</div>'}
     </div>
-    ${nAlt ? `<div class="sm-sec sm-altsec">
-      <h4>② Also played here <span class="h4n">${nAlt} · other shows at ${escapeHtml(c.name)} by artists who are on the radio · from the listings, not our tracklists · unticked by default</span></h4>
-      <table class="sm-tbl sm-ctbl"><thead><tr><th class="pk"></th><th>Song</th><th>Played here</th><th>Song was picked for</th></tr></thead><tbody>${altRows}</tbody></table>
-    </div>` : ''}
   </div>`;
+}
+async function sceneExportCtx() {
+  const ctx = sceneCtx(); if (!ctx) return;
+  const ids = [...new Set(sceneCtxPicked(ctx).map(id => ctx.rows.find(x => x.r.sc_track_id === id)?.r.sc_export_id).filter(Boolean))];
+  const title = ('Come With Radio x ' + ctx.title.replace(/[“”]/g, '')).slice(0, 100);
+  if (!ids.length) { toast('Tick at least one SoundCloud song', 'err'); return; }
+  if (!confirm(`Put a private playlist "${title}" (${ids.length} songs) in YOUR SoundCloud?\n\nSoundCloud will ask you to approve Come With, then bring you back here. Songs whose uploaders block apps are listed instead of added.`)) return;
+  try {
+    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'export_mine_start', track_ids: ids, title } });
+    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
+    if (!data?.authorize_url) throw new Error(data?.error || 'Could not start');
+    window.location.href = data.authorize_url;
+  } catch (e) { toast('Export failed to start: ' + (e.message || e), 'err'); }
+}
+function sceneCopyCtx() {
+  const ctx = sceneCtx(); if (!ctx) return;
+  const T = sceneTL();
+  const lines = [ctx.kind + ': ' + ctx.title, ''];
+  ctx.rows.forEach(({ r, p }) => lines.push(`${p.date || '?'}  ${r.artist_name || '?'} - ${r.title || 'untitled'}  (SHOW ${r.station_no})  @ ${T.byKey[p.key]?.name || '?'}${p.party ? ' · ' + p.party : ''}${p.src === 'alt' ? ' [other show]' : ''}${(r.sc_url || r.permalink_url) ? '  ' + (r.sc_url || r.permalink_url) : ''}`));
+  navigator.clipboard.writeText(lines.join('\n')).then(() => toast('Tracklist copied', 'ok'), () => toast('Could not copy', 'err'));
 }
 
 function renderSceneUpcoming() {
@@ -20177,35 +20215,14 @@ function renderSceneInfo(v, shared) {
 // A club's radio songs -> a private playlist in the clicker's own SoundCloud (231):
 // the same one-shot approval as "Copy to my SoundCloud" on a station, with the
 // track list carried on the export row instead of a station id.
-async function sceneExportClub(key) {
-  const c = sceneTL().clubs.find(x => x.key === key); if (!c) return;
-  const ids = sceneExportIds(c);
-  const title = ('Come With Radio x ' + c.name).slice(0, 100);
-  if (!ids.length) { toast('Tick at least one SoundCloud song', 'err'); return; }
-  if (!confirm(`Put a private playlist "${title}" (${ids.length} songs) in YOUR SoundCloud?
-
-SoundCloud will ask you to approve Come With, then bring you back here. Songs whose uploaders block apps are listed instead of added.`)) return;
-  try {
-    const { data, error } = await sb.functions.invoke('sc-connect', { body: { action: 'export_mine_start', track_ids: ids, title } });
-    if (error) throw new Error((await fnErrorDetail(error)) || error.message);
-    if (!data?.authorize_url) throw new Error(data?.error || 'Could not start');
-    window.location.href = data.authorize_url;
-  } catch (e) { toast('Export failed to start: ' + (e.message || e), 'err'); }
-}
-function sceneCopyTracklist() {
-  const c = sceneTL().clubs.find(x => x.key === sceneState.selected); if (!c) return;
-  const lines = [c.name, ''];
-  c.nightList.forEach(n => { lines.push(`${n.date || '?'} - ${n.title || 'Show'}${n.alt ? ' (other show - from the listings)' : ''}${n.url ? ' ' + n.url : ''}`); (n.alt ? [...n.rows.values()].map(x => x.r) : n.rows).forEach(r => lines.push(`  ${r.artist_name || '?'} - ${r.title || 'untitled'} (SHOW ${r.station_no})${(r.sc_url || r.permalink_url) ? ' ' + (r.sc_url || r.permalink_url) : ''}`)); lines.push(''); });
-  navigator.clipboard.writeText(lines.join('\n')).then(() => toast('Tracklist copied', 'ok'), () => toast('Could not copy', 'err'));
-}
 $('panel-scene-map').addEventListener('click', (e) => {
   if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
   const md = e.target.closest('[data-sm-mode]'); if (md) { if (sceneState.mode !== md.dataset.smMode) { sceneState.mode = md.dataset.smMode; sceneState.selected = null; loadSceneMap(); } return; }
-  const ex = e.target.closest('[data-sm-export]'); if (ex) { sceneExportClub(ex.dataset.smExport); return; }
+  if (e.target.closest('[data-sm-export]')) { sceneExportCtx(); return; }
   if (e.target.closest('[data-sm-close]')) { sceneCloseClub(); return; }
   if (e.target.closest('[data-sm-reset]')) { sceneCloseClub(); sceneClearFilter(); return; }
-  if (e.target.closest('[data-sm-copylist]')) { sceneCopyTracklist(); return; }
-  const pa = e.target.closest('[data-sm-pickall]'); if (pa) { const c = sceneTL().byKey[sceneState.selected]; const v = pa.dataset.smPickall; sceneState.picked = v === 'own' ? null : v === 'all' && c ? new Set(sceneExportableAll(c)) : new Set(); const keepY = window.scrollY; sceneSelect(sceneState.selected); window.scrollTo(0, keepY); return; }
+  if (e.target.closest('[data-sm-copylist]')) { sceneCopyCtx(); return; }
+  const pa = e.target.closest('[data-sm-pickall]'); if (pa) { const ctx = sceneCtx(); if (!ctx) return; sceneCtxPicked(ctx); const v = pa.dataset.smPickall; sceneState.picked = v === 'own' ? null : v === 'all' ? new Set(sceneCtxExp(ctx, true)) : new Set(); sceneShowList(true); return; }
   const dv = e.target.closest('[data-sm-dv]'); if (dv) { sceneState.dv = dv.dataset.smDv; $('smData').innerHTML = sceneDataShell(); sceneRenderData(); return; }
   const fo = e.target.closest('[data-sm-focus]'); if (fo) { const k = fo.dataset.smFocus; sceneState.focus = { kind: k, val: k === 'show' ? Number(fo.dataset.smFv) : fo.dataset.smFv, label: fo.dataset.smFl }; sceneRenderData(); $('sceneMapCanvas')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
   if (e.target.closest('[data-sm-unfocus]')) { sceneClearFilter(); return; }
@@ -20224,7 +20241,7 @@ $('panel-scene-map').addEventListener('change', (e) => {
   const so = e.target.closest('[data-sm-others]'); if (so) { sceneState.showOthers = so.checked; renderSceneMap(); return; }
   const sl = e.target.closest('[data-sm-listings]'); if (sl) { sceneState.listings = sl.checked; loadSceneMap(); return; }
   const ds = e.target.closest('[data-sm-dsrc]'); if (ds) { sceneState.dsrc = ds.value; sceneRenderData(); return; }
-  const pk = e.target.closest('[data-sm-pick]'); if (pk) { const c = sceneTL().byKey[sceneState.selected]; if (!c) return; const cur = new Set(scenePicked(c)); if (pk.checked) cur.add(pk.dataset.smPick); else cur.delete(pk.dataset.smPick); sceneState.picked = cur; const keepY = window.scrollY; sceneSelect(sceneState.selected); window.scrollTo(0, keepY); return; }
+  const pk = e.target.closest('[data-sm-pick]'); if (pk) { const ctx = sceneCtx(); if (!ctx) return; const cur = new Set(sceneCtxPicked(ctx)); if (pk.checked) cur.add(pk.dataset.smPick); else cur.delete(pk.dataset.smPick); sceneState.picked = cur; sceneShowList(true); return; }
 });
 // Explore filter box: re-render only the table (the input keeps focus and caret).
 $('panel-scene-map').addEventListener('input', (e) => {

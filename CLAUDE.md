@@ -574,7 +574,11 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   `via:'title'` (211's title fill) are ignored there - "Panama Independence Weekend"
   is not the act Panama. The Explore table under the map (clubs / artists / radio
   shows / songs, search, source) drives the map: whatever it is narrowed to is lit,
-  the rest dimmed. An open club draws its web (animated lines, labels, fit to view). The artist split `RADIO_SPLIT_RE` exists
+  the rest dimmed. An open club draws its web (animated lines, labels, fit to view).
+  **Whatever is being looked at - an open club or any filter (radio show, artist,
+  song, search) - renders ONE master tracklist under the map** (`sceneCtx()` →
+  `renderSceneList()`): one row per song, show-date order, other-show songs dimmed
+  with "picked for X", one export bar. Don't reintroduce per-night grouping. The artist split `RADIO_SPLIT_RE` exists
   in the view AND the dashboard - change both. Clubs are keyed by `venueIdent`
   (`v:<venue_id>`), never the label. Unlocated clubs and songs with no show are
   LISTED, not dropped: clubs outside the NYC view (Elements Festival = Pocono
