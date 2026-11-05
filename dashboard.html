@@ -19729,7 +19729,19 @@ function sceneInjectCss() {
   .sm-segsm{display:inline-flex;border:1px solid rgba(237,228,211,.26);border-radius:8px;overflow:hidden}
   .sm-segsm button{background:transparent;border:0;color:inherit;font-family:inherit;font-size:.74rem;padding:5px 9px;cursor:pointer}
   .sm-segsm button:hover{background:rgba(167,224,46,.18)}
-  .sm-ctbl td{vertical-align:middle}
+  .sm-ctbl{width:auto;max-width:100%;min-width:min(560px,100%)}
+  .sm-ctbl td,.sm-ctbl th{vertical-align:middle;padding-left:8px;padding-right:14px}
+  .sm-ctbl td.num,.sm-ctbl th.num{text-align:left}
+  .sm-ctbl td.sm-hide-sm{max-width:260px;font-size:.78rem;opacity:.85}
+  .sm-nighthd .fit{width:0;min-width:100%}
+  .sm-own{width:100%;min-width:0}
+  .sm-own .sm-nighthd .fit{width:auto;min-width:0}
+  .sm-line{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;min-width:0}
+  .sm-line .t{font-weight:600}
+  .sm-line .t a{color:inherit;text-decoration:none}
+  .sm-line .t a:hover{text-decoration:underline}
+  .sm-line .ia{font-size:.78rem;opacity:.6}
+  .sm-line .sm-chip{font-size:.6rem}
   .sm-ctbl .pk{width:28px;text-align:center}
   .sm-nighthd td{background:rgba(255,255,255,.045);padding:9px 10px!important}
   .sm-ctbl tbody+tbody .sm-nighthd td{border-top:12px solid var(--card,#20142a)}
@@ -20027,6 +20039,12 @@ function sceneArt(r) {
   const ini = escapeHtml(((r.artist_name || r.title || '?').trim()[0] || '?').toUpperCase());
   return r.artwork_url ? `<img class="sm-art s" src="${escapeHtml(r.artwork_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sm-art s">${ini}</span>`;
 }
+// One flowing line: Title  artist  [SHOW n] - each piece starts where the last ends.
+function sceneSongLine(r, chip) {
+  const url = r.sc_url || r.permalink_url || null;
+  const t = url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open on SoundCloud">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled');
+  return `<div class="sm-song">${sceneArt(r)}<div class="sm-line"><span class="t">${t}</span><span class="ia">${escapeHtml(r.artist_name || '')}</span>${chip || ''}</div></div>`;
+}
 function sceneSongCell(r) {
   const url = r.sc_url || r.permalink_url || null;
   return `<div class="sm-song">${sceneArt(r)}<div class="sm-song-t"><div class="t">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open on SoundCloud">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled')}</div><div class="a sm-only-sm">${escapeHtml(r.artist_name || '')}</div></div></div>`;
@@ -20052,9 +20070,10 @@ function renderSceneRadioInfo(c, shared) {
   const ownRows = own.map(n => {
     const up = n.date && n.date >= today;
     const meta = [srcOf(n), n.cost, n.attending ? fmtNum(n.attending) + ' going' : '', !n.title && !n.match ? 'party not in the listings' : ''].filter(Boolean).join(' · ');
-    const rows = n.rows.map(r => `<tr><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}</td><td class="sm-hide-sm">${escapeHtml(r.artist_name || '')}</td><td class="num">${showChip(r.station_no)}</td></tr>`).join('');
-    const bill = n.altRows?.size ? [...n.altRows.values()].map(({ r, who }) => { const h = homeOf(r); return `<tr class="sm-altrow"><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}<div class="sm-why">also on this bill: ${escapeHtml([...who].join(', '))} · song was picked for ${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}${r.show_date ? ' ' + smDate(r.show_date) : ''}</div></td><td class="sm-hide-sm">${escapeHtml(r.artist_name || '')}</td><td class="num">${showChip(r.station_no)}</td></tr>`; }).join('') : '';
-    return `<tbody><tr class="sm-nighthd"><td colspan="4"><span class="d${up ? ' up' : ''}">${longDate(n.date)}${up ? ' · upcoming' : ''}</span><span class="p">${party(n, 'Show at ' + c.name)}</span>${meta ? `<span class="m">${escapeHtml(meta)}</span>` : ''}</td></tr>${rows}${bill}</tbody>`;
+    const rows = n.rows.map(r => `<tr><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongLine(r, showChip(r.station_no))}</td></tr>`).join('');
+    const bill = n.altRows?.size ? [...n.altRows.values()].map(({ r, who }) => { const h = homeOf(r); return `<tr class="sm-altrow"><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongLine(r, showChip(r.station_no))}<div class="sm-why">also on this bill: ${escapeHtml([...who].join(', '))} · song was picked for ${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}${r.show_date ? ' ' + smDate(r.show_date) : ''}</div></td></tr>`; }).join('') : '';
+    // .fit: the header text never sets the table's width (the songs do); it wraps inside it.
+    return `<tbody><tr class="sm-nighthd"><td colspan="2"><div class="fit"><span class="d${up ? ' up' : ''}">${longDate(n.date)}${up ? ' · upcoming' : ''}</span><span class="p">${party(n, 'Show at ' + c.name)}</span>${meta ? `<span class="m">${escapeHtml(meta)}</span>` : ''}</div></td></tr>${rows}${bill}</tbody>`;
   }).join('');
 
   // ② Also played here: other shows at this club by radio artists.
@@ -20090,7 +20109,7 @@ function renderSceneRadioInfo(c, shared) {
     </div>` : ''}
     <div class="sm-sec">
       <h4>① Picked for shows here <span class="h4n">${nOwn} song${nOwn === 1 ? '' : 's'} · from our radio tracklists: the show each song was chosen for</span></h4>
-      ${own.length ? `<table class="sm-tbl sm-ctbl"><thead><tr><th class="pk"></th><th>Song</th><th class="sm-hide-sm">Artist</th><th class="num">On</th></tr></thead>${ownRows}</table>` : '<div class="li-sub">None in this range - this club only shows up through other shows.</div>'}
+      ${own.length ? `<table class="sm-tbl sm-ctbl sm-own"><thead><tr><th class="pk"></th><th>Song · artist · radio show</th></tr></thead>${ownRows}</table>` : '<div class="li-sub">None in this range - this club only shows up through other shows.</div>'}
       ${nOwn - ownExp > 0 ? `<div class="li-sub" style="margin-top:6px;">🔍 = no SoundCloud link matched yet; click it to search SoundCloud.</div>` : ''}
     </div>
     ${nAlt ? `<div class="sm-sec sm-altsec">
