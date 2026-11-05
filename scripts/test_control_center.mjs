@@ -7,6 +7,7 @@ import {
   parseCsv, parseCsvRaw, controlFor, tierSplit, matchTier, ticketStats, donationStats, sponsorStats,
   missionMath, drinkLedger, doorStats, audience, winbackList, scenario, parseZeffy, parseRa, parseDiy,
   planImport, execSnapshot, execDiff, daysUntil, toCsv, personIndex,
+  eventRoster, whereWeStand, rsvpStats, planRsvps, chaseList,
 } from '../assets/control-center.js';
 
 let pass = 0, fail = 0;
@@ -174,6 +175,96 @@ console.log('DI #3 Zeffy: "Guest List + Sponsorship" is a ticket; applied paymen
   const p3 = planImport({ sales: z3.sales, tiers: [T25a, T40a], event: DI3, db: { guests: [], eventGea: [], ticketKeys: new Set(), donationKeys: new Set(), subscribers: [], sponsorships: spApplied } });
   eq('a payment already applied to a sponsorship is not re-booked as a donation', [p3.donations.length, p3.sponsorPayments.length, p3.report.paymentsAlreadyApplied], [0, 0, 2]);
   eq('the tickets still import (3 rows, $40 + $40 + $25 tiers)', p3.ticketing.map(t => t.tier_id), ['t40', 't40', 't25']);
+}
+
+// ---- roster / where we stand / RSVPs / chase (2026-11-05) -----------------
+console.log('roster: one person per guest, sponsors with comps beneath, roles from entry_type');
+{
+  const SPX = [
+    { id: 'pd', cash_amount: 500, entry_tickets: 4, status: 'paid', tier: 'Champion', actor: { id: 'aPulse', display_name: 'Pulse Co' } },
+    { id: 'tb', cash_amount: 500, entry_tickets: 3, status: 'paid', tier: 'Champion', actor: { id: 'aTB', display_name: 'Tess B' } },
+    { id: 'kb', cash_amount: 500, entry_tickets: 0, status: 'pending', tier: 'Champion', actor: { id: 'aKB', display_name: 'Kay Bee' } },
+    { id: 'xx', cash_amount: 100, entry_tickets: 1, status: 'cancelled', actor: { id: 'aX', display_name: 'Gone' } },
+  ];
+  const G = (id, name, o = {}) => ({ id: 'r' + id, guest_id: id, guest: { id, full_name: name, email: o.email || null, actor_id: o.actor || null }, quantity: 1, amount_spent: 0, ...o.row });
+  const gea = [
+    G('g1', 'Ethan P', { row: { entry_type: 'sponsor_comp', sponsorship_id: 'pd', ticket_type: 'Sponsor comp' } }),
+    G('g2', 'Tess B', { row: { entry_type: 'sponsor_comp', sponsorship_id: 'tb', ticket_type: 'Sponsor comp' } }),
+    G('g3', 'Kay Bee', { actor: 'aBerky', row: { entry_type: 'dj', ticket_type: 'DJ' } }),
+    G('g4', 'Vee Real', { actor: 'aVee', row: { entry_type: 'dj', ticket_type: 'DJ' } }),
+    G('g5', 'Jay', { row: { entry_type: 'comp', quantity: 2, ticket_type: 'Comp' } }),
+    G('g6', 'Ay K', { row: { entry_type: 'ticket', quantity: 2, amount_spent: 65, ticket_type: 'Guest List + Guest List' } }),
+    G('g7', 'Old Timer', { row: { entry_type: null, ticket_type: 'comp' } }),
+  ];
+  const parts = [
+    { role: 'dj', bill_order: 2, set_start: '2026-11-14T21:00:00Z', actor: { id: 'aBerky', display_name: 'Berky' } },
+    { role: 'dj', bill_order: 1, set_start: '2026-11-14T20:00:00Z', actor: { id: 'aVee', display_name: 'Miss V' } },
+  ];
+  const R = eventRoster({ gea, sponsorships: SPX, participants: parts, donations: [{ donor_name: 'Pat D', amount: 50 }] });
+  eq('every door row is one person; comps/DJs are not "ticket"', R.people.filter(p => p.roles.has('ticket')).map(p => p.name), ['Ay K']);
+  eq('lineup actors merge into their guest record (Berky = Kay Bee, Miss V = Vee Real)', R.groups.lineup.map(p => [p.name, p.stage]), [['Vee Real', 'Miss V'], ['Kay Bee', 'Berky']]);
+  eq('a sponsor who is also a DJ is one person with both roles', [...R.people.find(p => p.name === 'Kay Bee').roles].sort(), ['dj', 'sponsor']);
+  eq('sponsors carry their comps beneath, with open slots; cancelled dropped', R.sponsors.map(s => [s.name, s.comps.map(p => p.name), s.open]), [['Kay Bee', [], 0], ['Pulse Co', ['Ethan P'], 3], ['Tess B', ['Tess B'], 2]]);
+  eq('org sponsor with no person is a header, not a guest', R.onList.some(p => p.name === 'Pulse Co'), false);
+  eq('legacy ticket_type "comp" reads as a guest comp', R.groups.comp.map(p => p.name), ['Jay', 'Old Timer']);
+  eq('guest list = 7 people, 9 heads (party sizes)', [R.counts.people, R.counts.heads], [7, 9]);
+  eq('a donor with no door row stays tied to the event, not on the list', [R.groups.donor.map(p => p.name), R.onList.some(p => p.name === 'Pat D')], [['Pat D'], false]);
+
+  console.log('where we stand');
+  const tk = { revenue: 395 }, don = { total: 50 }, sp = { pledged: 2000, paid: 1750 }, mm = { toMission: 400 };
+  const W = whereWeStand({ tk, don, sp, mm, fund: true, tiers: TIERS,
+    budget: [{ direction: 'expense', category: 'Venue', planned_amount: 6000 }, { direction: 'expense', category: 'Venue', planned_amount: 800 },
+             { direction: 'expense', category: 'Marketing', planned_amount: 0, amount_tbd: true }],
+    expenses: [{ category: 'Venue', amount: 3000, status: 'paid' }, { category: 'Venue', amount: 3000, status: 'invoiced' },
+               { category: 'Marketing', amount: 150, status: 'paid', funded_by: 'owner' }, { category: 'Entertainment / Event', amount: 500, status: 'accrued' }],
+    advances: [{ amount: 1500, status: 'contingent' }, { amount: 99, status: 'repaid' }] });
+  eq('raised / received / to collect', [W.raised, W.received, W.toCollect], [2445, 2195, 250]);
+  eq('promised to the mission comes off before costs', [W.promised, W.forCosts], [400, 2045]);
+  eq('expected cost = max(planned, booked) per category', [W.costs.expected, W.costs.booked, W.costs.paid, W.costs.toPay, W.costs.planOnly], [7450, 6650, 3150, 3500, 800]);
+  eq('TBD lines are counted, not $0', W.costs.tbd, 1);
+  eq('gap, owner-paid, owed back (open only)', [W.gap, W.ownerPaid, W.owedBack], [5405, 150, 1500]);
+  eq('levers: a $25 ticket adds $0 toward costs, a $40 adds $15', W.levers.map(l => l.toCosts), [0, 15]);
+
+  console.log('rsvps');
+  const rs = [
+    { name: 'Ethan P', status: 'going', guest_id: 'g1' },
+    { name: 'Alexey', status: 'going', invited_by: 'Jess K' },
+    { name: "Alexey's +1", status: 'going', plus_one_of: 'Alexey', invited_by: 'Alexey' },
+    { name: 'JAS', status: 'going', suggested_guest_id: 'gx', match_note: 'Jason?' },
+    { name: 'Lovely', status: 'maybe', guest_id: 'g6' },
+    { name: 'Nope', status: 'cant_go', invited_by: 'Jess K' },
+  ];
+  const RS = rsvpStats(rs, R);
+  eq('going on the list vs going without a ticket vs to confirm', [RS.goingOnList.map(r => r.name), RS.goingNoTicket.map(r => r.name), RS.toConfirm.map(r => r.name)], [['Ethan P'], ['Alexey', "Alexey's +1"], ['JAS']]);
+  eq('status counts + promoters', [RS.byStatus, RS.promoters.map(p => [p.name, p.invited, p.going])], [{ going: 4, maybe: 1, cant_go: 1, interested: 0 }, [['Jess K', 2, 1], ['Alexey', 1, 1]]]);
+
+  console.log('partiful re-import');
+  const P = planRsvps({
+    rows: [
+      { Name: 'Alexey', Status: 'Going', 'RSVP date': '2026-10-30 16:28:06-04:00', 'Invited By': 'Jess K', 'Explore Source': '', 'Is Plus One Of': '' },
+      { Name: 'Nope', Status: 'Going', 'RSVP date': '2026-11-05 10:00:00-05:00', 'Invited By': 'Jess K', 'Explore Source': '', 'Is Plus One Of': '' },
+      { Name: 'Jay', Status: 'Maybe', 'RSVP date': '', 'Invited By': '', 'Explore Source': '', 'Is Plus One Of': '' },
+      { Name: 'Ethan', Status: 'Going', 'RSVP date': '', 'Invited By': '', 'Explore Source': '', 'Is Plus One Of': '' },
+      { Name: 'Tess B', Status: 'Can t Go'.replace(' t', "'t"), 'RSVP date': '', 'Invited By': '', 'Explore Source': '', 'Is Plus One Of': '' },
+    ],
+    existing: [{ id: 'x1', external_key: 'partiful:alexey', status: 'going', rsvp_at: '2026-10-30T20:28:06Z', invited_by: 'Jess K', plus_one_of: null, explore_source: null },
+               { id: 'x2', external_key: 'partiful:nope', status: 'cant_go', rsvp_at: '2026-11-04T10:00:00Z', invited_by: 'Jess K' },
+               { id: 'x3', external_key: 'partiful:gone', status: 'going' }],
+    guests: [], roster: R });
+  eq('unchanged row untouched; changed status updates (links kept)', [P.report.unchanged, P.updates.map(u => [u.id, u.status])], [1, [['x2', 'going']]]);
+  eq('new exact name on the guest list links; first name alone only suggests', P.inserts.map(i => [i.name, i.guest_id, i.suggested_guest_id]), [['Jay', 'g5', null], ['Ethan', null, 'g1'], ['Tess B', 'g2', null]]);
+  eq("Can't Go maps; rows no longer in the file are reported, not deleted", [P.inserts[2].status, P.report.notInFile], ['cant_go', 1]);
+
+  console.log('chase list');
+  const spS = sponsorStats(SPX, gea.map(r => ({ ...r, sponsorship_id: r.sponsorship_id })));
+  const C = chaseList({ sp: spS, rsvp: RS, todayIso: '2026-11-05', eventDate: '2026-11-14',
+    expenses: [{ vendor: 'Shane', amount: 500, status: 'accrued', category: 'Entertainment / Event' }, { vendor: 'Signal', amount: 3000, status: 'paid' }],
+    tasks: [{ id: 't1', title: 'Signal balance date', status: 'blocked' }, { id: 't2', title: 'Late thing', status: 'todo', due_date: '2026-11-01' },
+            { id: 't3', title: 'After the night', status: 'todo', due_date: '2026-11-16' }, { id: 't4', title: 'Done', status: 'done' }] });
+  eq('late first, then blockers; post-event tasks wait', C.map(x => x.title).slice(0, 2), ['Late thing', 'Signal balance date']);
+  eq('collect, name comps, nudge RSVPs, pay costs', C.map(x => x.title).filter(t => /Collect|comps? not|no ticket|confirm|Pay/.test(t)),
+     ['Collect $500 from Kay Bee', '2 going on Partiful with no ticket', 'Pay Shane $500', 'Pulse Co: 3 comps not named yet', 'Tess B: 2 comps not named yet', '1 RSVP match to confirm']);
+  eq('nothing after the event date, nothing done', C.some(x => /After the night|^Done$/.test(x.title)), false);
 }
 
 // ---- real DI #2 exports, where present ------------------------------------

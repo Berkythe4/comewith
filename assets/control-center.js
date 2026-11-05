@@ -655,3 +655,272 @@ export function nextMilestones(tasks, eventDate, todayIso, n = 6) {
     .sort((a, b) => a.due_date.localeCompare(b.due_date) || (b.milestone ? 1 : 0) - (a.milestone ? 1 : 0));
   return open.slice(0, n);
 }
+
+// ---------------------------------------------------------------------------
+// Roster: ONE answer to "who is tied to this event".
+// ---------------------------------------------------------------------------
+// Used by control.html (Command, Guest list) AND the event hub's Customers tab
+// in dashboard.html, so the two can never disagree (Keith, 2026-11-05).
+//
+// A person is keyed by GUEST record. Lineup and sponsor ACTORS join a person
+// through guests.actor_id, then by name. Role comes from entry_type (222).
+// ticket_type is free text ("Sponsor comp", "DJ"), and reading it is how the
+// hub used to show every comp as a paying attendee. Pre-222 rows have no
+// entry_type, so they fall back to the old reading: 'comp' -> guest,
+// 'donation' -> donor, anything else -> ticket.
+export const ROSTER_GROUPS = [
+  ['sponsor', 'Sponsors & their comps'], ['lineup', 'Lineup & crew'], ['comp', 'Comps'],
+  ['ticket', 'Paid tickets'], ['donor', 'Donors'], ['other', 'Also tied to the event'],
+];
+export const ENTRY_LABEL = {
+  ticket: 'ticket', walk_in: 'walk-in', comp: 'comp', guest_list: 'guest', sponsor_comp: 'sponsor comp',
+  dj: 'dj', artist: 'artist', staff: 'staff', volunteer: 'volunteer', vendor: 'vendor', donation: 'donor',
+};
+const LINEUP_ROLES = new Set(['dj', 'artist', 'staff', 'volunteer', 'vendor', 'performer', 'dancer', 'host', 'crew', 'photographer']);
+
+export function entryOf(r) {
+  if (r.entry_type) return r.entry_type;
+  const tt = String(r.ticket_type || '').trim().toLowerCase();
+  if (tt === 'donation') return 'donation';
+  if (tt === 'comp') return 'guest_list';
+  return 'ticket';
+}
+
+export function eventRoster({ gea = [], sponsorships = [], participants = [], donations = [] } = {}) {
+  const people = new Map(), byGuest = new Map(), byActor = new Map(), byName = new Map();
+  const make = (key, name, email) => {
+    const p = { key, name: (name || '').trim() || '(no name)', email: email || null, guestIds: [], actorIds: [], rows: [],
+                roles: new Set(), sources: new Set(), heads: 0, spent: 0, donated: 0, sponsored: 0, fee: 0,
+                attended: null, scans: 0, sponsorshipId: null, sponsorOf: [], set: null, stage: null, group: 'other' };
+    people.set(key, p);
+    const n = normName(name); if (n && !byName.has(n)) byName.set(n, p);
+    return p;
+  };
+  for (const r of gea || []) {
+    const g = r.guest || {};
+    const gid = r.guest_id || g.id;
+    const name = g.full_name ?? r.name, email = g.email ?? r.email ?? null, actorId = g.actor_id ?? r.actor_id ?? null;
+    let p = gid && byGuest.get(gid);
+    if (!p) {
+      p = make('g:' + gid, name, email);
+      if (gid) { byGuest.set(gid, p); p.guestIds.push(gid); }
+    }
+    if (actorId && !byActor.has(actorId)) { byActor.set(actorId, p); p.actorIds.push(actorId); }
+    if (email && !p.email) p.email = email;
+    p.rows.push(r);
+    const e = entryOf(r);
+    if (e === 'donation') { p.roles.add('donor'); p.donated += num(r.amount_spent); }
+    else {
+      p.roles.add(ENTRY_LABEL[e] || e);
+      p.heads += Math.max(1, num(r.quantity) || 1);
+      if (e === 'ticket' || e === 'walk_in') p.spent += num(r.amount_spent);
+      if (e === 'sponsor_comp' && r.sponsorship_id) p.sponsorshipId = r.sponsorship_id;
+    }
+    if (r.source) p.sources.add(r.source);
+    p.scans += num(r.scan_count);
+    if (r.attended === true || r.checked_in_at) p.attended = true;
+    else if (r.attended === false && p.attended !== true) p.attended = false;
+  }
+  const findByActor = (a) => (a && a.id && byActor.get(a.id)) || (a && byName.get(normName(a.display_name))) || null;
+  for (const pp of participants || []) {
+    const a = pp.actor || {};
+    let p = findByActor(a);
+    if (!p) p = make('a:' + (a.id || normName(a.display_name)), a.display_name, a.email);
+    if (a.id && !p.actorIds.includes(a.id)) { p.actorIds.push(a.id); if (!byActor.has(a.id)) byActor.set(a.id, p); }
+    (pp.roles && pp.roles.length ? pp.roles : [pp.role]).filter(Boolean).forEach(x => p.roles.add(x));
+    p.fee += num(pp.fee);
+    if (a.display_name && normName(a.display_name) !== normName(p.name)) p.stage = a.display_name;
+    if (pp.set_start || pp.bill_order != null) p.set = { start: pp.set_start || null, end: pp.set_end || null, order: pp.bill_order ?? null };
+  }
+  const sponsors = [];
+  for (const s of (sponsorships || []).filter(x => x.status !== 'cancelled')) {
+    const a = s.actor || {};
+    const name = a.display_name || s.notes || 'Sponsor';
+    const p = findByActor(a);
+    if (p) { p.roles.add('sponsor'); p.sponsored += num(s.cash_amount) + num(s.in_kind_value); p.sponsorOf.push(s.id); }
+    sponsors.push({ id: s.id, name, tier: s.tier || null, cash: num(s.cash_amount), inKind: num(s.in_kind_value),
+                    status: s.status, paid: s.status === 'paid', compsTotal: num(s.entry_tickets), person: p || null, comps: [], open: 0, s });
+  }
+  for (const d of donations || []) {
+    let p = byName.get(normName(d.donor_name));
+    if (!p) p = make('d:' + normName(d.donor_name || 'anonymous'), d.donor_name || 'Anonymous', null);
+    p.roles.add('donor'); p.donated += num(d.amount);
+  }
+  // groups: a sponsor comp sits under its sponsor; then lineup, comps, tickets, donors
+  const spById = new Map(sponsors.map(s => [s.id, s]));
+  const groups = Object.fromEntries(ROSTER_GROUPS.map(([k]) => [k, []]));
+  for (const p of people.values()) {
+    const has = (...r) => r.some(x => p.roles.has(x));
+    if (p.sponsorshipId && spById.has(p.sponsorshipId)) { p.group = 'sponsor'; spById.get(p.sponsorshipId).comps.push(p); continue; }
+    if ([...p.roles].some(r => LINEUP_ROLES.has(r))) p.group = 'lineup';
+    else if (has('comp', 'guest', 'sponsor comp')) p.group = 'comp';
+    else if (has('ticket', 'walk-in')) p.group = 'ticket';
+    else if (has('donor')) p.group = 'donor';
+    else if (p.roles.has('sponsor')) { p.group = 'sponsor'; continue; }   // drawn as its sponsor header
+    else p.group = 'other';
+    groups[p.group].push(p);
+  }
+  const byNameSort = (a, b) => a.name.localeCompare(b.name);
+  for (const s of sponsors) { s.comps.sort(byNameSort); s.open = Math.max(0, s.compsTotal - s.comps.length); }
+  sponsors.sort((a, b) => (b.cash - a.cash) || a.name.localeCompare(b.name));
+  const setKey = (p) => p.set ? (p.set.start || '') + String(p.set.order ?? 99).padStart(3, '0') : '~' + p.name;
+  groups.lineup.sort((a, b) => setKey(a).localeCompare(setKey(b)));
+  for (const k of ['comp', 'ticket', 'donor', 'other']) groups[k].sort(byNameSort);
+  const all = [...people.values()];
+  const onList = all.filter(p => p.heads > 0);
+  return {
+    sponsors, groups, people: all, onList,
+    counts: {
+      people: onList.length, heads: sum(onList, p => p.heads),
+      byGroup: Object.fromEntries(ROSTER_GROUPS.map(([k]) => [k, k === 'sponsor' ? sum(sponsors, s => s.comps.length) : groups[k].length])),
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Where we stand: one answer to "are we going to make it"
+// ---------------------------------------------------------------------------
+// Raised = tickets + donations + sponsor cash (pledged). What is promised to the
+// mission comes off first; what is left is what can pay the costs. Expected
+// cost per category is the larger of planned and booked, so a booked expense
+// never double-counts the plan line it realises. TBD lines are COUNTED, never $0.
+export function whereWeStand({ tk, don, sp, mm, fund, tiers = [], budget = [], expenses = [], advances = [] }) {
+  const raised = round2(tk.revenue + don.total + sp.pledged);
+  const received = round2(tk.revenue + don.total + sp.paid);
+  const promised = fund ? round2(mm.toMission) : 0;
+  const forCosts = round2(raised - promised);
+  const cats = {};
+  const cat = (k) => cats[k] || (cats[k] = { planned: 0, actual: 0, paid: 0, tbd: 0 });
+  for (const b of budget.filter(x => x.direction === 'expense' && !x.deleted_at)) {
+    const x = cat(b.category || 'Uncategorised'); if (b.amount_tbd) x.tbd++; else x.planned += num(b.planned_amount);
+  }
+  const live = expenses.filter(x => !x.deleted_at);
+  for (const e of live) {
+    const x = cat(e.category || 'Uncategorised'); x.actual += num(e.amount); if (e.status === 'paid') x.paid += num(e.amount);
+  }
+  const vals = Object.values(cats);
+  const expected = round2(sum(vals, x => Math.max(x.planned, x.actual)));
+  const booked = round2(sum(vals, x => x.actual));
+  const paid = round2(sum(vals, x => x.paid));
+  const ownerPaid = round2(sum(live.filter(e => e.funded_by === 'owner' && e.status === 'paid' && !e.reimbursed_at), e => e.amount));
+  const owedBack = round2(sum((advances || []).filter(a => a.status === 'contingent' || a.status === 'owed'), a => a.amount));
+  const gap = round2(expected - forCosts);
+  // what one more of each thing adds toward costs (the lever)
+  const levers = tiers.filter(t => t.active !== false).map(t => ({ label: t.label, toCosts: fund ? round2(num(t.price) - num(t.to_mission)) : num(t.price) }));
+  return {
+    raised, received, toCollect: round2(raised - received), promised, forCosts,
+    costs: { expected, booked, paid, toPay: round2(booked - paid), planOnly: round2(expected - booked), tbd: sum(vals, x => x.tbd), cats },
+    gap, covered: expected > 0 ? Math.max(0, Math.min(100, forCosts / expected * 100)) : null,
+    ownerPaid, owedBack, levers,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// RSVPs (event_rsvps, 224): a layer, never tickets or attendance
+// ---------------------------------------------------------------------------
+export const RSVP_STATUS = { going: 'Going', maybe: 'Maybe', cant_go: "Can't go", interested: 'Interested' };
+
+export function rsvpStats(rsvps, roster) {
+  const onList = new Set((roster ? roster.onList : []).flatMap(p => p.guestIds));
+  const byStatus = { going: 0, maybe: 0, cant_go: 0, interested: 0 };
+  const promoters = {};
+  const goingNoTicket = [], toConfirm = [], goingOnList = [];
+  for (const r of rsvps || []) {
+    byStatus[r.status] = (byStatus[r.status] || 0) + 1;
+    if (r.invited_by) {
+      const p = promoters[r.invited_by] || (promoters[r.invited_by] = { name: r.invited_by, invited: 0, going: 0, onList: 0 });
+      p.invited++; if (r.status === 'going') p.going++; if (r.guest_id && onList.has(r.guest_id)) p.onList++;
+    }
+    const pending = !r.guest_id && !!(r.suggested_guest_id || r.match_note);
+    if (pending) toConfirm.push(r);
+    if (r.status !== 'going') continue;
+    if (r.guest_id && onList.has(r.guest_id)) goingOnList.push(r);
+    else if (!pending) goingNoTicket.push(r);
+  }
+  const host = (r) => normName(r.plus_one_of || r.name);
+  goingNoTicket.sort((a, b) => host(a).localeCompare(host(b)) || (a.plus_one_of ? 1 : 0) - (b.plus_one_of ? 1 : 0));
+  return { total: (rsvps || []).length, byStatus, goingNoTicket, goingOnList, toConfirm,
+           promoters: Object.values(promoters).sort((a, b) => b.invited - a.invited || a.name.localeCompare(b.name)) };
+}
+
+// Partiful guest export: Name, Status, RSVP date, Invited By, Explore Source, Is Plus One Of.
+export function looksLikePartiful(headers) {
+  const h = (headers || []).map(x => String(x).trim().toLowerCase());
+  return h.includes('name') && h.includes('status') && h.includes('invited by');
+}
+const RSVP_FROM = { going: 'going', maybe: 'maybe', "can't go": 'cant_go', 'cant go': 'cant_go', interested: 'interested' };
+
+// Re-importing an export UPDATES status/date/inviter on rows we have (links are
+// kept). New rows auto-link only on an exact full-name match to ONE person;
+// a single first name (or first + initial) that fits exactly one person on the
+// guest list becomes a suggestion for a human to confirm, never a link.
+// Keys match 224: 'partiful:' + normName(name), '#n' for a repeated name.
+export function planRsvps({ rows, existing = [], guests = [], roster = null }) {
+  const seen = new Map(), have = new Map(existing.map(r => [r.external_key, r]));
+  const byFull = new Map();
+  for (const g of guests) { const n = normName(g.full_name); if (!n) continue; byFull.set(n, byFull.has(n) ? null : g); }
+  const listPeople = (roster ? roster.onList : []).filter(p => p.guestIds[0]);
+  for (const p of listPeople) byFull.set(normName(p.name), { id: p.guestIds[0], full_name: p.name });   // the guest list wins a tie
+  const inserts = [], updates = [], keys = new Set();
+  const report = { rows: 0, created: 0, updated: 0, unchanged: 0, linked: 0, suggested: 0, skipped: [] };
+  for (const r of rows || []) {
+    const g = (k) => { const hit = Object.keys(r).find(x => x.trim().toLowerCase() === k); return hit == null ? '' : String(r[hit] ?? '').replace(/ /g, ' ').trim(); };
+    const name = g('name'); if (!name) continue;
+    const status = RSVP_FROM[normName(g('status'))];
+    if (!status) { report.skipped.push(`${name}: unknown status "${g('status')}"`); continue; }
+    report.rows++;
+    const n = normName(name), c = (seen.get(n) || 0) + 1; seen.set(n, c);
+    const key = 'partiful:' + n + (c === 1 ? '' : '#' + c);
+    keys.add(key);
+    const fields = { status, rsvp_at: g('rsvp date') || null, invited_by: g('invited by') || null, plus_one_of: g('is plus one of') || null, explore_source: g('explore source') || null };
+    const prev = have.get(key);
+    if (prev) {
+      const t = (v) => v ? new Date(v).getTime() : null;
+      const diff = Object.keys(fields).some(k => k === 'rsvp_at' ? t(prev[k]) !== t(fields[k]) : (prev[k] || null) !== fields[k]);
+      if (diff) { updates.push({ id: prev.id, ...fields }); report.updated++; } else report.unchanged++;
+      continue;
+    }
+    const row = { external_key: key, name, ...fields, guest_id: null, suggested_guest_id: null, match_note: null };
+    const exact = c === 1 ? byFull.get(n) : null;
+    if (exact) { row.guest_id = exact.id; report.linked++; }
+    else if (c === 1 && !/'s \+1$|^friend of /i.test(name)) {
+      const parts = n.replace(/\(.*?\)/g, ' ').replace(/[^a-z0-9 ]/g, ' ').trim().split(/\s+/);
+      const short = parts.length === 1 || (parts.length === 2 && parts[1].length === 1);
+      if (short && parts[0].length >= 2) {
+        const hits = listPeople.filter(p => { const q = normName(p.name).split(' '); return q[0] === parts[0] && (parts.length === 1 || (q[1] || '').startsWith(parts[1])); });
+        if (hits.length === 1) { row.suggested_guest_id = hits[0].guestIds[0]; row.match_note = `${hits[0].name}? (on the guest list)`; report.suggested++; }
+        else if (hits.length > 1) { row.match_note = hits.map(h => h.name).join(' / ') + '?'; report.suggested++; }
+      }
+    }
+    inserts.push(row); report.created++;
+  }
+  // rows we hold that this export no longer has (un-RSVP'd, or renamed): kept, and reported
+  report.notInFile = existing.filter(e => (e.source || 'partiful') === 'partiful' && !keys.has(e.external_key)).length;
+  return { inserts, updates, report };
+}
+
+// ---------------------------------------------------------------------------
+// Chase list: everything that needs a person before the night, in one place
+// ---------------------------------------------------------------------------
+const money0 = (v) => '$' + Math.round(num(v)).toLocaleString('en-US');
+export function chaseList({ sp, rsvp, expenses = [], tasks = [], todayIso, eventDate }) {
+  const out = [];
+  for (const k of sp.cards) {
+    const nm = (k.s.actor && k.s.actor.display_name) || 'Sponsor';
+    if (!k.paid && num(k.s.cash_amount) > 0) out.push({ rank: 2, sec: 'sponsors', kind: 'money', title: `Collect ${money0(k.s.cash_amount)} from ${nm}`, detail: [k.s.tier, k.s.status].filter(Boolean).join(' · ') });
+    if (k.compsOpen > 0) out.push({ rank: 3, sec: 'sponsors', kind: 'comp', title: `${nm}: ${k.compsOpen} comp${k.compsOpen === 1 ? '' : 's'} not named yet`, detail: `${k.compsUsed} of ${k.compsTotal} named` });
+  }
+  if (rsvp && rsvp.goingNoTicket.length) out.push({ rank: 2, sec: 'rsvps', kind: 'people', title: `${rsvp.goingNoTicket.length} going on Partiful with no ticket`, detail: 'nudge them to buy' });
+  if (rsvp && rsvp.toConfirm.length) out.push({ rank: 3, sec: 'rsvps', kind: 'people', title: `${rsvp.toConfirm.length} RSVP match${rsvp.toConfirm.length === 1 ? '' : 'es'} to confirm`, detail: rsvp.toConfirm.map(r => r.name).join(', ') });
+  for (const e of expenses.filter(x => !x.deleted_at && x.status !== 'paid')) {
+    const late = !!(e.due_date && todayIso && e.due_date < todayIso);
+    out.push({ rank: late ? 0 : 2, sec: 'finance', kind: 'money', late, title: `Pay ${e.vendor || e.category || 'expense'} ${money0(e.amount)}`,
+               detail: [e.category, e.due_date ? `due ${e.due_date}` : 'no due date'].filter(Boolean).join(' · ') });
+  }
+  for (const t of tasks.filter(x => !['done', 'cancelled'].includes(x.status) && !x.deleted_at && (!x.due_date || !eventDate || x.due_date <= eventDate))) {
+    const late = !!(t.due_date && todayIso && t.due_date < todayIso);
+    out.push({ rank: t.status === 'blocked' ? 1 : late ? 0 : 3, sec: 'command', kind: t.status === 'blocked' ? 'blocked' : 'task', late, taskId: t.id,
+               blocked: t.status === 'blocked', title: t.title, detail: [t.status === 'blocked' ? 'blocked' : '', t.due_date ? `due ${t.due_date}` : ''].filter(Boolean).join(' · ') });
+  }
+  return out.sort((a, b) => a.rank - b.rank);
+}

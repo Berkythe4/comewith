@@ -442,6 +442,11 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **`sponsorships.payment_refs` records which source payments a sponsorship absorbed.**
   The importer skips those keys, so a reclassified row (Savery's Zeffy "donation") is
   not booked twice on the next import (§102). When you reclassify a row, add its key.
+- **ONE roster: `eventRoster()` in `assets/control-center.js`** feeds the Control Center
+  (Command, Guest list, RSVPs) AND the event hub's Customers tab. People are keyed by guest
+  record, actors join via `guests.actor_id`, roles come from `entry_type`. Change the rules
+  there only, never in either page (§104). Link a DJ's guest record to their actor or the
+  lineup shows them twice.
 - **`owner_advances` (225) is owner money that may be owed back. It is NOT income or
   sponsor cash.** Master-only, outside % to the mission, and it never converts itself:
   a closed status requires `resolved_at`, so a conversion is always a recorded decision (§103).

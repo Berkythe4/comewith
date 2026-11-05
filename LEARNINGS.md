@@ -2972,3 +2972,21 @@ Status starts at `contingent`. A CHECK ties every closed status (`repaid`,
 `converted_to_donation`, `written_off`) to `resolved_at`, so a conversion is always
 a recorded decision. Nothing converts it automatically. The Control Center shows it
 under "Owed back", outside the revenue table.
+
+## Section 104 — Two screens showing the same people must share ONE roster function (2026-11-05)
+
+The event hub's Customers tab and the Control Center's door list both answered
+"who is coming", with two separate sets of rules. Customers merged people by display
+name across tables, so Berky and Keith Berkman became two people, Miss Vee and
+Victoriarose Vargas became two, and Pulse Devices appeared as a customer. It also
+read a person's role from free-text `ticket_type`, so every "Sponsor comp", "Comp"
+and "DJ" showed as a paying attendee. The Control Center keyed people by guest
+record and read `entry_type`. Keith asked whether the two should always match:
+yes, and they didn't. Both now call `eventRoster()` in `assets/control-center.js`.
+A person is keyed by guest record. Lineup and sponsor actors join a person through
+`guests.actor_id`, then by name. Role comes from `entry_type`, falling back to the
+old `ticket_type` reading for rows from before 222. Sponsors carry their comps
+beneath them. The rule: **when two screens list the same people, the matching
+logic lives in one tested function, and neither screen re-derives it.** A
+duplicate drifts the first time either one is edited. Linking a guest to its actor
+(227: Keith ↔ Berky) is part of the data, not a rendering fix.

@@ -1,3 +1,32 @@
+# Carryover - 2026-11-05 (DI #3 answers + Control Center rebuild - DESKTOP, Quick Close)
+
+**Closed 2026-11-05 on the DESKTOP.** On `master`, pushed (Netlify deploys `control.html`
++ `dashboard.html`). **Migrations 226 + 227 applied to prod** (dry run first, recorded).
+
+## This session shipped
+- **226**: Frick Frack BlackJack $500 to Shane Fonda (new actor, org = Frick Frack
+  BlackJack; accrued, dated 11/14, no due date); Meta Ads $150 paid by Keith personally
+  (owner-funded, dated 11/5); Ethan Pollak = Pulse comp 1/4; Terri -> existing Theresa
+  McGuinness record, Bill -> Bill McGuinness; Lorena Aragon -> Lorena Hunter (guest +
+  subscriber); Pat Donnelly guest; RSVP matches confirmed (all but JAS).
+- **227**: Keith Berkman guest linked to the Berky actor (one roster row).
+- **Control Center rebuilt**: gradient hero (countdown, tickets, guest list, Partiful,
+  $ to MS); "Where we stand" (raised vs expected costs, gap, owed back, levers);
+  Chase list; Run of show; Guest list grouped (sponsors with comps beneath, lineup by set
+  time, comps, tickets); new RSVPs tab (going-no-ticket, confirm matches, promoters,
+  Partiful re-import that keeps links). Visual refresh.
+- **Customers tab (event hub)** now reads the same `eventRoster()` (LEARNINGS §104),
+  grouped by default; DI #2 verified on it (77 on the list).
+- Verified by rendering control.html headless (Edge) against a prod snapshot with a stub
+  client; the harness lives in the session scratchpad only, not in the repo.
+
+## Open
+- JAS (RSVP) still unconfirmed. Pulse: 3 comps open; Savery/Martinez: 1 open.
+- Shane Fonda payment date; Signal balance due date; DJ drink tickets TBD.
+- Hub Customers grouped view not seen rendered (only syntax + DI #2 data check).
+
+---
+
 # Carryover - 2026-11-04 (DI #3 first data import + Signal deposit - DESKTOP, Quick Close)
 
 **Closed 2026-11-04 on the DESKTOP.** On `master`, pushed (Netlify deploys the

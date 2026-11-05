@@ -2071,6 +2071,7 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 import { PRICING_DEFAULTS, computeQuote, mergeConfig, suggestDailyRate } from './assets/pricing-engine.js';
 import { parseCsv, classifyExport, buildImportPlan, TYPE_LABELS } from './assets/import-engine.js';
 import { BUZZ_W, BUZZ_ANCHOR, buzzAnchor, scScoreArtist, buzzSort } from './assets/buzz.js';
+import { eventRoster } from './assets/control-center.js';
 
 // PUBLIC values — safe to embed in frontend per the env contract.
 const SUPABASE_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
@@ -10146,48 +10147,36 @@ async function hubLoadInSheet() {
 async function hubSecCustomers() {
   const id = hub.eventId;
   const [pp, spo, don, gea, sum, gl, tk] = await Promise.all([
-    sb.from('event_participants').select('role, roles, fee, actor:actors(display_name, email)').eq('event_id', id),
-    sb.from('sponsorships').select('cash_amount, in_kind_value, tier, actor:actors(display_name, email)').eq('event_id', id),
+    sb.from('event_participants').select('role, roles, fee, bill_order, set_start, set_end, actor:actors(id, display_name, email)').eq('event_id', id),
+    sb.from('sponsorships').select('id, status, entry_tickets, cash_amount, in_kind_value, tier, notes, actor:actors(id, display_name, email)').eq('event_id', id),
     sb.from('third_party_donations').select('donor_name, amount').eq('event_id', id),
-    sb.from('guest_event_attendance').select('amount_spent, ticket_type, quantity, source, attended, scan_count, guest:guests(id, full_name, email)').eq('event_id', id),
+    sb.from('guest_event_attendance').select('guest_id, entry_type, sponsorship_id, amount_spent, ticket_type, quantity, source, attended, scan_count, checked_in_at, guest:guests(id, full_name, email, actor_id)').eq('event_id', id),
     sb.from('v_event_summary').select('ticket_revenue, tickets_sold, third_party_donations, sponsor_cash, sponsor_in_kind, revenue, expenses, net').eq('event_id', id).maybeSingle(),
     sb.from('guest_event_attendance').select('id, guest:guests(full_name, email)').eq('event_id', id).eq('source', 'guestlist').order('created_at'),
     sb.from('ticketing').select('guest_id').eq('event_id', id).eq('attended', true),
   ]);
   const tkScanned = new Set((tk.data || []).map(r => r.guest_id).filter(Boolean));
-  const map = new Map();
-  const norm = (n) => (n || '').trim().toLowerCase();
-  const rec = (name, email) => {
-    const k = norm(name); if (!k) return null;
-    let o = map.get(k);
-    if (!o) { o = { name: (name || '').trim(), email: email || '', roles: new Set(), spent: 0, donated: 0, sponsored: 0, fee: 0, tickets: 0, sources: new Set(), scanned: null, scans: 0, guestIds: new Set() }; map.set(k, o); }
-    if (email && !o.email) o.email = email;
-    return o;
-  };
-  for (const p of (pp.data || [])) { const o = rec(p.actor?.display_name, p.actor?.email); if (!o) continue; (p.roles?.length ? p.roles : [p.role]).filter(Boolean).forEach(r => o.roles.add(r)); if (p.fee) o.fee += Number(p.fee); }
-  for (const s of (spo.data || [])) { const o = rec(s.actor?.display_name, s.actor?.email); if (!o) continue; o.roles.add('sponsor'); o.sponsored += Number(s.cash_amount || 0) + Number(s.in_kind_value || 0); if (s.tier) o.tier = s.tier; }
-  for (const d of (don.data || [])) { const o = rec(d.donor_name, null); if (!o) continue; o.roles.add('donor'); o.donated += Number(d.amount || 0); }
-  for (const a of (gea.data || [])) {
-    const o = rec(a.guest?.full_name, a.guest?.email); if (!o) continue;
-    const tt = a.ticket_type || '';
-    if (tt === 'donation') { o.roles.add('donor'); o.donated += Number(a.amount_spent || 0); }
-    else if (tt === 'comp') { o.roles.add('guest'); }
-    else { o.roles.add('attendee'); o.spent += Number(a.amount_spent || 0); }
-    o.tickets += Number(a.quantity || 0); // count tickets/entries for everyone, incl. comps
-    if (a.source) o.sources.add(a.source);
-    if (a.guest?.id) o.guestIds.add(a.guest.id);
-    o.scans += Number(a.scan_count || 0); // scanned ADMISSIONS (parties roll up: Lunaera ×6)
-    // scanned aggregates across a person's records: any true wins, else explicit false, else unknown
-    if (a.attended === true || tkScanned.has(a.guest?.id)) o.scanned = true;
-    else if (a.attended === false && o.scanned !== true) o.scanned = false;
-  }
-  const list = [...map.values()].map(o => ({ ...o, total: o.sponsored || o.donated || o.spent || o.fee }));
+  // ONE roster with the Event Control Center (assets/control-center.js eventRoster):
+  // people keyed by guest record, lineup/sponsor actors joined via guests.actor_id,
+  // roles from entry_type. Change the rules THERE, never here, or the two drift.
+  const R = eventRoster({ gea: gea.data || [], sponsorships: spo.data || [], participants: pp.data || [], donations: don.data || [] });
+  const list = R.people.map(p => ({
+    key: p.key, name: p.name, email: p.email || '', roles: new Set(p.roles), spent: p.spent, donated: p.donated, sponsored: p.sponsored, fee: p.fee,
+    tickets: p.heads, sources: new Set(p.sources), scans: p.scans, guestIds: new Set(p.guestIds), group: p.group, stage: p.stage, set: p.set,
+    sponsorshipId: p.sponsorshipId, scanned: p.guestIds.some(g => tkScanned.has(g)) ? true : p.attended,
+  }));
+  // an org sponsor with no person behind it (Pulse Devices) is still tied to the event
+  for (const s of R.sponsors) if (!s.person) list.push({ key: 'sp:' + s.id, name: s.name, email: '', roles: new Set(['sponsor']), spent: 0, donated: 0,
+    sponsored: s.cash + s.inKind, fee: 0, tickets: 0, sources: new Set(), scans: 0, guestIds: new Set(), group: 'sponsor', scanned: null, sponsorHeaderOnly: true });
+  for (const o of list) o.total = o.sponsored || o.donated || o.spent || o.fee;
   list.sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
   hub.custList = list;
+  hub.custRoster = { sponsors: R.sponsors.map(s => ({ id: s.id, name: s.name, tier: s.tier, cash: s.cash, status: s.status, compsTotal: s.compsTotal, open: s.open,
+    personKey: s.person ? s.person.key : 'sp:' + s.id, compKeys: s.comps.map(p => p.key) })), groups: Object.fromEntries(Object.entries(R.groups).map(([k, v]) => [k, v.map(p => p.key)])), counts: R.counts };
   hub.counts.customers = list.length; renderHubSecNav();
 
   const has = (r) => (l) => l.roles.has(r);
-  const nAtt = list.filter(has('attendee')).length, nDon = list.filter(has('donor')).length, nSpon = list.filter(has('sponsor')).length;
+  const nAtt = list.filter(has('ticket')).length, nDon = list.filter(has('donor')).length, nSpon = list.filter(has('sponsor')).length;
   const nScan = list.filter(o => o.scanned === true).length;
   // Admissions: scan counts, plus 1 for anyone confirmed attended without a scan.
   const nScanAdm = list.reduce((s, o) => s + (o.scans || (o.scanned === true ? 1 : 0)), 0);
@@ -10246,8 +10235,8 @@ async function hubSecCustomers() {
   const opt = (v, lbl, cur) => `<option value="${escapeHtml(v)}"${v === cur ? ' selected' : ''}>${escapeHtml(lbl)}</option>`;
   $('hubSecBody').innerHTML = impBlock + glBlock + `
     <div class="hub-sec-bar"><h3>Customers</h3>
-      <span class="li-sub">${list.length} people · ${fmtNum(namedTix)} tickets · <strong>${nScanAdm} admissions scanned in</strong>${nScanAdm !== nScan ? ` (${nScan} records)` : ''} · ${nAtt} attendees · ${nDon} donors · ${nSpon} sponsors</span></div>
-    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event — attendees, donors, sponsors, performers & crew — merged by name. Scanned = walked in per RA scan data (×N = a party's admissions on one record; ✓* = confirmed attended with no scan; ✗ = listed but never scanned; — = no check-in data, e.g. Partiful). <strong>Click a ✗ or — to confirm someone attended</strong>; click a ✓* to undo. Click a column to sort; filters combine.</div>
+      <span class="li-sub"><strong>${hub.custRoster.counts.heads} on the guest list</strong> (${hub.custRoster.counts.people} people, same as the Control Center) · ${list.length} tied to the event · <strong>${nScanAdm} admissions scanned in</strong>${nScanAdm !== nScan ? ` (${nScan} records)` : ''} · ${nAtt} ticket buyers · ${nDon} donors · ${nSpon} sponsors</span></div>
+    <div class="kpi-hint" style="margin-bottom:12px;">Everyone tied to this event, one row per person — the same roster the Control Center reads, so the two always agree. Grouped by default: each sponsor with its comps right beneath it, then the lineup, comps, paid tickets and donors. Scanned = walked in per RA scan data (×N = a party's admissions on one record; ✓* = confirmed attended with no scan; ✗ = listed but never scanned; — = no check-in data, e.g. Partiful). <strong>Click a ✗ or — to confirm someone attended</strong>; click a ✓* to undo. Click a column to sort; filters combine.</div>
     ${recon}
     <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px;">
       <input class="modal-input" id="custQ" placeholder="Search name / email…" style="max-width:220px;" value="${escapeHtml(custState.q)}">
@@ -10264,6 +10253,7 @@ async function hubSecCustomers() {
     const att = e.target.closest('[data-cust-att]');
     if (att) { const [gids, mode] = att.dataset.custAtt.split(':'); hubCustConfirmAttended(gids.split(','), mode === 'on'); return; }
     const th = e.target.closest('[data-csort]'); if (!th) return;
+    e.preventDefault();
     const k = th.dataset.csort;
     if (custState.sortKey === k) custState.sortDir *= -1;
     else { custState.sortKey = k; custState.sortDir = (k === 'name' || k === 'roles' || k === 'sources') ? 1 : -1; }
@@ -10292,7 +10282,7 @@ async function hubCustConfirmAttended(guestIds, confirm) {
 }
 
 // Customers table state + renderer (filter/sort client-side over hub.custList).
-const custState = { q: '', role: 'all', source: 'all', scanned: 'all', sortKey: 'total', sortDir: -1 };
+const custState = { q: '', role: 'all', source: 'all', scanned: 'all', sortKey: 'group', sortDir: 1 };
 const CUST_COLS = [['name', 'Customer'], ['roles', 'Roles'], ['sources', 'Source'], ['tickets', '🎟'], ['total', 'Amount'], ['scanned', 'Scanned']];
 function renderCustGrid() {
   const wrap = $('custGrid'); if (!wrap) return;
@@ -10327,15 +10317,37 @@ function renderCustGrid() {
     if (o.scanned === false) return `<span data-cust-att="${escapeHtml(gids)}:on" class="li-sub" style="cursor:pointer;" title="Never scanned. Click to confirm they attended anyway.">✗ not scanned</span>`;
     return `<span data-cust-att="${escapeHtml(gids)}:on" class="muted" style="cursor:pointer;" title="No check-in data. Click to confirm they attended.">—</span>`;
   };
-  const rows = list.map(o => `<tr>
-    <td><strong>${escapeHtml(o.name)}</strong>${o.email ? `<div class="li-sub">${escapeHtml(o.email)}</div>` : ''}</td>
+  const rowHtml = (o, indent) => `<tr${indent ? ' style="background:var(--off);"' : ''}>
+    <td${indent ? ' style="padding-left:26px;border-left:3px solid var(--border-strong);"' : ''}><strong>${escapeHtml(o.name)}</strong>${o.stage ? ` <span class="li-sub">(${escapeHtml(o.stage)})</span>` : ''}${o.email ? `<div class="li-sub">${escapeHtml(o.email)}</div>` : ''}</td>
     <td>${[...o.roles].sort().map(roleChip).join(' ') || muted}</td>
     <td class="li-sub">${escapeHtml([...o.sources].sort().join(', ').replace(/_/g, ' ')) || muted}</td>
     <td class="num">${o.tickets || ''}</td>
     <td>${amtCell(o)}</td>
-    <td>${scanCell(o)}</td>
-  </tr>`).join('') || `<tr><td colspan="6" class="muted" style="padding:14px;">${(hub.custList || []).length ? 'No one matches these filters.' : 'No customers, attendees, donors or sponsors recorded for this event yet.'}</td></tr>`;
-  wrap.innerHTML = `<div class="li-sub" style="margin-bottom:6px;">${list.length} of ${(hub.custList || []).length} shown</div>
+    <td>${o.sponsorHeaderOnly ? muted : scanCell(o)}</td>
+  </tr>`;
+  const empty = `<tr><td colspan="6" class="muted" style="padding:14px;">${(hub.custList || []).length ? 'No one matches these filters.' : 'No customers, attendees, donors or sponsors recorded for this event yet.'}</td></tr>`;
+  let rows;
+  if (s.sortKey === 'group' && hub.custRoster) {
+    // grouped (the Control Center's guest-list order): sponsors with comps beneath
+    const vis = new Map(list.map(o => [o.key, o]));
+    const hdr = (label, n) => `<tr><td colspan="6" style="padding:14px 8px 6px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;font-size:.78rem;border-bottom:2px solid var(--border-strong);">${escapeHtml(label)} <span class="li-sub">${n}</span></td></tr>`;
+    const out = [];
+    const spRows = hub.custRoster.sponsors.map(sp => {
+      const comps = sp.compKeys.map(k => vis.get(k)).filter(Boolean);
+      const me = vis.get(sp.personKey);
+      if (!comps.length && !me) return '';
+      const st = sp.status === 'paid' ? '<span style="color:#8FB339;font-weight:700;">paid</span>' : escapeHtml(sp.status);
+      return `<tr><td colspan="6" style="padding:10px 8px 4px;"><strong>${escapeHtml(sp.name)}</strong> <span class="li-sub">${escapeHtml(sp.tier || '')} · ${money(sp.cash)} · ${st}${sp.compsTotal || sp.compKeys.length ? ` · ${sp.compKeys.length}/${sp.compsTotal} comps` : ''}${sp.open ? ` · ${sp.open} open` : ''}${me && me.group !== 'sponsor' ? ' · also listed below as ' + escapeHtml([...me.roles].filter(r => r !== 'sponsor').join(', ')) : ''}</span></td></tr>`
+        + comps.map(o => rowHtml(o, true)).join('');
+    }).filter(Boolean);
+    if (spRows.length) out.push(hdr('Sponsors & their comps', hub.custRoster.sponsors.length), ...spRows);
+    for (const [k, label] of [['lineup', 'Lineup & crew'], ['comp', 'Comps'], ['ticket', 'Paid tickets'], ['donor', 'Donors'], ['other', 'Also tied to the event']]) {
+      const g = (hub.custRoster.groups[k] || []).map(x => vis.get(x)).filter(Boolean);
+      if (g.length) out.push(hdr(label, g.length), ...g.map(o => rowHtml(o, false)));
+    }
+    rows = out.join('') || empty;
+  } else rows = list.map(o => rowHtml(o, false)).join('') || empty;
+  wrap.innerHTML = `<div class="li-sub" style="margin-bottom:6px;">${list.length} of ${(hub.custList || []).length} shown${s.sortKey !== 'group' ? ' · <a href="#" data-csort="group">↺ grouped view</a>' : ''}</div>
     <table class="data-table"><thead><tr>${CUST_COLS.map(([k, l]) => `<th data-csort="${k}" style="cursor:pointer;user-select:none;">${l}${arrow(k)}</th>`).join('')}</tr></thead><tbody>${rows}</tbody></table>`;
 }
 
