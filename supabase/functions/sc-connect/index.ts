@@ -218,11 +218,22 @@ Deno.serve(async (req) => {
     if (!userId) return err(403, "log in to export to your own SoundCloud");
     if (!clientId) return err(503, "SoundCloud app not configured.");
     const playlistId = (body.playlist_id || "").toString();
-    if (!playlistId) return err(400, "playlist_id required");
+    // OR a list of songs that is not a station (231) - the Scene Map's per-club
+    // playlist. SoundCloud ids only (numeric), de-duplicated, at most 500 (the
+    // SoundCloud playlist limit), and it needs a title because there is no station
+    // to name it after.
+    const trackIds = Array.isArray(body.track_ids)
+      ? [...new Set(body.track_ids.map((x: unknown) => String(x ?? "").trim()).filter((x: string) => /^\d+$/.test(x)))].slice(0, 500)
+      : [];
+    const listTitle = (body.title || "").toString().trim().slice(0, 100);
+    if (!playlistId && !trackIds.length) return err(400, "playlist_id or track_ids required");
+    if (!playlistId && !listTitle) return err(400, "title required for a track list");
     const verifier = b64url(crypto.getRandomValues(new Uint8Array(48)));
     const challenge = b64url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));
     const state = "me_" + b64url(crypto.getRandomValues(new Uint8Array(16)));
-    const { error: xe } = await admin.from("sc_dj_exports").insert({ state, playlist_id: playlistId, code_verifier: verifier, origin: "dashboard", requested_by: userId });
+    const { error: xe } = await admin.from("sc_dj_exports").insert(playlistId
+      ? { state, playlist_id: playlistId, code_verifier: verifier, origin: "dashboard", requested_by: userId }
+      : { state, track_ids: trackIds, title: listTitle, code_verifier: verifier, origin: "dashboard", requested_by: userId });
     if (xe) return err(500, "Could not start the export: " + xe.message);
     const authorize = `https://secure.soundcloud.com/authorize?response_type=code&client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&code_challenge=${challenge}&code_challenge_method=S256&state=${state}`;
     return ok({ authorize_url: authorize });
@@ -235,6 +246,23 @@ Deno.serve(async (req) => {
     if (!(bearer === SRK || roleOf(bearer) === "service_role")) return err(403, "service role only");
     const playlistId = (body.playlist_id || "").toString();
     const djToken = (body.access_token || "").toString();
+    // A track list instead of a station (231): build straight from the ids,
+    // titled as given. Titles come from our own track rows so a blocked song is
+    // reported by name, not by number.
+    if (!playlistId && Array.isArray(body.track_ids) && djToken) {
+      const ids = [...new Set(body.track_ids.map((x: unknown) => String(x ?? "")).filter((x: string) => /^\d+$/.test(x)))].slice(0, 500) as string[];
+      if (!ids.length) return err(400, "No SoundCloud songs to export.");
+      const { data: named } = await admin.from("sc_playlist_tracks").select("sc_track_id, title").in("sc_track_id", ids);
+      const nm: Record<string, string> = {};
+      (named || []).forEach((t) => { if (t.title && !nm[t.sc_track_id]) nm[t.sc_track_id] = t.title; });
+      const built = await scBuildPlaylist(djToken, ids.map((id) => ({ id: Number(id), title: nm[id] || "track " + id })), {
+        title: (body.title || "Come With Radio").toString().slice(0, 100),
+        description: (body.description || `Built with Come With Radio (${SITE}/radio.html).`).toString().slice(0, 4000),
+        updateId: null,
+      });
+      if (!built.ok) return err(built.status, built.error);
+      return ok({ success: true, url: built.playlist.permalink_url || null, tracks: built.added.length, skipped: built.skipped, not_on_soundcloud: [] });
+    }
     if (!playlistId || !djToken) return err(400, "playlist_id and access_token required");
     const { data: pl } = await admin.from("sc_playlists").select("id, name, station_no").eq("id", playlistId).single();
     if (!pl) return err(404, "playlist not found");

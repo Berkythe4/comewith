@@ -560,6 +560,15 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   The trigger mirrors the derivation in `scArtistData()` exactly (incl. the tie-at-0
   quirk); **change one, change the other**, and re-run the parity check (JS rules over
   every row vs the view: must be 0 mismatches). Never select `songs` in a list loader.
+- **The Scene Map defaults to RADIO HISTORY (2026-11-05).** Every kept `ra_events`
+  row (past + upcoming) reduced to the clubs whose lineups include an artist with a
+  song on an AIRED station (`live`/`archived` - a building station has not aired).
+  A song links to a lineup artist by the credited name (split by `RADIO_SPLIT_RE`,
+  the one copy) OR by the uploading SoundCloud account equalling the artist's own.
+  Clubs are keyed by `venueIdent`, never the label. Unlocated clubs and unlinked
+  songs are LISTED under the map, not dropped. A club's songs export through the
+  same one-shot "Copy to my SoundCloud" flow as a station: `sc_dj_exports` carries
+  `track_ids` + `title` instead of `playlist_id` (231; exactly one of the two).
 - **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`
   stores a PKCE verifier in `sc_dj_exports`; `sc-oauth` recognises that state,
   exchanges the code and calls `sc-connect export_as` (service role only), which

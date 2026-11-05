@@ -26,10 +26,13 @@ Deno.serve(async (req) => {
   // the token is handed to sc-connect export_as for this one playlist, and then
   // dropped: it is never written anywhere. They land back on their dj.html link.
   if (state) {
-    const { data: dx } = await admin.from("sc_dj_exports").select("state, playlist_id, code_verifier, created_at, completed_at, origin")
+    const { data: dx } = await admin.from("sc_dj_exports").select("state, playlist_id, track_ids, title, code_verifier, created_at, completed_at, origin")
       .eq("state", state).maybeSingle();
     if (dx) {
-      const { data: ep } = await admin.from("sc_playlists").select("dj_token").eq("id", dx.playlist_id).maybeSingle();
+      // A track-list export (231) has no station; only a DJ export needs dj_token.
+      const { data: ep } = dx.playlist_id
+        ? await admin.from("sc_playlists").select("dj_token").eq("id", dx.playlist_id).maybeSingle()
+        : { data: null };
       // Back to wherever it started: the DJ's link, or the dashboard (216).
       const fromDash = dx.origin === "dashboard";
       const djBack = (st: string) => fromDash
@@ -64,7 +67,10 @@ Deno.serve(async (req) => {
         const r = await fetch(`${SUPA}/functions/v1/sc-connect`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "Authorization": "Bearer " + SRK },
-          body: JSON.stringify({ action: "export_as", playlist_id: dx.playlist_id, access_token: tok.access_token }),
+          body: JSON.stringify(dx.playlist_id
+            ? { action: "export_as", playlist_id: dx.playlist_id, access_token: tok.access_token }
+            : { action: "export_as", track_ids: dx.track_ids || [], title: dx.title, access_token: tok.access_token,
+                description: `${dx.title} - songs from Come With Radio by artists who have played this room. Built with Come With Radio (${SITE}/radio.html).` }),
         });
         const j = await r.json().catch(() => ({}));
         if (!r.ok || !j.success) return finish({ ok: false, sc_username: username, error: (j.error || "SoundCloud rejected the playlist.").toString().slice(0, 300) }, "error");
