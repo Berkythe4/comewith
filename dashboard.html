@@ -19704,7 +19704,57 @@ function sceneInjectCss() {
   .sm-webi:hover{background:rgba(167,224,46,.25)}
   .sm-webi i{display:inline-block;height:3px;border-radius:2px;background:#a7e02e}
   .sm-webi b{color:#a7e02e}
-  @media (max-width:640px){.sm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-night{grid-template-columns:46px 1fr;gap:8px}.sm-tr{grid-template-columns:20px 36px 1fr}.sm-tr .r{display:none}.sm-tbl .hide-sm{display:none}}`;
+  .sm-state{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 8px;padding:8px 10px;border-radius:12px;border:1px solid var(--border);background:rgba(0,0,0,.18);min-height:44px}
+  .sm-state.on{border-color:#a7e02e;background:rgba(167,224,46,.07)}
+  .sm-st-idle{font-size:.82rem}
+  .sm-st-idle span{opacity:.7}
+  .sm-st-pill{display:inline-flex;align-items:center;gap:8px;border-radius:10px;padding:4px 4px 4px 10px;font-size:.85rem;background:rgba(0,0,0,.25);border:1px solid rgba(237,228,211,.18)}
+  .sm-st-pill .k{font-size:.62rem;text-transform:uppercase;letter-spacing:.08em;opacity:.65}
+  .sm-st-pill .n{font-size:.75rem;opacity:.75}
+  .sm-st-pill.club{border-color:#a7e02e}
+  .sm-st-pill button,.sm-st-reset,.sm-closebig{font-family:inherit;cursor:pointer;border-radius:8px;font-weight:700;font-size:.8rem;padding:5px 10px;border:0}
+  .sm-st-pill button{background:#a7e02e;color:#0f0814}
+  .sm-st-pill button:hover,.sm-closebig:hover{filter:brightness(1.1)}
+  .sm-st-reset{background:transparent;color:inherit;border:1px solid rgba(237,228,211,.35)!important;margin-left:auto}
+  .sm-closebig{background:#a7e02e;color:#0f0814;font-size:.9rem;padding:8px 14px}
+  .sm-legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.72rem;opacity:.8;margin:6px 2px 0}
+  .sm-legend span{display:inline-flex;align-items:center;gap:6px}
+  .sm-lg-dot{display:inline-block;width:11px;height:11px;border-radius:50%}
+  .sm-lg-line{display:inline-block;width:22px;height:3px;border-radius:2px;background:#a7e02e;box-shadow:0 0 6px #a7e02e}
+  .sm-exh{margin:22px 0 8px;font-size:1rem}
+  .sm-exh span{font-weight:normal;font-size:.75rem;opacity:.7}
+  .sm-kicker{font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;opacity:.6}
+  .sm-club .sm-sec h4{font-size:.85rem;opacity:1;letter-spacing:.02em}
+  .h4n{text-transform:none;letter-spacing:0;font-weight:normal;opacity:.65;font-size:.74rem}
+  .sm-segsm{display:inline-flex;border:1px solid rgba(237,228,211,.26);border-radius:8px;overflow:hidden}
+  .sm-segsm button{background:transparent;border:0;color:inherit;font-family:inherit;font-size:.74rem;padding:5px 9px;cursor:pointer}
+  .sm-segsm button:hover{background:rgba(167,224,46,.18)}
+  .sm-ctbl td{vertical-align:middle}
+  .sm-ctbl .pk{width:28px;text-align:center}
+  .sm-nighthd td{background:rgba(255,255,255,.045);padding:9px 10px!important}
+  .sm-ctbl tbody+tbody .sm-nighthd td{border-top:12px solid var(--card,#20142a)}
+  .sm-nighthd .d{font-weight:800;margin-right:10px}
+  .sm-nighthd .d.up{color:#a7e02e}
+  .sm-nighthd .p{font-weight:700}
+  .sm-nighthd .p a{color:inherit;text-decoration:none;border-bottom:1px dotted rgba(255,255,255,.4)}
+  .sm-nighthd .m{margin-left:10px;font-size:.72rem;opacity:.65}
+  .sm-song{display:flex;gap:10px;align-items:center;min-width:0}
+  .sm-art.s{width:32px;height:32px;flex:0 0 32px;font-size:.8rem;border-radius:5px}
+  .sm-song-t{min-width:0}
+  .sm-song-t .t{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:420px}
+  .sm-song-t .t a{color:inherit;text-decoration:none}
+  .sm-song-t .t a:hover{text-decoration:underline}
+  .sm-song-t .a{font-size:.72rem;opacity:.7}
+  .sm-only-sm{display:none}
+  .sm-altrow td{opacity:.62;font-style:italic}
+  .sm-why{font-size:.7rem;opacity:.85;margin:2px 0 0 42px;font-style:normal}
+  .sm-sub2{font-size:.7rem;opacity:.65}
+  .sm-sub2 a{color:inherit}
+  .sm-altsec{background:repeating-linear-gradient(135deg,rgba(255,255,255,.015) 0 8px,transparent 8px 16px)}
+  .sm-altsec .sm-ctbl tbody td{opacity:.8}
+  .sm-find{text-decoration:none}
+  .sm-dup{opacity:.6;font-weight:800}
+  @media (max-width:640px){.sm-hide-sm{display:none}.sm-only-sm{display:block}.sm-song-t .t{max-width:200px}.sm-st-reset{margin-left:0}.sm-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.sm-night{grid-template-columns:46px 1fr;gap:8px}.sm-tr{grid-template-columns:20px 36px 1fr}.sm-tr .r{display:none}.sm-tbl .hide-sm{display:none}}`;
   document.head.appendChild(s);
 }
 function renderSceneRadio() {
@@ -19725,19 +19775,21 @@ function renderSceneRadio() {
     <div class="hub-sec-bar"><h3>🗺️ Scene Map <span class="li-sub" style="font-weight:normal;">· internal · radio history, from our tracklists</span></h3>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">${sceneModeBar()}</div></div>
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px;">
-      <select class="modal-select" data-sm-station style="max-width:170px;" title="Songs from which radio show"><option value="">Every aired show</option>${T.stations.map(n => `<option value="${n}"${String(sceneState.station) === String(n) ? ' selected' : ''}>SHOW ${n}</option>`).join('')}</select>
-      <select class="modal-select" data-sm-range style="max-width:170px;" title="When the show happened">${rOpt('all', 'Any date')}${rOpt('past', 'Past shows')}${rOpt('last4', 'Last 4 weeks')}${rOpt('last12', 'Last 12 weeks')}${rOpt('upcoming', 'Upcoming shows')}</select>
+      <span class="li-sub">Radio show</span><select class="modal-select" data-sm-station style="max-width:170px;" title="Songs from which radio show"><option value="">Every aired show</option>${T.stations.map(n => `<option value="${n}"${String(sceneState.station) === String(n) ? ' selected' : ''}>SHOW ${n}</option>`).join('')}</select>
+      <span class="li-sub">When</span><select class="modal-select" data-sm-range style="max-width:170px;" title="When the show happened">${rOpt('all', 'Any date')}${rOpt('past', 'Past shows')}${rOpt('last4', 'Last 4 weeks')}${rOpt('last12', 'Last 12 weeks')}${rOpt('upcoming', 'Upcoming shows')}</select>
       <label class="li-sub" style="display:flex;gap:5px;align-items:center;cursor:pointer;" title="Also show a radio song at OTHER clubs its artist played, from the listings (lineups the feeds sent). Drawn dimmed with a dashed edge, and each one says which show the song was really picked for."><input type="checkbox" data-sm-listings${sceneState.listings ? ' checked' : ''}> songs at other shows</label>
       <label class="li-sub" style="display:flex;gap:5px;align-items:center;cursor:pointer;"><input type="checkbox" data-sm-others${sceneState.showOthers ? ' checked' : ''}> other clubs (grey)</label>
     </div>
     <div class="li-sub" style="margin-bottom:8px;display:flex;gap:10px;flex-wrap:wrap;align-items:center;">
       <span><b style="color:${RADIO_COLOR};">${tlClubs} clubs</b> from our tracklists${altOnly ? ` · ${altOnly} more only via other shows (dashed rings${hiddenAlt ? `; ${hiddenAlt} unlocated, in the table` : ''})` : ''} · ${placed} of ${T.scopedSongs} songs placed${T.songs !== T.scopedSongs ? ' (' + T.songs + ' aired in all)' : ''}</span>
-      <span id="smFocusChip"></span>
     </div>
+    <div id="smState" class="sm-state"></div>
     <div id="sceneMapCanvas" style="height:min(60vh,560px);border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#0e1116;"></div>
+    ${sceneLegendHtml()}
     ${T.noVenue.length ? `<div class="li-sub" style="margin-top:4px;">${T.noVenue.length} song${T.noVenue.length === 1 ? ' has' : 's have'} no show recorded on the tracklist: ${T.noVenue.map(r => escapeHtml((r.artist_name || '?') + ' (SHOW ' + r.station_no + ')')).join(', ')}</div>` : ''}
     <div id="sceneMapInfo" style="margin-top:12px;"></div>
-    <div class="sm-card" style="margin-top:12px;" id="smData">${sceneDataShell()}</div>`;
+    <h3 class="sm-exh">Explore <span>· every radio song placement · pick a view, filter, click a name to light it up on the map</span></h3>
+    <div class="sm-card" id="smData">${sceneDataShell()}</div>`;
   const maxS = Math.max(1, ...mapped.filter(sceneInNyc).map(c => c.weight));   // Elements (98, in PA) must not shrink every NYC dot
   sceneDrawMap([...mapped, ...others], {
     offMap: unmapped,
@@ -19748,7 +19800,7 @@ function renderSceneRadio() {
     tip: (c) => `${escapeHtml(c.name)}${c.quiet ? ' · no radio songs' : `${c.songs ? ` · 🎙 ${c.songs} song${c.songs === 1 ? '' : 's'} picked for shows here` : ''}${c.altSongs ? ` · ${c.altSongs} more via other shows` : ''}`}`,
   });
   sceneRenderData();
-  if (!sceneState.selected) $('sceneMapInfo').innerHTML = '<div class="li-sub">Click a dot, or a club in the table below, to open its nights and songs.</div>';
+  sceneRenderState();
 }
 // ── Explore: one filterable table over every placement (song x show x club). It
 // drives the map: whatever is filtered/focused here is what the map lights up.
@@ -19824,10 +19876,9 @@ function sceneRenderData() {
 }
 // Light the clubs the table is narrowed to; dim the rest. No narrowing = no overlay.
 function sceneApplyFocus(P) {
-  const chip = $('smFocusChip');
-  const f = sceneState.focus, narrowed = !!(f || (sceneState.dq || '').trim() || sceneState.dsrc !== 'all');
+  const narrowed = sceneNarrowed();
   const keys = narrowed ? new Set((P || scenePFiltered()).map(p => p.key)) : null;
-  if (chip) chip.innerHTML = narrowed ? `<span class="sm-focus">Map: ${escapeHtml(f ? f.label : (sceneState.dq || '').trim() ? '“' + sceneState.dq.trim() + '”' : sceneState.dsrc === 'tl' ? 'tracklists only' : 'other shows only')} · ${keys.size} club${keys.size === 1 ? '' : 's'} <button data-sm-unfocus title="Clear">✕</button></span>` : '';
+  sceneRenderState(keys ? keys.size : null);
   Object.entries(sceneMarkers).forEach(([k, m]) => {
     const base = m._smBase || (m._smBase = { ...m.options });
     if (!keys) m.setStyle({ opacity: base.opacity ?? 1, fillOpacity: base.fillOpacity, color: base.color, weight: base.weight });
@@ -19848,6 +19899,7 @@ function sceneSelect(key) {
   sceneState._web = { key, shared };
   sceneDrawWeb(true);
   $('sceneMapInfo').innerHTML = sceneState.mode === 'radio' ? renderSceneRadioInfo(v, shared) : renderSceneInfo(v, shared);
+  if (sceneState.mode === 'radio') sceneRenderState();
   $('sceneMapInfo').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 // The web: the open club and every club sharing an artist with it, drawn so it reads
@@ -19926,62 +19978,125 @@ function sceneTrackRow(r, stations, picked, note) {
     <div class="r">${[...stations].sort((a, b) => a - b).map(n => `<span class="sm-chip">SHOW ${n}</span>`).join(' ')}${meta ? `<div style="margin-top:3px;">${escapeHtml(meta)}</div>` : ''}</div>
   </div>`;
 }
+// What the map is showing RIGHT NOW, always in one place above it, each part with
+// its own obvious way out. (Keith: "closing a club or any filtering needs to be
+// more obvious".) Esc closes the club first, then clears the filter.
+function sceneNarrowed() { return !!(sceneState.focus || (sceneState.dq || '').trim() || sceneState.dsrc !== 'all'); }
+function sceneRenderState(litCount) {
+  const box = $('smState'); if (!box) return;
+  const T = sceneTL();
+  const club = sceneState.selected ? T.byKey[sceneState.selected] : null;
+  const narrowed = sceneNarrowed();
+  const fLabel = sceneState.focus ? sceneState.focus.label : (sceneState.dq || '').trim() ? '“' + sceneState.dq.trim() + '”' : sceneState.dsrc === 'tl' ? 'our tracklists only' : sceneState.dsrc === 'alt' ? 'other shows only' : '';
+  if (litCount == null && narrowed) litCount = new Set(scenePFiltered().map(p => p.key)).size;
+  const parts = [];
+  if (club) parts.push(`<span class="sm-st-pill club"><span class="k">Open club</span><b>${escapeHtml(club.name)}</b><button data-sm-close title="Close this club (Esc)">✕ Close club</button></span>`);
+  if (narrowed) parts.push(`<span class="sm-st-pill filt"><span class="k">Filter</span><b>${escapeHtml(fLabel)}</b><span class="n">${litCount} club${litCount === 1 ? '' : 's'} lit</span><button data-sm-unfocus title="Clear the filter (Esc)">✕ Clear filter</button></span>`);
+  box.className = 'sm-state' + (club || narrowed ? ' on' : '');
+  box.innerHTML = parts.length
+    ? parts.join('') + (club && narrowed ? '<button class="sm-st-reset" data-sm-reset title="Close the club and clear the filter">↺ Reset view</button>' : '')
+    : `<span class="sm-st-idle">Showing <b>all ${T.clubs.filter(c => c.songs).length} clubs</b> with radio songs. <span>Click a dot on the map, or a row in <i>Explore</i> below, to open a club.</span></span>`;
+}
+function sceneCloseClub() {
+  sceneState.selected = null; sceneState._web = null; sceneState.picked = null;
+  sceneClearWeb(); const info = $('sceneMapInfo'); if (info) info.innerHTML = '';
+  sceneApplyFocus();
+}
+function sceneClearFilter() {
+  sceneState.focus = null; sceneState.dq = ''; sceneState.dsrc = 'all';
+  const d = $('smData'); if (d) d.innerHTML = sceneDataShell();
+  sceneRenderData();
+}
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape' || !document.querySelector('#panel-scene-map.active') || sceneState.mode !== 'radio') return;
+  if (document.querySelector('.modal-overlay.show, #kpiModalOverlay.show')) return;
+  if (sceneState.selected) sceneCloseClub(); else if (sceneNarrowed()) sceneClearFilter();
+});
+function sceneLegendHtml() {
+  const dot = (st) => `<span class="sm-lg-dot" style="${st}"></span>`;
+  return `<div class="sm-legend">
+    <span>${dot('background:#a7e02e;')} songs <b>picked for a show</b> at this club (our tracklists) · bigger = more</span>
+    <span>${dot('border:1.5px dashed #a7e02e;background:transparent;')} only via <b>another show</b> (listings)</span>
+    <span>${dot('background:#6b6f78;width:7px;height:7px;')} no radio songs</span>
+    <span><span class="sm-lg-line"></span> open club → clubs sharing its radio artists</span>
+  </div>`;
+}
+// ── The club panel: two plain tables. ① what our tracklists picked for shows here,
+// grouped by night; ② other shows here by radio artists (listings). One export bar.
+function sceneArt(r) {
+  const ini = escapeHtml(((r.artist_name || r.title || '?').trim()[0] || '?').toUpperCase());
+  return r.artwork_url ? `<img class="sm-art s" src="${escapeHtml(r.artwork_url)}" alt="" loading="lazy" onerror="this.style.visibility='hidden'">` : `<span class="sm-art s">${ini}</span>`;
+}
+function sceneSongCell(r) {
+  const url = r.sc_url || r.permalink_url || null;
+  return `<div class="sm-song">${sceneArt(r)}<div class="sm-song-t"><div class="t">${url ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener" title="Open on SoundCloud">${escapeHtml(r.title || 'untitled')}</a>` : escapeHtml(r.title || 'untitled')}</div><div class="a sm-only-sm">${escapeHtml(r.artist_name || '')}</div></div></div>`;
+}
+function scenePickCell(r, picked) {
+  const onSc = !!(r.sc_export_id || /^\d+$/.test(r.sc_track_id || ''));
+  if (onSc) return `<input type="checkbox" data-sm-pick="${escapeHtml(r.sc_track_id)}"${picked ? ' checked' : ''} title="Include in the SoundCloud playlist">`;
+  const q = ((r.artist_name || '').split(RADIO_SPLIT_RE)[0] + ' ' + (r.title || '').replace(/[([].*?[)\]]/g, '')).trim();
+  return `<a class="sm-find" href="https://soundcloud.com/search/sounds?q=${encodeURIComponent(q)}" target="_blank" rel="noopener" title="No SoundCloud link matched yet - search SoundCloud">🔍</a>`;
+}
 function renderSceneRadioInfo(c, shared) {
   const T = sceneTL();
   const today = new Date().toISOString().slice(0, 10);
   const picked = new Set(scenePicked(c));
-  const exportable = sceneExportable(c).length, exportableAll = sceneExportableAll(c).length;
-  const dateBlock = (n, up) => { const d = n.date ? new Date(n.date + 'T12:00:00') : null; return `<div class="sm-date${up ? ' up' : ''}">${d ? `<div class="m">${d.toLocaleDateString('en-US', { month: 'short' })}</div><div class="d">${d.getDate()}</div><div class="m">${d.toLocaleDateString('en-US', { weekday: 'short' })}</div>` : '<div class="d">?</div>'}</div>`; };
+  const own = Object.values(c.nights).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const longDate = (d) => d ? new Date(d + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }) : 'Date unknown';
   const srcOf = (n) => n.source ? platformOf(n.source).s : (n.url && /ra\.co/.test(n.url) ? 'RA' : n.url && /dice\.fm/.test(n.url) ? 'DICE' : '');
-  // A song from a different show: every one says where it was really picked for.
-  const altRow = ({ r, who }) => {
-    const home = r.venue_id ? 'v:' + r.venue_id : (r.show_venue ? 'n:' + venueKey(r.show_venue) : null);
-    const homeName = (home && T.byKey[home]?.name) || r.venue_name || r.show_venue || 'its show';
-    const note = `${escapeHtml([...who].join(', '))} played here · <span>picked for</span> ${home ? `<span data-sm-venue="${escapeHtml(home)}">${escapeHtml(homeName)}</span>` : escapeHtml(homeName)}${r.show_date ? ' · ' + smDate(r.show_date) : ''}`;
-    return sceneTrackRow(r, new Set([r.station_no]), picked.has(r.sc_track_id), note);
-  };
-  const nights = c.nightList.map(n => {
+  const party = (n, fallback) => { const t = n.title || fallback; return n.url ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener" title="Open the listing">${escapeHtml(t)} ↗</a>` : escapeHtml(t); };
+  const homeOf = (r) => { const k = r.venue_id ? 'v:' + r.venue_id : (r.show_venue ? 'n:' + venueKey(r.show_venue) : null); return { k, name: (k && T.byKey[k]?.name) || r.venue_name || r.show_venue || '?' }; };
+  const showChip = (n) => `<span class="sm-chip">SHOW ${n}</span>`;
+
+  // ① Picked for shows here, grouped by night.
+  const ownRows = own.map(n => {
     const up = n.date && n.date >= today;
-    if (n.alt) {
-      // A different show: subtle, and every song says where it was really picked for.
-      return `<div class="sm-night alt">${dateBlock(n, false)}
-        <div style="min-width:0;">
-          <div class="sm-party">${n.url ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener">${escapeHtml(n.title || 'Show at ' + c.name)} ↗</a>` : escapeHtml(n.title || 'Show at ' + c.name)}</div>
-          <div class="sm-meta"><span class="sm-from" title="Not from our tracklists: the listings show a radio artist playing here">other show · from the listings</span>${up ? '<span>upcoming</span>' : ''}${srcOf(n) ? `<span>${escapeHtml(srcOf(n))}</span>` : ''}${n.attending ? `<span>· ${fmtNum(n.attending)} going</span>` : ''}</div>
-          ${[...n.rows.values()].map(altRow).join('')}
-        </div></div>`;
-    }
-    const title = n.title || (n.match ? '' : 'Show at ' + c.name);
-    return `<div class="sm-night">${dateBlock(n, up)}
-      <div style="min-width:0;">
-        <div class="sm-party">${n.url ? `<a href="${escapeHtml(n.url)}" target="_blank" rel="noopener">${escapeHtml(title)} ↗</a>` : escapeHtml(title)}</div>
-        <div class="sm-meta">${up ? '<span class="sm-chip">UPCOMING</span>' : ''}${[...n.stations].sort((a, b) => a - b).map(s => `<span class="sm-chip dim">picked for SHOW ${s}</span>`).join('')}${srcOf(n) ? `<span>${escapeHtml(srcOf(n))}</span>` : ''}${n.cost ? `<span>· ${escapeHtml(n.cost)}</span>` : ''}${n.attending ? `<span>· ${fmtNum(n.attending)} going</span>` : ''}${!n.title && !n.match ? '<span title="The tracklist names this room and date, but no show in the listings matches it">· party not in the listings</span>' : ''}</div>
-        ${n.rows.map(r => sceneTrackRow(r, c.tracks.get(r.sc_track_id)?.stations || new Set([r.station_no]), picked.has(r.sc_track_id))).join('')}
-        ${n.altRows?.size ? `<div class="sm-alsobill"><span class="sm-from" title="Not from our tracklists: the listings show another radio artist on this same bill">also on the bill · from the listings</span>${[...n.altRows.values()].map(altRow).join('')}</div>` : ''}
-      </div></div>`;
+    const meta = [srcOf(n), n.cost, n.attending ? fmtNum(n.attending) + ' going' : '', !n.title && !n.match ? 'party not in the listings' : ''].filter(Boolean).join(' · ');
+    const rows = n.rows.map(r => `<tr><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}</td><td class="sm-hide-sm">${escapeHtml(r.artist_name || '')}</td><td class="num">${showChip(r.station_no)}</td></tr>`).join('');
+    const bill = n.altRows?.size ? [...n.altRows.values()].map(({ r, who }) => { const h = homeOf(r); return `<tr class="sm-altrow"><td class="pk">${scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}<div class="sm-why">also on this bill: ${escapeHtml([...who].join(', '))} · song was picked for ${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}${r.show_date ? ' ' + smDate(r.show_date) : ''}</div></td><td class="sm-hide-sm">${escapeHtml(r.artist_name || '')}</td><td class="num">${showChip(r.station_no)}</td></tr>`; }).join('') : '';
+    return `<tbody><tr class="sm-nighthd"><td colspan="4"><span class="d${up ? ' up' : ''}">${longDate(n.date)}${up ? ' · upcoming' : ''}</span><span class="p">${party(n, 'Show at ' + c.name)}</span>${meta ? `<span class="m">${escapeHtml(meta)}</span>` : ''}</td></tr>${rows}${bill}</tbody>`;
   }).join('');
-  return `<div class="sm-card">
+
+  // ② Also played here: other shows at this club by radio artists.
+  const altList = Object.values(c.alt).sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+    .flatMap(n => [...n.rows.values()].map(x => ({ n, ...x })));
+  // A song already in ① (its artist played here again) is not a second pick: say so.
+  const altRows = altList.map(({ n, r, who }) => { const h = homeOf(r); const dup = c.tracks.has(r.sc_track_id); return `<tr><td class="pk">${dup ? '<span class="sm-dup" title="Same song as in ① above - tick it there">↑</span>' : scenePickCell(r, picked.has(r.sc_track_id))}</td><td>${sceneSongCell(r)}${dup ? '<div class="sm-why" style="margin-left:42px;">same song as above · its artist played here again</div>' : ''}</td>
+      <td><div>${escapeHtml([...who].join(', '))}</div><div class="sm-sub2">${longDate(n.date)} · ${party(n, 'show')}</div></td>
+      <td><div>${h.k ? `<span class="sm-lnk" data-sm-venue="${escapeHtml(h.k)}" title="Open that club">${escapeHtml(h.name)}</span>` : escapeHtml(h.name)}</div><div class="sm-sub2">${r.show_date ? smDate(r.show_date) + ' · ' : ''}SHOW ${r.station_no}</div></td></tr>`; }).join('');
+
+  const nOwn = c.songs, nAlt = altList.length;
+  const ownExp = sceneExportable(c).length, allExp = sceneExportableAll(c).length;
+  return `<div class="sm-card sm-club">
     <div class="sm-head">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start;">
-        <div style="min-width:0;"><h2 class="sm-title">${escapeHtml(c.name)}</h2>
+        <div style="min-width:0;"><div class="sm-kicker">Club</div><h2 class="sm-title">${escapeHtml(c.name)}</h2>
           <div class="sm-sub">${[c.area, c.address].filter(Boolean).map(escapeHtml).join(' · ') || (c.lat == null ? 'No location yet, so not on the map' : 'NYC')}</div></div>
-        <button class="hub-btn ghost" data-sm-close title="Close">✕</button></div>
+        <button class="sm-closebig" data-sm-close title="Close this club (Esc)">✕ Close</button></div>
       <div class="sm-stats">
-        <div class="sm-stat"><b>${c.songs}${c.altSongs ? `<i>+${c.altSongs}</i>` : ''}</b><span>radio songs${c.altSongs ? ' (+ other shows)' : ''}</span></div>
-        <div class="sm-stat"><b>${c.tlNights}${c.altNights ? `<i>+${c.altNights}</i>` : ''}</b><span>nights</span></div>
-        <div class="sm-stat"><b>${c.artists.size}</b><span>artists</span></div>
-        <div class="sm-stat"><b>${c.stations.size}</b><span>radio shows</span></div>
+        <div class="sm-stat"><b>${nOwn}</b><span>songs picked for shows here</span></div>
+        <div class="sm-stat"><b>${c.tlNights}</b><span>nights we picked for</span></div>
+        <div class="sm-stat"><b>${c.altSongs}</b><span>more via other shows</span></div>
+        <div class="sm-stat"><b>${shared.length}</b><span>connected clubs</span></div>
       </div>
     </div>
-    <div class="sm-sec" style="border-top:0;padding-top:4px;"><h4>🕸 Connected clubs <span style="text-transform:none;letter-spacing:0;font-weight:normal;">· share radio artists · lines on the map, thicker = more shared</span></h4>${sceneWebHtml(shared, 'radio artists')}</div>
-    ${exportableAll || c.songs ? `<div class="sm-bar">
-      <span class="sm-sel">${picked.size} selected${c.songs - exportable ? ` · ${c.songs - exportable} with no SoundCloud link yet (🔍)` : ''}${exportableAll > exportable ? ' · songs from other shows start unticked' : ''}</span>
-      <button class="hub-btn ghost" data-sm-pickall="own" title="This club's own picks">Own picks</button><button class="hub-btn ghost" data-sm-pickall="all" title="Including songs from other shows">All</button><button class="hub-btn ghost" data-sm-pickall="none">None</button>
-      <button class="hub-btn ghost" data-sm-copylist title="Copy the tracklist as text">⧉ Copy tracklist</button>
-      ${exportableAll ? `<button class="hub-btn" data-sm-export="${escapeHtml(c.key)}"${picked.size ? '' : ' disabled'} title="Make a private playlist of the ticked songs in YOUR SoundCloud. SoundCloud asks you to approve Come With once; your login is never stored.">☁ Copy ${picked.size} to my SoundCloud</button>` : ''}
-      ${c.venueId ? `<button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(c.name)}">Control center →</button>` : ''}
+    ${shared.length ? `<div class="sm-sec"><h4>🕸 Connected clubs <span class="h4n">share radio artists with ${escapeHtml(c.name)} · the lines on the map · click to open</span></h4>${sceneWebHtml(shared, 'radio artists')}</div>` : ''}
+    ${allExp ? `<div class="sm-bar">
+      <span class="sm-sel"><b>${picked.size}</b> song${picked.size === 1 ? '' : 's'} selected</span>
+      <span class="sm-segsm"><button data-sm-pickall="own" title="Songs picked for shows here">Picked here (${ownExp})</button><button data-sm-pickall="all" title="Including songs from other shows">Everything (${allExp})</button><button data-sm-pickall="none">None</button></span>
+      <button class="hub-btn" data-sm-export="${escapeHtml(c.key)}"${picked.size ? '' : ' disabled'} title="Make a private playlist of the selected songs in YOUR SoundCloud. SoundCloud asks you to approve Come With once; your login is never stored.">☁ Copy ${picked.size} to my SoundCloud</button>
+      <button class="hub-btn ghost" data-sm-copylist title="Copy the list as text">⧉ Copy list</button>
+      ${c.venueId ? `<button class="hub-btn ghost" data-sm-openvenue="${escapeHtml(c.name)}" title="Open this venue in the control center">Venue →</button>` : ''}
     </div>` : ''}
-    ${nights ? `<div class="sm-nights">${nights}</div>` : '<div class="sm-sec li-sub">No radio songs at this room in this range.</div>'}
+    <div class="sm-sec">
+      <h4>① Picked for shows here <span class="h4n">${nOwn} song${nOwn === 1 ? '' : 's'} · from our radio tracklists: the show each song was chosen for</span></h4>
+      ${own.length ? `<table class="sm-tbl sm-ctbl"><thead><tr><th class="pk"></th><th>Song</th><th class="sm-hide-sm">Artist</th><th class="num">On</th></tr></thead>${ownRows}</table>` : '<div class="li-sub">None in this range - this club only shows up through other shows.</div>'}
+      ${nOwn - ownExp > 0 ? `<div class="li-sub" style="margin-top:6px;">🔍 = no SoundCloud link matched yet; click it to search SoundCloud.</div>` : ''}
+    </div>
+    ${nAlt ? `<div class="sm-sec sm-altsec">
+      <h4>② Also played here <span class="h4n">${nAlt} · other shows at ${escapeHtml(c.name)} by artists who are on the radio · from the listings, not our tracklists · unticked by default</span></h4>
+      <table class="sm-tbl sm-ctbl"><thead><tr><th class="pk"></th><th>Song</th><th>Played here</th><th>Song was picked for</th></tr></thead><tbody>${altRows}</tbody></table>
+    </div>` : ''}
   </div>`;
 }
 
@@ -20068,12 +20183,13 @@ $('panel-scene-map').addEventListener('click', (e) => {
   if (e.target.closest('[data-ra-refresh]')) return raRefresh(e.target.closest('[data-ra-refresh]'));
   const md = e.target.closest('[data-sm-mode]'); if (md) { if (sceneState.mode !== md.dataset.smMode) { sceneState.mode = md.dataset.smMode; sceneState.selected = null; loadSceneMap(); } return; }
   const ex = e.target.closest('[data-sm-export]'); if (ex) { sceneExportClub(ex.dataset.smExport); return; }
-  if (e.target.closest('[data-sm-close]')) { sceneState.selected = null; sceneState._web = null; sceneClearWeb(); $('sceneMapInfo').innerHTML = ''; sceneApplyFocus(); return; }
+  if (e.target.closest('[data-sm-close]')) { sceneCloseClub(); return; }
+  if (e.target.closest('[data-sm-reset]')) { sceneCloseClub(); sceneClearFilter(); return; }
   if (e.target.closest('[data-sm-copylist]')) { sceneCopyTracklist(); return; }
   const pa = e.target.closest('[data-sm-pickall]'); if (pa) { const c = sceneTL().byKey[sceneState.selected]; const v = pa.dataset.smPickall; sceneState.picked = v === 'own' ? null : v === 'all' && c ? new Set(sceneExportableAll(c)) : new Set(); const keepY = window.scrollY; sceneSelect(sceneState.selected); window.scrollTo(0, keepY); return; }
   const dv = e.target.closest('[data-sm-dv]'); if (dv) { sceneState.dv = dv.dataset.smDv; $('smData').innerHTML = sceneDataShell(); sceneRenderData(); return; }
   const fo = e.target.closest('[data-sm-focus]'); if (fo) { const k = fo.dataset.smFocus; sceneState.focus = { kind: k, val: k === 'show' ? Number(fo.dataset.smFv) : fo.dataset.smFv, label: fo.dataset.smFl }; sceneRenderData(); $('sceneMapCanvas')?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
-  if (e.target.closest('[data-sm-unfocus]')) { sceneState.focus = null; sceneState.dq = ''; sceneState.dsrc = 'all'; $('smData').innerHTML = sceneDataShell(); sceneRenderData(); return; }
+  if (e.target.closest('[data-sm-unfocus]')) { sceneClearFilter(); return; }
   if (e.target.closest('[data-sm-radio]')) { sceneState.onRadio = !sceneState.onRadio; renderSceneMap(); return; }
   const sv = e.target.closest('[data-sm-venue]'); if (sv) { sceneSelect(sv.dataset.smVenue); return; }
   const oa = e.target.closest('[data-sm-openvenue]'); if (oa) { const n = scVenueName(oa.dataset.smOpenvenue); activateTab('market'); setTimeout(() => { marketState.tab = 'venues'; marketState.vExpand = n; marketState.vSearch = n; renderMarket(); }, 140); return; }
