@@ -560,13 +560,18 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   The trigger mirrors the derivation in `scArtistData()` exactly (incl. the tie-at-0
   quirk); **change one, change the other**, and re-run the parity check (JS rules over
   every row vs the view: must be 0 mismatches). Never select `songs` in a list loader.
-- **The Scene Map defaults to RADIO HISTORY (2026-11-05).** Every kept `ra_events`
-  row (past + upcoming) reduced to the clubs whose lineups include an artist with a
-  song on an AIRED station (`live`/`archived` - a building station has not aired).
-  A song links to a lineup artist by the credited name (split by `RADIO_SPLIT_RE`,
-  the one copy) OR by the uploading SoundCloud account equalling the artist's own.
-  Clubs are keyed by `venueIdent`, never the label. Unlocated clubs and unlinked
-  songs are LISTED under the map, not dropped. A club's songs export through the
+- **The Scene Map defaults to RADIO HISTORY, and OUR TRACKLISTS are its primary
+  source (2026-11-05).** Every aired song (station `live`/`archived`) records the
+  show it was picked for (`show_venue/show_date/show_url`); `v_radio_track_shows`
+  (233-235) resolves that to a room (`resolve_venue_name`, never fuzzy) and a party
+  (ticket link → lineup on that date → sole show in that room that day). Lineup-name
+  matching across all listings is an OPTIONAL lighter layer ("+ other nights from
+  listings") that only adds, never replaces. The artist split `RADIO_SPLIT_RE` exists
+  in the view AND the dashboard - change both. Clubs are keyed by `venueIdent`
+  (`v:<venue_id>`), never the label. Unlocated clubs and songs with no show are
+  LISTED under the map, not dropped. Elements Festival (98 songs) has no location.
+  232 merged only pure spelling duplicates; ROOMS inside a building (Elsewhere
+  Rooftop, Ruins at Knockdown) are still separate venues pending Keith's call. A club's songs export through the
   same one-shot "Copy to my SoundCloud" flow as a station: `sc_dj_exports` carries
   `track_ids` + `title` instead of `playlist_id` (231; exactly one of the two).
 - **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`

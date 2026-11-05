@@ -1,0 +1,75 @@
+-- 234: v_radio_track_shows, fast. 233's 'url' branch was an OR of a regex and a
+-- content_url compare, so every song with a ticket link scanned all of ra_events
+-- (6.2s for 256 rows). Now: an RA link is a primary-key lookup on its id; any other
+-- link is an indexed equality on content_url. Same rows, same columns, same order.
+
+begin;
+
+create index if not exists ra_events_content_url_idx on public.ra_events (content_url);
+
+create or replace view public.v_radio_track_shows
+with (security_invoker = true) as
+with tr as (
+  select t.id, t.playlist_id, p.station_no, p.status as station_status, t.sort,
+         t.sc_track_id, t.title, t.artist_name, t.permalink_url, t.artwork_url, t.duration_ms,
+         t.genres, t.label, t.bpm, t.camelot,
+         t.show_date, nullif(btrim(t.show_venue), '') as show_venue,
+         nullif(btrim(t.show_url), '') as show_url, t.show_cost,
+         substring(t.show_url from 'ra\.co/events/(\d+)') as show_ra_id,
+         split_part(nullif(btrim(t.show_url), ''), '?', 1) as show_url_bare,
+         public.resolve_venue_name(nullif(btrim(t.show_venue), '')) as show_venue_id,
+         array(select btrim(x)
+                 from regexp_split_to_table(lower(coalesce(t.artist_name, '')),
+                      ',|&|\mfeat\.?|\mft\.?|\mx\M|\mvs\.?') x
+                where btrim(x) <> '') as parts
+  from public.sc_playlist_tracks t
+  join public.sc_playlists p on p.id = t.playlist_id
+  where p.status in ('live', 'archived')
+)
+select
+  tr.id, tr.playlist_id, tr.station_no, tr.sort, tr.sc_track_id, tr.title, tr.artist_name,
+  tr.permalink_url, tr.artwork_url, tr.duration_ms, tr.genres, tr.label, tr.bpm, tr.camelot,
+  tr.show_date, tr.show_venue, tr.show_url, tr.show_cost,
+  coalesce(ev.venue_id, tr.show_venue_id)          as venue_id,
+  v.name                                           as venue_name,
+  ev.ra_id                                         as event_ra_id,
+  nullif(btrim(ev.title), '')                      as event_title,
+  ev.content_url                                   as event_url,
+  ev.source                                        as event_source,
+  ev.attending                                     as event_attending,
+  ev.how                                           as event_match
+from tr
+left join lateral (
+  select c.* from (
+    select e.ra_id, e.title, e.venue_id, e.content_url, e.source, e.attending, 'url'::text as how, 1 as pri
+      from public.ra_events e
+     where e.ra_id = tr.show_ra_id                      -- primary key
+    union all
+    select e.ra_id, e.title, e.venue_id, e.content_url, e.source, e.attending, 'url', 1
+      from public.ra_events e
+     where tr.show_ra_id is null and e.content_url = tr.show_url_bare   -- ra_events_content_url_idx
+    union all
+    select e.ra_id, e.title, e.venue_id, e.content_url, e.source, e.attending, 'lineup', 2
+      from public.ra_events e
+     where tr.show_date is not null and e.event_date = tr.show_date
+       and exists (select 1 from jsonb_array_elements(coalesce(e.lineup, '[]'::jsonb)) l
+                    where lower(btrim(l->>'name')) = any(tr.parts))
+       and (tr.show_venue is null or e.venue_id = tr.show_venue_id
+            or public.normalize_venue_name(e.venue_name) = public.normalize_venue_name(tr.show_venue))
+    union all
+    select e.ra_id, e.title, e.venue_id, e.content_url, e.source, e.attending, 'room', 3
+      from public.ra_events e
+     where tr.show_date is not null and tr.show_venue_id is not null
+       and e.event_date = tr.show_date and e.venue_id = tr.show_venue_id
+       and (select count(*) from public.ra_events e2
+             where e2.event_date = tr.show_date and e2.venue_id = tr.show_venue_id) = 1
+  ) c
+  order by c.pri, c.ra_id
+  limit 1
+) ev on true
+left join public.venues v on v.id = coalesce(ev.venue_id, tr.show_venue_id);
+
+revoke all on public.v_radio_track_shows from public, anon;
+grant select on public.v_radio_track_shows to authenticated;
+
+commit;

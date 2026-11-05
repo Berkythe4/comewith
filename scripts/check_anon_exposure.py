@@ -132,6 +132,7 @@ MUST_BE_EMPTY = [
     # --- radio scan cache (admin-only RLS; 229 added the summary view) ---
     ("sc_artist_cache", "the SoundCloud scan cache"),
     ("v_sc_artist_summary", "the scan cache summary (229)"),
+    ("v_radio_track_shows", "aired songs with the show each was picked for (233)"),
 ]
 
 
