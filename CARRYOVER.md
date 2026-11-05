@@ -1,3 +1,61 @@
+# Carryover - 2026-11-05 (2nd session: radio refresh + load speed -> Scene Map rebuilt - DESKTOP, FULL Close)
+
+**Closed 2026-11-05 on the DESKTOP.** On `master`, pushed; Netlify serves it (verified
+live: `dashboard.html` carries `sceneCtx`/`renderSceneList`). No branch. Edge functions
+deployed this session: `sc-connect` v43, `sc-oauth` v27. The DI #3 close below is the
+same day's earlier session.
+
+## State summary
+- **Migrations: repo and prod both top out at 239** (`applied_migrations` 229-239, 11 this
+  session, no drift). Every one dry-run first (commit -> rollback), then applied + recorded.
+- **Prod invariants:** `post_apply.sql` 6 PASS / 3 INFO; anon sweep clean incl. new
+  `v_sc_artist_summary` + `v_radio_track_shows` (401); all five financial views 401.
+- **LEARNINGS latest = §112** (§107-112 this session). CLAUDE.md Radio section carries the
+  Scene Map, room = one club, Rekordbox SoundCloud links, Esri tiles, master tracklist.
+- **Radio data refreshed 2026-11-05** (shows, sc-match, scan). No scheduled refresh exists.
+
+## This session shipped
+- **Load speed (229/230):** Radio/Market/Scene Map read `v_sc_artist_summary` (summary
+  STORED by trigger) instead of 32 MB of `songs`; ~5x faster. Songs load when Build opens.
+- **Scene Map = radio history** (default mode; "Upcoming shows" kept as the 2nd mode):
+  - Primary source = our tracklists via `v_radio_track_shows` (233-235, 237): 273/273
+    aired songs placed, 45 clubs, party names from ticket link / lineup / sole show.
+  - "Songs at other shows" layer from listings (dimmed, "picked for X"; ignores
+    title-derived lineup entries).
+  - Explore table (clubs / artists / radio shows / songs + search) drives the map; any
+    club or filter shows ONE master tracklist under the map with an export bar.
+  - State bar (✕ Close club / ✕ Clear filter / Reset, Esc), legend, club web lines,
+    "Off this map" tray, Esri tiles (CARTO now returns API-KEY images at 200).
+  - Export any club/filter to the clicker's own SoundCloud (231: `sc_dj_exports` carries
+    `track_ids` + `title`).
+- **Venues (232, 236, 238, 239):** spelling dupes merged; rooms folded into their building
+  (BASEMENT stays separate); Pacha NYC Basement + Brooklyn Pacha -> Pacha New York; 7 pins
+  fixed from RA addresses; Elements Festival = Pocono Raceway; ONE 77, Music Hall of
+  Williamsburg and 8 tracklist rooms created. Linked events 5,016 -> 5,282; review queue 424 -> 385.
+- **SoundCloud links for Rekordbox songs (236/237):** 116 of 152 linked
+  (`scripts/link_radio_tracks_soundcloud.py`, `sc-connect search_tracks`).
+- **239:** SHOW 9's three show-less songs pointed at their shows (MEDUZA / Afrojack /
+  Phantogram).
+
+## >> START HERE NEXT SESSION
+1. Keith clicks through the Scene Map on prod. Everything was verified by rendering the
+   real code + prod data in headless Edge, NOT in the live dashboard, and no SoundCloud
+   export (club/filter) has been run end to end - try one.
+2. Radio -> Build: confirm songs appear under artists (the 230 change; never browser-tested).
+3. After any Rekordbox import: `SBP_REF=yaytdosxfhcqatmhctzk python scripts/link_radio_tracks_soundcloud.py --write`.
+
+## Parked / next
+- Scheduled radio refresh (shows + match + scan) - offered, not built. Same for the link script.
+- Phantogram's SHOW 9 song points at Phantogram's own Elsewhere show; the remixers (Jkyl &
+  Hyde) played Brooklyn Storehouse 10-24 - switch if that was the real reason.
+- 36 Rekordbox songs still unlinked (flips/edits/IDs; a few findable by hand).
+- 385 venue-name pairs still in review; ~180 non-radio rooms unlocated (the RA-address +
+  geocode pass used here would do them in bulk).
+- Public club heat-map (P2) - data gate passed; needs Keith's call on what's public.
+- Loading the listings layer costs ~1.3 MB on Scene Map open; untick "songs at other shows" if slow.
+
+---
+
 # Carryover - 2026-11-05 (DI #3 import -> Control Center rebuild - DESKTOP, FULL Close)
 
 **Closed 2026-11-05 on the DESKTOP.** On `master`, pushed; Netlify serves it (verified

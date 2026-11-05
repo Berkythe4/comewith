@@ -3015,3 +3015,77 @@ syntax check could not see: crew sorted ABOVE the 3 PM set, because
   inside a 390px iframe, which gives a true phone viewport, and there the page fit.
   Measure the viewport before blaming the CSS.
 - `_build/` holds guest names and emails. It is gitignored; keep it that way.
+
+## Section 107 — A list loader never reads `songs`; the scan summary is STORED (229/230, 2026-11-05)
+
+Opening Radio, Market or the Scene Map downloaded `sc_artist_cache` whole: 3,911
+rows, 32 MB of JSON, ~5 s, every time. Nearly all of it was the `songs` arrays,
+and the list views only need five derived facts (top track title/link/plays,
+"typical" plays, latest upload). 229 derived them in a view and was correct
+(0 mismatches against the dashboard's JS over every row) but ran the laterals on
+every read: 0.8 s a page. 230 stores them on the row via a BEFORE trigger on
+`songs`. **Derive once at write time when the input changes rarely and is read
+often.** The trigger mirrors `scArtistData()` exactly, tie-at-0 quirk included;
+change one, change the other, and re-run the parity check. Full songs load only
+when the Build view opens (`raEnsureSongs()`), never per artist on click.
+
+## Section 108 — The radio's own tracklists are the Scene Map's primary source (2026-11-05)
+
+The first radio map matched song credits against lineup NAMES across every kept
+show: 189 of 256 songs, and it could only guess which night. Every aired song
+already records the show it was picked for (`show_venue/show_date/show_url`) —
+253 of 256. `v_radio_track_shows` (233-237) resolves that to a room
+(`resolve_venue_name`, never fuzzy) and a party (ticket link → lineup on that
+date → the ONLY show in that room that day). **When we wrote down why something
+happened, read that before inferring it.** Lineup matching stays as a SECONDARY
+layer that only adds ("other show", dimmed, "picked for X"), and it ignores
+lineup entries 211 filled in from an event TITLE (`via:'title'`): "Panama
+Independence Weekend Party" put the act Panama at a Latin bar. Perf note: a CTE
+that calls a STABLE function and is used inside a LATERAL gets inlined and the
+function re-runs per candidate row — `as materialized` took the view 6.2 s → 0.3 s
+(with an index for the URL match).
+
+## Section 109 — A room is part of its building; a business at the same address is not (2026-11-05)
+
+Keith: rooms count as one club (Elsewhere Rooftop/Hall/Zone One → Elsewhere,
+Ruins → Knockdown Center, 99 Scott's rooms, Pacha NYC Basement → Pacha). BASEMENT
+shares Knockdown's address but is its own club with its own lineups, so it stays
+separate. 232 merged spelling-only duplicates first (SILO Brooklyn → SILO, 8 rows,
+17 spellings); 236 folded the rooms. Both keep `ra_events.venue_name` raw, so
+every merge is reversible. Checking every radio club's pin against RA's own venue
+address found the July geocodes wrong by 5-13 km for seven clubs (SILO was at
+Rockaway; Pacha at its old Hell's Kitchen site). **A geocoded pin is a claim;
+check it against the source's address before drawing anything on it.** The
+geocoder itself can also miss (Gabriela, street-level hit) — compare, don't
+overwrite blindly.
+
+## Section 110 — Rekordbox songs get a SoundCloud LINK, not a new identity (236, 2026-11-05)
+
+138 aired songs came from Rekordbox cue sheets (`cue_…`/`man_…` ids) and showed
+"not on SoundCloud" — Keith: "a lot of them actually are". `sc_track_id` cannot
+change: song log, dedupe and carry-over key on it. So `sc_link_id/sc_link_url`
+hold a found SoundCloud track, written only by
+`scripts/link_radio_tracks_soundcloud.py`: the credited artist's own uploads in
+the scan cache first, then SoundCloud search (`sc-connect search_tracks`).
+Accepted only when the core title AND the version are equal and the uploader is
+a credited artist (or the title names one). 116 of 152 linked; the misses are
+mostly DJ flips/mashups/private edits. Exports that are one-shot copies use the
+link; ⇪ push / ↺ sync do NOT, because sync-back would read a linked id as a new
+song. A song with no link shows a SoundCloud SEARCH, never a verdict.
+
+## Section 111 — A tile server can fail with a 200 (2026-11-05)
+
+CARTO's `dark_all` started answering every tile with an "API KEY REQUIRED" image
+at HTTP 200, so the Scene Map silently lost its streets and nothing errored. The
+map now uses Esri's keyless dark canvas. Same class as §24/§52: **validate the
+payload, not the status** — for an image, look at it.
+
+## Section 112 — Whatever is being looked at gets ONE master tracklist (2026-11-05)
+
+Keith: "I can barely understand it and I am developing it." What made the map
+legible: (1) a state bar above it that always names the open club and the active
+filter, each with its own ✕, plus Esc; (2) any view — a club, a radio show, an
+artist, a song, a search — renders the same master tracklist under the map (one
+row per song, show-date order, other-show songs dimmed and attributed, one
+export bar); (3) one-line rows (title · artist · SHOW) instead of full-width
+columns. Grouping by night read as structure but hid the list; don't bring it back.

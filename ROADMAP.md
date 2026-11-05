@@ -555,8 +555,13 @@ the measured version of the same idea and did not replace it.
 ### ▶️ Open / next
 - DJ portal: assign 32LVS as a person-actor if not yet in the roster; let DJs
   reorder their picks (currently add/remove only).
-- Public **club heat-map** — hold until ≥4 weeks of scene data; keep internal
-  triggers off it (the Scene Map is the internal precursor).
+- Public **club heat-map** — the ≥4-weeks data gate has passed (4 months kept as of
+  2026-11-05); needs Keith's call on what is public. Keep internal triggers off it.
+- ✅ **Scene Map rebuilt as radio history (2026-11-05, 229-239)** — tracklist-first
+  (`v_radio_track_shows`), other-shows layer, Explore table driving the map, master
+  tracklist + SoundCloud export per club/filter, rooms = one club, pins checked against
+  RA, Rekordbox songs linked to SoundCloud. See CARRYOVER 2026-11-05 (2nd) + LEARNINGS §107-112.
+- Scheduled radio refresh + `link_radio_tracks_soundcloud.py` after imports — not built.
 - Rekordbox tag-writing (energy/comments back to purchased files) — still parked.
 
 ---
