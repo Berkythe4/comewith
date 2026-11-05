@@ -435,6 +435,16 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **Money writes stay master-only** (existing RLS); a sub_admin sees a "financials not
   released" notice, not $0. **`amount_tbd` / `drink_tickets_tbd` mean "no number yet"**:
   any surface that renders those columns must honour the flag (§101).
+- **RSVPs are a LAYER, not tickets (`event_rsvps`, 224).** Partiful RSVPs never count as
+  attendance, tickets or revenue for DI. `guest_id` is set only on an exact full-name
+  match; a partial match goes in `suggested_guest_id` for a person to confirm (never
+  both). (The 7/11 "Partiful Going = ticket" rule was for a free party, not DI.)
+- **`sponsorships.payment_refs` records which source payments a sponsorship absorbed.**
+  The importer skips those keys, so a reclassified row (Savery's Zeffy "donation") is
+  not booked twice on the next import (§102). When you reclassify a row, add its key.
+- **`owner_advances` (225) is owner money that may be owed back. It is NOT income or
+  sponsor cash.** Master-only, outside % to the mission, and it never converts itself:
+  a closed status requires `resolved_at`, so a conversion is always a recorded decision (§103).
 
 ## Come With Radio (episodes live outside `events`)
 

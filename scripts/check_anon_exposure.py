@@ -113,6 +113,9 @@ MUST_BE_EMPTY = [
     ("event_ticket_tiers", "ticket prices and the mission split"),
     ("event_drink_allocations", "drink ticket allocations"),
     ("event_exec_updates", "exec update snapshots"),
+    # --- DI #3 import (224) + owner advances (225) ---
+    ("event_rsvps", "Partiful RSVPs - names, who invited whom"),
+    ("owner_advances", "money an owner advanced and may be owed back"),
     # --- venue normalisation (208) ---
     ("venue_aliases", "which venue spellings map to which room"),
     ("v_venue_name_review", "the venue names still awaiting a ruling"),

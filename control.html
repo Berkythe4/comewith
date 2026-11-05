@@ -355,7 +355,7 @@ async function loadEvent() {
   const id = S.eventId;
   if (!id) { $('main').innerHTML = '<div class="state">No events yet.</div>'; return; }
   try {
-    const [ev, ctl, tiers, tk, don, spo, gea, alloc, tasks, bl, exp, inc, upd] = await Promise.all([
+    const [ev, ctl, tiers, tk, don, spo, gea, alloc, tasks, bl, exp, inc, upd, adv] = await Promise.all([
       sb.from('events').select('*').eq('id', id).single(),
       sb.from('event_control').select('*').eq('event_id', id).maybeSingle(),
       sb.from('event_ticket_tiers').select('*').eq('event_id', id).order('sort_order'),
@@ -369,6 +369,8 @@ async function loadEvent() {
       sb.from('expenses').select('id, date, amount, category, vendor, description, status, expected_amount, settled_at, due_date').eq('event_id', id).is('deleted_at', null).order('date'),
       sb.from('income').select('id, date, amount, category, description, status, expected_amount').eq('event_id', id).is('deleted_at', null).order('date'),
       sb.from('event_exec_updates').select('*').eq('event_id', id).order('created_at', { ascending: false }).limit(20),
+      // master-only by RLS (225): anyone else gets [] and the block is not drawn
+      sb.from('owner_advances').select('*').eq('event_id', id).order('advanced_on'),
     ]);
     const event = must(ev, 'Event');
     let venue = null;
@@ -387,7 +389,7 @@ async function loadEvent() {
       ticketing: must(tk, 'Tickets') || [], donations: must(don, 'Donations') || [],
       sponsorships: must(spo, 'Sponsors') || [], gea: geaRows, allocations: must(alloc, 'Drink allocations') || [],
       tasks: must(tasks, 'Tasks') || [], budget: must(bl, 'Planned costs') || [], expenses: must(exp, 'Expenses') || [],
-      income: must(inc, 'Income') || [], updates: must(upd, 'Exec updates') || [], moneyHidden,
+      income: must(inc, 'Income') || [], updates: must(upd, 'Exec updates') || [], advances: must(adv, 'Owner advances') || [], moneyHidden,
     };
     compute();
     renderTabs(); render();
@@ -834,6 +836,7 @@ function rFinance() {
       <div class="card"><h2>Reconciliation <span class="meta">expected vs actual</span></h2><div class="tbl-wrap"><table><thead><tr><th></th><th class="num">Expected</th><th class="num">Actual</th><th class="num">Gap</th></tr></thead><tbody>
         ${moneyRecon.map(([l, a, b]) => `<tr><td>${l}</td><td class="num">${money(a, 2)}</td><td class="num">${money(b, 2)}</td><td class="num">${money(b - a, 2)}</td></tr>`).join('')}
       </tbody></table></div>
+      ${advanceBlock(d.advances)}
       <h2 class="h" style="font-size:1.05rem;margin:14px 0 6px">Costs by category</h2><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="num">Planned</th><th class="num">Actual</th><th class="num">Paid</th><th class="num">Over / under</th></tr></thead><tbody>
         ${recon || '<tr><td colspan="5" class="muted">No costs planned or booked.</td></tr>'}</tbody></table></div></div>
     </div>
@@ -846,6 +849,23 @@ function rFinance() {
         ${masterOnly(`<div class="row" style="margin-top:10px"><input id="exDate" type="date" value="${todayIso()}"><input id="exVendor" placeholder="Payee" style="flex:1 1 120px"><select id="exCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="exAmt" type="number" min="0" step="0.01" placeholder="$" style="width:7em"><select id="exStatus"><option value="accrued">pending</option><option value="paid">paid</option></select><button class="btn ghost" data-act="exAdd" data-ledger="${ledger}">Add</button></div>`)}</div>
     </div>
     ${scenarioCard()}`;
+}
+
+// Owner advances (225): money an owner put in that may be owed back. NOT
+// revenue, NOT sponsor cash, never in % to the mission - so it sits apart from
+// the revenue table, and an open one reads as owed, not raised.
+function advanceBlock(advances) {
+  const open = (advances || []).filter(a => a.status === 'contingent' || a.status === 'owed');
+  const closed = (advances || []).filter(a => !open.includes(a));
+  if (!open.length && !closed.length) return '';
+  const first = (n) => String(n || 'owner').split(' ')[0];
+  return `<h2 class="h" style="font-size:1.05rem;margin:14px 0 6px">Owed back <span class="meta">not revenue · not in % to the mission</span></h2>
+    <div class="tbl-wrap"><table><tbody>
+      ${open.map(a => `<tr><td>Owed back to ${esc(first(a.owner_name))} <span class="small muted">${esc(a.advanced_on)}${a.account_label ? ' · ' + esc(a.account_label) : ''}</span>
+        ${a.condition ? `<div class="small muted">${esc(a.condition)}</div>` : ''}</td>
+        <td class="num">${money(a.amount, 2)}</td><td><span class="pill warn">${esc(a.status)}</span></td></tr>`).join('')}
+      ${closed.map(a => `<tr><td class="muted">${esc(a.owner_name)} advance <span class="small">${esc(a.advanced_on)}</span></td><td class="num muted">${money(a.amount, 2)}</td><td><span class="pill">${esc(a.status.replace(/_/g, ' '))}</span></td></tr>`).join('')}
+    </tbody></table></div>`;
 }
 
 function scenarioCard() {
@@ -1088,7 +1108,7 @@ async function runImport(plan, eventId, say) {
   if (plan.sponsorPayments.some(p => p.apply)) {
     say('Sponsors…');
     for (const p of plan.sponsorPayments.filter(x => x.apply)) {
-      const r = await sb.from('sponsorships').update({ status: 'paid' }).eq('id', p.sponsorship.id);
+      const r = await sb.from('sponsorships').update({ status: 'paid', payment_refs: [...new Set([...(p.sponsorship.payment_refs || []), p.external_id])] }).eq('id', p.sponsorship.id);
       if (r.error) errors.push('Sponsor paid: ' + r.error.message); else done.push(`💼 ${(p.sponsorship.actor && p.sponsorship.actor.display_name) || p.name} marked paid (${moneyTxt(p.amount)})`);
     }
   }

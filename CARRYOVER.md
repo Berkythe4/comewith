@@ -1,3 +1,35 @@
+# Carryover - 2026-11-04 (DI #3 first data import + Signal deposit - DESKTOP, Quick Close)
+
+**Closed 2026-11-04 on the DESKTOP.** On `master`, pushed (Netlify deploys the
+`control.html` Finance change). **Migrations 224 + 225 applied to prod** (dry run first,
+both recorded). The 2026-11-03 block below is the previous close.
+
+## This session shipped
+- **224**: DI #3 Zeffy import (14 tickets / $395, Pat Donnelly $50), sponsor corrections
+  (Pulse + Theresa paid; Savery/Martinez split into Savery $250 paid + Martinez $250
+  pending; Keith Berkman Champion), Theresa's comps (Terri, Bill - last names unknown),
+  the lineup in `event_participants` with set times (b2b cancelled), DJ + JayJay + Amanda
+  comps, 77 Partiful RSVPs in the NEW `event_rsvps` (RSVP layer, never money/door),
+  Amy Garcia failed-payment task, mailing seg `di-03-2026-11`. New `sponsorships.payment_refs`.
+- **225**: NEW `owner_advances` (master-only); Signal $3,000 deposit paid 11/4 + $3,000
+  balance invoiced; Keith's $500 Champion paid via Bluevine; $1,500 owner advance
+  contingent; blocker "Confirm Signal balance due date".
+- `control-center.js`: "Guest List + Sponsorship" parses as a ticket; payments already in
+  `payment_refs` are skipped on re-import (LEARNINGS §102). Tests 56/56.
+- Source files (guest PII, untracked): `events/dance-infusion/di-03-2026-11/source-files/`.
+
+## Open - Keith to answer
+- 9 partial RSVP matches (stored as `suggested_guest_id`, not linked): Arthemise, Lovely,
+  Jessica, Pat, Irene, JAS, Kierney, Martin Kearney, Scott (Rainbow Tutu).
+- Terri / Bill last names (Terri = Theresa McGuinness, the DI #2 donor?). Ethan Pollak
+  RSVP'd Going - take a Pulse comp? Pulse has 4 comps, none assigned.
+- Bluevine balance: no bank feed, so it cannot be reconciled from data. Zeffy payouts
+  received to 11/4 = $1,375 (+$320 upcoming).
+- `event_rsvps` has no UI yet; the page importer still tags the event SLUG
+  (`dance-infusion-3`) where the DI convention is `di-03-2026-11`.
+
+---
+
 # Carryover - 2026-11-03 (Radio Ep 8 / SHOW 12 scheduled - DESKTOP, Quick Close)
 
 **Closed 2026-11-03 on the DESKTOP.** No branch; on `master`, pushed. No migration, no

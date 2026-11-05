@@ -2946,3 +2946,29 @@ model and an unreviewed change to four money views. 222 adds `drink_tickets_tbd`
 the field (the Control Center, and the hub's forecast column, which now skips TBD
 lines) show TBD. When a NOT NULL column feeds views, add the "unknown" flag next to
 the number. Don't loosen the column.
+
+## Section 102 — A payment can sit in the processor's export under the wrong KIND (2026-11-04)
+
+Patrick Savery's $250 is half of a Champion sponsorship, but Zeffy records it as
+"1x Donations". Reclassifying it once in the database is not enough. The next time
+the same export goes through the Control Center importer, the row has no
+`third_party_donations` match, so it gets booked as a donation and the $250 counts
+twice. 224 added `sponsorships.payment_refs`, the source keys of every payment
+applied to a sponsorship, and `planImport` now skips any donation or sponsor
+payment whose key is already there. The same export had the opposite trap: DI #3's
+$40 tier sells as "Guest List + **Sponsorship**", and the parser read any label
+containing "sponsor" as sponsor cash. A label names a sponsorship only if it does
+not also name a guest list or ticket. The rule: **when you reclassify what a source
+row is, record the reclassification where the importer will see it.** If you don't,
+the next import reverts the correction.
+
+## Section 103 — An owner's advance is its own record, not income, and never converts itself (2026-11-04)
+
+Keith moved $2,000 into DI Bluevine to cover the Signal deposit. $500 was his
+Champion sponsorship. The other $1,500 is repayable if the $6,000 minimum is met,
+and may become a donation if it isn't. Booking it as `income` would put a loan on
+the P&L and into % to the mission. 225 created `owner_advances` (master-only).
+Status starts at `contingent`. A CHECK ties every closed status (`repaid`,
+`converted_to_donation`, `written_off`) to `resolved_at`, so a conversion is always
+a recorded decision. Nothing converts it automatically. The Control Center shows it
+under "Owed back", outside the revenue table.

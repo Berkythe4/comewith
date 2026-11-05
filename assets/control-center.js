@@ -412,8 +412,11 @@ export function parseZeffy(rows) {
     // Zeffy sells sponsorships through the same form. Those are sponsor CASH
     // (sponsorships.cash_amount), never tickets - importing one as a ticket
     // counts the same $500 twice.
-    const sponsorItems = items.filter(i => /sponsor/i.test(i.label));
-    const ticketItems = items.filter(i => !/donation/i.test(i.label) && !/sponsor/i.test(i.label));
+    // ...but a TICKET may carry the word too: DI #3's $40 tier sells as "Guest
+    // List + Sponsorship". Anything naming a guest list / ticket is a ticket.
+    const isSponsor = (l) => /sponsor/i.test(l) && !/guest\s*list|ticket/i.test(l);
+    const sponsorItems = items.filter(i => isSponsor(i.label));
+    const ticketItems = items.filter(i => !/donation/i.test(i.label) && !isSponsor(i.label));
     const net = Math.max(0, total - refund);
     if (net <= 0 && total > 0) { skipped.push(`${name}: fully refunded`); continue; }
     const purchased_at = toIso(date, time);
@@ -544,7 +547,18 @@ export function planImport({ sales, tiers, event, db, mode = 'live' }) {
   for (const sp of db.sponsorships || []) {
     for (const n of [sp.actor && sp.actor.display_name, sp.notes]) if (n) sponsorByName.set(normName(n), sp);
   }
+  // Source keys of payments already applied to a sponsorship (224). A payment
+  // can sit in the processor's export as something else - Savery's $250 is a
+  // "Donations" line in Zeffy - so without this a re-import books it twice.
+  const appliedRefs = new Map();
+  for (const sp of db.sponsorships || []) for (const r of sp.payment_refs || []) appliedRefs.set(r, sp);
   for (const s of sales || []) {
+    if ((s.kind === 'sponsor_payment' || s.kind === 'donation') && appliedRefs.has(s.external_id)) {
+      const sp = appliedRefs.get(s.external_id);
+      plan.report.paymentsAlreadyApplied = (plan.report.paymentsAlreadyApplied || 0) + 1;
+      plan.report.flags.push(`${s.name}: ${s.amount} already applied to the ${(sp.actor && sp.actor.display_name) || 'sponsor'} sponsorship - skipped`);
+      continue;
+    }
     if (s.kind === 'sponsor_payment') {
       if (mode !== 'live') continue;
       const n = normName(s.name);

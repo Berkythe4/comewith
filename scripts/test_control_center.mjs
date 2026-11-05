@@ -153,6 +153,29 @@ const pz = planImport({ sales: zs.sales, tiers: TIERS, event: DI3, db: { guests:
 eq('sponsor payment matched to the card and marked to apply', [pz.sponsorPayments[0].sponsorship.id, pz.sponsorPayments[0].apply], ['s2', true]);
 eq('unmapped $60 item held: no ticket, no guest, no door row', [pz.ticketing.length, pz.guestsToCreate.length, pz.geaInsert.length, pz.held.length], [0, 0, 0, 1]);
 
+// ---- DI #3 Zeffy shapes (224): "+ Sponsorship" tickets, applied payments ----
+console.log('DI #3 Zeffy: "Guest List + Sponsorship" is a ticket; applied payments skip');
+{
+  const zrow = (o) => ({ 'Payment Date (America/New_York)': '11/4/2026', 'Payment Time (America/New_York)': '10:27 PM', 'Payment Status': 'Succeeded', 'Tax Receipt #': '', ...o });
+  const z3 = parseZeffy([
+    zrow({ 'Total Amount': '40', 'First Name': 'Pat', 'Last Name': 'One', Email: 'p1@x.com', 'Tax Receipt #': 'R1', Details: '1x Guest List + Sponsorship' }),
+    zrow({ 'Total Amount': '65', 'First Name': 'Ay', 'Last Name': 'Two', Email: 'a2@x.com', 'Tax Receipt #': 'R2', Details: '1x Guest List + Sponsorship, 1x Guest List' }),
+    zrow({ 'Total Amount': '500', 'First Name': 'Ethan', 'Last Name': 'Co', Email: 'e@x.com', 'Tax Receipt #': 'R3', Details: '1x Champion Sponsorship' }),
+    zrow({ 'Payment Date (America/New_York)': '10/26/2026', 'Payment Time (America/New_York)': '10:18 PM', 'Total Amount': '250', 'First Name': 'Pat', 'Last Name': 'Sav', Email: 'ps@x.com', Details: '1x Donations' }),
+  ]);
+  eq('$40 "+ Sponsorship" line is a ticket, not sponsor cash', z3.sales.filter(s => s.external_id === 'zeffy:R1').map(s => [s.kind, s.qty, s.amount]), [['ticket', 1, 40]]);
+  eq('mixed $40 + $25 order: two ticket rows, nothing skipped', [z3.sales.filter(s => s.external_id.startsWith('zeffy:R2/')).map(s => s.external_id), z3.skipped], [['zeffy:R2/0', 'zeffy:R2/1'], []]);
+  eq('Champion Sponsorship is still a sponsor payment', z3.sales.find(s => s.external_id === 'zeffy:R3').kind, 'sponsor_payment');
+  const donKey = 'zeffy:10/26/2026 10:18 PM|ps@x.com|250';
+  eq('no-receipt key = date time|email|total (224 stores this)', z3.sales.find(s => s.kind === 'donation').external_id, donKey);
+  const T40a = { ...T40, aliases: ['guest list + sponsorship'] }, T25a = { ...T25, aliases: ['guest list'] };
+  eq('aliases map Zeffy labels to tiers', [matchTier('Guest List + Sponsorship', 32.5, [T25a, T40a])?.id, matchTier('Guest List', 32.5, [T25a, T40a])?.id], ['t40', 't25']);
+  const spApplied = SP.map(s => s.id === 's3' ? { ...s, status: 'paid', payment_refs: [donKey] } : s.id === 's1' ? { ...s, status: 'paid', payment_refs: ['zeffy:R3'] } : s);
+  const p3 = planImport({ sales: z3.sales, tiers: [T25a, T40a], event: DI3, db: { guests: [], eventGea: [], ticketKeys: new Set(), donationKeys: new Set(), subscribers: [], sponsorships: spApplied } });
+  eq('a payment already applied to a sponsorship is not re-booked as a donation', [p3.donations.length, p3.sponsorPayments.length, p3.report.paymentsAlreadyApplied], [0, 0, 2]);
+  eq('the tickets still import (3 rows, $40 + $40 + $25 tiers)', p3.ticketing.map(t => t.tier_id), ['t40', 't40', 't25']);
+}
+
 // ---- real DI #2 exports, where present ------------------------------------
 const SRC = new URL('../events/dance-infusion/di-02-2026-05/source-files/', import.meta.url);
 const raFile = new URL('20260509-DanceInfusion%232-list%20(4).csv', SRC), diyFile = new URL('DIY%20Page%20transactions.csv', SRC);
