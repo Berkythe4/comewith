@@ -565,8 +565,16 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   show it was picked for (`show_venue/show_date/show_url`); `v_radio_track_shows`
   (233-235) resolves that to a room (`resolve_venue_name`, never fuzzy) and a party
   (ticket link → lineup on that date → sole show in that room that day). Lineup-name
-  matching across all listings is an OPTIONAL lighter layer ("+ other nights from
-  listings") that only adds, never replaces. The artist split `RADIO_SPLIT_RE` exists
+  matching across all listings is a SECONDARY layer ("songs at other shows", on by
+  default) that only adds, never replaces: those nights are dimmed with a dashed
+  edge, labelled "other show · from the listings", every song names the show it was
+  really picked for, they start UNTICKED for export, one card per club per date
+  (RA/DICE/TM list the same night), and a listing that is the same night as a
+  tracklist night joins it as "also on the bill". Lineup entries with
+  `via:'title'` (211's title fill) are ignored there - "Panama Independence Weekend"
+  is not the act Panama. The Explore table under the map (clubs / artists / radio
+  shows / songs, search, source) drives the map: whatever it is narrowed to is lit,
+  the rest dimmed. An open club draws its web (animated lines, labels, fit to view). The artist split `RADIO_SPLIT_RE` exists
   in the view AND the dashboard - change both. Clubs are keyed by `venueIdent`
   (`v:<venue_id>`), never the label. Unlocated clubs and songs with no show are
   LISTED, not dropped: clubs outside the NYC view (Elements Festival = Pocono
