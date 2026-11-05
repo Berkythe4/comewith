@@ -18209,11 +18209,48 @@ async function sbAll(build, pk) {
   return { data: out, error: null };
 }
 // ===== COME WITH RADIO module (panel-ra-market) =====
+// The scan cache is read WITHOUT song lists (229, v_sc_artist_summary). Loading
+// sc_artist_cache whole was 32 MB of JSON on every open of this tab (and of Market
+// and Scene Map) - nearly all of it `songs`, which only the Build view's expanded
+// artist needs. The summary carries what Buzz uses (top/median plays, latest
+// upload); scArtistData() still derives them from `songs` once those are loaded,
+// and the view mirrors that derivation exactly - change one, change the other.
+const SC_SUMMARY_COLS = 'soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,ok,scanned_at,sc_track_count,top_title,top_url,top_plays,med_plays,latest_song_at';
+const scSummaryAll = () => sbAll(() => sb.from('v_sc_artist_summary').select(SC_SUMMARY_COLS), 'soundcloud');
+// Song lists load when the Build view opens - once, for the artists in its window
+// (plus the expanded one), topping up only what is missing when the window moves.
+// Never per artist on click: by the time you open one, its songs are already here.
+let _raSongsP = null;
+function raEnsureSongs() {
+  if (_raSongsP) return _raSongsP;
+  const want = new Set(raWindowScannable().map(a => a.key));
+  if (raState.openArtist) want.add(raState.openArtist);
+  // `_songsTried`: one attempt per load. The finish re-renders, and the render asks
+  // again - so a key the fetch cannot fill would otherwise be requested forever.
+  const keys = [...want].filter(k => { const c = raState.cache[k]; return c && c.ok !== false && !Array.isArray(c.songs) && !c._songsTried; });
+  if (!keys.length) return Promise.resolve();
+  keys.forEach(k => { raState.cache[k]._songsTried = true; });
+  _raSongsP = (async () => {
+    const chunks = []; for (let i = 0; i < keys.length; i += 80) chunks.push(keys.slice(i, i + 80));
+    let failed = 0;
+    for (let i = 0; i < chunks.length; i += 4) {
+      await Promise.all(chunks.slice(i, i + 4).map(async ch => {
+        const { data, error } = await sb.from('sc_artist_cache').select('soundcloud,songs').in('soundcloud', ch);
+        if (error) { failed += ch.length; return; }
+        (data || []).forEach(r => { const c = raState.cache[raKey(r.soundcloud)]; if (c) c.songs = Array.isArray(r.songs) ? r.songs : []; });
+      }));
+    }
+    _raSongsP = null;
+    if (failed) toast(`Couldn't load songs for ${failed} artist${failed === 1 ? '' : 's'} — reload the Radio tab to retry`, 'err');
+    if (!raState.ccMode && document.querySelector('#panel-ra-market.active')) { const y = scrollPos(); renderRaMarket(); scrollToPos(y); }
+  })();
+  return _raSongsP;
+}
 async function loadRaMarket() {
   $('raMarketBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading artists…</div>';
   const [ar, cache, social, ev] = await Promise.all([
     sbAll(() => sb.from('ra_artists').select('ra_id,name,soundcloud,instagram,follower_count,image,content_url,next_event_date,next_event_title,next_venue,next_cost,next_event_url,genres,source,city,is_partner').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
-    sbAll(() => sb.from('sc_artist_cache').select('soundcloud,sc_user_id,username,followers,city,is_producer,song_count,set_count,songs,ok,scanned_at'), 'soundcloud'),
+    scSummaryAll(),
     sbAll(() => sb.from('sc_social_log').select('action,target_type,target_id,ok').eq('ok', true), 'id'),
     sbAll(() => sb.from('ra_events').select('ra_id,event_date,venue_name,venue_id,attending,is_pick,genres,lineup,source,fetched_at').gte('event_date', new Date().toISOString().slice(0, 10)), 'ra_id'),
   ]);
@@ -18326,6 +18363,7 @@ function renderRaMarket() {
   }
   $('raMarketBody').innerHTML = raModeBar() + renderRaRadio();
   raMarkPlaying(); // the rebuild wiped the class; the dock is still playing
+  raEnsureSongs(); // Build is open: fetch the window's song lists in the background (no-op once loaded)
 }
 // A small mode switch shared by both radio views (Build ⇄ Control Center).
 function raModeBar() {
@@ -18383,7 +18421,7 @@ async function loadMarket() {
   raState.events = ev.data || []; raState.mine = mine.data || []; raState.venues = ven.data || [];
   // Full artist pool (city/partner) + scan cache so Buzz/NYC work here even if the radio tab hasn't loaded.
   if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,instagram,soundcloud,follower_count,genres,next_event_date,next_venue,city,is_partner,source').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
-  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs,ok'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
+  if (!Object.keys(raState.cache || {}).length) { try { const { data } = await scSummaryAll(); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) { /* ignore */ } }
   if (!marketState.month) { const d = new Date(); marketState.month = new Date(d.getFullYear(), d.getMonth(), 1); }
   await raLoadWatch();
   await ensureRadioArtists();
@@ -18460,6 +18498,7 @@ function scArtistData() {
     // the score simply ignored it. reduce() rather than Math.max(...spread): the
     // catalogue length is whatever an artist has uploaded, and that is not a
     // number to hand to the argument stack.
+    if (Array.isArray(cache?.songs)) {
     c.topTrack = songs.reduce((best, s) =>
       (Number(s.playback_count) || 0) > (Number(best?.playback_count) || -1) ? s : best, null);
     c.topPlays = Number(c.topTrack?.playback_count) || 0;
@@ -18468,6 +18507,14 @@ function scArtistData() {
     const plays = songs.map(s => Number(s.playback_count) || 0).sort((a, b) => a - b);
     c.medPlays = plays.length ? plays[Math.floor(plays.length / 2)] : 0;
     c.recent = !!songs.some(s => s.created_at && Date.parse(s.created_at) >= sixMo);
+    } else {
+      // Song lists not loaded (229/230): the same numbers, stored on the row by the
+      // sc_artist_cache_summarize trigger with exactly the rules above.
+      c.topTrack = cache?.top_title != null || cache?.top_url ? { title: cache.top_title, permalink_url: cache.top_url, playback_count: cache.top_plays } : null;
+      c.topPlays = Number(cache?.top_plays) || 0;
+      c.medPlays = Number(cache?.med_plays) || 0;
+      c.recent = !!(cache?.latest_song_at && Date.parse(cache.latest_song_at) >= sixMo);
+    }
     c.nyc = NYC_RE.test(c.city || '');
     c.onRadio = radioSet.has(c.name.toLowerCase());
     c.genresArr = [...c.genres];
@@ -19354,7 +19401,7 @@ async function loadSceneMap() {
       raState.events = ev.data || raState.events || []; raState.venues = ven.data || []; raState._scVenSig = null;
     }
     if (!raState.artists?.length) { const { data } = await sbAll(() => sb.from('ra_artists').select('name,soundcloud,follower_count,city,is_partner,source,genres,next_event_date').gte('next_event_date', new Date().toISOString().slice(0, 10)), 'ra_id'); raState.artists = data || []; }
-    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await sbAll(() => sb.from('sc_artist_cache').select('soundcloud,followers,city,is_producer,song_count,songs,ok'), 'soundcloud'); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
+    if (!Object.keys(raState.cache || {}).length) { try { const { data } = await scSummaryAll(); const m = {}; (data || []).forEach(c => { m[raKey(c.soundcloud)] = c; }); raState.cache = m; } catch (_) {} }
     await ensureRadioArtists();
     await ensureLeaflet();
   } catch (e) { body.innerHTML = `<div class="panel-state err">${escapeHtml(e.message || String(e))}</div>`; return; }
@@ -19685,6 +19732,12 @@ function raRenderArtistTracks(key) {
   if (c === 'loading') return '<div class="li-sub" style="padding:6px 0;"><span class="spinner"></span> Loading songs…</div>';
   if (!c) return '<div class="li-sub" style="padding:6px 0;"><span class="spinner"></span> Scanning this artist…</div>';
   if (!c.ok) return '<div class="li-sub" style="padding:6px 0;">SoundCloud profile unavailable (renamed or private).</div>';
+  // The cache holds the summary only until raEnsureSongs() fills `songs` (229).
+  if (!Array.isArray(c.songs)) {
+    if (c._songsTried && !_raSongsP) return '<div class="li-sub" style="padding:6px 0;">Couldn’t load this artist’s songs — reload the Radio tab to retry.</div>';
+    raEnsureSongs();
+    return '<div class="li-sub" style="padding:6px 0;"><span class="spinner"></span> Loading songs…</div>';
+  }
   if (!c.songs || !c.songs.length) return `<div class="li-sub" style="padding:6px 0;">No original songs — this artist only posts DJ sets (${c.set_count || 0} sets). They're a DJ, not a producer.</div>`;
   const inPl = new Set((raState.playlist?.tracks || []).map(t => t.sc_track_id));
   // SONGS ONLY, re-checked at read time. `songs` was filtered when the artist was

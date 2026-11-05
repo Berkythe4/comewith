@@ -129,6 +129,9 @@ MUST_BE_EMPTY = [
     ("social_posts", "unpublished posts, briefs and Claude's draft captions"),
     ("social_post_notes", "the Keith/Janelle/Claude conversation on each post"),
     ("connector_log", "every call the Claude connector has made (217)"),
+    # --- radio scan cache (admin-only RLS; 229 added the summary view) ---
+    ("sc_artist_cache", "the SoundCloud scan cache"),
+    ("v_sc_artist_summary", "the scan cache summary (229)"),
 ]
 
 

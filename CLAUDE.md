@@ -551,6 +551,15 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   `dj.html`.** `dj-station` sends the raw inputs (`buzz_in`) and the page scores them,
   so the guest crate ranks exactly like the dashboard. Change the formula there only;
   if you change how an INPUT is derived in `scArtistData()`, change `dj-station` too.
+- **The dashboard reads the scan cache WITHOUT song lists (229/230).** `sc_artist_cache`
+  whole was 32 MB of JSON on every open of Radio / Market / Scene Map. Those now read
+  `v_sc_artist_summary`, whose `top_title/top_url/top_plays/med_plays/latest_song_at`
+  are STORED on the table by the `sc_artist_cache_summarize` trigger whenever `songs` is
+  written. Full `songs` load only when the Build view opens (`raEnsureSongs()`: the
+  window's artists, once, topping up on a window change) — never per artist on click.
+  The trigger mirrors the derivation in `scArtistData()` exactly (incl. the tie-at-0
+  quirk); **change one, change the other**, and re-run the parity check (JS rules over
+  every row vs the view: must be 0 mismatches). Never select `songs` in a list loader.
 - **A guest DJ exports to THEIR OWN SoundCloud (215).** `dj-station sc_export_start`
   stores a PKCE verifier in `sc_dj_exports`; `sc-oauth` recognises that state,
   exchanges the code and calls `sc-connect export_as` (service role only), which
