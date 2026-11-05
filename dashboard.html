@@ -10172,7 +10172,7 @@ async function hubSecCustomers() {
   list.sort((a, b) => (b.total - a.total) || a.name.localeCompare(b.name));
   hub.custList = list;
   hub.custRoster = { sponsors: R.sponsors.map(s => ({ id: s.id, name: s.name, tier: s.tier, cash: s.cash, status: s.status, compsTotal: s.compsTotal, open: s.open,
-    personKey: s.person ? s.person.key : 'sp:' + s.id, compKeys: s.comps.map(p => p.key) })), groups: Object.fromEntries(Object.entries(R.groups).map(([k, v]) => [k, v.map(p => p.key)])), counts: R.counts };
+    personKey: s.person ? s.person.key : 'sp:' + s.id, compKeys: s.comps.map(p => p.key), compHeads: s.compHeads })), groups: Object.fromEntries(Object.entries(R.groups).map(([k, v]) => [k, v.map(p => p.key)])), counts: R.counts };
   hub.counts.customers = list.length; renderHubSecNav();
 
   const has = (r) => (l) => l.roles.has(r);
@@ -10337,7 +10337,7 @@ function renderCustGrid() {
       const me = vis.get(sp.personKey);
       if (!comps.length && !me) return '';
       const st = sp.status === 'paid' ? '<span style="color:#8FB339;font-weight:700;">paid</span>' : escapeHtml(sp.status);
-      return `<tr><td colspan="6" style="padding:10px 8px 4px;"><strong>${escapeHtml(sp.name)}</strong> <span class="li-sub">${escapeHtml(sp.tier || '')} · ${money(sp.cash)} · ${st}${sp.compsTotal || sp.compKeys.length ? ` · ${sp.compKeys.length}/${sp.compsTotal} comps` : ''}${sp.open ? ` · ${sp.open} open` : ''}${me && me.group !== 'sponsor' ? ' · also listed below as ' + escapeHtml([...me.roles].filter(r => r !== 'sponsor').join(', ')) : ''}</span></td></tr>`
+      return `<tr><td colspan="6" style="padding:10px 8px 4px;"><strong>${escapeHtml(sp.name)}</strong> <span class="li-sub">${escapeHtml(sp.tier || '')} · ${money(sp.cash)} · ${st}${sp.compsTotal || sp.compKeys.length ? ` · ${sp.compHeads}/${sp.compsTotal} comps` : ''}${sp.open ? ` · ${sp.open} open` : ''}${me && me.group !== 'sponsor' ? ' · also listed below as ' + escapeHtml([...me.roles].filter(r => r !== 'sponsor').join(', ')) : ''}</span></td></tr>`
         + comps.map(o => rowHtml(o, true)).join('');
     }).filter(Boolean);
     if (spRows.length) out.push(hdr('Sponsors & their comps', hub.custRoster.sponsors.length), ...spRows);

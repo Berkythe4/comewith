@@ -161,8 +161,9 @@ export function sponsorStats(sponsorships, gea) {
     const handed = sum(slots, g => g.drink_tickets);
     const pkg = s.drink_tickets_tbd ? null : num(s.drink_tickets);
     return {
-      s, slots, compsTotal: num(s.entry_tickets), compsUsed: slots.length,
-      compsOpen: Math.max(0, num(s.entry_tickets) - slots.length),
+      // comps count ENTRIES, not rows: a comp party of 2 uses 2 (228, JayJay)
+      s, slots, compsTotal: num(s.entry_tickets), compsUsed: sum(slots, g => Math.max(1, num(g.quantity) || 1)),
+      compsOpen: Math.max(0, num(s.entry_tickets) - sum(slots, g => Math.max(1, num(g.quantity) || 1))),
       drinkPackage: pkg, drinksHanded: handed,
       drinksLeftover: pkg == null ? null : pkg - handed,
       paid: s.status === 'paid',
@@ -761,10 +762,12 @@ export function eventRoster({ gea = [], sponsorships = [], participants = [], do
     groups[p.group].push(p);
   }
   const byNameSort = (a, b) => a.name.localeCompare(b.name);
-  for (const s of sponsors) { s.comps.sort(byNameSort); s.open = Math.max(0, s.compsTotal - s.comps.length); }
+  for (const s of sponsors) { s.comps.sort(byNameSort); s.compHeads = sum(s.comps, p => p.heads); s.open = Math.max(0, s.compsTotal - s.compHeads); }
   sponsors.sort((a, b) => (b.cash - a.cash) || a.name.localeCompare(b.name));
-  const setKey = (p) => p.set ? (p.set.start || '') + String(p.set.order ?? 99).padStart(3, '0') : '~' + p.name;
-  groups.lineup.sort((a, b) => setKey(a).localeCompare(setKey(b)));
+  // timed sets in running order, then anyone with no set (crew) by name.
+  // Plain comparison, not localeCompare: collation sorts symbols before digits.
+  const setKey = (p) => p.set && (p.set.start || p.set.order != null) ? '0' + (p.set.start || '') + String(p.set.order ?? 999).padStart(4, '0') : '1' + normName(p.name);
+  groups.lineup.sort((a, b) => { const x = setKey(a), y = setKey(b); return x < y ? -1 : x > y ? 1 : 0; });
   for (const k of ['comp', 'ticket', 'donor', 'other']) groups[k].sort(byNameSort);
   const all = [...people.values()];
   const onList = all.filter(p => p.heads > 0);
@@ -772,7 +775,7 @@ export function eventRoster({ gea = [], sponsorships = [], participants = [], do
     sponsors, groups, people: all, onList,
     counts: {
       people: onList.length, heads: sum(onList, p => p.heads),
-      byGroup: Object.fromEntries(ROSTER_GROUPS.map(([k]) => [k, k === 'sponsor' ? sum(sponsors, s => s.comps.length) : groups[k].length])),
+      byGroup: Object.fromEntries(ROSTER_GROUPS.map(([k]) => [k, k === 'sponsor' ? sum(sponsors, s => s.compHeads) : groups[k].length])),
     },
   };
 }

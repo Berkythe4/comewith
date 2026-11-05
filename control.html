@@ -787,9 +787,9 @@ function doorListHtml() {
   const spBody = R.sponsors.map(s => {
     const pill = s.paid ? '<span class="pill ok">paid</span>' : `<span class="pill warn">${esc(s.status)}</span>`;
     const also = s.person && s.person.group !== 'sponsor' ? ` <span class="small muted">· also on the list as ${esc([...s.person.roles].filter(r => r !== 'sponsor').join(', '))}</span>` : '';
-    const open = Array.from({ length: s.open }, (_, i) => `<div class="door-row open-slot"><div class="who"><div class="nm">Open comp ${s.comps.length + i + 1}</div><div class="mt">name it on the Sponsors tab</div></div><button class="mini" data-act="goSec" data-sec="sponsors">Assign</button></div>`).join('');
+    const open = Array.from({ length: s.open }, (_, i) => `<div class="door-row open-slot"><div class="who"><div class="nm">Open comp ${s.compHeads + i + 1}</div><div class="mt">name it on the Sponsors tab</div></div><button class="mini" data-act="goSec" data-sec="sponsors">Assign</button></div>`).join('');
     return `<div class="sp-group"><div class="sp-head"><div><b>${esc(s.name)}</b> <span class="small muted">${esc(s.tier || '')}${S.d.moneyHidden ? '' : ' · ' + money(s.cash)}</span>${also}</div>
-      <div class="row">${S.d.moneyHidden ? '' : pill}<span class="pill info">${s.comps.length}/${s.compsTotal} comps</span></div></div>
+      <div class="row">${S.d.moneyHidden ? '' : pill}<span class="pill info">${s.compHeads}/${s.compsTotal} comps</span></div></div>
       ${s.comps.map(p => rowsOf(p)).join('')}${open}</div>`;
   }).join('');
   const L = R.groups.lineup;

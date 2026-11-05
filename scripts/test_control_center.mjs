@@ -203,8 +203,18 @@ console.log('roster: one person per guest, sponsors with comps beneath, roles fr
   const R = eventRoster({ gea, sponsorships: SPX, participants: parts, donations: [{ donor_name: 'Pat D', amount: 50 }] });
   eq('every door row is one person; comps/DJs are not "ticket"', R.people.filter(p => p.roles.has('ticket')).map(p => p.name), ['Ay K']);
   eq('lineup actors merge into their guest record (Berky = Kay Bee, Miss V = Vee Real)', R.groups.lineup.map(p => [p.name, p.stage]), [['Vee Real', 'Miss V'], ['Kay Bee', 'Berky']]);
+  {
+    const Rc = eventRoster({ gea: [...gea, G('h', 'Hank Crew', { actor: 'aH', row: { entry_type: 'staff' } })], participants: [...parts, { role: 'crew', roles: ['crew', 'producer'], actor: { id: 'aH', display_name: 'Hank' } }] });
+    eq('crew with no set time sorts AFTER the timed sets', Rc.groups.lineup.map(p => p.name), ['Vee Real', 'Kay Bee', 'Hank Crew']);
+  }
   eq('a sponsor who is also a DJ is one person with both roles', [...R.people.find(p => p.name === 'Kay Bee').roles].sort(), ['dj', 'sponsor']);
   eq('sponsors carry their comps beneath, with open slots; cancelled dropped', R.sponsors.map(s => [s.name, s.comps.map(p => p.name), s.open]), [['Kay Bee', [], 0], ['Pulse Co', ['Ethan P'], 3], ['Tess B', ['Tess B'], 2]]);
+  {
+    const sp3 = [{ id: 'k3', cash_amount: 500, entry_tickets: 3, status: 'paid', actor: { id: 'aK', display_name: 'Kay' } }];
+    const g3 = [G('j', 'JayJay', { row: { entry_type: 'sponsor_comp', sponsorship_id: 'k3', quantity: 2 } }), G('m', 'Amanda', { row: { entry_type: 'sponsor_comp', sponsorship_id: 'k3' } })];
+    const r3 = eventRoster({ gea: g3, sponsorships: sp3 }), s3 = sponsorStats(sp3, g3.map(r => ({ ...r })));
+    eq('comps count ENTRIES: a party of 2 uses 2 of 3 (roster + sponsorStats agree)', [r3.sponsors[0].compHeads, r3.sponsors[0].open, s3.cards[0].compsUsed, s3.cards[0].compsOpen], [3, 0, 3, 0]);
+  }
   eq('org sponsor with no person is a header, not a guest', R.onList.some(p => p.name === 'Pulse Co'), false);
   eq('legacy ticket_type "comp" reads as a guest comp', R.groups.comp.map(p => p.name), ['Jay', 'Old Timer']);
   eq('guest list = 7 people, 9 heads (party sizes)', [R.counts.people, R.counts.heads], [7, 9]);
