@@ -1,6 +1,6 @@
 # Carryover - 2026-11-11 (DI #3 final comp list - DESKTOP, Quick)
 
-- **240 applied to prod** (dry-run first; repo + prod top out at 241). DI #3 comps set to
+- **240 applied to prod** (dry-run first; repo + prod top out at 242). DI #3 comps set to
   Keith's FINAL list: 20 confirmed comp entries (5 DJs, 2 performers, 3 artist guests,
   5 Keith comp tickets, 5 sponsor comps); Pulse 3 tentative (open slots), Savery 1 open.
   Drinks: 38 locked with Signal, 20 allocated (Theresa 6 / Pulse 10 on Ethan / Savery 4
@@ -15,6 +15,12 @@
   Sovenko = actor, co-founder of NEW org actor "NYC Rave Girls". Janelle Sochet on the
   door list as staff + crew (Marketing Director). Door list: 36 heads (14 paid + 20 comps
   + Henry + Janelle), before Terry's Zeffy re-import.
+- **242:** Savery/Martinez merged into ONE sponsorship (Patrick's card): $500, status
+  `confirmed` (Patrick's $250 paid via Zeffy, Arnaldo's $250 pending - mark paid when it
+  lands). Arnaldo's separate sponsorship row deleted; his actor stays. Pledged total
+  unchanged; the "paid" sponsor total now reads $250 lower until his half is marked.
+- control.html: Finance tab "+ Add an expense" form (531b903); Drinks tab sponsor
+  drink-ticket steppers (64672a4). Emmy's $800 fee NOT entered - Keith adds it.
 
 ---
 
