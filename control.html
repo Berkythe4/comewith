@@ -156,6 +156,17 @@ tr.total td { font-weight: 700; border-top: 1px solid var(--border-strong); }
 .qty-ctl .q { min-width: 46px; text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; }
 
 /* ---- big, step-by-step form (Add an expense) ---- */
+.dsp { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; padding: 14px 0; border-top: 1px solid var(--border); }
+.dsp:first-of-type { border-top: 0; }
+.dsp .who { flex: 1 1 180px; font-size: 1.1rem; font-weight: 700; }
+.dsp .who small { display: block; font-weight: 400; font-size: 0.82rem; color: var(--mid); margin-top: 2px; }
+.step { display: inline-flex; align-items: stretch; }
+.step button { width: 44px; min-height: 44px; font-size: 1.4rem; line-height: 1; background: var(--surface-2); border: 1px solid var(--border-strong); color: var(--ink); cursor: pointer; }
+.step button:hover { border-color: var(--red); color: var(--red); }
+.step input { width: 4.2em; text-align: center; font-size: 1.3rem; font-weight: 700; border-left: 0; border-right: 0; }
+.step.sm button { width: 34px; min-height: 34px; font-size: 1.1rem; } .step.sm input { width: 3.4em; font-size: 1rem; }
+.dsp .on-guest { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 8px 18px; padding-left: 4px; font-size: 0.9rem; color: var(--mid); }
+.dsp .on-guest > span { display: inline-flex; align-items: center; gap: 8px; }
 .bigform { max-width: 580px; }
 .bigform .field { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; }
 .bigform .lab { font-size: 1.02rem; font-weight: 700; color: var(--ink); }
@@ -720,6 +731,35 @@ function rTickets() {
 // ---------------------------------------------------------------------------
 // 3. Drinks
 // ---------------------------------------------------------------------------
+// One row per sponsor: the package as a big − / + stepper, and the guests it's
+// handed to underneath with their own steppers. Package = sponsorships.drink_tickets;
+// handed = gea.drink_tickets on that sponsor's comps (the ledger counts the larger).
+function stepper(kind, id, val, { sm = false, ro = false } = {}) {
+  const attr = kind === 'sp' ? `data-sp="${id}" data-f="drink_tickets"` : `data-gea="${id}"`;
+  const dis = ro ? 'disabled' : '';
+  return `<span class="step ${sm ? 'sm' : ''}"><button data-act="drStep" data-k="${kind}" data-id="${id}" data-d="-1" aria-label="One fewer" ${dis}>−</button><input type="number" min="0" ${attr} value="${val ?? ''}" placeholder="TBD" ${dis}><button data-act="drStep" data-k="${kind}" data-id="${id}" data-d="1" aria-label="One more" ${dis}>+</button></span>`;
+}
+function sponsorDrinksCard() {
+  const cards = S.calc.sp.cards;
+  if (!cards.length) return '';
+  const ro = !S.isMaster;
+  const rows = cards.map(k => {
+    const s = k.s, name = (s.actor && s.actor.display_name) || s.notes || 'Sponsor';
+    let status;
+    if (k.drinkPackage == null) status = `<span class="tbd">Package not agreed yet</span>${k.drinksHanded ? ` · ${k.drinksHanded} already handed out` : ''}`;
+    else if (k.drinksLeftover < 0) status = `<span class="pill warn">${-k.drinksLeftover} over the package</span> · ${k.drinksHanded} handed out`;
+    else status = `${k.drinksHanded} handed to guests · <b>${k.drinksLeftover}</b> not handed out yet`;
+    const guests = k.slots.map(g => `<span>${esc(g.name || (g.guest && g.guest.full_name) || 'Guest')} ${stepper('gea', g.id, num(g.drink_tickets) || 0, { sm: true })}</span>`).join('');
+    return `<div class="dsp">
+      <div class="who">${esc(name)}<small>${status}</small></div>
+      ${stepper('sp', s.id, k.drinkPackage, { ro })}
+      ${guests ? `<div class="on-guest"><span style="color:var(--ink)">On their guests:</span>${guests}</div>` : ''}
+    </div>`;
+  }).join('');
+  return `<div class="card"><h2>Sponsor drink tickets <span class="meta">tap − / + or type a number · saves itself</span></h2>${rows}
+    <p class="note" style="margin-top:8px">The big number is the sponsor's package. The small ones are how many each of their guests is carrying. They don't add up twice: a sponsor counts as whichever is bigger.${ro ? ' Packages are master-admin only.' : ''}</p></div>`;
+}
+
 function rDrinks() {
   const c = S.calc, dr = c.drinks, ctl = c.control;
   const lines = dr.lines.map(l => `<tr><td><span class="pill">${esc(CC.DRINK_CATS[l.cat] || l.cat)}</span></td><td>${esc(l.label)}</td>
@@ -733,6 +773,7 @@ function rDrinks() {
       ${kpi('Overflow', dr.overflow == null ? '<em class="tbd">—</em>' : int(dr.overflow), 'allocated beyond locked', dr.overflow ? 'warn' : '')}
       ${kpi('Toward bar min', dr.barValue == null ? '<em class="tbd">TBD</em>' : money(dr.barValue), dr.barPct == null ? 'needs $ per ticket' : pct(dr.barPct) + ' of ' + moneyTxt(dr.barMinimum))}
     </div>
+    ${sponsorDrinksCard()}
     <div class="grid g2">
       <div class="card"><h2>Venue terms</h2><div class="row">
         <label>Locked count<input type="number" min="0" id="dLocked" value="${ctl.drink_tickets_locked ?? ''}" placeholder="TBD"></label>
@@ -1644,6 +1685,24 @@ document.addEventListener('click', async (e) => {
         must(await sb.from('event_drink_allocations').delete().eq('id', id), 'Allocation');
         return reload();
       case 'addSponsor': return addSponsorModal();
+      case 'drStep': {
+        // update the box at once; save once the taps stop (so 5 quick taps = 1 write)
+        const inp = a.parentElement.querySelector('input');
+        const v = Math.max(0, (Number(inp.value) || 0) + Number(a.dataset.d));
+        inp.value = v;
+        const key = a.dataset.k + id; S.drT = S.drT || {};
+        clearTimeout(S.drT[key]);
+        S.drT[key] = setTimeout(async () => {
+          delete S.drT[key];
+          try {
+            if (a.dataset.k === 'sp') must(await sb.from('sponsorships').update({ drink_tickets: v, drink_tickets_tbd: false }).eq('id', id), 'Sponsor');
+            else must(await sb.from('guest_event_attendance').update({ drink_tickets: v }).eq('id', id), 'Drink tickets');
+            toast('Saved');
+            if (!Object.keys(S.drT).length) reload();
+          } catch (err) { toast(err.message || String(err), 'err'); }
+        }, 700);
+        return;
+      }
       case 'spDrinkSet': {
         const v = prompt('Drink tickets in this sponsor\'s package:'); if (v == null || v === '' || !(Number(v) >= 0)) return;
         must(await sb.from('sponsorships').update({ drink_tickets: Number(v), drink_tickets_tbd: false }).eq('id', id), 'Sponsor');
@@ -1741,7 +1800,9 @@ document.addEventListener('change', async (e) => {
       const f = el.dataset.f; let v = el.value;
       if (['cash_amount', 'entry_tickets', 'drink_tickets'].includes(f)) v = Math.max(0, Number(v) || 0);
       if (f === 'tier') v = v.trim() || null;
-      must(await sb.from('sponsorships').update({ [f]: v }).eq('id', el.dataset.sp), 'Sponsor');
+      // a drink package typed in is an agreed number; cleared means back to TBD
+      const patch = f === 'drink_tickets' ? { drink_tickets: v, drink_tickets_tbd: el.value.trim() === '' } : { [f]: v };
+      must(await sb.from('sponsorships').update(patch).eq('id', el.dataset.sp), 'Sponsor');
       toast('Saved'); return reload();
     }
     if (el.dataset.gea) {
