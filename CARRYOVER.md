@@ -1,30 +1,50 @@
-# Carryover - 2026-11-11 (DI #3 final comp list - DESKTOP, Quick)
+# Carryover - 2026-11-11 (DI #3 final comps, drinks, Finance form - DESKTOP, Standard Close)
 
-- **240 applied to prod** (dry-run first; repo + prod top out at 243). DI #3 comps set to
-  Keith's FINAL list: 20 confirmed comp entries (5 DJs, 2 performers, 3 artist guests,
-  5 Keith comp tickets, 5 sponsor comps); Pulse 3 tentative (open slots), Savery 1 open.
-  Drinks: 38 locked with Signal, 20 allocated (Theresa 6 / Pulse 10 on Ethan / Savery 4
-  on Patrick), 18 unallocated. Verified through `control-center.js` on a fresh snapshot.
-- **OPEN before doors (11/14):** re-run the Zeffy import in the Control Center. Terry
-  (Theresa McGuinness) 2 x $40 and Angela Tabone's $50 donation are NOT in prod, so Terry
-  is not on the door list until that import runs. Deliberately not hand-entered (it
-  would double-book on import).
-- Kierney Brennan renamed Kierney Kearney (married name, same record; undo = rename back).
-- **241:** Emmy Adelle is the correct spelling (actor + guest + door-list text renamed;
-  posted social captions left as history). Leif Fosse = actor, Emmy's manager; Kseniya
-  Sovenko = actor, co-founder of NEW org actor "NYC Rave Girls". Janelle Sochet on the
-  door list as staff + crew (Marketing Director). Door list: 36 heads (14 paid + 20 comps
-  + Henry + Janelle), before Terry's Zeffy re-import.
-- **242:** Savery/Martinez merged into ONE sponsorship (Patrick's card): $500, status
-  `confirmed` (Patrick's $250 paid via Zeffy, Arnaldo's $250 pending - mark paid when it
-  lands). Arnaldo's separate sponsorship row deleted; his actor stays. Pledged total
-  unchanged; the "paid" sponsor total now reads $250 lower until his half is marked.
-- control.html: Finance tab "+ Add an expense" form (531b903); Drinks tab sponsor
-  drink-ticket steppers (64672a4). Emmy's $800 fee NOT entered - Keith adds it.
-- **243:** `event_control.drink_tickets_cost` = total paid for the locked tickets; $ per
-  ticket is DERIVED (total / locked, unrounded) in `controlFor()`, so DI #3's 38 for $500
-  counts as exactly $500 toward the bar minimum (was 38 x $13 = $494). drink_ticket_value
-  is now only a rounded copy (13.16) when a total is set.
+**Closed 2026-11-11 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). No
+branch, no edge-function deploys.
+
+## State summary
+- **Migrations: repo and prod both top out at 243** (`applied_migrations` 240-243 this
+  session, no drift). Each was dry-run first (commit -> rollback), then applied. post_apply:
+  0 FAIL. `check_anon_exposure.py` clean, and `check_financial_views.py` shows all five 401.
+- Latest LEARNINGS: **§115**. Roles unchanged.
+- Control Center tests: 81/81 (`node scripts/test_control_center.mjs`).
+
+## Tomorrow's default (doors are 11/14)
+1. **Keith re-runs the Zeffy import** (Tickets tab, bottom card). Terry McGuinness (2 x $40)
+   and Angela Tabone's $50 donation are NOT in prod until that runs. They were deliberately
+   not hand-entered, because that would double-book on import.
+2. Mark the Savery card **paid** when Arnaldo's $250 lands.
+3. Fill the open comps (Pulse up to 3 tentative, Savery 1 open) as names come in.
+
+## This session shipped
+- **240:** DI #3 comps set to Keith's FINAL list: 20 confirmed comp entries (5 DJs,
+  2 performers, 3 artist guests, 5 Keith comp tickets, 5 sponsor comps). 38 drink tickets
+  locked with Signal.
+- **241:** "Emmy Adelle" spelling fixed (actor, guest and door-list text; posted captions
+  left as history). Leif Fosse added as an actor (Emmy's manager). Kseniya Sovenko added,
+  linked to a NEW org actor, NYC Rave Girls. Janelle Sochet added as staff and crew.
+  Kierney Brennan renamed Kierney Kearney.
+- **242:** Savery/Martinez merged into ONE sponsorship: $500 `confirmed` (§114,
+  supersedes the 11-05 split).
+- **243:** `event_control.drink_tickets_cost`. $ per ticket is derived from the total;
+  DI #3 is $500 for 38 (§113).
+- control.html:
+  - Finance "+ Add an expense" form: the lineup appears as buttons, the payee box
+    autocompletes from contacts, and `vendor_actor_id` is written (531b903, §115).
+  - Finance tab leads with owed/paid; the rest is folded under "More detail".
+  - Drinks tab: sponsor-package and per-guest steppers that save themselves (64672a4).
+  - Venue terms take the total paid (9f4a063).
+- Keith did these himself on prod: entered Emmy's $800 DJ fee (accrued) and set his own
+  drink package to 18. Drinks are now 38 of 38 allocated (Pulse 10, Theresa 6, Savery 4,
+  Keith 18).
+- Door list: 36 heads (14 paid + 20 comps + Henry + Janelle), before Terry's re-import.
+
+## Parked / next
+- Offered, not asked for: a Zeffy import button at the TOP of the Tickets tab.
+- There is no partial-payment field on sponsorships (status is all or nothing; §114).
+- Signal $3,000 balance due date; Shane Fonda's $500 is unpaid; owner-advance resolution
+  after the night.
 
 ---
 

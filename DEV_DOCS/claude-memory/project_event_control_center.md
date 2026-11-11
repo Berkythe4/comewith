@@ -24,3 +24,12 @@ Open questions for Keith:
 See [[project-event-hub-and-di2-money]], [[project-event-import-tool]].
 
 **Update 2026-11-05 (224-228):** DI #3 now runs on real data: Zeffy, Partiful RSVPs (`event_rsvps`), sponsor fixes, Signal deposit, Keith's $1,500 contingent advance (`owner_advances`), lineup + Henry as producer, and every comp under its sponsor. Keith found the old page underwhelming, so it was rebuilt: hero, Where we stand, Chase list, Run of show, grouped Guest list and an RSVPs tab. `eventRoster()` in control-center.js is now the ONLY roster logic, used by both control.html and the hub Customers tab. To see the page locally, run `scripts/control_harness/render.py` (headless Edge can't go under ~477px, so the phone shot uses an iframe). Keith has not yet clicked through it on prod. Open items: JAS, open comps, Signal balance date, drink-ticket value. See [[project-event-hub-and-di2-money]].
+
+**Update 2026-11-11 (240-243):**
+- **Comps and drinks:** final DI #3 list is 20 comp entries; drinks are 38 locked and all allocated.
+- **Savery/Martinez:** merged back into one sponsorship, $500 `confirmed` (§114).
+- **Drink value:** the total paid is stored (`drink_tickets_cost`); $ per ticket is derived (§113). The drink-ticket value question is answered: $500 for 38.
+- **Finance tab:** the Add-an-expense form picks a contact (`vendor_actor_id`, §115), and the tab leads with owed/paid.
+- **Drinks tab:** − / + steppers for each sponsor package and each guest.
+- **Keith has now used it on prod:** he entered Emmy's $800 fee and set his own drink package.
+- **Still open:** Zeffy re-import before doors (Terry, Angela).

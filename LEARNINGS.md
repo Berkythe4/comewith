@@ -3089,3 +3089,32 @@ artist, a song, a search — renders the same master tracklist under the map (on
 row per song, show-date order, other-show songs dimmed and attributed, one
 export bar); (3) one-line rows (title · artist · SHOW) instead of full-width
 columns. Grouping by night read as structure but hid the list; don't bring it back.
+
+## Section 113 — Store the total that was agreed; derive the unit price (243, 2026-11-11)
+
+Keith paid Signal $500 for 38 drink tickets. `drink_ticket_value` is numeric(10,2),
+so no per-ticket number reproduces the deal: $13.00 gives $494 and $13.16 gives
+$500.08, and the bar-minimum credit was off either way. `event_control.drink_tickets_cost`
+now holds the total, and `controlFor()` derives $ per ticket as total ÷ locked,
+unrounded. The stored per-ticket value is only a rounded copy. **When the real deal
+is a lump sum for a count, store the lump sum.** A rounded unit price can't be
+multiplied back to what was paid.
+
+## Section 114 — Savery/Martinez is ONE sponsorship again; status follows the money (242, 2026-11-11)
+
+This supersedes the 2026-11-05 choice to split Savery/Martinez into two sponsorship rows
+(no partial-payment column). Two cards confused the Drinks and Sponsors tabs: Arnaldo
+showed up as a sponsor with 0 comps and 0 drinks. Keith asked for them to be merged.
+The merged card is $500 `confirmed`, not `paid`, because only $250 has arrived.
+Consequence: the sponsor "paid" total reads $250 lower until his half lands. There is
+still no partial-payment field. A sponsor's paid status is all or nothing, and the
+notes record who paid what.
+
+## Section 115 — A payee box picks a contact; it doesn't take free text (Control Center Finance, 2026-11-11)
+
+The Finance tab's Payee was a plain text box. Keith typed "Emmy" and got no suggestions, and
+the expense would not have been linked to her actor record, so it would never count
+toward her 1099 total (§30). The Add-an-expense form offers the event's lineup as
+buttons, then all contacts. It writes `vendor_actor_id` and says out loud when a name
+is new (person or business). Also: a dense money page is read as noise. Lead with
+owed and paid, then the list, and fold the rest under "More detail".

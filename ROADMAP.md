@@ -207,6 +207,16 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-11-11 (DI #3 final comps + Control Center usability)
+
+- ✅ 240-243: final DI #3 comp list (20) and drinks (38 locked, all allocated). Savery/Martinez
+  merged into one sponsorship. Drink tickets store the total paid (§113-§114).
+- ✅ Control Center: Finance "Add an expense" form picks a contact (§115). Drinks tab has
+  steppers. Venue terms take the total paid.
+- ⏳ Before doors 11/14: Zeffy re-import (Terry, Angela). Savery's second $250.
+- Backlog: a partial-payment field on sponsorships (not asked for). A Zeffy import button
+  at the top of Tickets (offered).
+
 ## Current state — reconciled 2026-11-05 (DI #3 live data + Control Center rebuild)
 
 **DI #3 runs on real data now, and the Control Center answers "are we going to make it".**

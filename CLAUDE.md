@@ -449,6 +449,10 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   lineup shows them twice.
 - **Comps count ENTRIES, not rows** (`quantity`): a comp party of 2 uses 2 of a sponsor's
   comps, in `sponsorStats` and `eventRoster` alike (§105).
+- **Drink tickets: the TOTAL paid is stored (`event_control.drink_tickets_cost`, 243); $ per
+  ticket is derived (total ÷ locked) in `controlFor()`.** `drink_ticket_value` is only a
+  rounded copy when a total is set. Never compute bar-minimum credit from the rounded copy
+  (§113). Sponsor packages are edited on the Drinks tab's steppers.
 - **`owner_advances` (225) is owner money that may be owed back. It is NOT income or
   sponsor cash.** Master-only, outside % to the mission, and it never converts itself:
   a closed status requires `resolved_at`, so a conversion is always a recorded decision (§103).
