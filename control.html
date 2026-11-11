@@ -155,6 +155,29 @@ tr.total td { font-weight: 700; border-top: 1px solid var(--border-strong); }
 .qty-ctl button { width: 40px; height: 52px; font-size: 1.3rem; background: var(--surface); border: 1px solid var(--border-strong); cursor: pointer; }
 .qty-ctl .q { min-width: 46px; text-align: center; font-family: 'Bebas Neue', sans-serif; font-size: 1.3rem; }
 
+/* ---- big, step-by-step form (Add an expense) ---- */
+.bigform { max-width: 580px; }
+.bigform .field { display: flex; flex-direction: column; gap: 7px; margin-top: 16px; }
+.bigform .lab { font-size: 1.02rem; font-weight: 700; color: var(--ink); }
+.bigform .lab em { color: var(--mid); font-weight: 400; font-style: normal; font-size: 0.85rem; }
+.bigform input, .bigform select { font-size: 1.05rem; padding: 11px 12px; width: 100%; }
+.bigform input[type=number] { max-width: 12em; }
+.bigform .hint { font-size: 0.86rem; color: var(--mid); }
+.bigform .hint.ok { color: var(--green); } .bigform .hint.new { color: var(--amber); }
+.bigform .picks { display: flex; flex-wrap: wrap; gap: 8px; }
+.bigform .pick { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 9px 12px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); cursor: pointer; text-align: left; }
+.bigform .pick small { font-size: 0.7rem; color: var(--mid); text-transform: uppercase; letter-spacing: 0.06em; }
+.bigform .pick.on, .bigform .seg button.on { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.bigform .seg { display: flex; gap: 8px; flex-wrap: wrap; }
+.bigform .seg button { flex: 1 1 170px; padding: 12px; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: var(--r-sm); cursor: pointer; font-size: 1rem; }
+.bigform .newkind { display: flex; gap: 14px; font-size: 0.9rem; }
+details.more > summary { cursor: pointer; padding: 12px 14px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--r); list-style: none; font-size: 0.92rem; color: var(--mid); }
+details.more > summary::-webkit-details-marker { display: none; }
+details.more > summary::before { content: '▸ '; } details.more[open] > summary::before { content: '▾ '; }
+details.more[open] > summary { margin-bottom: 14px; }
+.exp-t td { padding-top: 10px; padding-bottom: 10px; }
+.exp-t .who { font-weight: 700; font-size: 1rem; }
+
 /* ---- modal ---- */
 .ov { position: fixed; inset: 0; background: rgba(5,2,7,0.78); z-index: 50; display: flex; align-items: flex-start; justify-content: center; padding: 30px 12px; overflow-y: auto; }
 .modal { background: var(--surface); border: 1px solid var(--border-strong); width: 100%; max-width: 720px; padding: 18px; }
@@ -461,7 +484,7 @@ async function loadEvent() {
       sb.from('event_drink_allocations').select('*').eq('event_id', id).order('created_at'),
       sb.from('tasks').select('id, title, description, status, priority, due_date, milestone, updated_at, created_at').eq('event_id', id).is('deleted_at', null).order('due_date', { ascending: true, nullsFirst: false }),
       sb.from('budget_lines').select('*').eq('event_id', id).eq('scope', 'event').is('deleted_at', null).order('planned_amount', { ascending: false }),
-      sb.from('expenses').select('id, date, amount, category, vendor, description, status, expected_amount, settled_at, due_date').eq('event_id', id).is('deleted_at', null).order('date'),
+      sb.from('expenses').select('id, date, amount, category, vendor, vendor_actor_id, description, status, expected_amount, settled_at, due_date').eq('event_id', id).is('deleted_at', null).order('date'),
       sb.from('income').select('id, date, amount, category, description, status, expected_amount').eq('event_id', id).is('deleted_at', null).order('date'),
       sb.from('event_exec_updates').select('*').eq('event_id', id).order('created_at', { ascending: false }).limit(20),
       // master-only by RLS (225): anyone else gets [] and the block is not drawn
@@ -1058,8 +1081,12 @@ function rFinance() {
   const budgetRows = d.budget.filter(b => b.direction === 'expense').map(b => `<tr><td>${esc(b.label || b.category)}</td><td class="small muted">${esc(b.category)}</td>
       <td class="num"><input type="number" min="0" step="1" value="${b.amount_tbd ? '' : b.planned_amount}" placeholder="TBD" data-bl="${b.id}" style="width:7em" ${ro}></td>
       <td class="small muted">${esc(b.notes || '')}</td><td>${b.realized_at ? '<span class="pill ok">realised</span>' : ''}</td></tr>`).join('');
-  const expRows = d.expenses.map(e => `<tr><td>${esc(e.date)}</td><td>${esc(e.vendor || e.description || '')}</td><td class="small muted">${esc(e.category || '')}</td><td class="num">${money(e.amount, 2)}</td>
-      <td>${e.status === 'paid' ? '<span class="pill ok">paid</span>' : `<span class="pill warn">${esc(e.status)}</span>`}${S.isMaster && e.status !== 'paid' ? ` <button class="mini" data-act="expPaid" data-id="${e.id}">Mark paid</button>` : ''}</td></tr>`).join('');
+  const short = (s, n) => s && s.length > n ? s.slice(0, n - 1) + '…' : (s || '');
+  const expRows = d.expenses.map(e => `<tr><td><div class="who">${esc(e.vendor || short(e.description, 40) || '—')}</div>${e.vendor && e.description ? `<div class="small muted" title="${esc(e.description)}">${esc(short(e.description, 70))}</div>` : ''}</td>
+      <td class="small muted">${esc(e.category || '')}<br>${esc(e.date)}</td><td class="num"><b>${money(e.amount, 2)}</b></td>
+      <td>${e.status === 'paid' ? '<span class="pill ok">paid</span>' : '<span class="pill warn">we owe it</span>'}${S.isMaster && e.status !== 'paid' ? ` <button class="mini" data-act="expPaid" data-id="${e.id}">Mark paid</button>` : ''}</td></tr>`).join('');
+  const owed = d.expenses.filter(e => e.status !== 'paid').reduce((a, e) => a + Number(e.amount || 0), 0);
+  const paidOut = d.expenses.filter(e => e.status === 'paid').reduce((a, e) => a + Number(e.amount || 0), 0);
   const recon = Object.entries(cats).map(([k, x]) => {
     const v = x.actual - x.planned;
     return `<tr><td>${esc(k)}</td><td class="num">${x.planned || !x.tbd ? money(x.planned) : ''}${x.tbd ? ` <em class="tbd">${x.planned ? '+' : ''}${x.tbd} TBD</em>` : ''}</td><td class="num">${money(x.actual, 2)}</td><td class="num">${money(x.paid, 2)}</td>
@@ -1069,8 +1096,21 @@ function rFinance() {
     ['Sponsor cash', c.sp.pledged, c.sp.paid],
     ['Planned costs', c.plannedCost, c.actualCost],
   ];
-  return head('Finance', fund ? 'Actuals, what was planned, and what-if.' : 'Actuals and what was planned.') + hiddenMoney() +
-    `<div class="grid g2">
+  return head('Finance', 'What we owe, what we have paid, and what came in.', masterOnly('<button class="btn" data-act="exAdd">+ Add an expense</button>')) + hiddenMoney() +
+    `<div class="kpis">
+      ${kpi('Still to pay', money(owed, 2), `${d.expenses.filter(e => e.status !== 'paid').length} unpaid`, owed > 0 ? 'warn' : '')}
+      ${kpi('Paid out', money(paidOut, 2), `${d.expenses.filter(e => e.status === 'paid').length} paid`)}
+      ${kpi('Raised', money(revTotal, 2), 'tickets, donations, sponsors')}
+      ${kpi('Planned costs', money(c.plannedCost), 'the forecast')}
+    </div>
+    <div class="card"><h2>Expenses <span class="meta">everything we owe or have paid for this event</span></h2><div class="tbl-wrap"><table class="exp-t"><thead><tr><th>Who</th><th>Kind · date</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
+      ${expRows || '<tr><td colspan="4" class="muted">Nothing booked yet.</td></tr>'}</tbody></table></div>
+      ${masterOnly('<div style="margin-top:12px"><button class="btn" data-act="exAdd">+ Add an expense</button></div>')}</div>
+    <div class="card"><h2>Planned costs <span class="meta">the forecast — never the P&amp;L</span></h2><div class="tbl-wrap"><table><thead><tr><th>Line</th><th>Category</th><th class="num">Planned</th><th>Note</th><th></th></tr></thead><tbody>
+        ${budgetRows || '<tr><td colspan="5" class="muted">None.</td></tr>'}</tbody></table></div>
+        ${masterOnly(`<div class="row" style="margin-top:10px"><input id="blLabel" placeholder="Planned cost" style="flex:1 1 140px"><select id="blCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="blAmt" type="number" min="0" placeholder="$ (blank = TBD)" style="width:9em"><button class="btn ghost" data-act="blAdd">Add</button></div>`)}</div>
+    <details class="more"><summary>More detail — revenue lines, reconciliation, costs by category${fund ? ', what-if' : ''}</summary>
+    <div class="grid g2">
       <div class="card"><h2>Revenue <span class="meta">actual</span></h2><div class="tbl-wrap"><table><thead><tr><th>Line</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
         ${rev.map(r => `<tr><td>${esc(r[0])} <span class="small muted">${esc(r[2])}</span></td><td class="num">${money(r[1], 2)}</td><td>${r[3] === 'received' ? '<span class="pill ok">received</span>' : '<span class="pill warn">pending</span>'}</td></tr>`).join('')}
         <tr class="total"><td>Total raised</td><td class="num">${money(revTotal, 2)}</td><td></td></tr>
@@ -1084,15 +1124,8 @@ function rFinance() {
       <h2 class="h" style="font-size:1.05rem;margin:14px 0 6px">Costs by category</h2><div class="tbl-wrap"><table><thead><tr><th>Category</th><th class="num">Planned</th><th class="num">Actual</th><th class="num">Paid</th><th class="num">Over / under</th></tr></thead><tbody>
         ${recon || '<tr><td colspan="5" class="muted">No costs planned or booked.</td></tr>'}</tbody></table></div></div>
     </div>
-    <div class="grid g2">
-      <div class="card"><h2>Planned costs <span class="meta">the event hub's forecast column — never the P&amp;L</span></h2><div class="tbl-wrap"><table><thead><tr><th>Line</th><th>Category</th><th class="num">Planned</th><th>Note</th><th></th></tr></thead><tbody>
-        ${budgetRows || '<tr><td colspan="5" class="muted">None.</td></tr>'}</tbody></table></div>
-        ${masterOnly(`<div class="row" style="margin-top:10px"><input id="blLabel" placeholder="Planned cost" style="flex:1 1 140px"><select id="blCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="blAmt" type="number" min="0" placeholder="$ (blank = TBD)" style="width:9em"><button class="btn ghost" data-act="blAdd">Add</button></div>`)}</div>
-      <div class="card"><h2>Expenses <span class="meta">actual · ${money(c.actualCost, 2)}</span></h2><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Payee</th><th>Category</th><th class="num">Amount</th><th>Status</th></tr></thead><tbody>
-        ${expRows || '<tr><td colspan="5" class="muted">Nothing booked yet.</td></tr>'}</tbody></table></div>
-        ${masterOnly(`<div class="row" style="margin-top:10px"><input id="exDate" type="date" value="${todayIso()}"><input id="exVendor" placeholder="Payee" style="flex:1 1 120px"><select id="exCat">${EXPENSE_CATS.map(k => `<option>${k}</option>`).join('')}</select><input id="exAmt" type="number" min="0" step="0.01" placeholder="$" style="width:7em"><select id="exStatus"><option value="accrued">pending</option><option value="paid">paid</option></select><button class="btn ghost" data-act="exAdd" data-ledger="${ledger}">Add</button></div>`)}</div>
-    </div>
-    ${scenarioCard()}`;
+    ${scenarioCard()}
+    </details>`;
 }
 
 // Owner advances (225): money an owner put in that may be owed back. NOT
@@ -1451,6 +1484,78 @@ function settingsModal() {
   });
 }
 
+// Add an expense: one question at a time, big boxes. The payee is a CONTACT
+// (expenses.vendor_actor_id), picked from this event's lineup or any contact,
+// so the cost lands on that person's record (1099 roll-up, history) instead of
+// being free text nobody can match later.
+async function addExpenseModal() {
+  const d = S.d;
+  const actors = must(await sb.from('actors').select('id, display_name, kind').is('deleted_at', null).order('display_name'), 'Contacts') || [];
+  const lineup = (d.participants || []).filter(p => p.actor && p.actor.id);
+  const roleOf = new Map(lineup.map(p => [p.actor.id, (p.roles && p.roles.length ? p.roles : [p.role]).filter(Boolean).join(', ')]));
+  const feeOf = new Map(lineup.filter(p => Number(p.fee) > 0).map(p => [p.actor.id, Number(p.fee)]));
+  const ledger = d.event.series === 'Dance Infusion' ? 'dance_infusion' : 'come_with';
+  const findActor = (name) => actors.find(x => CC.normName(x.display_name) === CC.normName(name)) || null;
+  let status = 'accrued';
+  const ov = document.createElement('div'); ov.className = 'ov';
+  ov.innerHTML = `<div class="modal bigform"><h3>Add an expense</h3>
+    <div class="field"><span class="lab">1 · Who are we paying?</span>
+      ${lineup.length ? `<div class="picks">${lineup.map(p => `<button type="button" class="pick" data-pick="${esc(p.actor.display_name)}">${esc(p.actor.display_name)}<small>${esc(roleOf.get(p.actor.id) || 'lineup')}</small></button>`).join('')}</div>
+      <span class="hint">Tap someone on this event, or type to search every contact:</span>` : ''}
+      <input id="xWho" list="xActors" placeholder="Start typing a name…" autocomplete="off">
+      <datalist id="xActors">${actors.map(a => `<option value="${esc(a.display_name)}">${roleOf.has(a.id) ? 'On this event · ' + esc(roleOf.get(a.id)) : a.kind === 'org' ? 'Business' : 'Person'}</option>`).join('')}</datalist>
+      <div class="hint" id="xWhoNote"></div></div>
+    <div class="field"><span class="lab">2 · How much?</span><input id="xAmt" type="number" min="0" step="0.01" inputmode="decimal" placeholder="$0.00"></div>
+    <div class="field"><span class="lab">3 · Have we paid it yet?</span>
+      <div class="seg"><button type="button" data-st="accrued" class="on">Not yet — we owe it</button><button type="button" data-st="paid">Already paid</button></div></div>
+    <div class="field"><span class="lab">4 · What kind of cost?</span><select id="xCat">${EXPENSE_CATS.map(k => `<option${k === 'Entertainment / Event' ? ' selected' : ''}>${k}</option>`).join('')}</select></div>
+    <div class="field"><span class="lab">5 · What for? <em>optional</em></span><input id="xWhat" placeholder="e.g. DJ fee"></div>
+    <div class="field"><span class="lab">Date <em>defaults to today</em></span><input id="xDate" type="date" value="${todayIso()}" style="max-width:14em"></div>
+    <div class="foot"><button class="btn ghost" data-x>Cancel</button><button class="btn" data-save>Add expense</button></div></div>`;
+  document.body.appendChild(ov);
+  const who = $('xWho');
+  const describe = () => {
+    const name = who.value.trim(), a = name && findActor(name), note = $('xWhoNote');
+    ov.querySelectorAll('.pick').forEach(b => b.classList.toggle('on', !!a && CC.normName(b.dataset.pick) === CC.normName(a.display_name)));
+    if (!name) { note.className = 'hint'; note.innerHTML = ''; return; }
+    if (a) { note.className = 'hint ok'; note.textContent = `✓ ${a.display_name} — ${roleOf.has(a.id) ? 'on this event (' + roleOf.get(a.id) + ')' : 'existing contact'}`; return; }
+    note.className = 'hint new';
+    note.innerHTML = `New contact — “${esc(name)}” will be added. It is a: <span class="newkind"><label><input type="radio" name="xKind" value="person" checked style="width:auto"> person</label><label><input type="radio" name="xKind" value="org" style="width:auto"> business</label></span>`;
+  };
+  const pickActor = (a) => {
+    if (!a) return;
+    if (roleOf.has(a.id)) $('xCat').value = 'Entertainment / Event';
+    if (feeOf.has(a.id) && !$('xAmt').value) $('xAmt').value = feeOf.get(a.id);
+  };
+  who.addEventListener('input', () => { describe(); pickActor(findActor(who.value.trim())); });
+  ov.addEventListener('click', async (ev) => {
+    if (ev.target === ov || ev.target.closest('[data-x]')) return ov.remove();
+    const pk = ev.target.closest('[data-pick]');
+    if (pk) { who.value = pk.dataset.pick; describe(); pickActor(findActor(pk.dataset.pick)); $('xAmt').focus(); return; }
+    const st = ev.target.closest('[data-st]');
+    if (st) { status = st.dataset.st; ov.querySelectorAll('[data-st]').forEach(b => b.classList.toggle('on', b === st)); return; }
+    const save = ev.target.closest('[data-save]');
+    if (!save) return;
+    try {
+      const name = who.value.trim(); if (!name) throw new Error('Who are we paying?');
+      const amt = Number($('xAmt').value); if (!(amt > 0)) throw new Error('Enter how much');
+      let a = findActor(name);
+      if (a && d.expenses.some(e => e.vendor_actor_id === a.id && e.status !== 'paid' && Math.abs(Number(e.amount) - amt) < 0.005)
+          && !confirm(`${a.display_name} already has an unpaid ${money(amt, 2)} on this event. Add another one?`)) return;
+      save.disabled = true;
+      if (!a) {
+        const kind = (ov.querySelector('input[name=xKind]:checked') || {}).value || 'person';
+        a = must(await sb.from('actors').insert({ display_name: name, kind }).select('id, display_name').single(), 'New contact');
+      }
+      must(await sb.from('expenses').insert({ event_id: S.eventId, date: $('xDate').value || todayIso(), amount: amt, expected_amount: amt,
+        category: $('xCat').value, vendor: a.display_name, vendor_actor_id: a.id, description: $('xWhat').value.trim() || null,
+        status, ledger, settled_at: status === 'paid' ? new Date().toISOString() : null }), 'Expense');
+      ov.remove(); toast(`Added: ${money(amt, 2)} to ${a.display_name}${status === 'paid' ? ' (paid)' : ' (owed)'}`); await reload();
+    } catch (err) { save && (save.disabled = false); toast(err.message, 'err'); }
+  });
+  who.focus();
+}
+
 async function addSponsorModal() {
   const actors = must(await sb.from('actors').select('id, display_name, kind').is('deleted_at', null).order('display_name'), 'Actors') || [];
   const ov = document.createElement('div'); ov.className = 'ov';
@@ -1587,12 +1692,7 @@ document.addEventListener('click', async (e) => {
           category: $('blCat').value, label: $('blLabel').value.trim() || null, planned_amount: amt ?? 0, amount_tbd: amt == null }), 'Planned cost');
         return reload();
       }
-      case 'exAdd': {
-        const amt = Number($('exAmt').value); if (!(amt > 0)) throw new Error('Amount required');
-        must(await sb.from('expenses').insert({ event_id: S.eventId, date: $('exDate').value || todayIso(), amount: amt, category: $('exCat').value, vendor: $('exVendor').value.trim() || null,
-          status: $('exStatus').value, ledger: a.dataset.ledger, settled_at: $('exStatus').value === 'paid' ? new Date().toISOString() : null }), 'Expense');
-        toast('Expense added'); return reload();
-      }
+      case 'exAdd': return addExpenseModal();
       case 'expPaid':
         must(await sb.from('expenses').update({ status: 'paid', settled_at: new Date().toISOString() }).eq('id', id), 'Expense');
         return reload();
