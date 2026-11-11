@@ -1,6 +1,6 @@
 # Carryover - 2026-11-11 (DI #3 final comp list - DESKTOP, Quick)
 
-- **240 applied to prod** (dry-run first; repo + prod top out at 240). DI #3 comps set to
+- **240 applied to prod** (dry-run first; repo + prod top out at 241). DI #3 comps set to
   Keith's FINAL list: 20 confirmed comp entries (5 DJs, 2 performers, 3 artist guests,
   5 Keith comp tickets, 5 sponsor comps); Pulse 3 tentative (open slots), Savery 1 open.
   Drinks: 38 locked with Signal, 20 allocated (Theresa 6 / Pulse 10 on Ethan / Savery 4
@@ -10,7 +10,11 @@
   is not on the door list until that import runs. Deliberately not hand-entered (it
   would double-book on import).
 - Kierney Brennan renamed Kierney Kearney (married name, same record; undo = rename back).
-- "Emmy Adele" (actor + guest) vs Keith's "Emmy Adelle": not renamed, Keith to confirm.
+- **241:** Emmy Adelle is the correct spelling (actor + guest + door-list text renamed;
+  posted social captions left as history). Leif Fosse = actor, Emmy's manager; Kseniya
+  Sovenko = actor, co-founder of NEW org actor "NYC Rave Girls". Janelle Sochet on the
+  door list as staff + crew (Marketing Director). Door list: 36 heads (14 paid + 20 comps
+  + Henry + Janelle), before Terry's Zeffy re-import.
 
 ---
 
