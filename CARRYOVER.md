@@ -1,6 +1,6 @@
 # Carryover - 2026-11-11 (DI #3 final comp list - DESKTOP, Quick)
 
-- **240 applied to prod** (dry-run first; repo + prod top out at 242). DI #3 comps set to
+- **240 applied to prod** (dry-run first; repo + prod top out at 243). DI #3 comps set to
   Keith's FINAL list: 20 confirmed comp entries (5 DJs, 2 performers, 3 artist guests,
   5 Keith comp tickets, 5 sponsor comps); Pulse 3 tentative (open slots), Savery 1 open.
   Drinks: 38 locked with Signal, 20 allocated (Theresa 6 / Pulse 10 on Ethan / Savery 4
@@ -21,6 +21,10 @@
   unchanged; the "paid" sponsor total now reads $250 lower until his half is marked.
 - control.html: Finance tab "+ Add an expense" form (531b903); Drinks tab sponsor
   drink-ticket steppers (64672a4). Emmy's $800 fee NOT entered - Keith adds it.
+- **243:** `event_control.drink_tickets_cost` = total paid for the locked tickets; $ per
+  ticket is DERIVED (total / locked, unrounded) in `controlFor()`, so DI #3's 38 for $500
+  counts as exactly $500 toward the bar minimum (was 38 x $13 = $494). drink_ticket_value
+  is now only a rounded copy (13.16) when a total is set.
 
 ---
 

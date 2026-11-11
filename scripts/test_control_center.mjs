@@ -78,6 +78,11 @@ eq('sponsor tickets handed to a guest are NOT added on top of the package', dl.l
 eq('allocated = 60 sponsor + 4 tier + 5 dj + 10 staff ($25 tier TBD)', dl.allocated, 79);
 eq('remaining / overflow', [dl.remaining, dl.overflow], [21, 0]);
 eq('bar progress: 79 x $12 of $6,000', Math.round(dl.barPct * 10) / 10, 15.8);
+{
+  const c38 = controlFor({ id: 'e', series: 'Dance Infusion' }, { drink_tickets_locked: 38, drink_tickets_cost: 500, drink_ticket_value: 13 });
+  const d38 = drinkLedger({ sp: sponsorStats([], []), tiers: [], tk: ticketStats([], []), gea: [], allocations: [{ category: 'other', tickets: 20 }], control: c38, barMinimum: 6000 });
+  eq('a total paid wins over $ per ticket: 38 for $500 is worth $500, 20 of them $263.16', [d38.lockedValue, d38.barValue], [500, 263.16]);
+}
 const over = sponsorStats([{ ...SP[0], drink_tickets: 2, drink_tickets_tbd: false }], [{ sponsorship_id: 's1', drink_tickets: 5 }]);
 eq('handing out more than the package counts what exists', drinkLedger({ sp: over, tiers: [], tk: ticketStats([], []), gea: [], allocations: [], control: ctl, barMinimum: 6000 }).allocated, 5);
 

@@ -37,7 +37,12 @@ export function controlFor(event, row) {
     beneficiary: row ? row.beneficiary : (isDI ? 'National MS Society' : null),
     mission_target_pct: row && row.mission_target_pct != null ? num(row.mission_target_pct) : (isDI ? DEFAULT_TARGET_PCT : null),
     drink_tickets_locked: row && row.drink_tickets_locked != null ? num(row.drink_tickets_locked) : null,
-    drink_ticket_value: row && row.drink_ticket_value != null ? num(row.drink_ticket_value) : null,
+    // A total paid for the locked tickets (243) wins: $ per ticket = total / locked,
+    // unrounded, so 38 tickets for $500 is worth exactly $500, not 38 x $13.16.
+    drink_tickets_cost: row && row.drink_tickets_cost != null ? num(row.drink_tickets_cost) : null,
+    drink_ticket_value: row && row.drink_tickets_cost != null && num(row.drink_tickets_locked) > 0
+      ? num(row.drink_tickets_cost) / num(row.drink_tickets_locked)
+      : (row && row.drink_ticket_value != null ? num(row.drink_ticket_value) : null),
     comp_mission_value: row && row.comp_mission_value != null ? num(row.comp_mission_value) : null,
     notes: row ? row.notes : null,
   };

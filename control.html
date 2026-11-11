@@ -777,10 +777,11 @@ function rDrinks() {
     <div class="grid g2">
       <div class="card"><h2>Venue terms</h2><div class="row">
         <label>Locked count<input type="number" min="0" id="dLocked" value="${ctl.drink_tickets_locked ?? ''}" placeholder="TBD"></label>
-        <label>$ per ticket toward bar min<input type="number" min="0" step="0.01" id="dValue" value="${ctl.drink_ticket_value ?? ''}" placeholder="TBD"></label>
+        <label>Total paid for them ($)<input type="number" min="0" step="0.01" id="dCost" value="${ctl.drink_tickets_cost ?? ''}" placeholder="TBD"></label>
+        <label>$ per ticket${ctl.drink_tickets_cost != null ? ' <span class="muted">(worked out)</span>' : ''}<input type="number" min="0" step="0.01" id="dValue" value="${ctl.drink_ticket_value == null ? '' : Math.round(ctl.drink_ticket_value * 100) / 100}" placeholder="TBD" ${ctl.drink_tickets_cost != null ? 'disabled' : ''}></label>
         <label>Bar minimum<input type="number" min="0" step="1" id="dBarMin" value="${S.d.event.bar_minimum ?? ''}" placeholder="none" ${S.isMaster ? '' : 'disabled'}></label>
         <button class="btn" data-act="saveDrinkTerms">Save</button></div>
-        <p class="note" style="margin-top:8px">Blank means not agreed yet. It renders as TBD and is never treated as 0.</p></div>
+        <p class="note" style="margin-top:8px">${ctl.drink_tickets_cost != null && ctl.drink_tickets_locked ? `<b>${moneyTxt(ctl.drink_tickets_cost)} for ${int(ctl.drink_tickets_locked)} tickets = ${money(ctl.drink_ticket_value, 2)} each</b>, and the ${int(ctl.drink_tickets_locked)} add up to exactly ${moneyTxt(ctl.drink_tickets_cost)}. ` : 'Enter the total you paid and the price per ticket is worked out for you (clear the total to type a per-ticket price instead). '}Blank means not agreed yet. It renders as TBD and is never treated as 0.</p></div>
       <div class="card"><h2>Add a block allocation <span class="meta">tickets nobody is named on yet</span></h2><div class="row">
         <select id="aCat">${['dj', 'staff', 'volunteer', 'comp', 'purchased', 'other'].map(k => `<option value="${k}">${CC.DRINK_CATS[k]}</option>`).join('')}</select>
         <input id="aLabel" placeholder="Label (e.g. DJ pool)" style="flex:1 1 140px"><input id="aN" type="number" min="0" placeholder="#" style="width:5em">
@@ -1668,7 +1669,10 @@ document.addEventListener('click', async (e) => {
         must(await sb.from('event_ticket_tiers').update({ active: false }).eq('id', id), 'Tier');
         return reload();
       case 'saveDrinkTerms': {
-        await saveControl({ drink_tickets_locked: num($('dLocked').value), drink_ticket_value: num($('dValue').value) });
+        // a total paid wins; the stored per-ticket is only its rounded copy (243)
+        const locked = num($('dLocked').value), cost = num($('dCost').value);
+        await saveControl({ drink_tickets_locked: locked, drink_tickets_cost: cost,
+          drink_ticket_value: cost != null && locked > 0 ? Math.round(cost / locked * 100) / 100 : num($('dValue').value) });
         if (S.isMaster) {
           const bar = num($('dBarMin').value);
           if (bar !== (S.d.event.bar_minimum == null ? null : Number(S.d.event.bar_minimum))) must(await sb.from('events').update({ bar_minimum: bar }).eq('id', S.eventId), 'Bar minimum');
