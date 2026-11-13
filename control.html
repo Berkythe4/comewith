@@ -1681,8 +1681,10 @@ document.addEventListener('click', async (e) => {
       }
       case 'allocAdd': {
         const n = Number($('aN').value); if (!(n > 0)) throw new Error('How many tickets?');
-        must(await sb.from('event_drink_allocations').insert({ event_id: S.eventId, category: $('aCat').value, label: $('aLabel').value.trim() || null, tickets: n }), 'Allocation');
-        return reload();
+        const lbl = $('aLabel').value.trim();
+        must(await sb.from('event_drink_allocations').insert({ event_id: S.eventId, category: $('aCat').value, label: lbl || null, tickets: n }), 'Allocation');
+        // the new line lands in the Ledger at the bottom of the page, out of sight: say so
+        toast(`Added ${n} drink ticket${n === 1 ? '' : 's'}${lbl ? ` for ${lbl}` : ''} — see the Ledger below`); return reload();
       }
       case 'allocDel':
         if (!confirm('Remove this allocation?')) return;
