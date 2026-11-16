@@ -88,8 +88,8 @@
      invoice to JSD Drip.
 - DI #3: **Emmy Adelle's invoice (#2026-1114, $800, Emmy Adelle Music LLC, due on receipt) + W-9**
   are filed on DI #3 Files (Invoice / W-9, vendor Emmy). The invoice is also the receipt on her $800
-  DJ-fee expense (still accrued = unpaid). W-9 = LLC taxed as an S corp. Recorded in
-  `tax_1099_note`; `tax_1099_status` left for Keith (S corps are usually exempt from 1099-NEC).
+  DJ-fee expense (still accrued = unpaid). W-9 = LLC taxed as an S corp. **Keith: 1099 EXEMPT**
+  (a business invoicing Come With, not a contractor). `tax_1099_status='exempt'`.
 - DI #3: **+$500 Signal tip guarantee**, paid by Keith personally via Venmo (expense, paid,
   personal / owner-funded, not yet reimbursed). It realizes the $800 "Signal - tip guarantee" budget
   line. DI #3 costs are now $7,979.12, of which $679.12 was paid by Keith personally.
