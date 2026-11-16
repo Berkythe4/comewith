@@ -3213,3 +3213,23 @@ Two accounting rules came out of it:
   happens, Consulting owes Come With. Keith settles it by offset: mark personal-card
   Come With costs of the same total as reimbursed, with the reason written on each
   row. The first was $71.93 for the Hulaween meals.
+
+## Section 123 — A business invoicing us is not a 1099 contractor (2026-11-16)
+
+Keith, on Emmy Adelle: "She is a business invoicing me, not a contractor for me, no 1099 for that."
+Emmy Adelle Music LLC sent its own invoice, and its W-9 says the LLC is taxed as an S corporation.
+It is marked `tax_1099_status='exempt'`, with the reason in `tax_1099_note`. This is still a STORED
+decision per payee (§30), never inferred. But when a W-9 shows a corporation (C or S, incl. an LLC
+taxed as one) invoicing us as a business, the default answer is exempt. File the W-9 on the event
+(Files -> W-9 / Tax, vendor set) and record what it says in the note.
+
+## Section 124 — Invoices fit one page down to 80%, then paginate at full size (invoice-doc v19, 2026-11-16)
+
+Keith: a 7-line reimbursement spilling a lone totals block onto page 2 "is silly looking".
+`renderInvoicePdf` now lays the same document out at 100/95/90/85/80% and takes the first scale
+that is one page. Below 80% (9.5pt body text ~ 7.6pt) it keeps full size and paginates, because a
+long invoice should stay readable rather than tiny. It scales the LAYOUT, not the page:
+`Page(width, height, scale)` lays out on a virtual sheet (Letter / scale) and writes one top-left
+`cm`. Margins and columns derive from that width, so the real margins stay 48pt and nothing is
+pushed into a corner. An invoice that already fits is byte-identical to before (tested). The floor
+is `FIT_MIN_SCALE` in template.ts.

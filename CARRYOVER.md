@@ -1,139 +1,96 @@
-# Carryover - 2026-11-16 (DI #3 finals; FFBJ invoices; Come With Consulting ledger - DESKTOP)
+# Carryover - 2026-11-16 (DI #3 finals; FFBJ + Consulting invoicing; Come With Consulting ledger - DESKTOP, Full Close)
 
-## Later the same session: FFBJ gigs, Juice merge, Come With Consulting
-- **ALL LIVE (Keith's go-ahead, 2026-11-16).** `consulting-ledger` is merged to master and
-  deployed; `invoice-doc` is v18. **Prod and repo are both at 248** (applied 244, 247, then
-  245, 246). LEARNINGS latest is **§119**. Live check: CWC-2026-0001's client PDF prints
-  "Come With Consulting / Keith Berkman" with no Come With bank details. Close checks: anon
-  sweep clean (incl. `invoice_issuers`, `invoice_counters_ledger`, `invoice_attachments`), all
-  five financial views 401, post_apply 0 FAIL.
-  - **CWC-2026-0001** Hulaween $1,350: PAID in kind. **CWC-2026-0002** reimbursement
-    $802.98: DRAFT, with 4 receipts attached (hotel receipt missing). Keith sends it.
-    Rental $616.82 confirmed final by Keith.
-  - Branch `consulting-ledger` is merged; safe to delete.
-  - **CW-2026-0003 and CW-2026-0004 SENT** to jessplendid.inc@gmail.com, cc berky@comewith.org
-    (Resend: delivered); their income is now `invoiced`.
-  - **CWC-2026-0001 ($1,350 paid in kind) SENT as an FYI receipt** (same to/cc, "nothing is
-    due" note). It stays `paid`; its income stays `received`. Keith is test-sending
-    CWC-2026-0002 with its receipts himself.
-  - **RESOLVED by 248 (applied):** ONE Hulaween (`hulaween-2026`, 10/12-21, Consulting,
-    21 expenses, 4 lineup, the task); the July `hulaween` is soft-deleted with a pointer. E-ZPass $25 +
-    Morphis Art $21.20 taken off Hulaween (Come With overhead). Consulting personal-card costs set to
-    funded_by=business. The $71.93 Consulting owed Come With is settled by offset (Beatport 2025-07-26
-    $5.96 + Sq Tce Presents 2026-06-21 $65.97 marked reimbursed). `v_cash_position` counts Consulting
-    costs paid from 'bank'. Cash reserve $3,276.49; LEARNINGS **§122**. The history below is kept.
-  - **Invoice PDFs fit one page when they can** (invoice-doc v19): 100 -> 95 -> 90 -> 85 -> 80%,
-    and below 80% they paginate at full size. Invoices that already fit are byte-identical.
-    `layoutInvoicePdf(doc, scale)` + `Page` scale in pdf.ts; tests in scripts/test_invoice.mjs.
-  - ~~DUPLICATE HULAWEEN (my error, open):~~ an original "Hulaween" event already existed
-    (`ffc2391c…`, slug `hulaween`, 10/22-25, Growth & Networking, created July: 20 card-imported
-    charges, 4 lineup, 1 task). 245 created a second (`b12ea8b3…`, `hulaween-2026`, 10/12-21,
-    Consulting), which holds the income, CWC-0001/0002 and the rental/hotel/$6 toll. **Not merged
-    yet: Keith to pick the dates** (he said 10/12-21; the original says 10/22-25; the card charges
-    run 10/19-10/28).
-  - **Tolls were double-booked** (246 vs the card import "Eractoll 5f00g8" $77.83/$2.33). Fixed:
-    the card rows are kept (now consulting, Travel, receipts linked, invoice attachments re-pointed)
-    and my two copies are soft-deleted. **The $6.00 toll (EHI210613686) isn't imported yet. When
-    "Eractoll" $6.00 lands, delete the manual 246 row and re-point its attachment, or it doubles.**
-  - Per Keith: Walmart $133.21 + Hilton $15.05 are reimbursable, so they were ADDED to
-    CWC-2026-0002 (now **$951.24**, 7 lines, still draft). Meals + fuel ($358.75) are NOT billed
-    but were moved to the consulting ledger. Left on Come With: E-ZPass rebill $25 and Morphis Art
-    $21.20 (asked Keith). McDonald's $31.58 + Subway $40.35 were paid from Come With's bank and
-    are now consulting, so Come With's cash reserve no longer deducts that $71.93 (asked Keith).
-  - **The dashboard was DOWN ~15 min after the merge** (a JS syntax error that the esprima
-    check missed). Fixed and verified with headless Edge (§120). LEARNINGS latest is **§121**.
-- **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
-  Halloween (10/31, Refuge), series Bookings, owner Frick Frack BlackJack, Berky on the lineup.
-  Income is accrued ($125; $125 + $100 OT). Invoices **CW-2026-0003 ($125)** and **CW-2026-0004
-  ($225)** are DRAFTS, so Keith sends them from the dashboard. `bill_to_email` is empty
-  (FFBJ has no email on file).
-- **Jessica Kenny = actor "Juice"** (existed since July: jessplendid.inc@gmail.com, org FFBJ,
-  4 lineups). The duplicate "Jessica Kenny" actor made earlier today was merged into it and
-  deleted. Juice now carries `legal_name` and the ownership notes (FFBJ + JSD Drip).
-- **Come With Consulting = a separate sole proprietorship (§118).** All JSD Drip work.
-  - 244 (applied): `consulting` ledger, `invoice_issuers` (seeded "Come With Consulting",
-    CWC, NO bank details yet), `next_invoice_no(ledger)`.
-  - **Branch `consulting-ledger` (pushed, awaiting Keith's sign-off; do not merge to close):**
-    the dashboard (series "Come With Consulting", ledger-safe forms, P&L switch, invoice books +
-    "Consulting details" editor), `invoice-doc` (prints the ledger's issuer; deploy WITH the
-    merge: `python scripts/deploy_edge_function.py invoice-doc --no-verify-jwt`), and 245.
-  - **After merge:** deploy invoice-doc, then apply 245 (Hulaween event 10/12-10/21, $1,350
-    consulting income paid in kind as the joggers rev-share buy-in, CWC-2026-0001 paid). Dry run passed.
-- **Open with Keith:**
-  1. Consulting payment details (bank/PayPal) are blank. Fill them in under Invoices ->
-     Consulting details.
-  2. **Lost Lands (CW-2026-0002, $1,200, JSD Drip)** was issued and paid INTO Come With's
-     bank as Come With. Moving it to Consulting would reprint a sent invoice under another
-     business, and the cash is in Come With's account. Keith to decide: leave it, or move
-     it and record a transfer.
-  - **Keith 2026-11-16 (later):** Lost Lands STAYS Come With (settled). All 12 rental days are
-    JSD Drip's. Consulting is paid to Keith's personal **Venmo / Zelle**; handles not given
-    yet, so enter them as extra methods under Invoices -> Consulting details. FFBJ and JSD Drip
-    both bill to jessplendid.inc@gmail.com (already on the actors; set on the CW-0003/0004 drafts).
-  - **246 written + dry-run (with 245), NOT applied, on the branch:** reimbursement $802.98 as
-    5 consulting Travel expenses + matching accrued Reimbursement income + DRAFT CWC-2026-0002.
-    Apply order after merge: deploy invoice-doc -> 245 -> 246.
-  - **Consulting Venmo = @kberky** (set on `invoice_issuers.extra_methods`). Zelle left
-    for Keith to add in Consulting details.
-  - **247 applied (on master): `invoice_attachments`**, i.e. receipts emailed with an invoice
-    (row present = attached). The UI and the `invoice-doc` send are on the branch. The Hulaween
-    receipts are uploaded to `receipts/expense/hulaween-2026/` (rental agreement + 3 TollPass
-    emails rendered to PDF); 246 sets them as `receipt_path` and pre-attaches them to
-    CWC-2026-0002. The **hotel receipt is still missing.** Prod has 247 applied before 245/246:
-    that's out of order, but no number is duplicated.
-  3. ~~Lost Lands~~ settled above. **Hulaween reimbursement to JSD Drip (est. $802.98):** Enterprise RA 5F00G8 $616.82
-     (ESTIMATE on the rental agreement, 10/16-10/28; need the final receipt), tolls $86.16
-     (3 TollPass receipts: $77.83 incl. $19.80 fees, $2.33, $6.00), hotel Jacksonville
-     10/20 $100. Not entered yet. Book as consulting expenses (paid personally) plus an
-     invoice to JSD Drip.
-- DI #3: **Emmy Adelle's invoice (#2026-1114, $800, Emmy Adelle Music LLC, due on receipt) + W-9**
-  are filed on DI #3 Files (Invoice / W-9, vendor Emmy). The invoice is also the receipt on her $800
-  DJ-fee expense (still accrued = unpaid). W-9 = LLC taxed as an S corp. **Keith: 1099 EXEMPT**
-  (a business invoicing Come With, not a contractor). `tax_1099_status='exempt'`.
-- DI #3: **+$500 Signal tip guarantee**, paid by Keith personally via Venmo (expense, paid,
-  personal / owner-funded, not yet reimbursed). It realizes the $800 "Signal - tip guarantee" budget
-  line. DI #3 costs are now $7,979.12, of which $679.12 was paid by Keith personally.
-- DI #3: the later Zeffy export `(1)` is the per-ticket check-in list. 44 of 62 Zeffy
-  tickets were scanned, walk-ups included in the unscanned, so it is not a headcount.
+**Closed 2026-11-16 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). Branch
+`consulting-ledger` is merged; it's safe to delete (`git push origin --delete consulting-ledger`).
+Edge function deployed: **`invoice-doc` v19**.
 
----
+## State summary
+- **Migrations: repo and prod both top out at 248** (244-248 this session, no drift). Applied
+  order: 244, 247, 245, 246, 248. That's out of order, but no number is duplicated. Each one was
+  dry-run first.
+- **Prod invariants (close checks):** all five financial views 401; anon sweep clean (now incl.
+  `invoice_issuers`, `invoice_counters_ledger`, `invoice_attachments`); post_apply 0 FAIL.
+- **LEARNINGS latest: §124** (§116-124 this session). Roles unchanged.
+- **Three sets of books now:** Come With, Dance Infusion, **Come With Consulting** (Keith's
+  separate sole proprietorship; all JSD Drip work). See CLAUDE.md "Come With Consulting".
+- Come With cash reserve **$3,276.49**.
+- The working tree carries 16 uncommitted files that predate this session (radio preview renders,
+  5 deleted `Receipts/*.pdf`, a deleted `events/dance-infusion-2/index-v2.html`). **Not ours. Never
+  `git commit -a` here (§119).**
 
-# Carryover - 2026-11-16 (DI #3 final exports imported; homepage DI metrics final - DESKTOP, Quick Close)
+## Tomorrow's default
+1. Keith sends **CWC-2026-0002** (Hulaween reimbursement to JSD Drip, **$951.24**, draft, Venmo
+   @kberky, 4 receipts attached). First add the **hotel receipt** (Jacksonville 10/20) on the hotel
+   expense, and the Walmart/Hilton receipts if he has them, then use "📎 Receipts from the event".
+2. Keith adds **Zelle** under Invoices -> ⚙ Consulting details.
+3. When the **$6.00 toll** ("Eractoll 5f00g8", TollPass EHI210613686) lands in a card import,
+   delete the manual 246 row (`Enterprise TollPass` $6.00 on hulaween-2026) and re-point its
+   `invoice_attachments.expense_id` to the imported row, or it doubles (same fix as 248 did for
+   $77.83/$2.33).
+4. Mark Emmy Adelle's $800 DJ fee paid when it goes out (invoice #2026-1114, due on receipt).
 
-**Data only: no code, no migration, no deploy.** Prod is still at migration 243. LEARNINGS latest is **§116**.
+## This session shipped
+**DI #3 finals (data):**
+- Final Zeffy/RA/Partiful exports imported through the Control Center engine run in Node against
+  a prod snapshot. Zeffy: +19 orders (22 heads; 6 tap-to-pay walk-ups on one `(unknown)` guest, §116)
+  and +$40 donation. RA: +3. Partiful: +11 RSVPs, 2 changed. Re-planning afterwards is a no-op.
+- Arnaldo Martinez's $250 had been booked as a donation AND pledged on the Savery/Martinez
+  sponsorship. It was reclassified per §102: the sponsorship is now paid, and all 4 sponsors are paid.
+- Comps reconciled to `DI3_Guest_List.pdf`: +10 heads. The door list is **96** (64 paid + 32 comp);
+  `total_attendance` = 96. The Zeffy check-in list scanned only 44 of 62 tickets, so it isn't a headcount.
+- **Totals:** 65 tickets / $1,879.40, donations $340, sponsors $2,000, **to mission $1,965**, raised
+  $4,219.40. Costs are $7,979.12 incl. Keith's **$500 Signal tip guarantee** (Venmo, owner-funded;
+  it realizes the $800 budget line) and Emmy Adelle's $800 fee.
+- **Homepage:** $ to MS 4,140 -> **6,105**, benefits 3, on the floor 159 -> **255**, goal label "final".
+- Emmy Adelle's invoice + W-9 filed on DI #3 Files (Invoice / W-9, vendor Emmy). The invoice is
+  also the receipt on her expense. **1099 exempt** (Keith: a business invoicing us, not a
+  contractor; LLC taxed as an S corp; §123).
+- **Jessica Kenny = actor "Juice"** (existed since July; jessplendid.inc@gmail.com; owns FFBJ +
+  JSD Drip). The duplicate actor made this session was merged in and deleted.
 
-## What changed on prod
-- **The final Zeffy, RA and Partiful exports (11-16) are imported into DI #3.** The import
-  used the Control Center engine (`planImport`/`planRsvps`) in Node against a prod snapshot,
-  then ran as one SQL transaction (dry-run first). Re-planning afterwards finds nothing new.
-  - Zeffy: +19 ticket orders (22 heads; 6 are anonymous tap-to-pay walk-ups on one
-    `(unknown)` guest, see §116) and Kendall Leary's $40 extra donation.
-  - RA: +3 tickets ($34.80, mapped to the $40 tier = $25 to mission). Partiful: +11 RSVPs, 2 changed.
-  - **Arnaldo Martinez's $250** (Zeffy "2x Donations", 11/11) had gone in as a donation while
-    the merged Savery/Martinez sponsorship also pledged it. It was reclassified per §102:
-    sponsorship marked **paid**, payment key added to `payment_refs`, donation row deleted.
-  - Kierney Kearney's $25 ticket (bought as "Kierney Rose Brennan") is attached to her
-    existing comp record (§116).
-- **DI #3 totals:** 65 tickets / $1,879.40 · donations $340 · sponsors $2,000 (all 4 paid) ·
-  to mission **$1,965** · raised $4,219.40 · door list **96** (no check-ins were recorded).
-  `events.total_attendance` = 96.
-- **Comps reconciled to Keith's `DI3_Guest_List.pdf` (Nov 14, 34 heads).** 10 heads were missing
-  and have been added: Shane Fonda and Jessica Kenny (artist, Frick Frack BlackJack), Kristen London (comp,
-  Keith), Caiden Storm, Keila Hernandez, Thomas Ortiz and Eric Capuano (comp, Amanda Maldonado),
-  Jessie Scott, William Stoeffhaas and Caitlin Attaway (Pulse sponsor comps; Pulse is now 4/4). New
-  guests for Shane and Kristen are linked to their actors (§104). 3 Partiful RSVPs linked on
-  exact names. Jennifer Taveras and Junior Fernandez are on the PDF but PAID, so they stay
-  tickets. Non-ticket heads = 32 = the PDF's 34 minus those 2.
-- **Jessica Kenny (AKA Juicy) is now a person actor**, owner of Frick Frack BlackJack AND JSD Drip.
-  `org_id` -> Frick Frack BlackJack (one org link per person); JSD Drip ownership is in the notes
-  on her record and on both org records. Her DI #3 guest record is linked to the actor.
-- **Homepage (`site_content`):** `di.goal_raised`/`di.stat1` 4140 -> **6105**, `di.stat2` 2 -> **3**,
-  `di.stat3` 159 -> **255**, and `di.goal_label` reads "(final: all three in)". Verified via anon REST.
+**Invoicing:**
+- FFBJ gigs (Come With books): Vampire Ball (10/30, Industry City) and Refuge Halloween (10/31).
+  **CW-2026-0003 $125 and CW-2026-0004 $225 SENT** to jessplendid.inc@gmail.com, cc
+  berky@comewith.org (Resend: delivered); income `invoiced`.
+- Hulaween (Consulting, 10/12-21): **CWC-2026-0001 $1,350 paid in kind** (the JSD Drip joggers
+  rev-share buy-in, booked as income per Keith) and SENT as an FYI receipt.
+  **CWC-2026-0002 $951.24** reimbursement (rental $616.82 confirmed final, tolls $86.16, hotel $100,
+  Walmart $133.21, Hilton $15.05). Meals + fuel ($358.75) are Consulting costs, NOT billed.
+  E-ZPass $25 + Morphis Art $21.20 are off Hulaween (Come With overhead).
+- **Lost Lands (CW-2026-0002 Come With, $1,200, JSD Drip) STAYS Come With** (Keith; it was paid into
+  Come With's bank).
 
-## Open
-- DI #3 `events.status` is still `on_sale`. The homepage `di.ticket_show` = 1 still
-  shows a "Get tickets" button pointing at the DI #3 Zeffy page. Both are Keith's call.
-- "On the floor" uses the door list (96), because nobody was checked in on the night.
+**Come With Consulting (244-248, branch merged):**
+- 244: `consulting` on the 7 ledger checks; `invoice_issuers` (Come With Consulting / Keith Berkman /
+  CWC; Venmo @kberky); `next_invoice_no(ledger)` with its own gapless CWC- series.
+- 245/246: Hulaween event, income, CWC-0001/0002, receipts. 247: `invoice_attachments` (receipts
+  emailed with an invoice; row present = attached). 248: merged the **duplicate Hulaween** (§122) and
+  fixed the **double-booked tolls**; Consulting personal-card costs = `funded_by business`; the $71.93
+  Consulting owed Come With (meals paid from Come With's bank) was settled by offset against Beatport
+  2025-07-26 + Sq Tce Presents 2026-06-21 (marked reimbursed); `v_cash_position` counts Consulting
+  costs paid from 'bank'.
+- Dashboard: series "Come With Consulting" -> consulting books (`ledgerForSeries`); ledger-safe
+  income/expense forms; Consulting P&L tab; invoice books choice + "⚙ Consulting details" editor;
+  invoice Attachments section (receipts from the event / upload / remove; the send confirmation
+  lists them); a Venmo/extra-methods checkbox on invoices.
+- invoice-doc: prints the ledger's issuer (spread, never merged); attaches receipts on send (an
+  unreadable file fails the send); **fits one page when it can** (100->80%, then paginates at full
+  size; §124).
+
+**Incident:** the dashboard was **down ~15 min** after the merge (`Uncaught SyntaxError`: an
+apostrophe lost its escape in a heredoc). The esprima check passed because it stops early. Fixed and
+verified in headless Edge. **`node --check` on the extracted module is the gate now** (§120,
+CLAUDE.md).
+
+## Parked / next
+- Offered, not asked for: DI #3 `events.status` is still `on_sale` and the homepage "Get tickets"
+  button (`di.ticket_show`=1) still points at the DI #3 Zeffy page. DI #3's homepage "to MS" number
+  uses the per-ticket mission rule ($1,965), while DI #1/#2 were posted NET; on a net basis DI #3 is
+  negative. Keith's call.
+- Reimbursements in general still record no cash leaving the bank (`reimbursed_at` only). The 248
+  offset is the only reimbursement so far.
+- `v_capital` has no ledger filter: DI owner-funded costs count in Come With's "Reimbursable" too
+  (pre-existing; Consulting was fixed by marking its rows `business`).
 
 ---
 

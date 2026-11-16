@@ -207,6 +207,23 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-11-16 (DI #3 finals + Come With Consulting books)
+
+- ✅ DI #3 closed out: final Zeffy/RA/Partiful imported, comps reconciled (door list 96), homepage
+  metrics final ($6,105 to MS / 3 benefits / 255 on the floor). The 11-11 "before doors" items are
+  done (Terry + Angela imported; Savery/Martinez paid).
+- ✅ 244-248: **Come With Consulting**, a third set of books (Keith's sole proprietorship; JSD Drip
+  work). It has its own invoice issuer + CWC- numbering, a P&L tab, ledger-safe forms, and the
+  rule that series "Come With Consulting" means consulting books (§118, §122).
+- ✅ Invoices: receipts attach to the email (247); PDFs fit one page down to 80% (§124); a
+  Venmo/Zelle checkbox; FFBJ CW-0003/0004 and Hulaween CWC-0001 sent.
+- ⏳ CWC-2026-0002 ($951.24 reimbursement) waits on the hotel receipt, then Keith sends it. Zelle
+  goes in Consulting details. The $6 toll will double when it imports (see CARRYOVER).
+- Backlog (not asked for): reimbursements record no cash leaving the bank; `v_capital` has no
+  ledger filter; DI #3 still `on_sale` + a homepage "Get tickets" button; homepage DI basis
+  (per-ticket vs net). Earlier items still open: a partial-payment field on sponsorships, and a
+  Zeffy import button at the top of Tickets.
+
 ## Current state — reconciled 2026-11-11 (DI #3 final comps + Control Center usability)
 
 - ✅ 240-243: final DI #3 comp list (20) and drinks (38 locked, all allocated). Savery/Martinez

@@ -344,6 +344,49 @@ for DI events, or those KPIs read empty. `'Come With Production'` is services
 added in 095) is when we're the **booked talent** at someone else's event —
 performance fees go there, never under Production. The host/client who booked
 us goes in `events.owner_actor_id` ("Host / booked by" in the edit-event modal).
+`'Come With Consulting'` (type `gig`, 244) is work for Keith's separate sole
+proprietorship: **the series decides the books**, and its money lands in the
+`consulting` ledger (see "Come With Consulting" below).
+
+**Search before you create.** Before inserting an event, `name ilike` across all
+dates (not just your new slug); before an actor, search name and email; before
+entering a cost by hand, search the card imports for it. 245 created a second
+"Hulaween" next to Keith's July one and double-booked two tolls that were already
+imported; 248 had to merge them. LEARNINGS §122.
+
+## Come With Consulting (244-248) — added 2026-11-16
+
+- **Three sets of books: `come_with`, `dance_infusion`, `consulting`.** Consulting is
+  Keith's SEPARATE SOLE PROPRIETORSHIP: all JSD Drip work. Frick Frack BlackJack work is
+  Come With for now. It is a ledger, not a category under Come With. Lost Lands
+  (CW-2026-0002, paid into Come With's bank) deliberately stays Come With.
+- **One rule decides the books in the dashboard: `ledgerForSeries()`** (Dance Infusion ->
+  DI, Come With Consulting -> consulting, else Come With). The event Money panel, Record
+  revenue and bulk event moves all go through it. Don't add a sixth copy of the regex.
+- **Any form that lists ledgers lists all three, and keeps the value it was given**
+  (`LEDGERS` / `ledgerOptions()`). A two-option select rewrote a third ledger as
+  `come_with` on save. Add a ledger = audit every select that writes one.
+- **An invoice is FROM its ledger's issuer.** `invoice_issuers` (master-only, like
+  `invoice_settings`) is SPREAD over `invoice_settings` in `invoice-doc` and in
+  `invSettingsFor()`: its nulls win, so a blank Consulting bank field prints blank and
+  never Come With's account. Consulting numbers are `CWC-YYYY-NNNN` from
+  `next_invoice_no(ledger)`; Come With / DI keep the shared CW- series. One invoice = one
+  ledger (mixed rows are refused).
+- **Consulting's personal-card costs are its own money: `funded_by='business'`.**
+  `v_capital` has no ledger filter, so `owner` would read as Come With owing Keith.
+- **Consulting has no business bank. `cash_source='bank'` on a Consulting cost means
+  Come With's bank paid it.** `v_cash_position` counts it (248), and Consulting then owes
+  Come With. Keith settles that by offset: mark personal-card Come With costs of the same
+  total `reimbursed_at`, with the reason on every row involved. LEARNINGS §122.
+- **Barter is income.** Work paid in kind (Hulaween's $1,350 joggers rev-share buy-in) is
+  invoiced and recorded as PAID with method `other` / reference "In kind", not comped to
+  $0. LEARNINGS §118.
+- **Receipts ride with the invoice email (247, `invoice_attachments`).** Row present =
+  attached. An expense's own `receipt_path` is attached by path (one upload serves both).
+  An unreadable file FAILS the send. **Invoice PDFs fit one page down to 80%** (§124).
+- **Sending from a script:** `invoice-doc` accepts the project's `sb_secret_…` key (the
+  `type: secret` key from `/api-keys?reveal=true`), not the legacy service_role JWT
+  (§121). Read in memory, never printed. Sending is outward-facing: only on Keith's say-so.
 
 ## Mailing segments (brand delineation)
 
@@ -950,6 +993,18 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   `await`, so BOTH sides stopping on that same final line is the pass; the exit code
   already knows that. `node --check` on an extracted `.mjs` is the same idea where a
   runtime exists.
+- **⚠ Where node exists, `node --check` on the extracted module is THE gate — not the
+  esprima check.** esprima stops at an early construct on BOTH sides and checks nothing
+  after it, so it reported OK on 2026-11-16 while a stray apostrophe 25,000 lines in took
+  the live dashboard down for ~15 minutes. Extract the largest `<script type="module">`
+  to a `.mjs`, `node --check` it, and do the same to `git show HEAD:dashboard.html` as the
+  control. After a dashboard deploy, load the live page in headless Edge with
+  `--enable-logging=stderr` and grep for `Uncaught`: zero, plus the sign-in screen, is the
+  pass. User-facing apostrophes are written `’`, which needs no escape. LEARNINGS §120.
+- **Stage by path. Never `git commit -a` in this repo.** The working tree routinely carries
+  other machines' uncommitted changes (deleted receipts, a deleted DI page, radio renders);
+  `-a` committed 17 of them into a two-line migration edit, one push from deleting them on
+  the live site. Read `git show --stat` before anything reaches `master`. LEARNINGS §119.
 - **`control.html` has a local render check (§106):** `SBP_REF=yaytdosxfhcqatmhctzk python
   scripts/control_harness/render.py [slug] [sections]` screenshots it from a prod snapshot via
   a stub client + headless Edge. Headless Edge will not go narrower than ~477px; the phone shot
@@ -987,6 +1042,11 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
   inferred from an expense category.** The $600 threshold is per payee per calendar
   year across every category. Payees with no actor row read `'no vendor'`, not
   `'undecided'` — they need linking before they can be ruled on. LEARNINGS §30.
+- **A business invoicing us is not a 1099 contractor** (Keith, 2026-11-16). When a W-9
+  shows a corporation (C or S, including an LLC taxed as one) sending its own invoice,
+  the default is `exempt`. It is still recorded per payee with the reason in
+  `tax_1099_note`, and the W-9 is filed on the event (Files -> W-9 / Tax, vendor set).
+  Emmy Adelle Music LLC is the worked example. LEARNINGS §123.
 - **Never seed a payment rail as an actor.** `Venmo`, `Sq *`, `Ubr `, `In *` and the
   like are statement descriptors describing how money moved, not who received it. One
   actor per rail silently merges unrelated payees. LEARNINGS §31.
