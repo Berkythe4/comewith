@@ -15,15 +15,22 @@
   - Kierney Kearney's $25 ticket (bought as "Kierney Rose Brennan") is attached to her
     existing comp record (§116).
 - **DI #3 totals:** 65 tickets / $1,879.40 · donations $340 · sponsors $2,000 (all 4 paid) ·
-  to mission **$1,965** · raised $4,219.40 · door list 86 (no check-ins were recorded).
-  `events.total_attendance` = 86.
+  to mission **$1,965** · raised $4,219.40 · door list **96** (no check-ins were recorded).
+  `events.total_attendance` = 96.
+- **Comps reconciled to Keith's `DI3_Guest_List.pdf` (Nov 14, 34 heads).** 10 heads were missing
+  and have been added: Shane Fonda and Jessica Kenny (artist, Frick Frack BlackJack), Kristen London (comp,
+  Keith), Caiden Storm, Keila Hernandez, Thomas Ortiz and Eric Capuano (comp, Amanda Maldonado),
+  Jessie Scott, William Stoeffhaas and Caitlin Attaway (Pulse sponsor comps; Pulse is now 4/4). New
+  guests for Shane and Kristen are linked to their actors (§104). 3 Partiful RSVPs linked on
+  exact names. Jennifer Taveras and Junior Fernandez are on the PDF but PAID, so they stay
+  tickets. Non-ticket heads = 32 = the PDF's 34 minus those 2.
 - **Homepage (`site_content`):** `di.goal_raised`/`di.stat1` 4140 -> **6105**, `di.stat2` 2 -> **3**,
-  `di.stat3` 159 -> **245**, and `di.goal_label` reads "(final: all three in)". Verified via anon REST.
+  `di.stat3` 159 -> **255**, and `di.goal_label` reads "(final: all three in)". Verified via anon REST.
 
 ## Open
 - DI #3 `events.status` is still `on_sale`. The homepage `di.ticket_show` = 1 still
   shows a "Get tickets" button pointing at the DI #3 Zeffy page. Both are Keith's call.
-- "On the floor" uses the door list (86), because nobody was checked in on the night.
+- "On the floor" uses the door list (96), because nobody was checked in on the night.
 
 ---
 
