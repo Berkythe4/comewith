@@ -1,8 +1,16 @@
 # Carryover - 2026-11-16 (DI #3 finals; FFBJ invoices; Come With Consulting ledger - DESKTOP)
 
 ## Later the same session: FFBJ gigs, Juice merge, Come With Consulting
-- **Migrations: prod is at 244** (`244_consulting_ledger.sql`, on master). **245 is written
-  but NOT applied**; it's on branch `consulting-ledger`. LEARNINGS latest is **§118**.
+- **ALL LIVE (Keith's go-ahead, 2026-11-16).** `consulting-ledger` is merged to master and
+  deployed; `invoice-doc` is v18. **Prod and repo are both at 247** (applied 244, 247, then
+  245, 246). LEARNINGS latest is **§119**. Live check: CWC-2026-0001's client PDF prints
+  "Come With Consulting / Keith Berkman" with no Come With bank details. Close checks: anon
+  sweep clean (incl. `invoice_issuers`, `invoice_counters_ledger`, `invoice_attachments`), all
+  five financial views 401, post_apply 0 FAIL.
+  - **CWC-2026-0001** Hulaween $1,350: PAID in kind. **CWC-2026-0002** reimbursement
+    $802.98: DRAFT, with 4 receipts attached (hotel receipt missing). Keith sends it.
+    Rental $616.82 confirmed final by Keith.
+  - Branch `consulting-ledger` is merged; safe to delete.
 - **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
   Halloween (10/31, Refuge), series Bookings, owner Frick Frack BlackJack, Berky on the lineup.
   Income is accrued ($125; $125 + $100 OT). Invoices **CW-2026-0003 ($125)** and **CW-2026-0004

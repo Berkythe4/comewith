@@ -3163,3 +3163,13 @@ Come With. Three rules came out of building it:
   field-by-field fallback would print Come With's account number on a Consulting
   invoice.
 `v_cash_position` and `v_contractor_1099` stay Come With-only on purpose.
+
+## Section 119 — `git commit -a` in a dirty tree commits everyone's changes (2026-11-16)
+
+This working tree carries other machines' and other sessions' uncommitted changes:
+radio preview renders, 5 deleted `Receipts/*.pdf`, and a deleted
+`events/dance-infusion-2/index-v2.html`. One `git commit -qam` meant for a two-line
+migration edit committed all 17 files. Merged and pushed, `master` would have
+deployed those deletions to the live site. It was caught by reading `git show --stat`
+before the push, and the tree was put back exactly as it was. **Stage by path,
+always** (`git add <file>`), and read the stat of anything about to reach `master`.
