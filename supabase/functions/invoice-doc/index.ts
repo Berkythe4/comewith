@@ -310,6 +310,26 @@ Deno.serve(async (req) => {
 
     const { bytes, path } = await storePdf(row.id as string, doc, (row.event_id as string) || null);
 
+    // 247: receipts attached to this invoice ride along with the PDF. A file that
+    // cannot be read FAILS the send rather than going out without it - an
+    // invoice that says "receipts attached" and arrives without them is worse
+    // than one that has not gone yet.
+    const { data: atts } = await a.from("invoice_attachments").select("path, filename")
+      .eq("invoice_id", row.id).order("created_at", { ascending: true });
+    const extra: { filename: string; content: string }[] = [];
+    let extraBytes = 0;
+    for (const att of atts || []) {
+      const { data: blob, error: dlErr } = await a.storage.from("receipts").download(att.path);
+      if (dlErr || !blob) return err(500, `Could not read the attachment "${att.filename}" - nothing was sent.`);
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      extraBytes += buf.length;
+      extra.push({ filename: att.filename, content: b64(buf) });
+    }
+    // Resend's limit is 40 MB per email after base64 (x1.37). Stay well inside it.
+    if (extraBytes + bytes.length > 25 * 1024 * 1024) {
+      return err(413, "The attachments are too large to email together (over 25 MB). Remove some and send again.");
+    }
+
     const resend = new Resend(resendKey);
     const subject = body.subject
       ? String(body.subject)
@@ -322,7 +342,7 @@ Deno.serve(async (req) => {
       reply_to: doc.settings?.biz_email || undefined,
       subject,
       html: emailHtml(doc, t, body.note),
-      attachments: [{ filename: fileName(doc), content: b64(bytes) }],
+      attachments: [{ filename: fileName(doc), content: b64(bytes) }, ...extra],
     });
     if (sent.error) return err(502, "Resend refused it: " + sent.error.message);
 
@@ -348,6 +368,7 @@ Deno.serve(async (req) => {
       to,
       cc: body.cc || null,
       subject,
+      attachments: (atts || []).map((x: { filename: string }) => x.filename),
       resend: !!sent.data?.id,
       // A re-send is a different act from the first send and reads differently
       // on the timeline.

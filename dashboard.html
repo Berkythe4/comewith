@@ -27346,17 +27346,18 @@ async function invCreateFrom(opts) {
 
 // ---- the invoice itself -----------------------------------------------------
 async function openInvoice(id) {
-  const [inv, lines, pays, evs] = await Promise.all([
+  const [inv, lines, pays, evs, atts] = await Promise.all([
     sb.from('v_invoices_list').select('*').eq('id', id).maybeSingle(),
     sb.from('v_invoice_line_calc').select('*').eq('invoice_id', id).order('position'),
     sb.from('invoice_payments').select('*').eq('invoice_id', id).order('paid_on'),
     sb.from('invoice_events').select('*, who:profiles!by_profile(full_name,email)')
       .eq('invoice_id', id).order('at', { ascending: false }),
+    sb.from('invoice_attachments').select('*').eq('invoice_id', id).order('created_at'),
   ]);
   if (inv.error || !inv.data) { toast('Could not open that invoice', 'err'); return; }
   const { data: full } = await sb.from('invoices').select('*').eq('id', id).single();
   invDash.open = { row: inv.data, full, lines: lines.data || [], pays: pays.data || [],
-                   events: (evs && evs.data) || [] };
+                   events: (evs && evs.data) || [], atts: (atts && atts.data) || [] };
   renderInvoiceModal();
 }
 
@@ -27466,6 +27467,20 @@ function renderInvoiceModal() {
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
       '<th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + payRows + '</tbody></table></div>' +
+
+    // 247: receipts sent WITH the invoice email. Row present = attached.
+    '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Attachments <span class="muted" style="font-weight:400;">emailed with the invoice</span></h3>' +
+      '<span style="display:flex;gap:6px;">' +
+      (f.event_id ? '<button class="hub-mini" data-invattev title="Every receipt uploaded on this event\'s expenses">📎 Receipts from the event</button>' : '') +
+      '<button class="hub-mini" data-invattup>⬆ Upload a file</button></span></div>' +
+    ((o.atts || []).length
+      ? '<ul style="list-style:none;padding:0;margin:0 0 6px;">' + o.atts.map(x =>
+          '<li style="display:flex;gap:8px;align-items:center;padding:3px 0;font-size:.78rem;">📄 ' +
+          '<a href="#" data-invattview="' + escapeHtml(x.id) + '">' + escapeHtml(x.filename) + '</a>' +
+          (x.expense_id ? ' <span class="exp-tag">expense receipt</span>' : '') +
+          '<button class="hub-mini exp-del" data-invattdel="' + escapeHtml(x.id) + '" style="margin-left:auto;" title="Stop sending this file">✕</button></li>').join('') + '</ul>'
+      : '<div class="li-sub" style="margin-bottom:6px;">Nothing attached - the email carries the invoice PDF only.' +
+          (f.event_id ? ' Upload receipts on the event\'s expenses (📎 on the Expenses tab), then pull them in here.' : '') + '</div>') +
 
     '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Send &amp; file</h3></div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
@@ -27714,6 +27729,10 @@ $('kpiModalOverlay').addEventListener('click', async (e) => {
     await invSyncPaid(); await invReload(); return;
   }
   if (e.target.closest('[data-invpayadd]')) { invRecordPayment(); return; }
+  if (e.target.closest('[data-invattev]')) { invAttachEventReceipts(); return; }
+  if (e.target.closest('[data-invattup]')) { invAttachUpload(); return; }
+  const iad = e.target.closest('[data-invattdel]'); if (iad) { invAttachRemove(iad.dataset.invattdel); return; }
+  const iav = e.target.closest('[data-invattview]'); if (iav) { e.preventDefault(); invAttachView(iav.dataset.invattview); return; }
   if (e.target.closest('[data-invnote]')) {
     // A chase by phone, a promise to pay, a dispute — the things that happen to
     // an invoice off-system and are otherwise lost.
@@ -27855,6 +27874,76 @@ function invRecordPayment() {
     }, 'Record it');
 }
 
+// ---- attachments (247) --------------------------------------------------------
+// Files in the private receipts bucket that go out with the invoice email. An
+// expense's own receipt is attached by PATH, so one upload serves both the
+// expense and the invoice; nothing is copied.
+function invAttName(x) {
+  const ext = ((x.receipt_path || '').match(/\.[a-z0-9]+$/i) || [''])[0];
+  return ('Receipt - ' + (x.vendor || x.category || 'expense') + ' - ' + (x.date || '') + ' - $' + Number(x.amount || 0).toFixed(2))
+    .replace(/[\\/:*?"<>|]/g, '-') + ext;
+}
+async function invAttachEventReceipts() {
+  const o = invDash.open, f = o.full;
+  if (!f.event_id) { toast('This invoice has no event - upload the files instead.', 'err'); return; }
+  const { data, error } = await sb.from('expenses').select('id, date, amount, vendor, category, receipt_path')
+    .eq('event_id', f.event_id).is('deleted_at', null).not('receipt_path', 'is', null).order('date');
+  if (error) { toast(error.message, 'err'); return; }
+  const have = new Set((o.atts || []).map(a => a.path));
+  const todo = (data || []).filter(x => !have.has(x.receipt_path));
+  if (!todo.length) {
+    toast((data || []).length ? 'Every receipt on this event is already attached.'
+      : 'No receipts uploaded on this event\'s expenses yet - add them with 📎 on the Expenses tab.', 'err');
+    return;
+  }
+  const NL = String.fromCharCode(10);
+  if (!confirm('Attach ' + todo.length + ' receipt' + (todo.length > 1 ? 's' : '') + ' to ' + o.row.invoice_no + '?' + NL + NL +
+      todo.map(x => '- ' + invAttName(x)).join(NL) + NL + NL + 'They go out with the invoice email. Remove any with the x.')) return;
+  const { data: { session } } = await sb.auth.getSession();
+  const { error: ie } = await sb.from('invoice_attachments').insert(todo.map(x => ({
+    invoice_id: f.id, path: x.receipt_path, filename: invAttName(x), expense_id: x.id,
+    created_by: (session && session.user && session.user.id) || null })));
+  if (ie) { toast('Could not attach: ' + ie.message, 'err'); return; }
+  toast('Attached ' + todo.length, 'ok');
+  await openInvoice(f.id);
+}
+function invAttachUpload() {
+  const f = invDash.open.full;
+  const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true;
+  inp.accept = 'image/jpeg,image/png,image/webp,application/pdf';
+  inp.onchange = async () => {
+    const files = [...(inp.files || [])]; if (!files.length) return;
+    const { data: { session } } = await sb.auth.getSession();
+    toast('Uploading…', 'ok');
+    for (const file of files) {
+      const path = 'invoice/' + f.id + '/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error: ue } = await sb.storage.from('receipts').upload(path, file, { upsert: false });
+      if (ue) { toast('Upload failed (' + file.name + '): ' + ue.message, 'err'); return; }
+      const { error } = await sb.from('invoice_attachments').insert({ invoice_id: f.id, path, filename: file.name,
+        created_by: (session && session.user && session.user.id) || null });
+      if (error) { toast('Saved the file, but could not attach it: ' + error.message, 'err'); return; }
+    }
+    toast('Attached ' + files.length, 'ok');
+    await openInvoice(f.id);
+  };
+  inp.click();
+}
+async function invAttachRemove(attId) {
+  const x = (invDash.open.atts || []).find(a => a.id === attId); if (!x) return;
+  if (!confirm('Stop sending "' + x.filename + '" with this invoice?' + (x.expense_id ? ' (The expense keeps its receipt.)' : ''))) return;
+  const { error } = await sb.from('invoice_attachments').delete().eq('id', attId);
+  if (error) { toast(error.message, 'err'); return; }
+  // A file uploaded straight onto the invoice belongs to nothing else, so it goes too.
+  if (!x.expense_id && x.path.indexOf('invoice/') === 0) await sb.storage.from('receipts').remove([x.path]);
+  await openInvoice(invDash.open.full.id);
+}
+async function invAttachView(attId) {
+  const x = (invDash.open.atts || []).find(a => a.id === attId); if (!x) return;
+  const { data, error } = await sb.storage.from('receipts').createSignedUrl(x.path, 3600);
+  if (error) { toast(error.message, 'err'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+
 function invSend() {
   const r = invDash.open.row, f = invDash.open.full;
   if (!Number(r.n_lines)) { toast('Add at least one line before sending.', 'err'); return; }
@@ -27884,6 +27973,9 @@ function invSend() {
       row2('Issued', escapeHtml(fmtDate(f.issue_date))) +
       row2('Due', dueTxt) +
       row2('Lines', escapeHtml(String(r.n_lines))) +
+      row2('Attached', (invDash.open.atts || []).length
+        ? 'invoice PDF + ' + invDash.open.atts.map(x => escapeHtml(x.filename)).join(', ')
+        : 'invoice PDF only') +
       row2('Total', money(r.total)) +
       (Number(r.paid) ? row2('Already paid', '<span class="pos">' + money(-r.paid) + '</span>') : '') +
       row2('Amount due', '<b style="font-size:1.05rem;">' + money(r.balance) + '</b>') +

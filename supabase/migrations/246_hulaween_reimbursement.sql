@@ -17,6 +17,10 @@
 --       nets to zero: the cost is real, and so is JSD Drip owing it back
 --     * DRAFT invoice CWC-2026-0002 to JSD Drip, one line per item, $802.98,
 --       Net 14, Venmo/Zelle (Consulting's extra methods) only
+--     * receipts (uploaded 2026-11-16 to receipts/expense/hulaween-2026/: the
+--       rental agreement + the 3 TollPass emails rendered to PDF) set as each
+--       expense's receipt_path AND attached to the invoice email (247). The
+--       hotel has no receipt yet.
 --   Depends on 245 (the Hulaween event). Apply after the dashboard is merged.
 -- =============================================================================
 
@@ -26,7 +30,7 @@ do $$
 declare
   jsd   uuid := 'a8fe9c38-824e-4aee-8db8-c6124bd933b6';
   keith uuid := 'bd71f88d-fd0a-4e3a-a712-7ac958318c8b';
-  ev uuid; inv uuid; n int; r record; inc uuid; pos int := 0; total numeric := 0;
+  ev uuid; inv uuid; n int; r record; inc uuid; xid uuid; pos int := 0; total numeric := 0;
 begin
   select id into ev from public.events where slug = 'hulaween-2026' and deleted_at is null;
   if ev is null then raise exception 'apply 245 first (no Hulaween event)'; end if;
@@ -46,21 +50,27 @@ begin
 
   for r in select * from (values
       (date '2026-10-16', 616.82, 'Enterprise', 'Minivan rental 10/16-10/28 (RA 5F00G8)', 'enterprise:RA-5F00G8',
-       'Enterprise minivan, 10/16-10/28 (12 days)', 'RA 5F00G8 - 2024 Chrysler Pacifica'),
+       'Enterprise minivan, 10/16-10/28 (12 days)', 'RA 5F00G8 - 2024 Chrysler Pacifica', 'expense/hulaween-2026/Enterprise_Rental_Agreement_5F00G8.pdf'),
       (date '2026-10-28', 77.83, 'Enterprise TollPass', 'Tolls (incl. $19.80 TollPass service fees)', 'enterprise-toll:EHI209916712',
-       'Tolls', 'TollPass receipt EHI209916712 ($67.93 tolls + $19.80 service fees)'),
+       'Tolls', 'TollPass receipt EHI209916712 ($67.93 tolls + $19.80 service fees)', 'expense/hulaween-2026/Enterprise_TollPass_EHI209916712.pdf'),
       (date '2026-10-28', 2.33, 'Enterprise TollPass', 'Tolls', 'enterprise-toll:EHI210237131',
-       'Tolls', 'TollPass receipt EHI210237131'),
+       'Tolls', 'TollPass receipt EHI210237131', 'expense/hulaween-2026/Enterprise_TollPass_EHI210237131.pdf'),
       (date '2026-10-28', 6.00, 'Enterprise TollPass', 'Tolls', 'enterprise-toll:EHI210613686',
-       'Tolls', 'TollPass receipt EHI210613686'),
+       'Tolls', 'TollPass receipt EHI210613686', 'expense/hulaween-2026/Enterprise_TollPass_EHI210613686.pdf'),
       (date '2026-10-20', 100.00, 'Hotel (Jacksonville)', 'Hotel, Jacksonville, 1 night', 'hotel:jacksonville:2026-10-20',
-       'Hotel, Jacksonville', 'One night, Oct 20, 2026')
-    ) v(d, amt, vendor, descr, ref, line, detail)
+       'Hotel, Jacksonville', 'One night, Oct 20, 2026', null)
+    ) v(d, amt, vendor, descr, ref, line, detail, rcpt)
   loop
     insert into public.expenses (date, event_id, amount, expected_amount, category, vendor, description, external_ref,
-                                 ledger, cash_source, funded_by, status, settled_at, created_by)
+                                 ledger, cash_source, funded_by, status, settled_at, receipt_path, created_by)
     values (r.d, ev, r.amt, r.amt, 'Travel', r.vendor, r.descr || ' - Hulaween, billed back to JSD Drip', r.ref,
-            'consulting', 'personal', 'business', 'paid', now(), keith);
+            'consulting', 'personal', 'business', 'paid', now(), r.rcpt, keith)
+    returning id into xid;
+    -- 247: the receipt goes out with the invoice email (remove it there with x if not wanted).
+    if r.rcpt is not null then
+      insert into public.invoice_attachments (invoice_id, path, filename, expense_id, created_by)
+      values (inv, r.rcpt, 'Receipt - ' || replace(r.line, '/', '-') || ' - $' || to_char(r.amt, 'FM999990.00') || '.pdf', xid, keith);
+    end if;
     insert into public.income (date, event_id, amount, expected_amount, category, description, status, ledger, actor_id, external_ref, created_by)
     values (r.d, ev, r.amt, r.amt, 'Reimbursement', 'Reimbursable: ' || r.descr, 'accrued', 'consulting', jsd, r.ref, keith)
     returning id into inc;
