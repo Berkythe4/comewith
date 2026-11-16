@@ -87,6 +87,9 @@ MUST_BE_EMPTY = [
     ("invoice_payments", "what has been paid and how"),
     ("invoice_settings", "the PayPal handle and the Bluevine account number"),
     ("invoice_counters", "how many invoices have been raised"),
+    # 244: Come With Consulting's issuer (its bank details) and its numbering.
+    ("invoice_issuers", "Come With Consulting's bank details"),
+    ("invoice_counters_ledger", "how many Consulting invoices have been raised"),
     ("v_invoices_list", "the whole receivables book"),
     ("v_invoice_totals", "invoice totals and balances"),
     ("v_invoice_line_calc", "invoice line detail"),
