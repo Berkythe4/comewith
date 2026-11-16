@@ -27457,7 +27457,15 @@ function renderInvoiceModal() {
         '<label style="font-size:.72rem;cursor:pointer;"><input type="checkbox" data-invfield="pay_paypal"' + (f.pay_paypal ? ' checked' : '') +
           ' style="width:auto;margin:0 4px 0 0;">PayPal</label>' +
         '<label style="font-size:.72rem;cursor:pointer;"><input type="checkbox" data-invfield="pay_wire"' + (f.pay_wire ? ' checked' : '') +
-          ' style="width:auto;margin:0 4px 0 0;">Wire</label></div></div>' +
+          ' style="width:auto;margin:0 4px 0 0;">Wire</label>' +
+        // Venmo / Zelle / etc. (the issuer's extra_methods) print when pay_extra is on.
+        // They had no checkbox at all, so a Venmo-only invoice looked unpayable here.
+        (function () {
+          const xm = ((invSettingsFor(f.ledger) || {}).extra_methods || []).filter(m => m && m.label && m.detail);
+          return xm.length ? '<label style="font-size:.72rem;cursor:pointer;"><input type="checkbox" data-invfield="pay_extra"' +
+            (f.pay_extra !== false ? ' checked' : '') + ' style="width:auto;margin:0 4px 0 0;">' +
+            escapeHtml(xm.map(m => m.label).join(' / ')) + '</label>' : '';
+        })() + '</div></div>' +
     '</div>' +
     '<div class="modal-form-row"><label class="modal-label">Notes</label><textarea class="modal-input" data-invfield="notes" rows="2">' +
       escapeHtml(f.notes || '') + '</textarea></div>' +
@@ -27955,7 +27963,9 @@ function invSend() {
   const s = invSettingsFor(f.ledger) || {};
   const hasPaypal = f.pay_paypal && s.paypal_enabled && s.paypal_handle;
   const hasWire = f.pay_wire && s.wire_enabled && (s.wire_account || s.wire_routing);
-  const methods = [hasPaypal ? 'PayPal' : null, hasWire ? 'Bank transfer' : null].filter(Boolean);
+  const extraNames = f.pay_extra === false ? [] :
+    (s.extra_methods || []).filter(m => m && m.label && m.detail).map(m => String(m.label));
+  const methods = [hasPaypal ? 'PayPal' : null, hasWire ? 'Bank transfer' : null, ...extraNames].filter(Boolean);
   const row2 = (k, v, warn) => '<tr><td style="padding:3px 14px 3px 0;color:var(--mid);white-space:nowrap;">' +
     escapeHtml(k) + '</td><td style="padding:3px 0;' + (warn ? 'color:var(--red);font-weight:700;' : '') + '">' + v + '</td></tr>';
   const noEmail = !r.bill_to_email;
@@ -27983,7 +27993,8 @@ function invSend() {
     '</table></div>' +
     (methods.length ? '' :
       '<div class="kpi-hint" style="border-color:var(--red);margin-bottom:10px;">⚠ <b>No payment method will print on this invoice.</b> ' +
-      'The client will get a bill with no way to pay it. Close this, open <b>⚙ Payment details</b> and add PayPal or the Bluevine wire details first.</div>') +
+      'The client will get a bill with no way to pay it. Close this, open <b>⚙ ' + (f.ledger === 'consulting' ? 'Consulting details' : 'Payment details') +
+      '</b> and add a method (PayPal, bank, Venmo, Zelle…), and tick it on the invoice.</div>') +
     (f.sent_at ? '<div class="kpi-hint" style="margin-bottom:10px;">This invoice already went out on ' +
       escapeHtml(fmtDate(f.sent_at)) + '. Re-sending will not change its number, its dates, or reset the clock on it.</div>' : '');
 
