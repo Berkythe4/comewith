@@ -1,3 +1,32 @@
+# Carryover - 2026-11-16 (DI #3 final exports imported; homepage DI metrics final - DESKTOP, Quick Close)
+
+**Data only: no code, no migration, no deploy.** Prod is still at migration 243. LEARNINGS latest is **§116**.
+
+## What changed on prod
+- **The final Zeffy, RA and Partiful exports (11-16) are imported into DI #3.** The import
+  used the Control Center engine (`planImport`/`planRsvps`) in Node against a prod snapshot,
+  then ran as one SQL transaction (dry-run first). Re-planning afterwards finds nothing new.
+  - Zeffy: +19 ticket orders (22 heads; 6 are anonymous tap-to-pay walk-ups on one
+    `(unknown)` guest, see §116) and Kendall Leary's $40 extra donation.
+  - RA: +3 tickets ($34.80, mapped to the $40 tier = $25 to mission). Partiful: +11 RSVPs, 2 changed.
+  - **Arnaldo Martinez's $250** (Zeffy "2x Donations", 11/11) had gone in as a donation while
+    the merged Savery/Martinez sponsorship also pledged it. It was reclassified per §102:
+    sponsorship marked **paid**, payment key added to `payment_refs`, donation row deleted.
+  - Kierney Kearney's $25 ticket (bought as "Kierney Rose Brennan") is attached to her
+    existing comp record (§116).
+- **DI #3 totals:** 65 tickets / $1,879.40 · donations $340 · sponsors $2,000 (all 4 paid) ·
+  to mission **$1,965** · raised $4,219.40 · door list 86 (no check-ins were recorded).
+  `events.total_attendance` = 86.
+- **Homepage (`site_content`):** `di.goal_raised`/`di.stat1` 4140 -> **6105**, `di.stat2` 2 -> **3**,
+  `di.stat3` 159 -> **245**, and `di.goal_label` reads "(final: all three in)". Verified via anon REST.
+
+## Open
+- DI #3 `events.status` is still `on_sale`. The homepage `di.ticket_show` = 1 still
+  shows a "Get tickets" button pointing at the DI #3 Zeffy page. Both are Keith's call.
+- "On the floor" uses the door list (86), because nobody was checked in on the night.
+
+---
+
 # Carryover - 2026-11-11 (DI #3 final comps, drinks, Finance form - DESKTOP, Standard Close)
 
 **Closed 2026-11-11 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). No

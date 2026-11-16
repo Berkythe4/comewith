@@ -3118,3 +3118,18 @@ toward her 1099 total (§30). The Add-an-expense form offers the event's lineup 
 buttons, then all contacts. It writes `vendor_actor_id` and says out loud when a name
 is new (person or business). Also: a dense money page is read as noise. Lead with
 owed and paid, then the list, and fold the rest under "More detail".
+
+## Section 116 — A record an importer created is matched by its NAME; don't tidy it (DI #3 final import, 2026-11-16)
+
+Zeffy's tap-to-pay door sales carry no name and no email. `parseZeffy` names each
+buyer `(unknown)`, and `planImport` matches people on email, then name, so all six
+walk-ups land on ONE guest called `(unknown)` (one door row, 6 heads, $150). I
+renamed that guest "Walk-up (Zeffy tap-to-pay)" to make it readable. A re-plan
+against prod then wanted to create a fresh `(unknown)` and add the 6 heads again.
+The importer re-resolves people even for tickets it already holds, which is how
+it rebuilds the door list. The name went back, with a note on the record saying
+why. **A field an importer matches on is a key, even when it looks like a label.**
+Same problem, no fix: Kierney Kearney (a comp) bought a ticket as "Kierney Rose
+Brennan" with another email. The ticket is attached to her record so she counts
+once. A future UI re-import of the 11-16 Zeffy file will offer her as 1 new person
+and door row. Leave that one out.
