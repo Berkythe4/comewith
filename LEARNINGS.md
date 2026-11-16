@@ -3195,3 +3195,21 @@ Sending an invoice from a script: `requireAdmin` compares the bearer against
 `SUPABASE_SERVICE_ROLE_KEY`, which on this project holds the `sb_secret_…` key. The
 legacy `service_role` JWT from `/api-keys?reveal=true` gets a 401. Use the key with
 `type: secret`, read in memory and never printed.
+
+## Section 122 — Look up an event by NAME before creating one; and Consulting money is Keith's, not capital (248, 2026-11-16)
+
+245 created "Hulaween" after checking only for its own new slug. Keith already had
+"Hulaween" from July, holding 20 card-imported charges. The duplicate double-booked
+two tolls (the card import AND 246's hand entry) and split the trip's costs across two
+events. 248 merged them: the event carrying the invoices survived, and the other was
+soft-deleted with a pointer. **Before inserting an event, search `name ilike` (and the
+date window). Before entering a cost by hand, search the card imports for it.**
+Two accounting rules came out of it:
+- `v_capital` has no ledger filter, so a Consulting cost marked `funded_by='owner'`
+  read as Come With owing Keith. Consulting is Keith's sole proprietorship: its
+  personal-card costs are `funded_by='business'`.
+- Consulting has no business bank account. So `cash_source='bank'` on a Consulting
+  cost means Come With's bank paid it, and `v_cash_position` counts it. When that
+  happens, Consulting owes Come With. Keith settles it by offset: mark personal-card
+  Come With costs of the same total as reimbursed, with the reason written on each
+  row. The first was $71.93 for the Hulaween meals.

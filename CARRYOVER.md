@@ -2,7 +2,7 @@
 
 ## Later the same session: FFBJ gigs, Juice merge, Come With Consulting
 - **ALL LIVE (Keith's go-ahead, 2026-11-16).** `consulting-ledger` is merged to master and
-  deployed; `invoice-doc` is v18. **Prod and repo are both at 247** (applied 244, 247, then
+  deployed; `invoice-doc` is v18. **Prod and repo are both at 248** (applied 244, 247, then
   245, 246). LEARNINGS latest is **§119**. Live check: CWC-2026-0001's client PDF prints
   "Come With Consulting / Keith Berkman" with no Come With bank details. Close checks: anon
   sweep clean (incl. `invoice_issuers`, `invoice_counters_ledger`, `invoice_attachments`), all
@@ -16,7 +16,13 @@
   - **CWC-2026-0001 ($1,350 paid in kind) SENT as an FYI receipt** (same to/cc, "nothing is
     due" note). It stays `paid`; its income stays `received`. Keith is test-sending
     CWC-2026-0002 with its receipts himself.
-  - **DUPLICATE HULAWEEN (my error, open):** an original "Hulaween" event already existed
+  - **RESOLVED by 248 (applied):** ONE Hulaween (`hulaween-2026`, 10/12-21, Consulting,
+    21 expenses, 4 lineup, the task); the July `hulaween` is soft-deleted with a pointer. E-ZPass $25 +
+    Morphis Art $21.20 taken off Hulaween (Come With overhead). Consulting personal-card costs set to
+    funded_by=business. The $71.93 Consulting owed Come With is settled by offset (Beatport 2025-07-26
+    $5.96 + Sq Tce Presents 2026-06-21 $65.97 marked reimbursed). `v_cash_position` counts Consulting
+    costs paid from 'bank'. Cash reserve $3,276.49; LEARNINGS **§122**. The history below is kept.
+  - ~~DUPLICATE HULAWEEN (my error, open):~~ an original "Hulaween" event already existed
     (`ffc2391c…`, slug `hulaween`, 10/22-25, Growth & Networking, created July: 20 card-imported
     charges, 4 lineup, 1 task). 245 created a second (`b12ea8b3…`, `hulaween-2026`, 10/12-21,
     Consulting), which holds the income, CWC-0001/0002 and the rental/hotel/$6 toll. **Not merged
