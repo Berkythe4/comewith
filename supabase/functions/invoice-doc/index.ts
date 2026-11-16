@@ -91,7 +91,7 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
   const { data: inv } = await q.maybeSingle();
   if (!inv) return null;
 
-  const [{ data: lines }, { data: payments }, { data: settings }, { data: actor }, { data: event }] =
+  const [{ data: lines }, { data: payments }, { data: baseSettings }, { data: actor }, { data: event }, { data: issuer }] =
     await Promise.all([
       a.from("invoice_lines").select("*").eq("invoice_id", inv.id)
         .order("position", { ascending: true }).order("created_at", { ascending: true }),
@@ -104,7 +104,15 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
       inv.event_id
         ? a.from("events").select("name, event_date").eq("id", inv.event_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      // 244: a ledger with its own issuer (Come With Consulting, a separate sole
+      // proprietorship) is FROM that business. Spread, never merge field by field:
+      // its nulls must overwrite, or a blank Consulting bank field would print
+      // Come With's account number on a Consulting invoice.
+      inv.ledger && inv.ledger !== "come_with"
+        ? a.from("invoice_issuers").select("*").eq("ledger", inv.ledger).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+  const settings = issuer ? { ...(baseSettings || {}), ...issuer } : baseSettings;
 
   const doc: InvoiceDoc = {
     invoice_no: inv.invoice_no,
