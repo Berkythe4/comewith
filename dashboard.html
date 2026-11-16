@@ -27583,7 +27583,7 @@ async function openInvoiceSettings(ledger) {
     '" type="' + (type || 'text') + '" value="' + escapeHtml(val == null ? '' : val) + '"' +
     (ph ? ' placeholder="' + escapeHtml(ph) + '"' : '') + '></div>';
   openKpi(own ? ledgerLabel(ledger) + ' details' : 'Payment details',
-    own ? 'What prints on every ' + ledgerLabel(ledger) + ' invoice instead of Come With's. Master-admin only.'
+    own ? 'What prints on every ' + ledgerLabel(ledger) + ' invoice instead of Come With’s. Master-admin only.'
         : 'What prints on every invoice. Stored master-admin only — never in site_content.',
     '<div class="kpi-hint" style="margin-bottom:12px;">These details are printed on the invoice PDF and shown on the ' +
       'client link, which is how a client pays you. They are readable only by a master admin and are never exposed to the public site.</div>' +
@@ -27630,7 +27630,7 @@ async function openInvoiceSettings(ledger) {
     '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Defaults</h3></div>' +
     '<div class="modal-grid2">' + (own ? '' : f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number')) +
       f('number_prefix', 'Invoice number prefix', s.number_prefix, own ? 'CWC' : 'CW') + '</div>' +
-    (own ? '<div class="section-sub">Its own numbering: ' + escapeHtml(s.number_prefix || 'CWC') + '-YYYY-0001, separate from Come With's.</div>' : '') +
+    (own ? '<div class="section-sub">Its own numbering: ' + escapeHtml(s.number_prefix || 'CWC') + '-YYYY-0001, separate from Come With’s.</div>' : '') +
     '<div class="modal-form-row"><label class="modal-label">Default note on new invoices</label><textarea class="modal-input" name="default_notes" rows="2">' + escapeHtml(s.default_notes || '') + '</textarea></div>' +
     '<div class="modal-form-row"><label class="modal-label">Footer line</label><input class="modal-input" name="footer_note" value="' + escapeHtml(s.footer_note || '') + '"></div>',
     async () => {
