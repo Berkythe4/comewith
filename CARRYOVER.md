@@ -39,6 +39,9 @@
      (3 TollPass receipts: $77.83 incl. $19.80 fees, $2.33, $6.00), hotel Jacksonville
      10/20 $100. Not entered yet. Book as consulting expenses (paid personally) plus an
      invoice to JSD Drip.
+- DI #3: **+$500 Signal tip guarantee**, paid by Keith personally via Venmo (expense, paid,
+  personal / owner-funded, not yet reimbursed). It realizes the $800 "Signal - tip guarantee" budget
+  line. DI #3 costs are now $7,979.12, of which $679.12 was paid by Keith personally.
 - DI #3: the later Zeffy export `(1)` is the per-ticket check-in list. 44 of 62 Zeffy
   tickets were scanned, walk-ups included in the unscanned, so it is not a headcount.
 
