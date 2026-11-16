@@ -11,8 +11,8 @@
 --         TollPass EHI210237131                          $2.33
 --         TollPass EHI210613686                          $6.00
 --         Hotel, Jacksonville, 10/20                   $100.00
---       (*) the rental agreement's ESTIMATED total; no final receipt yet. If
---           the final differs, edit the expense AND the matching invoice line.
+--       (*) Keith 2026-11-16: the final Enterprise charge matched the rental
+--           agreement total ($616.82); tolls were billed separately (below).
 --     * the same 5 as accrued 'Reimbursement' income (consulting), so the P&L
 --       nets to zero: the cost is real, and so is JSD Drip owing it back
 --     * DRAFT invoice CWC-2026-0002 to JSD Drip, one line per item, $802.98,
