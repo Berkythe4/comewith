@@ -90,6 +90,8 @@ MUST_BE_EMPTY = [
     # 244: Come With Consulting's issuer (its bank details) and its numbering.
     ("invoice_issuers", "Come With Consulting's bank details"),
     ("invoice_counters_ledger", "how many Consulting invoices have been raised"),
+    # 247: which receipt files go out with which invoice.
+    ("invoice_attachments", "receipt files attached to invoices"),
     ("v_invoices_list", "the whole receivables book"),
     ("v_invoice_totals", "invoice totals and balances"),
     ("v_invoice_line_calc", "invoice line detail"),
