@@ -13,6 +13,9 @@
   - Branch `consulting-ledger` is merged; safe to delete.
   - **CW-2026-0003 and CW-2026-0004 SENT** to jessplendid.inc@gmail.com, cc berky@comewith.org
     (Resend: delivered); their income is now `invoiced`.
+  - **CWC-2026-0001 ($1,350 paid in kind) SENT as an FYI receipt** (same to/cc, "nothing is
+    due" note). It stays `paid`; its income stays `received`. Keith is test-sending
+    CWC-2026-0002 with its receipts himself.
   - **The dashboard was DOWN ~15 min after the merge** (a JS syntax error that the esprima
     check missed). Fixed and verified with headless Edge (§120). LEARNINGS latest is **§121**.
 - **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
