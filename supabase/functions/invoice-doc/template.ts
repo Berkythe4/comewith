@@ -183,24 +183,49 @@ export function discountNote(l: Line): string | null {
 // ===========================================================================
 // PDF
 // ===========================================================================
-const M = 48;                    // page margin
-const COL_QTY = 330, COL_RATE = 400, COL_AMT = 480;
-const COL_W = 84;                // width of each right-aligned money column
+const BASE_M = 48;               // page margin, in real points
+const BASE_COL_W = 84;           // width of each right-aligned money column
+// Column positions are derived from the page width inside layoutInvoicePdf.
 
+/**
+ * Invoices fit ONE page when they can. Laid out at full size first; if that runs
+ * onto a second page, the same layout is tried at smaller scales down to
+ * FIT_MIN_SCALE (80%: 9.5pt body text prints at 7.6pt). The first scale that
+ * fits one page wins. An invoice that will not fit even at the floor keeps full
+ * size and paginates as before - a long invoice stays readable rather than tiny.
+ */
+export const FIT_SCALES = [1, 0.95, 0.9, 0.85, 0.8];
+export const FIT_MIN_SCALE = FIT_SCALES[FIT_SCALES.length - 1];
 export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
+  for (const sc of FIT_SCALES) {
+    const pdf = layoutInvoicePdf(doc, sc);
+    if (pdf.pages.length === 1) return pdf.build();
+  }
+  return layoutInvoicePdf(doc, 1).build();
+}
+
+/** The invoice laid out at one scale. Everything below measures against W/H and
+ *  the margin, so at scale < 1 it fills the real page with the same real margins. */
+export function layoutInvoicePdf(doc: InvoiceDoc, scale = 1): Pdf {
+  const W = PAGE.W / scale, H = PAGE.H / scale;
+  const M = BASE_M / scale;                      // same REAL margin at every scale
+  const COL_W = BASE_COL_W;
+  const COL_AMT = W - M - COL_W;                 // 480 at full size
+  const COL_RATE = COL_AMT - 80;                 // 400
+  const COL_QTY = COL_RATE - 70;                 // 330
   const t = computeTotals(doc);
   const s = doc.settings || {};
   const cur = doc.currency || "USD";
   const pdf = new Pdf(`Invoice ${doc.invoice_no}`, s.biz_name || "Come With");
 
-  let page = pdf.addPage();
+  let page = pdf.addPage(PAGE.W, PAGE.H, scale);
   let y = 0;
 
   // withHead is only true when the LINE TABLE is what continues. Drawing the
   // column headers on a page that carries the totals or the payment block
   // produced a "DESCRIPTION QTY RATE AMOUNT" header with nothing underneath it.
   const newPage = (withHead: boolean) => {
-    page = pdf.addPage();
+    page = pdf.addPage(PAGE.W, PAGE.H, scale);
     y = M;
     // Continuation header, so a page 2 that arrives on its own is identifiable.
     page.text(M, y, `${s.biz_name || "Come With"} — Invoice ${doc.invoice_no} (continued)`,
@@ -209,21 +234,21 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
     if (withHead) tableHead();
   };
   const room = (need: number, withHead = false) => {
-    if (y + need > PAGE.H - 52) { newPage(withHead); return true; }
+    if (y + need > H - 52) { newPage(withHead); return true; }
     return false;
   };
 
   // ---- masthead ----
-  page.rect(0, 0, PAGE.W, 104, { fill: INK });
+  page.rect(0, 0, W, 104, { fill: INK });
   page.text(M, 40, (s.biz_name || "COME WITH").toUpperCase(),
     { size: 24, bold: true, color: CREAM, spacing: 2.4 });
   const sub = [s.biz_website, s.biz_email].filter(Boolean).join("  ·  ");
   if (sub) page.text(M, 62, sub, { size: 8, color: "#B9AE9E", spacing: 0.8 });
-  page.text(PAGE.W - M - 200, 38, "INVOICE",
+  page.text(W - M - 200, 38, "INVOICE",
     { size: 22, bold: true, color: CREAM, align: "right", width: 200, spacing: 3 });
-  page.text(PAGE.W - M - 200, 60, doc.invoice_no,
+  page.text(W - M - 200, 60, doc.invoice_no,
     { size: 10, color: RED, align: "right", width: 200, spacing: 1.2 });
-  page.rect(0, 104, PAGE.W, 3, { fill: RED });
+  page.rect(0, 104, W, 3, { fill: RED });
 
   y = 132;
 
@@ -248,7 +273,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
 
   // Right column: the three dates and the amount due, which is the number the
   // client is actually looking for.
-  const rx = PAGE.W - M - 190;
+  const rx = W - M - 190;
   const meta: [string, string][] = [
     ["Issued", fmtDate(doc.issue_date)],
     ["Due", doc.due_date ? fmtDate(doc.due_date) : "On receipt"],
@@ -281,7 +306,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
     page.text(COL_RATE, y, "RATE", { size: 7, color: MID, align: "right", width: COL_W - 20, spacing: 1.2 });
     page.text(COL_AMT, y, "AMOUNT", { size: 7, color: MID, align: "right", width: COL_W, spacing: 1.2 });
     y += 8;
-    page.line(M, y, PAGE.W - M, y, { color: INK, w: 0.9 });
+    page.line(M, y, W - M, y, { color: INK, w: 0.9 });
     y += 14;
   }
   tableHead();
@@ -308,7 +333,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
     page.text(COL_AMT, top, money(a.amount, cur), { size: 9.5, align: "right", width: COL_W });
 
     y += 5;
-    page.line(M, y, PAGE.W - M, y, { color: RULE, w: 0.5 });
+    page.line(M, y, W - M, y, { color: RULE, w: 0.5 });
     y += 10;
   }
   if (!(doc.lines || []).length) {
@@ -319,7 +344,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
   // ---- totals ----
   room(150);
   const tx = COL_RATE - 60;
-  const tw = PAGE.W - M - tx;
+  const tw = W - M - tx;
   const row = (label: string, value: string, o: { bold?: boolean; color?: string; size?: number } = {}) => {
     page.text(tx, y, label, { size: o.size ?? 9, color: o.color ?? MID, bold: o.bold });
     page.text(tx, y, value, { size: o.size ?? 9, align: "right", width: tw, bold: o.bold, color: o.color ?? INK });
@@ -337,7 +362,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
   if (doc.tax_enabled) {
     row(`${doc.tax_label || "Tax"} (${Number(doc.tax_rate) || 0}%)`, money(t.tax, cur));
   }
-  page.line(tx, y - 4, PAGE.W - M, y - 4, { color: INK, w: 0.9 });
+  page.line(tx, y - 4, W - M, y - 4, { color: INK, w: 0.9 });
   y += 6;
   row("TOTAL", money(t.total, cur), { bold: true, size: 11 });
 
@@ -349,7 +374,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
       y += 10;
     });
     y += 2;
-    page.line(tx, y - 4, PAGE.W - M, y - 4, { color: INK, w: 0.9 });
+    page.line(tx, y - 4, W - M, y - 4, { color: INK, w: 0.9 });
     y += 6;
     row("BALANCE DUE", money(t.balance, cur), { bold: true, size: 12, color: t.balance > 0 ? RED : GREEN });
   }
@@ -384,7 +409,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
   }
 
   if (payMethods.length && t.balance > 0) {
-    const colW0 = (PAGE.W - M * 2 - 20) / payMethods.length;
+    const colW0 = (W - M * 2 - 20) / payMethods.length;
     // The methods sit SIDE BY SIDE, so the block is as tall as the tallest
     // column - not the sum of them. Estimating it as a sum pushed a four-line
     // invoice onto a second page for no reason.
@@ -420,7 +445,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
   // Both blocks measure what they are about to draw. A flat reservation pushed a
   // one-line note onto a second page that then held nothing else.
   if (doc.notes) {
-    const nl = wrap(doc.notes, 9, PAGE.W - M * 2);
+    const nl = wrap(doc.notes, 9, W - M * 2);
     room(14 + nl.length * 12 + 6);
     page.text(M, y, "NOTES", { size: 7, color: MID, spacing: 1.4 });
     y += 14;
@@ -428,7 +453,7 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
     y += 6;
   }
   if (doc.terms_text) {
-    const tl = wrap(doc.terms_text, 8, PAGE.W - M * 2);
+    const tl = wrap(doc.terms_text, 8, W - M * 2);
     room(tl.length * 10);
     tl.forEach((ln) => { page.text(M, y, ln, { size: 8, color: MID }); y += 10; });
   }
@@ -436,13 +461,13 @@ export function renderInvoicePdf(doc: InvoiceDoc): Uint8Array {
   // ---- footer on every page ----
   const foot = s.footer_note || `${s.biz_name || "Come With"} · ${s.biz_website || "comewith.org"}`;
   pdf.pages.forEach((p, i) => {
-    p.line(M, PAGE.H - 46, PAGE.W - M, PAGE.H - 46, { color: RULE, w: 0.5 });
-    p.text(M, PAGE.H - 32, foot, { size: 7.5, color: MID });
-    p.text(PAGE.W - M - 120, PAGE.H - 32, `Page ${i + 1} of ${pdf.pages.length}`,
+    p.line(M, H - 46, W - M, H - 46, { color: RULE, w: 0.5 });
+    p.text(M, H - 32, foot, { size: 7.5, color: MID });
+    p.text(W - M - 120, H - 32, `Page ${i + 1} of ${pdf.pages.length}`,
       { size: 7.5, color: MID, align: "right", width: 120 });
   });
 
-  return pdf.build();
+  return pdf;
 }
 
 // ===========================================================================

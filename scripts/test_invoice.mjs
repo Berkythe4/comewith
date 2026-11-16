@@ -22,6 +22,7 @@ import { readFileSync } from "node:fs";
 import { Pdf, measure, wrap, toWinAnsi } from "../supabase/functions/invoice-doc/pdf.ts";
 import {
   computeTotals, lineAmounts, discountNote, money, invoiceHtml, renderInvoicePdf,
+  layoutInvoicePdf, FIT_MIN_SCALE,
 } from "../supabase/functions/invoice-doc/template.ts";
 
 let fails = 0;
@@ -198,6 +199,24 @@ pass("the PDF carries the client, the payment block and the balance");
   const txt = new TextDecoder("latin1").decode(paid);
   eq("a fully paid invoice drops the payment instructions", txt.includes("HOW TO PAY"), false);
   eq("a fully paid invoice says so", txt.includes("PAID IN FULL"), true);
+}
+// Fit to one page (2026-11-16): shrink down to FIT_MIN_SCALE before paginating,
+// never below it, and never scale an invoice that already fits.
+{
+  const pagesOf = (b) => (new TextDecoder("latin1").decode(b).match(/\/Type \/Page /g) || []).length;
+  const scaleOf = (b) => (new TextDecoder("latin1").decode(b).match(/q ([\d.]+) 0 0 [\d.]+ 0 0 cm/) || [, "1"])[1];
+  const mk = (n) => ({ ...FULL, lines: Array.from({ length: n }, (_, i) =>
+    ({ description: "Line " + (i + 1), detail: "Detail for line " + (i + 1), qty: 1, unit_price: 10 })) });
+  let n = 1;
+  while (layoutInvoicePdf(mk(n), 1).pages.length === 1) n++;          // first count that overflows at full size
+  const tight = renderInvoicePdf(mk(n));
+  eq("an invoice that just overflows is shrunk onto one page", pagesOf(tight), 1);
+  eq("...at a scale below 100%", Number(scaleOf(tight)) < 1, true);
+  const short = renderInvoicePdf(mk(2));
+  eq("an invoice that fits is not scaled at all", scaleOf(short), "1");
+  const long = renderInvoicePdf(mk(60));
+  eq("a long invoice keeps full size and paginates (never below the floor)", pagesOf(long) > 1 && scaleOf(long) === "1", true);
+  eq("the floor is 80%", FIT_MIN_SCALE, 0.8);
 }
 
 const html = invoiceHtml(FULL, { standalone: true });

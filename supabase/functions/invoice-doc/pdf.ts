@@ -148,14 +148,24 @@ export type TextOpts = {
  */
 class Page {
   ops: string[] = [];
+  // width/height are the LAYOUT size. With scale < 1 the page is laid out on a
+  // bigger virtual sheet (media / scale) and written back onto the real media
+  // with one `cm`, anchored top-left - so a layout that measures against
+  // width/height fills the real page proportionally, margins included.
   width: number;
   height: number;
+  mediaW: number;
+  mediaH: number;
+  scale: number;
   // Written out rather than as constructor parameter properties: Node's
   // strip-only TypeScript mode rejects those, and this file has to stay
   // importable from a plain `node scripts/...` test.
-  constructor(width: number, height: number) {
-    this.width = width;
-    this.height = height;
+  constructor(width: number, height: number, scale = 1) {
+    this.scale = scale;
+    this.mediaW = width;
+    this.mediaH = height;
+    this.width = width / scale;
+    this.height = height / scale;
   }
 
   private esc(s: string) {
@@ -197,7 +207,10 @@ class Page {
     );
   }
 
-  content(): string { return this.ops.join("\n"); }
+  content(): string {
+    const body = this.ops.join("\n");
+    return this.scale === 1 ? body : `q ${n3(this.scale)} 0 0 ${n3(this.scale)} 0 0 cm\n${body}\nQ`;
+  }
 }
 
 export class Pdf {
@@ -209,8 +222,8 @@ export class Pdf {
     this.author = author;
   }
 
-  addPage(width = LETTER_W, height = LETTER_H): Page {
-    const p = new Page(width, height);
+  addPage(width = LETTER_W, height = LETTER_H, scale = 1): Page {
+    const p = new Page(width, height, scale);
     this.pages.push(p);
     return p;
   }
@@ -248,7 +261,7 @@ export class Pdf {
       const contentNum = pageNum + 1;
       obj(
         pageNum,
-        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n3(p.width)} ${n3(p.height)}] ` +
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${n3(p.mediaW)} ${n3(p.mediaH)}] ` +
           `/Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentNum} 0 R >>`,
       );
       const body = p.content();
