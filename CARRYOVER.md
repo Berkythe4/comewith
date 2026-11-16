@@ -24,6 +24,9 @@
   guests for Shane and Kristen are linked to their actors (§104). 3 Partiful RSVPs linked on
   exact names. Jennifer Taveras and Junior Fernandez are on the PDF but PAID, so they stay
   tickets. Non-ticket heads = 32 = the PDF's 34 minus those 2.
+- **Jessica Kenny (AKA Juicy) is now a person actor**, owner of Frick Frack BlackJack AND JSD Drip.
+  `org_id` -> Frick Frack BlackJack (one org link per person); JSD Drip ownership is in the notes
+  on her record and on both org records. Her DI #3 guest record is linked to the actor.
 - **Homepage (`site_content`):** `di.goal_raised`/`di.stat1` 4140 -> **6105**, `di.stat2` 2 -> **3**,
   `di.stat3` 159 -> **255**, and `di.goal_label` reads "(final: all three in)". Verified via anon REST.
 
