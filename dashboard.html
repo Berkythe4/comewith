@@ -6946,12 +6946,12 @@ $('strat-manage-list').addEventListener('change', async (e) => {
 // ---- KPI entry forms (Phase 13 — Part B) ----
 // Series feed the KPI views by EXACT string (CLAUDE.md series contract). 'Come With
 // Production' = events produced as a service for other people (e.g. Maxwell House 4/20).
-const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings', 'Growth & Networking']; // no CWF
+const SERIES_OPTIONS = ['Come With Parties', 'Dance Infusion', 'Come With Production', 'Content Creation', 'Bookings', 'Growth & Networking', 'Come With Consulting']; // no CWF. Consulting = its own books (244)
 // Keep events.type (axis for templates / content flag) in sync with the series choice.
 // Bookings = we're the booked talent at someone else's event ('gig'), vs Come With
 // Production = we run their production.
 function seriesToType(series) {
-  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase', 'Bookings': 'gig', 'Growth & Networking': 'growth' })[series] || 'showcase';
+  return ({ 'Come With Parties': 'party', 'Dance Infusion': 'dance_infusion', 'Come With Production': 'production', 'Content Creation': 'showcase', 'Bookings': 'gig', 'Growth & Networking': 'growth', 'Come With Consulting': 'gig' })[series] || 'showcase';
 }
 const WS_OPTIONS = ['content', 'audience', 'parties', 'dance_infusion'];
 let kpiSubmit = null;
@@ -8299,8 +8299,20 @@ async function loadMoneyData(id) {
   return out;
 }
 
-// Which set of books this event's rows belong to. Same rule the DB views use.
-const moneyLedger = () => /dance infusion/i.test(moneyState.event?.series || '') ? 'dance_infusion' : 'come_with';
+// The three sets of books (244). Come With Consulting is a SEPARATE sole
+// proprietorship (all JSD Drip work), not a line of Come With.
+const LEDGERS = [['come_with', 'Come With'], ['dance_infusion', 'Dance Infusion'], ['consulting', 'Come With Consulting']];
+const ledgerLabel = (l) => (LEDGERS.find(x => x[0] === (l || 'come_with')) || LEDGERS[0])[1];
+// Which books an event's money belongs to, from its series. The DB views derive
+// ticket/sponsor/donation money the same way for DI; income and expense rows
+// carry their own ledger, written from this when they are created.
+const ledgerForSeries = (series) => /dance infusion/i.test(series || '') ? 'dance_infusion'
+  : /consulting/i.test(series || '') ? 'consulting' : 'come_with';
+// A <select> of the books that never drops a value it was given (a form only
+// writes what it could read).
+const ledgerOptions = (cur) => LEDGERS.map(([v, l]) =>
+  '<option value="' + v + '"' + ((cur || 'come_with') === v ? ' selected' : '') + '>' + l + '</option>').join('');
+const moneyLedger = () => ledgerForSeries(moneyState.event?.series);
 const moneyIsOwed = (tbl, r) => !!r.status && r.status !== MONEY_SETTLED[tbl];
 const mShort = (d) => (d ? fmtDate(d) : '');
 
@@ -8552,7 +8564,7 @@ async function moneyLinkApply(eventId) {
     ' currently on another event and will be MOVED off it: ' +
     [...new Set(moving.map(r => r.event_name || 'unnamed'))].join(', ') + '.';
   if (switching.length) msg += NL + NL + '\u26a0 ' + switching.length + ' will move into the ' +
-    (ledger === 'dance_infusion' ? 'Dance Infusion' : 'Come With') + ' books.';
+    ledgerLabel(ledger) + ' books.';
   if (!confirm(msg)) return;
   const { error } = await sb.from('expenses')
     .update({ event_id: eventId, event_na: false, ledger }).in('id', ids);
@@ -13135,7 +13147,7 @@ function eventBucket(e) {
 // written by hand - so it is derived now, and the next new series shows up
 // without anybody remembering to add it.
 const EV_SERIES_KNOWN = ['Come With Parties', 'Dance Infusion', 'Come With Production',
-                         'Content Creation', 'Bookings', 'Growth & Networking'];
+                         'Content Creation', 'Bookings', 'Growth & Networking', 'Come With Consulting'];
 function evSeriesList() {
   const present = [...new Set((eventsDash.rows || []).map(e => e.series).filter(Boolean))].sort();
   return [...new Set(EV_SERIES_KNOWN.concat(present))];
@@ -14579,9 +14591,8 @@ function renderIncome() {
       <input class="modal-input" data-incq placeholder="Search category / note…" style="max-width:220px;" value="${escapeHtml(s.q)}">
       <select class="hub-status-sel" data-incevfilter><option value="">All events</option><option value="__none"${s.event === '__none' ? ' selected' : ''}>— No event —</option>${s.events.map(e => `<option value="${escapeHtml(e.id)}"${s.event === e.id ? ' selected' : ''}>${escapeHtml(e.name)}</option>`).join('')}</select>
       <select class="hub-status-sel" data-inccatfilter><option value="">All streams</option>${cats.map(c => `<option value="${escapeHtml(c)}"${s.category === c ? ' selected' : ''}>${escapeHtml(c)}</option>`).join('')}</select>
-      <select class="hub-status-sel" data-incledgerfilter><option value="">Both books</option>
-        <option value="come_with"${s.ledger === 'come_with' ? ' selected' : ''}>Come With</option>
-        <option value="dance_infusion"${s.ledger === 'dance_infusion' ? ' selected' : ''}>Dance Infusion</option></select>
+      <select class="hub-status-sel" data-incledgerfilter><option value="">All books</option>
+        ${LEDGERS.map(([v, l]) => `<option value="${v}"${s.ledger === v ? ' selected' : ''}>${l}</option>`).join('')}</select>
       <button class="hub-mini" data-incclear>clear</button>
       <a class="guide-link" href="/revenue-guide.html" target="_blank" rel="noopener" title="Blue Sky to Banked — how future events carry revenue through to cash">📖 Blue Sky to Banked ↗</a>
       <span style="flex:1"></span>
@@ -14696,7 +14707,7 @@ async function incAddRevenue(eventId) {
     status: st.id,
     expected_amount: amt,
     settled_at: st.id === 'received' ? new Date().toISOString() : null,
-    ledger: (ev && /dance infusion/i.test(ev.series || '')) ? 'dance_infusion' : 'come_with',
+    ledger: ledgerForSeries(ev && ev.series),
   };
   const { error } = await sb.from('income').insert(row);
   if (error) { toast('Could not save: ' + error.message, 'err'); return; }
@@ -14759,7 +14770,7 @@ function renderIncomeBody() {
     <td>${escapeHtml(fmtDate(x.date))}</td>
     ${ed(x, 'amount', true)}${ed(x, 'category')}${ed(x, 'description')}
     <td>${acSel(x)}</td><td>${evSel(x)}</td>
-    <td class="exp-flags">${incInvChip(x)}${(x.ledger === 'dance_infusion' ? '<span class="exp-tag ok">DI</span> ' : '')}${
+    <td class="exp-flags">${incInvChip(x)}${(x.ledger === 'dance_infusion' ? '<span class="exp-tag ok">DI</span> ' : x.ledger === 'consulting' ? '<span class="exp-tag ok" title="Come With Consulting books">CWC</span> ' : '')}${
       x.status && x.status !== 'received' ? '<span class="exp-tag own" title="Agreed or invoiced, not yet paid">' + escapeHtml(x.status) + '</span> ' : ''}${
       x.cash_source ? '<span class="exp-tag">' + escapeHtml(x.cash_source) + '</span>' : ''}${
       x.expected_amount != null && Number(x.expected_amount) !== Number(x.amount)
@@ -14817,7 +14828,7 @@ $('panel-income').addEventListener('change', (e) => {
   const be = e.target.closest('[data-incbulkev]'); if (be && be.value) {
     const ev2 = incomeDash.events.find(x => x.id === be.value);
     const patch = { event_id: be.value };
-    if (ev2 && /dance infusion/i.test(ev2.series || '')) patch.ledger = 'dance_infusion';
+    if (ev2 && ledgerForSeries(ev2.series) !== 'come_with') patch.ledger = ledgerForSeries(ev2.series);
     incBulk(patch, 'event to ' + ((ev2 || {}).name || 'event')); be.value = ''; return;
   }
   const bs = e.target.closest('[data-incbulksrc]'); if (bs && bs.value) {
@@ -16326,6 +16337,8 @@ function plControlsHtml(months) {
       (plState.ledger === 'come_with' ? ' style="background:#305496;color:#fff"' : '') + '>Come With</button>' +
     '<button class="hub-mini" data-plledger="dance_infusion"' +
       (plState.ledger === 'dance_infusion' ? ' style="background:#1f7a4d;color:#fff"' : '') + '>Dance Infusion</button>' +
+    '<button class="hub-mini" data-plledger="consulting"' +
+      (plState.ledger === 'consulting' ? ' style="background:#5E7D3A;color:#fff"' : '') + '>Come With Consulting</button>' +
     '<span class="pl-bar-sep"></span>' +
     '<span class="pl-bar-l">Range</span>' +
     '<select class="hub-status-sel" data-plfrom>' + monthOpt(plState.from) + '</select>' +
@@ -16470,6 +16483,16 @@ function renderPL() {
     return;
   }
 
+  // Come With Consulting is a separate sole proprietorship with its own bank
+  // account: the float / capital / reserve band is Come With's and must not be
+  // shown over Consulting's numbers.
+  if (plState.ledger === 'consulting') {
+    $('plBody').innerHTML = line1 + line2 + plControlsHtml(months) + '<div id="plGrid"></div>' +
+      '<p class="muted" style="margin-top:10px">Come With Consulting only - a separate sole proprietorship (JSD Drip work) with its own bank account. ' +
+      'None of it touches the Come With float, reserve or 1099s.</p>';
+    renderPLGrid();
+    return;
+  }
   $('plBody').innerHTML =
     line1 + line2 + line3 + plControlsHtml(months) +
     '<div id="plGrid"></div>' +
@@ -16718,9 +16741,7 @@ function plOpenCharge(id) {
       '<label class="chg-f">Paid from<select data-chg="cash_source">' +
         ['personal', 'paypal', 'bank', 'other'].map(v => '<option value="' + v + '"' + (v === x.cash_source ? ' selected' : '') + '>' + v + '</option>').join('') +
         '</select></label>' +
-      '<label class="chg-f">Books<select data-chg="ledger">' +
-        '<option value="come_with"' + (x.ledger !== 'dance_infusion' ? ' selected' : '') + '>Come With</option>' +
-        '<option value="dance_infusion"' + (x.ledger === 'dance_infusion' ? ' selected' : '') + '>Dance Infusion</option></select></label>' +
+      '<label class="chg-f">Books<select data-chg="ledger">' + ledgerOptions(x.ledger) + '</select></label>' +
       '<label class="chg-f">Note<input data-chg="description" value="' + escapeHtml(x.description || '') + '"></label>' +
       '<div class="chg-actions">' +
         '<button class="hub-mini" data-chg-verify>' + (x.verified_at ? '✓ verified' : '○ mark verified') + '</button>' +
@@ -24728,6 +24749,8 @@ const CAL_SERIES_COLORS = {
   // Bookings (we're the booked talent, e.g. July Jewels) gets a distinct
   // magenta — the old blue-grey was too close to the new "ours elsewhere" teal.
   'Bookings': '#C264A0',
+  // Come With Consulting (244) - its own books; JSD Drip work.
+  'Come With Consulting': '#5E7D3A',
   // Growth & Networking (Keith attending industry events to DJ/practice/network) — teal.
   'Growth & Networking': '#3E9AA8',
 };
@@ -27117,16 +27140,18 @@ const INV_STATE_CLS = { draft: 'cc-todo', sent: 'cc-active', partial: 'cc-active
 const INV_METHODS = [['wire', 'Bank / wire'], ['paypal', 'PayPal'], ['cash', 'Cash'],
                      ['check', 'Check'], ['other', 'Other']];
 
-const invDash = { rows: [], q: '', state: [], actors: [], events: [], settings: null, open: null };
+const invDash = { rows: [], q: '', state: [], actors: [], events: [], settings: null, issuers: [], open: null };
 
 async function loadInvoices() {
   $('invoicesBody').innerHTML = '<div class="panel-state"><span class="spinner"></span> Loading invoices…</div>';
-  const [list, ac, ev, st] = await Promise.all([
+  const [list, ac, ev, st, iss] = await Promise.all([
     sb.from('v_invoices_list').select('*').order('issue_date', { ascending: false }).order('invoice_no', { ascending: false }),
     sb.from('actors').select('id, display_name, legal_name, email').is('deleted_at', null).order('display_name'),
-    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('events').select('id, name, event_date, series').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('invoice_settings').select('*').eq('id', true).maybeSingle(),
+    sb.from('invoice_issuers').select('*'),
   ]);
+  invDash.issuers = (iss && iss.data) || [];
   if (list.error) { $('invoicesBody').innerHTML = '<div class="panel-state err">' + escapeHtml(list.error.message) + '</div>'; return; }
   invDash.rows = list.data || [];
   invDash.actors = ac.data || [];
@@ -27184,6 +27209,7 @@ function renderInvoices() {
   $('invoicesBody').innerHTML =
     '<div class="hub-sec-bar"><h3>🧾 Invoices</h3><span style="display:flex;gap:8px;">' +
       '<button class="hub-btn ghost" data-invsettings>⚙ Payment details</button>' +
+      '<button class="hub-btn ghost" data-invsettings="consulting" title="Come With Consulting is a separate sole proprietorship: its own name, CWC- numbers and bank">⚙ Consulting details</button>' +
       '<button class="hub-btn" data-invnew>➕ New invoice</button></span></div>' +
     '<div class="section-sub">An invoice bills income that is already on the books. Creating one never adds revenue — ' +
       'it moves the rows it bills from <b>accrued</b> to <b>invoiced</b>, and to <b>received</b> when it is paid in full.</div>' +
@@ -27224,6 +27250,9 @@ async function invCreateFrom(opts) {
     invDash.events.map(e => '<option value="' + escapeHtml(e.id) + '"' +
       (e.id === evId ? ' selected' : '') + '>' + escapeHtml(e.name) + '</option>')).join('');
   const terms = (invDash.settings && invDash.settings.default_terms_days) || 14;
+  // Which books, and so who the invoice is FROM and which number series (244):
+  // the billed rows say, else the event's series, else Come With.
+  const ledgerGuess = (incomeRows.find(r => r.ledger) || {}).ledger || ledgerForSeries(ev && ev.series);
   const preview = incomeRows.length
     ? '<div class="kpi-hint" style="margin-bottom:10px;">Billing <b>' + incomeRows.length + '</b> income row' +
       (incomeRows.length === 1 ? '' : 's') + ' — ' +
@@ -27237,6 +27266,8 @@ async function invCreateFrom(opts) {
       '<div><label class="modal-label">Bill to *</label><select class="modal-input" name="actor">' + actorOpts + '</select></div>' +
       '<div><label class="modal-label">Event</label><select class="modal-input" name="event">' + evOpts + '</select></div>' +
     '</div>' +
+    '<div class="modal-form-row"><label class="modal-label">Books (who the invoice is from)</label><select class="modal-input" name="ledger"' +
+      (incomeRows.some(r => r.ledger) ? ' disabled title="Set by the income rows being billed"' : '') + '>' + ledgerOptions(ledgerGuess) + '</select></div>' +
     '<div class="modal-grid2">' +
       '<div><label class="modal-label">Issue date</label><input class="modal-input" type="date" name="issue" value="' + TODAY() + '"></div>' +
       '<div><label class="modal-label">Payment terms</label><select class="modal-input" name="terms">' +
@@ -27246,7 +27277,7 @@ async function invCreateFrom(opts) {
     '</div>' +
     '<div class="modal-form-row"><label class="modal-label">Notes on the invoice</label>' +
       '<textarea class="modal-input" name="notes" rows="2" placeholder="Thanks — anything the client should read.">' +
-      escapeHtml((invDash.settings && invDash.settings.default_notes) || '') + '</textarea></div>' +
+      escapeHtml((invSettingsFor(ledgerGuess) || {}).default_notes || '') + '</textarea></div>' +
     invCreatePreviewHTML(incomeRows),
     async () => {
       const actorId = kpiVal('actor');
@@ -27256,7 +27287,12 @@ async function invCreateFrom(opts) {
       const days = Number(kpiVal('terms') || 0);
       const due = days > 0 ? new Date(new Date(issue + 'T00:00:00Z').getTime() + days * 86400000).toISOString().slice(0, 10) : null;
 
-      const { data: noRow, error: noErr } = await sb.rpc('next_invoice_no');
+      // One invoice is from ONE business: rows from two sets of books cannot share it.
+      const rowBooks = [...new Set(incomeRows.map(r => r.ledger || 'come_with'))];
+      if (rowBooks.length > 1) throw new Error('These rows are in different books (' + rowBooks.map(ledgerLabel).join(' + ') + '). Invoice each set separately.');
+      const ledger = incomeRows.some(r => r.ledger) ? ledgerGuess : (kpiVal('ledger') || 'come_with');
+      // Consulting has its own CWC- series; Come With / DI share CW- (244).
+      const { data: noRow, error: noErr } = await sb.rpc('next_invoice_no', { p_ledger: ledger });
       if (noErr) throw new Error('Could not get an invoice number: ' + noErr.message);
 
       const { data: { session } } = await sb.auth.getSession();
@@ -27271,7 +27307,7 @@ async function invCreateFrom(opts) {
         event_id: chosenEv,
         issue_date: issue, due_date: due, terms_days: days || null,
         notes: kpiVal('notes') || null,
-        ledger: (incomeRows.find(r => r.ledger) || {}).ledger || 'come_with',
+        ledger,
         created_by: (session && session.user && session.user.id) || null,
       }).select('id, invoice_no').single();
       if (error) throw new Error(error.message);
@@ -27310,17 +27346,18 @@ async function invCreateFrom(opts) {
 
 // ---- the invoice itself -----------------------------------------------------
 async function openInvoice(id) {
-  const [inv, lines, pays, evs] = await Promise.all([
+  const [inv, lines, pays, evs, atts] = await Promise.all([
     sb.from('v_invoices_list').select('*').eq('id', id).maybeSingle(),
     sb.from('v_invoice_line_calc').select('*').eq('invoice_id', id).order('position'),
     sb.from('invoice_payments').select('*').eq('invoice_id', id).order('paid_on'),
     sb.from('invoice_events').select('*, who:profiles!by_profile(full_name,email)')
       .eq('invoice_id', id).order('at', { ascending: false }),
+    sb.from('invoice_attachments').select('*').eq('invoice_id', id).order('created_at'),
   ]);
   if (inv.error || !inv.data) { toast('Could not open that invoice', 'err'); return; }
   const { data: full } = await sb.from('invoices').select('*').eq('id', id).single();
   invDash.open = { row: inv.data, full, lines: lines.data || [], pays: pays.data || [],
-                   events: (evs && evs.data) || [] };
+                   events: (evs && evs.data) || [], atts: (atts && atts.data) || [] };
   renderInvoiceModal();
 }
 
@@ -27370,11 +27407,13 @@ function renderInvoiceModal() {
     '<td class="cc-act"><button class="hub-mini exp-del" data-invpaydel="' + escapeHtml(p.id) + '">✕</button></td></tr>').join('')
     || '<tr><td colspan="5" class="muted" style="padding:8px;">Nothing received yet.</td></tr>';
 
-  const noPay = !invDash.settings ? ''
-    : (!(invDash.settings.paypal_enabled && invDash.settings.paypal_handle) &&
-       !(invDash.settings.wire_enabled && (invDash.settings.wire_account || invDash.settings.wire_routing)))
+  const iset = invSettingsFor(f.ledger);
+  const noPay = !iset ? ''
+    : (!(iset.paypal_enabled && iset.paypal_handle) &&
+       !(iset.wire_enabled && (iset.wire_account || iset.wire_routing)) &&
+       !(Array.isArray(iset.extra_methods) && iset.extra_methods.length))
       ? '<div class="kpi-hint" style="border-color:var(--amber);margin-bottom:10px;">⚠ No payment method is set up yet, so this invoice will print with no way to pay it. ' +
-        'Open <b>⚙ Payment details</b> and add PayPal or the Bluevine wire details first.</div>'
+        'Open <b>⚙ ' + (f.ledger === 'consulting' ? 'Consulting details' : 'Payment details') + '</b> and add PayPal, bank or another method first.</div>'
       : '';
 
   const body = noPay +
@@ -27428,6 +27467,20 @@ function renderInvoiceModal() {
     '<div style="overflow-x:auto;"><table class="data-table cc-table"><thead><tr>' +
       '<th>Date</th><th>Method</th><th>Reference</th><th class="num">Amount</th><th class="cc-act"></th>' +
     '</tr></thead><tbody>' + payRows + '</tbody></table></div>' +
+
+    // 247: receipts sent WITH the invoice email. Row present = attached.
+    '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Attachments <span class="muted" style="font-weight:400;">emailed with the invoice</span></h3>' +
+      '<span style="display:flex;gap:6px;">' +
+      (f.event_id ? '<button class="hub-mini" data-invattev title="Every receipt uploaded on this event\'s expenses">📎 Receipts from the event</button>' : '') +
+      '<button class="hub-mini" data-invattup>⬆ Upload a file</button></span></div>' +
+    ((o.atts || []).length
+      ? '<ul style="list-style:none;padding:0;margin:0 0 6px;">' + o.atts.map(x =>
+          '<li style="display:flex;gap:8px;align-items:center;padding:3px 0;font-size:.78rem;">📄 ' +
+          '<a href="#" data-invattview="' + escapeHtml(x.id) + '">' + escapeHtml(x.filename) + '</a>' +
+          (x.expense_id ? ' <span class="exp-tag">expense receipt</span>' : '') +
+          '<button class="hub-mini exp-del" data-invattdel="' + escapeHtml(x.id) + '" style="margin-left:auto;" title="Stop sending this file">✕</button></li>').join('') + '</ul>'
+      : '<div class="li-sub" style="margin-bottom:6px;">Nothing attached - the email carries the invoice PDF only.' +
+          (f.event_id ? ' Upload receipts on the event\'s expenses (📎 on the Expenses tab), then pull them in here.' : '') + '</div>') +
 
     '<div class="hub-sec-bar" style="margin-top:18px;"><h3 style="font-size:.82rem;">Send &amp; file</h3></div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
@@ -27501,8 +27554,15 @@ function invDownload(d) {
 }
 
 // ---- payment details (master only) ------------------------------------------
-async function openInvoiceSettings() {
-  const { data: s, error } = await sb.from('invoice_settings').select('*').eq('id', true).maybeSingle();
+// ledger null = Come With (invoice_settings, the default issuer). A ledger with its
+// own issuer (244: 'consulting') reads and writes invoice_issuers instead. That row
+// REPLACES Come With's details on its invoices, so a blank field there prints
+// blank, never Come With's bank account.
+async function openInvoiceSettings(ledger) {
+  const own = !!ledger;
+  const { data: s, error } = own
+    ? await sb.from('invoice_issuers').select('*').eq('ledger', ledger).maybeSingle()
+    : await sb.from('invoice_settings').select('*').eq('id', true).maybeSingle();
   // Say which of the three things went wrong. Reporting every failure as
   // "master-admin only" is what sent Keith to check his own role when the real
   // problem was a missing table GRANT (fixed in 191) - grants are checked before
@@ -27515,14 +27575,16 @@ async function openInvoiceSettings() {
     return;
   }
   if (!s) {
-    toast('No payment-details row exists yet. Migration 188 seeds it — tell whoever runs migrations.', 'err');
+    toast('No payment-details row exists yet. Migration ' + (own ? '244' : '188') + ' seeds it — tell whoever runs migrations.', 'err');
     return;
   }
   const f = (name, label, val, ph, type) =>
     '<div><label class="modal-label">' + label + '</label><input class="modal-input" name="' + name +
     '" type="' + (type || 'text') + '" value="' + escapeHtml(val == null ? '' : val) + '"' +
     (ph ? ' placeholder="' + escapeHtml(ph) + '"' : '') + '></div>';
-  openKpi('Payment details', 'What prints on every invoice. Stored master-admin only — never in site_content.',
+  openKpi(own ? ledgerLabel(ledger) + ' details' : 'Payment details',
+    own ? 'What prints on every ' + ledgerLabel(ledger) + ' invoice instead of Come With's. Master-admin only.'
+        : 'What prints on every invoice. Stored master-admin only — never in site_content.',
     '<div class="kpi-hint" style="margin-bottom:12px;">These details are printed on the invoice PDF and shown on the ' +
       'client link, which is how a client pays you. They are readable only by a master admin and are never exposed to the public site.</div>' +
     '<div class="hub-sec-bar"><h3 style="font-size:.82rem;">Your business</h3></div>' +
@@ -27557,17 +27619,18 @@ async function openInvoiceSettings() {
       'invoice exactly as you type it here. Delete one to stop offering it.</div>' +
     '<div id="xmList"></div>' +
 
-    '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Email defaults</h3></div>' +
+    (own ? '' : '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Email defaults</h3></div>' +
     '<div class="section-sub">What every new invoice email starts with. Each one is still editable per invoice ' +
       'before you send, and leaving subject or message blank uses the standard wording.</div>' +
     '<div class="modal-grid2">' + f('default_cc', 'Always cc', s.default_cc, 'bookkeeper@…', 'email') +
       f('default_subject', 'Default subject', s.default_subject, 'blank = Invoice CW-2026-0001 from Come With') + '</div>' +
     '<div class="modal-form-row"><label class="modal-label">Default message</label><textarea class="modal-input" name="default_message" rows="3" placeholder="blank = the standard wording">' +
-      escapeHtml(s.default_message || '') + '</textarea></div>' +
+      escapeHtml(s.default_message || '') + '</textarea></div>') +
 
     '<div class="hub-sec-bar" style="margin-top:16px;"><h3 style="font-size:.82rem;">Defaults</h3></div>' +
-    '<div class="modal-grid2">' + f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number') +
-      f('number_prefix', 'Invoice number prefix', s.number_prefix, 'CW') + '</div>' +
+    '<div class="modal-grid2">' + (own ? '' : f('default_terms_days', 'Default terms (days)', s.default_terms_days, '14', 'number')) +
+      f('number_prefix', 'Invoice number prefix', s.number_prefix, own ? 'CWC' : 'CW') + '</div>' +
+    (own ? '<div class="section-sub">Its own numbering: ' + escapeHtml(s.number_prefix || 'CWC') + '-YYYY-0001, separate from Come With's.</div>' : '') +
     '<div class="modal-form-row"><label class="modal-label">Default note on new invoices</label><textarea class="modal-input" name="default_notes" rows="2">' + escapeHtml(s.default_notes || '') + '</textarea></div>' +
     '<div class="modal-form-row"><label class="modal-label">Footer line</label><input class="modal-input" name="footer_note" value="' + escapeHtml(s.footer_note || '') + '"></div>',
     async () => {
@@ -27577,7 +27640,7 @@ async function openInvoiceSettings() {
         default_cc: kpiVal('default_cc') || null,
         default_subject: kpiVal('default_subject') || null,
         default_message: kpiVal('default_message') || null,
-        biz_name: kpiVal('biz_name') || 'Come With', biz_legal_name: kpiVal('biz_legal_name') || null,
+        biz_name: kpiVal('biz_name') || (own ? ledgerLabel(ledger) : 'Come With'), biz_legal_name: kpiVal('biz_legal_name') || null,
         biz_address: kpiVal('biz_address') || null, biz_email: kpiVal('biz_email') || null,
         biz_phone: kpiVal('biz_phone') || null, biz_website: kpiVal('biz_website') || null,
         tax_id: kpiVal('tax_id') || null,
@@ -27588,17 +27651,21 @@ async function openInvoiceSettings() {
         wire_account: kpiVal('wire_account') || null, wire_swift: kpiVal('wire_swift') || null,
         wire_note: kpiVal('wire_note') || null, wire_bank_address: kpiVal('wire_bank_address') || null,
         default_terms_days: Number(kpiVal('default_terms_days')) || 14,
-        number_prefix: kpiVal('number_prefix') || 'CW',
+        number_prefix: kpiVal('number_prefix') || (own ? 'CWC' : 'CW'),
         default_notes: kpiVal('default_notes') || null, footer_note: kpiVal('footer_note') || null,
         updated_at: new Date().toISOString(),
       };
+      // invoice_issuers has no email defaults or terms: those stay shared.
+      if (own) ['default_cc', 'default_subject', 'default_message', 'default_terms_days'].forEach(k => delete patch[k]);
       // Turning a method on without the details behind it would print a heading
       // with nothing under it - worse than not offering it at all.
       if (patch.paypal_enabled && !patch.paypal_handle) throw new Error('PayPal is on but has no handle or email.');
       if (patch.wire_enabled && !patch.wire_account && !patch.wire_routing) throw new Error('Bank transfer is on but has no account or routing number.');
-      const { error } = await sb.from('invoice_settings').update(patch).eq('id', true);
+      const { error } = own
+        ? await sb.from('invoice_issuers').update(patch).eq('ledger', ledger)
+        : await sb.from('invoice_settings').update(patch).eq('id', true);
       if (error) throw new Error(error.message);
-      closeKpi(); toast('Payment details saved', 'ok');
+      closeKpi(); toast((own ? ledgerLabel(ledger) + ' details' : 'Payment details') + ' saved', 'ok');
       await loadInvoices();
     }, 'Save details');
   // Seed the repeatable list from what is stored, then draw it. Has to happen
@@ -27616,7 +27683,7 @@ $('panel-invoices').addEventListener('click', async (e) => {
   const ch = e.target.closest('[data-invchip]');
   if (ch) { invDash.state = evToggle(invDash.state, ch.dataset.invchip); renderInvoices(); return; }
   if (e.target.closest('[data-invclear]')) { invDash.q = ''; invDash.state = []; renderInvoices(); return; }
-  if (e.target.closest('[data-invsettings]')) { openInvoiceSettings(); return; }
+  const isb = e.target.closest('[data-invsettings]'); if (isb) { openInvoiceSettings(isb.dataset.invsettings || null); return; }
   if (e.target.closest('[data-invnew]')) { invCreateFrom({}); return; }
   const op = e.target.closest('[data-invopen]');
   if (op) { e.preventDefault(); openInvoice(op.dataset.invopen); return; }
@@ -27662,6 +27729,10 @@ $('kpiModalOverlay').addEventListener('click', async (e) => {
     await invSyncPaid(); await invReload(); return;
   }
   if (e.target.closest('[data-invpayadd]')) { invRecordPayment(); return; }
+  if (e.target.closest('[data-invattev]')) { invAttachEventReceipts(); return; }
+  if (e.target.closest('[data-invattup]')) { invAttachUpload(); return; }
+  const iad = e.target.closest('[data-invattdel]'); if (iad) { invAttachRemove(iad.dataset.invattdel); return; }
+  const iav = e.target.closest('[data-invattview]'); if (iav) { e.preventDefault(); invAttachView(iav.dataset.invattview); return; }
   if (e.target.closest('[data-invnote]')) {
     // A chase by phone, a promise to pay, a dispute — the things that happen to
     // an invoice off-system and are otherwise lost.
@@ -27803,6 +27874,76 @@ function invRecordPayment() {
     }, 'Record it');
 }
 
+// ---- attachments (247) --------------------------------------------------------
+// Files in the private receipts bucket that go out with the invoice email. An
+// expense's own receipt is attached by PATH, so one upload serves both the
+// expense and the invoice; nothing is copied.
+function invAttName(x) {
+  const ext = ((x.receipt_path || '').match(/\.[a-z0-9]+$/i) || [''])[0];
+  return ('Receipt - ' + (x.vendor || x.category || 'expense') + ' - ' + (x.date || '') + ' - $' + Number(x.amount || 0).toFixed(2))
+    .replace(/[\\/:*?"<>|]/g, '-') + ext;
+}
+async function invAttachEventReceipts() {
+  const o = invDash.open, f = o.full;
+  if (!f.event_id) { toast('This invoice has no event - upload the files instead.', 'err'); return; }
+  const { data, error } = await sb.from('expenses').select('id, date, amount, vendor, category, receipt_path')
+    .eq('event_id', f.event_id).is('deleted_at', null).not('receipt_path', 'is', null).order('date');
+  if (error) { toast(error.message, 'err'); return; }
+  const have = new Set((o.atts || []).map(a => a.path));
+  const todo = (data || []).filter(x => !have.has(x.receipt_path));
+  if (!todo.length) {
+    toast((data || []).length ? 'Every receipt on this event is already attached.'
+      : 'No receipts uploaded on this event\'s expenses yet - add them with 📎 on the Expenses tab.', 'err');
+    return;
+  }
+  const NL = String.fromCharCode(10);
+  if (!confirm('Attach ' + todo.length + ' receipt' + (todo.length > 1 ? 's' : '') + ' to ' + o.row.invoice_no + '?' + NL + NL +
+      todo.map(x => '- ' + invAttName(x)).join(NL) + NL + NL + 'They go out with the invoice email. Remove any with the x.')) return;
+  const { data: { session } } = await sb.auth.getSession();
+  const { error: ie } = await sb.from('invoice_attachments').insert(todo.map(x => ({
+    invoice_id: f.id, path: x.receipt_path, filename: invAttName(x), expense_id: x.id,
+    created_by: (session && session.user && session.user.id) || null })));
+  if (ie) { toast('Could not attach: ' + ie.message, 'err'); return; }
+  toast('Attached ' + todo.length, 'ok');
+  await openInvoice(f.id);
+}
+function invAttachUpload() {
+  const f = invDash.open.full;
+  const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true;
+  inp.accept = 'image/jpeg,image/png,image/webp,application/pdf';
+  inp.onchange = async () => {
+    const files = [...(inp.files || [])]; if (!files.length) return;
+    const { data: { session } } = await sb.auth.getSession();
+    toast('Uploading…', 'ok');
+    for (const file of files) {
+      const path = 'invoice/' + f.id + '/' + Date.now() + '_' + file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const { error: ue } = await sb.storage.from('receipts').upload(path, file, { upsert: false });
+      if (ue) { toast('Upload failed (' + file.name + '): ' + ue.message, 'err'); return; }
+      const { error } = await sb.from('invoice_attachments').insert({ invoice_id: f.id, path, filename: file.name,
+        created_by: (session && session.user && session.user.id) || null });
+      if (error) { toast('Saved the file, but could not attach it: ' + error.message, 'err'); return; }
+    }
+    toast('Attached ' + files.length, 'ok');
+    await openInvoice(f.id);
+  };
+  inp.click();
+}
+async function invAttachRemove(attId) {
+  const x = (invDash.open.atts || []).find(a => a.id === attId); if (!x) return;
+  if (!confirm('Stop sending "' + x.filename + '" with this invoice?' + (x.expense_id ? ' (The expense keeps its receipt.)' : ''))) return;
+  const { error } = await sb.from('invoice_attachments').delete().eq('id', attId);
+  if (error) { toast(error.message, 'err'); return; }
+  // A file uploaded straight onto the invoice belongs to nothing else, so it goes too.
+  if (!x.expense_id && x.path.indexOf('invoice/') === 0) await sb.storage.from('receipts').remove([x.path]);
+  await openInvoice(invDash.open.full.id);
+}
+async function invAttachView(attId) {
+  const x = (invDash.open.atts || []).find(a => a.id === attId); if (!x) return;
+  const { data, error } = await sb.storage.from('receipts').createSignedUrl(x.path, 3600);
+  if (error) { toast(error.message, 'err'); return; }
+  window.open(data.signedUrl, '_blank', 'noopener');
+}
+
 function invSend() {
   const r = invDash.open.row, f = invDash.open.full;
   if (!Number(r.n_lines)) { toast('Add at least one line before sending.', 'err'); return; }
@@ -27811,7 +27952,7 @@ function invSend() {
   // invoice is outward-facing and effectively irreversible - the client has it
   // the moment it lands - so the last screen before it goes shows exactly what
   // is going, to whom, for how much and by when.
-  const s = invDash.settings || {};
+  const s = invSettingsFor(f.ledger) || {};
   const hasPaypal = f.pay_paypal && s.paypal_enabled && s.paypal_handle;
   const hasWire = f.pay_wire && s.wire_enabled && (s.wire_account || s.wire_routing);
   const methods = [hasPaypal ? 'PayPal' : null, hasWire ? 'Bank transfer' : null].filter(Boolean);
@@ -27832,6 +27973,9 @@ function invSend() {
       row2('Issued', escapeHtml(fmtDate(f.issue_date))) +
       row2('Due', dueTxt) +
       row2('Lines', escapeHtml(String(r.n_lines))) +
+      row2('Attached', (invDash.open.atts || []).length
+        ? 'invoice PDF + ' + invDash.open.atts.map(x => escapeHtml(x.filename)).join(', ')
+        : 'invoice PDF only') +
       row2('Total', money(r.total)) +
       (Number(r.paid) ? row2('Already paid', '<span class="pos">' + money(-r.paid) + '</span>') : '') +
       row2('Amount due', '<b style="font-size:1.05rem;">' + money(r.balance) + '</b>') +
@@ -27890,14 +28034,26 @@ function invSend() {
  *  client list - the modal is reachable from screens that never opened it. */
 async function invEnsureLoaded() {
   if (invDash.actors.length && invDash.events.length) return;
-  const [ac, ev, st] = await Promise.all([
+  const [ac, ev, st, iss] = await Promise.all([
     sb.from('actors').select('id, display_name, legal_name, email').is('deleted_at', null).order('display_name'),
-    sb.from('events').select('id, name, event_date').is('deleted_at', null).order('event_date', { ascending: false }),
+    sb.from('events').select('id, name, event_date, series').is('deleted_at', null).order('event_date', { ascending: false }),
     sb.from('invoice_settings').select('*').eq('id', true).maybeSingle(),
+    sb.from('invoice_issuers').select('*'),
   ]);
   invDash.actors = ac.data || [];
   invDash.events = ev.data || [];
   invDash.settings = (st && st.data) || null;
+  invDash.issuers = (iss && iss.data) || [];
+}
+
+/** Who an invoice in this ledger is FROM - the same rule invoice-doc prints by (244).
+ *  The issuer row REPLACES Come With's fields (a spread, so its nulls win). Null
+ *  for a sub_admin, exactly like invDash.settings: these are master-only. */
+function invSettingsFor(ledger) {
+  const base = invDash.settings;
+  const own = (invDash.issuers || []).find(x => x.ledger === ledger);
+  if (!base && !own) return null;
+  return own ? Object.assign({}, base || {}, own) : base;
 }
 
 /** Shared guard: refuse rows that are already on a live invoice, and say which. */

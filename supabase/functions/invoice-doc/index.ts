@@ -91,7 +91,7 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
   const { data: inv } = await q.maybeSingle();
   if (!inv) return null;
 
-  const [{ data: lines }, { data: payments }, { data: settings }, { data: actor }, { data: event }] =
+  const [{ data: lines }, { data: payments }, { data: baseSettings }, { data: actor }, { data: event }, { data: issuer }] =
     await Promise.all([
       a.from("invoice_lines").select("*").eq("invoice_id", inv.id)
         .order("position", { ascending: true }).order("created_at", { ascending: true }),
@@ -104,7 +104,15 @@ async function loadDoc(where: { id?: string; token?: string }): Promise<
       inv.event_id
         ? a.from("events").select("name, event_date").eq("id", inv.event_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      // 244: a ledger with its own issuer (Come With Consulting, a separate sole
+      // proprietorship) is FROM that business. Spread, never merge field by field:
+      // its nulls must overwrite, or a blank Consulting bank field would print
+      // Come With's account number on a Consulting invoice.
+      inv.ledger && inv.ledger !== "come_with"
+        ? a.from("invoice_issuers").select("*").eq("ledger", inv.ledger).maybeSingle()
+        : Promise.resolve({ data: null }),
     ]);
+  const settings = issuer ? { ...(baseSettings || {}), ...issuer } : baseSettings;
 
   const doc: InvoiceDoc = {
     invoice_no: inv.invoice_no,
@@ -302,6 +310,26 @@ Deno.serve(async (req) => {
 
     const { bytes, path } = await storePdf(row.id as string, doc, (row.event_id as string) || null);
 
+    // 247: receipts attached to this invoice ride along with the PDF. A file that
+    // cannot be read FAILS the send rather than going out without it - an
+    // invoice that says "receipts attached" and arrives without them is worse
+    // than one that has not gone yet.
+    const { data: atts } = await a.from("invoice_attachments").select("path, filename")
+      .eq("invoice_id", row.id).order("created_at", { ascending: true });
+    const extra: { filename: string; content: string }[] = [];
+    let extraBytes = 0;
+    for (const att of atts || []) {
+      const { data: blob, error: dlErr } = await a.storage.from("receipts").download(att.path);
+      if (dlErr || !blob) return err(500, `Could not read the attachment "${att.filename}" - nothing was sent.`);
+      const buf = new Uint8Array(await blob.arrayBuffer());
+      extraBytes += buf.length;
+      extra.push({ filename: att.filename, content: b64(buf) });
+    }
+    // Resend's limit is 40 MB per email after base64 (x1.37). Stay well inside it.
+    if (extraBytes + bytes.length > 25 * 1024 * 1024) {
+      return err(413, "The attachments are too large to email together (over 25 MB). Remove some and send again.");
+    }
+
     const resend = new Resend(resendKey);
     const subject = body.subject
       ? String(body.subject)
@@ -314,7 +342,7 @@ Deno.serve(async (req) => {
       reply_to: doc.settings?.biz_email || undefined,
       subject,
       html: emailHtml(doc, t, body.note),
-      attachments: [{ filename: fileName(doc), content: b64(bytes) }],
+      attachments: [{ filename: fileName(doc), content: b64(bytes) }, ...extra],
     });
     if (sent.error) return err(502, "Resend refused it: " + sent.error.message);
 
@@ -340,6 +368,7 @@ Deno.serve(async (req) => {
       to,
       cc: body.cc || null,
       subject,
+      attachments: (atts || []).map((x: { filename: string }) => x.filename),
       resend: !!sent.data?.id,
       // A re-send is a different act from the first send and reads differently
       // on the timeline.
