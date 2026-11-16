@@ -22,6 +22,9 @@
     funded_by=business. The $71.93 Consulting owed Come With is settled by offset (Beatport 2025-07-26
     $5.96 + Sq Tce Presents 2026-06-21 $65.97 marked reimbursed). `v_cash_position` counts Consulting
     costs paid from 'bank'. Cash reserve $3,276.49; LEARNINGS **§122**. The history below is kept.
+  - **Invoice PDFs fit one page when they can** (invoice-doc v19): 100 -> 95 -> 90 -> 85 -> 80%,
+    and below 80% they paginate at full size. Invoices that already fit are byte-identical.
+    `layoutInvoicePdf(doc, scale)` + `Page` scale in pdf.ts; tests in scripts/test_invoice.mjs.
   - ~~DUPLICATE HULAWEEN (my error, open):~~ an original "Hulaween" event already existed
     (`ffc2391c…`, slug `hulaween`, 10/22-25, Growth & Networking, created July: 20 card-imported
     charges, 4 lineup, 1 task). 245 created a second (`b12ea8b3…`, `hulaween-2026`, 10/12-21,
