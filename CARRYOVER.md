@@ -34,6 +34,14 @@
   - **246 written + dry-run (with 245), NOT applied, on the branch:** reimbursement $802.98 as
     5 consulting Travel expenses + matching accrued Reimbursement income + DRAFT CWC-2026-0002.
     Apply order after merge: deploy invoice-doc -> 245 -> 246.
+  - **Consulting Venmo = @kberky** (set on `invoice_issuers.extra_methods`). Zelle left
+    for Keith to add in Consulting details.
+  - **247 applied (on master): `invoice_attachments`**, i.e. receipts emailed with an invoice
+    (row present = attached). The UI and the `invoice-doc` send are on the branch. The Hulaween
+    receipts are uploaded to `receipts/expense/hulaween-2026/` (rental agreement + 3 TollPass
+    emails rendered to PDF); 246 sets them as `receipt_path` and pre-attaches them to
+    CWC-2026-0002. The **hotel receipt is still missing.** Prod has 247 applied before 245/246:
+    that's out of order, but no number is duplicated.
   3. ~~Lost Lands~~ settled above. **Hulaween reimbursement to JSD Drip (est. $802.98):** Enterprise RA 5F00G8 $616.82
      (ESTIMATE on the rental agreement, 10/16-10/28; need the final receipt), tolls $86.16
      (3 TollPass receipts: $77.83 incl. $19.80 fees, $2.33, $6.00), hotel Jacksonville
