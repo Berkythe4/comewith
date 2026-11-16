@@ -1,3 +1,42 @@
+# Carryover - 2026-11-16 (DI #3 finals; FFBJ invoices; Come With Consulting ledger - DESKTOP)
+
+## Later the same session: FFBJ gigs, Juice merge, Come With Consulting
+- **Migrations: prod is at 244** (`244_consulting_ledger.sql`, on master). **245 is written
+  but NOT applied**; it's on branch `consulting-ledger`. LEARNINGS latest is **§118**.
+- **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
+  Halloween (10/31, Refuge), series Bookings, owner Frick Frack BlackJack, Berky on the lineup.
+  Income is accrued ($125; $125 + $100 OT). Invoices **CW-2026-0003 ($125)** and **CW-2026-0004
+  ($225)** are DRAFTS, so Keith sends them from the dashboard. `bill_to_email` is empty
+  (FFBJ has no email on file).
+- **Jessica Kenny = actor "Juice"** (existed since July: jessplendid.inc@gmail.com, org FFBJ,
+  4 lineups). The duplicate "Jessica Kenny" actor made earlier today was merged into it and
+  deleted. Juice now carries `legal_name` and the ownership notes (FFBJ + JSD Drip).
+- **Come With Consulting = a separate sole proprietorship (§118).** All JSD Drip work.
+  - 244 (applied): `consulting` ledger, `invoice_issuers` (seeded "Come With Consulting",
+    CWC, NO bank details yet), `next_invoice_no(ledger)`.
+  - **Branch `consulting-ledger` (pushed, awaiting Keith's sign-off; do not merge to close):**
+    the dashboard (series "Come With Consulting", ledger-safe forms, P&L switch, invoice books +
+    "Consulting details" editor), `invoice-doc` (prints the ledger's issuer; deploy WITH the
+    merge: `python scripts/deploy_edge_function.py invoice-doc --no-verify-jwt`), and 245.
+  - **After merge:** deploy invoice-doc, then apply 245 (Hulaween event 10/12-10/21, $1,350
+    consulting income paid in kind as the joggers rev-share buy-in, CWC-2026-0001 paid). Dry run passed.
+- **Open with Keith:**
+  1. Consulting payment details (bank/PayPal) are blank. Fill them in under Invoices ->
+     Consulting details.
+  2. **Lost Lands (CW-2026-0002, $1,200, JSD Drip)** was issued and paid INTO Come With's
+     bank as Come With. Moving it to Consulting would reprint a sent invoice under another
+     business, and the cash is in Come With's account. Keith to decide: leave it, or move
+     it and record a transfer.
+  3. **Hulaween reimbursement to JSD Drip (est. $802.98):** Enterprise RA 5F00G8 $616.82
+     (ESTIMATE on the rental agreement, 10/16-10/28; need the final receipt), tolls $86.16
+     (3 TollPass receipts: $77.83 incl. $19.80 fees, $2.33, $6.00), hotel Jacksonville
+     10/20 $100. Not entered yet. Book as consulting expenses (paid personally) plus an
+     invoice to JSD Drip.
+- DI #3: the later Zeffy export `(1)` is the per-ticket check-in list. 44 of 62 Zeffy
+  tickets were scanned, walk-ups included in the unscanned, so it is not a headcount.
+
+---
+
 # Carryover - 2026-11-16 (DI #3 final exports imported; homepage DI metrics final - DESKTOP, Quick Close)
 
 **Data only: no code, no migration, no deploy.** Prod is still at migration 243. LEARNINGS latest is **§116**.
