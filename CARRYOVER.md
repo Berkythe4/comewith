@@ -16,6 +16,21 @@
   - **CWC-2026-0001 ($1,350 paid in kind) SENT as an FYI receipt** (same to/cc, "nothing is
     due" note). It stays `paid`; its income stays `received`. Keith is test-sending
     CWC-2026-0002 with its receipts himself.
+  - **DUPLICATE HULAWEEN (my error, open):** an original "Hulaween" event already existed
+    (`ffc2391c…`, slug `hulaween`, 10/22-25, Growth & Networking, created July: 20 card-imported
+    charges, 4 lineup, 1 task). 245 created a second (`b12ea8b3…`, `hulaween-2026`, 10/12-21,
+    Consulting), which holds the income, CWC-0001/0002 and the rental/hotel/$6 toll. **Not merged
+    yet: Keith to pick the dates** (he said 10/12-21; the original says 10/22-25; the card charges
+    run 10/19-10/28).
+  - **Tolls were double-booked** (246 vs the card import "Eractoll 5f00g8" $77.83/$2.33). Fixed:
+    the card rows are kept (now consulting, Travel, receipts linked, invoice attachments re-pointed)
+    and my two copies are soft-deleted. **The $6.00 toll (EHI210613686) isn't imported yet. When
+    "Eractoll" $6.00 lands, delete the manual 246 row and re-point its attachment, or it doubles.**
+  - Per Keith: Walmart $133.21 + Hilton $15.05 are reimbursable, so they were ADDED to
+    CWC-2026-0002 (now **$951.24**, 7 lines, still draft). Meals + fuel ($358.75) are NOT billed
+    but were moved to the consulting ledger. Left on Come With: E-ZPass rebill $25 and Morphis Art
+    $21.20 (asked Keith). McDonald's $31.58 + Subway $40.35 were paid from Come With's bank and
+    are now consulting, so Come With's cash reserve no longer deducts that $71.93 (asked Keith).
   - **The dashboard was DOWN ~15 min after the merge** (a JS syntax error that the esprima
     check missed). Fixed and verified with headless Edge (§120). LEARNINGS latest is **§121**.
 - **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
