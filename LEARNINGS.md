@@ -3133,3 +3133,33 @@ Same problem, no fix: Kierney Kearney (a comp) bought a ticket as "Kierney Rose
 Brennan" with another email. The ticket is attached to her record so she counts
 once. A future UI re-import of the 11-16 Zeffy file will offer her as 1 new person
 and door row. Leave that one out.
+
+## Section 117 — `db.py` records a dry run unless `rollback;` is on a line of its own (2026-11-16)
+
+`db.py` records any numbered migration file it runs in `applied_migrations`, and it
+skips that only when the SQL has a line matching `^\s*rollback\s*;`. A dry-run file
+ending `select ...; rollback;` on ONE line ran, rolled back, and was still recorded
+as "244 applied". Prod's history then claimed a migration that was never applied.
+It was caught by the "recorded migration 244" line and deleted. **Put `rollback;` on
+its own line**, and read the `[db.py]` banner after every dry run: it must say
+`dry run detected - NOT recording`.
+
+## Section 118 — Come With Consulting is a third set of books, not a line of Come With (244, 2026-11-16)
+
+Keith: Come With Consulting is a separate sole proprietorship. All JSD Drip work is
+Consulting; Frick Frack BlackJack work stays Come With for now. So it is a ledger
+(`consulting`) with its own P&L, its own invoice issuer (`invoice_issuers`: name,
+CWC- numbers, bank) and its own gapless number series. It is NOT a category under
+Come With. Three rules came out of building it:
+- **The dashboard decides the books from the event's series** (`ledgerForSeries()`:
+  "Dance Infusion" -> DI, "Come With Consulting" -> consulting, else Come With).
+  This is one helper, not five copies of a regex.
+- **A form that lists two ledgers rewrites the third.** The old expense Books
+  select marked Come With as selected for anything that wasn't DI. So no consulting
+  rows may exist on prod until the dashboard that knows them is live (245 waits for
+  the merge).
+- **An issuer REPLACES Come With's details; it never merges with them.** It is
+  spread over `invoice_settings`, so a blank Consulting bank field prints blank. A
+  field-by-field fallback would print Come With's account number on a Consulting
+  invoice.
+`v_cash_position` and `v_contractor_1099` stay Come With-only on purpose.
