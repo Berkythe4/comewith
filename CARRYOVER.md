@@ -11,6 +11,10 @@
     $802.98: DRAFT, with 4 receipts attached (hotel receipt missing). Keith sends it.
     Rental $616.82 confirmed final by Keith.
   - Branch `consulting-ledger` is merged; safe to delete.
+  - **CW-2026-0003 and CW-2026-0004 SENT** to jessplendid.inc@gmail.com, cc berky@comewith.org
+    (Resend: delivered); their income is now `invoiced`.
+  - **The dashboard was DOWN ~15 min after the merge** (a JS syntax error that the esprima
+    check missed). Fixed and verified with headless Edge (§120). LEARNINGS latest is **§121**.
 - **FFBJ (Come With books), on prod:** events Vampire Ball (10/30, Industry City) and Refuge
   Halloween (10/31, Refuge), series Bookings, owner Frick Frack BlackJack, Berky on the lineup.
   Income is accrued ($125; $125 + $100 OT). Invoices **CW-2026-0003 ($125)** and **CW-2026-0004

@@ -3173,3 +3173,25 @@ migration edit committed all 17 files. Merged and pushed, `master` would have
 deployed those deletions to the live site. It was caught by reading `git show --stat`
 before the push, and the tree was put back exactly as it was. **Stage by path,
 always** (`git add <file>`), and read the stat of anything about to reach `master`.
+
+## Section 120 — `check_inline_js.py` passing does NOT mean the dashboard parses (2026-11-16)
+
+The Consulting merge took the live dashboard down for about 15 minutes: `Uncaught
+SyntaxError: Unexpected identifier 's'`. Two `Come With\'s` in a patch sent through a
+shell heredoc lost their backslash (CLAUDE.md warns about exactly this), so each
+string ended at the apostrophe. `check_inline_js.py` reported OK, because esprima
+stops at an earlier construct on BOTH sides, so nothing after that point is checked
+at all. Node's full parser found it immediately: extract the inline module to a
+`.mjs`, run `node --check`, and the pre-edit file fails or passes the same way as a
+control. **Where node exists, `node --check` on the extracted module is the gate.**
+The esprima check is only for machines without a JS runtime, and it is blind past its
+stopping line. The site was confirmed back with headless Edge (`--enable-logging`,
+no console errors), not by reading the code. Apostrophes in user-facing text are
+now ’, which needs no escape.
+
+## Section 121 — invoice-doc's service key is the NEW secret key, not the legacy JWT (2026-11-16)
+
+Sending an invoice from a script: `requireAdmin` compares the bearer against
+`SUPABASE_SERVICE_ROLE_KEY`, which on this project holds the `sb_secret_…` key. The
+legacy `service_role` JWT from `/api-keys?reveal=true` gets a 401. Use the key with
+`type: secret`, read in memory and never printed.
