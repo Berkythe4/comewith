@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Dance Infusion #3 impact report.
+     Data: events.impact_report for DI #3, read through v_public_impact_report, which
+     returns the row ONLY while the dashboard "Show on public site" toggle
+     (events.impact_report_public) is on. Toggle off -> "not published yet".
+     Unlike the DI #2 page, nothing here is hardcoded: every figure comes from
+     impact_report.config, and anything left blank is omitted rather than shown as a
+     placeholder (this page is public). Pinned to DI #3 by id, so publishing another
+     event's report can never re-skin it. -->
+<title>Dance Infusion #3 — Impact Report</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16243f; --navy2:#22335a; --cream:#faf6ec; --cream2:#f1ead8;
+    --ink:#1b2335; --muted:#5d6678; --line:#e3dcc8; --accent:#c8a24a; --green:#3a8c4a;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{background:var(--cream);color:var(--ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:720px;margin:0 auto;padding:0 20px}
+  h1,h2,h3{font-family:"Bebas Neue",Impact,sans-serif;font-weight:400;letter-spacing:.02em;line-height:1}
+  .eyebrow{font-size:12px;letter-spacing:.22em;text-transform:uppercase;color:var(--muted);font-weight:700}
+  a{color:var(--navy)}
+  .hero{background:var(--navy);color:var(--cream);padding:64px 0 56px;text-align:center}
+  .hero .eyebrow{color:#c9b67e}
+  .hero .amount{font-family:"Bebas Neue";font-size:clamp(84px,22vw,168px);line-height:.86;color:var(--cream);margin:10px 0 4px}
+  .hero .to{font-family:"Bebas Neue";font-size:clamp(26px,7vw,46px);letter-spacing:.03em;color:#e9dcb6}
+  .hero .meta{margin-top:22px;font-size:15px;color:#c4cbda}
+  .hero .subtitle{margin:20px auto 0;max-width:520px;font-size:17px;color:#dfe4ee;font-style:italic}
+  section{padding:44px 0;border-bottom:1px solid var(--line)}
+  section h2{font-size:34px;color:var(--navy);margin:0 0 6px}
+  section .lede{font-size:18px;margin:0 0 18px}
+  p{margin:0 0 14px}
+  .narr{font-size:17px;color:#2a3142}
+  .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+  .stat{border:1px solid var(--line);border-radius:14px;padding:16px 12px;background:#fff;text-align:center}
+  .stat .n{font-family:"Bebas Neue";font-size:42px;color:var(--navy);line-height:1}
+  .stat .l{font-size:12px;text-transform:uppercase;letter-spacing:.12em;color:var(--muted);font-weight:700;margin-top:6px}
+  .trend{width:100%;border-collapse:collapse;margin-top:8px;background:#fff;border:1px solid var(--line);border-radius:14px;overflow:hidden}
+  .trend th,.trend td{padding:12px 14px;text-align:right;border-bottom:1px solid var(--line);font-size:15px}
+  .trend th:first-child,.trend td:first-child{text-align:left}
+  .trend th{font-size:11px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted);font-weight:700;background:var(--cream2)}
+  .trend td.cur{font-weight:700;color:var(--navy)}
+  .trend tr:last-child td{border-bottom:0}
+  .total{margin-top:16px;font-size:16px}
+  .total b{font-family:"Bebas Neue";font-size:28px;color:var(--navy);letter-spacing:.02em}
+  .tier{margin:0 0 16px}
+  .tier .tname{font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);font-weight:700;margin-bottom:6px}
+  .members,.inline-list{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:6px 14px;font-size:14px;font-weight:500}
+  .rphoto{display:block;width:100%;border-radius:12px;margin:14px 0;object-fit:cover}
+  .people{margin:6px 0 0;padding:0;list-style:none}
+  .people li{padding:5px 0;border-bottom:1px dashed var(--line);font-size:15px}
+  .people li span{color:var(--muted)}
+  .cta{display:block;text-align:center;background:var(--accent);color:#1a1405;text-decoration:none;border-radius:14px;padding:18px;font-size:16px;font-weight:700;margin:8px 0}
+  .cta small{display:block;font-weight:400;color:#5a4a17;margin-top:4px;font-size:13px}
+  footer{padding:34px 0 60px;text-align:center;color:var(--muted);font-size:13px}
+  .quote{font-family:"Bebas Neue";font-size:30px;line-height:1.05;color:var(--navy);text-align:center;padding:8px 0}
+  .quote-by{text-align:center;color:var(--muted);font-size:14px;margin-top:8px;font-style:italic}
+  .pdfbar{position:sticky;top:0;z-index:50;background:rgba(250,246,236,.92);backdrop-filter:blur(6px);border-bottom:1px solid var(--line)}
+  .pdfbar .wrap{display:flex;justify-content:space-between;align-items:center;padding:10px 20px}
+  .pdfbar .brand{font-family:"Bebas Neue";font-size:20px;color:var(--navy);letter-spacing:.04em}
+  .btn{font-family:"DM Sans";font-weight:700;font-size:13px;background:var(--accent);color:#1a1405;border:0;border-radius:999px;padding:9px 18px;cursor:pointer}
+  .err{max-width:720px;margin:40px auto;padding:20px;border:1px solid #e7c3c3;background:#fbeaea;border-radius:12px;color:#8a2a2a;font-size:14px}
+  @media (max-width:520px){ .stat .n{font-size:34px} .trend th,.trend td{padding:10px 8px;font-size:14px} }
+  @media print{
+    .pdfbar{display:none}
+    body{background:#fff}
+    .hero{background:#fff!important;color:var(--navy)!important;border-bottom:2px solid var(--navy);padding:24px 0}
+    .hero .amount,.hero .to{color:var(--navy)!important}
+    .hero .eyebrow{color:var(--muted)!important}
+    .hero .meta,.hero .subtitle{color:#333!important}
+    section{break-inside:avoid;padding:20px 0}
+  }
+</style>
+</head>
+<body>
+<div class="pdfbar"><div class="wrap"><span class="brand">DANCE INFUSION</span><button class="btn" onclick="window.print()">Export as PDF</button></div></div>
+<div id="app"></div>
+
+<script>
+const EVENT_ID = 'f13bf700-7383-497b-91b8-d1f6781e077b';   // Dance Infusion #3
+const SB_URL = 'https://yaytdosxfhcqatmhctzk.supabase.co';
+const SB_KEY = 'sb_publishable_IkigzWOTU3ZSMK9DxqwwJw_AaQkShCi';
+const H = { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY };
+
+const money = n => '$' + Number(n).toLocaleString('en-US', { maximumFractionDigits: 0 });
+const num = n => Number(n).toLocaleString('en-US');
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const photoURL = p => SB_URL + '/storage/v1/object/public/event-photos/' + p;
+const has = v => v != null && v !== '' && !(Array.isArray(v) && !v.length);
+
+async function load() {
+  if (window.__IMPACT_PREVIEW__) return window.__IMPACT_PREVIEW__;   // local render check only
+  const r = await fetch(SB_URL + '/rest/v1/v_public_impact_report?select=id,impact_report,hero_image_path&id=eq.' + EVENT_ID, { headers: H });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  const row = rows && rows[0];
+  if (!row || !row.impact_report || !Object.keys(row.impact_report).length) return null;
+  return { report: row.impact_report, hero_image_path: row.hero_image_path };
+}
+
+async function surveyCta() {
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/v_public_survey?select=public_token&event_id=eq.' + EVENT_ID + '&limit=1', { headers: H });
+    if (!r.ok) return;
+    const rows = await r.json();
+    const el = document.getElementById('surveyCta');
+    if (el && rows && rows.length) el.innerHTML = `<a class="cta" href="/survey.html?t=${encodeURIComponent(rows[0].public_token)}">Tell us about your night →<small>Two minutes — your feedback shapes the next one</small></a>`;
+  } catch (_) {}
+}
+
+function render({ report, hero_image_path }) {
+  const cfg = report.config || {}, c = report.content || {};
+  const ev = c.event || {}, nar = c.narratives || {}, hm = c.human_moment || {}, ph = c.photos || {};
+  const name = ev.name || cfg.event_name || 'Dance Infusion #3';
+  const hero = ph.hero || hero_image_path;
+  const quote = (hm.quote || '').trim().replace(/^["“”']+|["“”']+$/g, '').trim();
+
+  const stats = [
+    has(cfg.attendance) && [num(cfg.attendance), 'on the floor'],
+    has(cfg.tickets_sold) && [num(cfg.tickets_sold), 'tickets sold'],
+    has(cfg.artists_count) && [num(cfg.artists_count), 'DJs'],
+  ].filter(Boolean);
+
+  const growth = Array.isArray(cfg.growth) ? cfg.growth : [];
+  const cols = growth.length ? Object.keys(growth[0].values || {}) : [];
+  const fmt = (g, v) => v == null ? '—' : (g.kind === 'money' ? money(v) : num(v));
+
+  const tiers = (c.sponsor_display || []).filter(t => (t.members || []).length).map(t => `
+    <div class="tier"><div class="tname">${esc(t.tier)}</div>
+      <div class="members">${t.members.map(m => `<span class="chip">${esc(m.name)}</span>`).join('')}</div></div>`).join('');
+
+  document.getElementById('app').innerHTML = `
+  <header class="hero"><div class="wrap">
+    <div class="eyebrow">${esc(name)} · Impact Report</div>
+    <div class="amount">${money(cfg.to_mission)}</div>
+    <div class="to">to the National MS Society</div>
+    <div class="meta">${esc(ev.date || '')}${ev.venue ? ' · ' + esc(ev.venue) : ''}</div>
+    ${ev.hero_subtitle ? `<div class="subtitle">${esc(ev.hero_subtitle)}</div>` : ''}
+  </div></header>
+
+  ${hero ? `<section><div class="wrap"><img class="rphoto" src="${photoURL(hero)}" alt="${esc(name)}"></div></section>` : ''}
+
+  ${nar.why_we_dance ? `<section><div class="wrap">
+    <div class="eyebrow">Why we dance</div><h2>For something bigger</h2>
+    <p class="narr">${esc(nar.why_we_dance)}</p></div></section>` : ''}
+
+  <section><div class="wrap">
+    <div class="eyebrow">The night</div><h2>${esc(ev.night_heading || 'The night')}</h2>
+    ${nar.the_event ? `<p class="narr">${esc(nar.the_event)}</p>` : ''}
+    ${stats.length ? `<div class="stats">${stats.map(s => `<div class="stat"><div class="n">${s[0]}</div><div class="l">${esc(s[1])}</div></div>`).join('')}</div>` : ''}
+    ${ph.inline ? `<img class="rphoto" src="${photoURL(ph.inline)}" alt="On the floor">` : ''}
+    ${quote ? `<div class="quote">“${esc(quote)}”</div>${hm.attribution ? `<div class="quote-by">— ${esc(hm.attribution)}</div>` : ''}` : ''}
+  </div></section>
+
+  ${growth.length ? `<section><div class="wrap">
+    <div class="eyebrow">Three nights</div><h2>Dance Infusion so far</h2>
+    ${cfg.growth_lede ? `<p class="lede">${esc(cfg.growth_lede)}</p>` : ''}
+    <table class="trend"><thead><tr><th></th>${cols.map(k => `<th>${esc(k)}</th>`).join('')}</tr></thead>
+      <tbody>${growth.map(g => `<tr><td>${esc(g.label)}</td>${cols.map((k, i) => `<td class="${i === cols.length - 1 ? 'cur' : ''}">${fmt(g, g.values[k])}</td>`).join('')}</tr>`).join('')}</tbody></table>
+    ${has(cfg.cumulative_to_mission) ? `<p class="total">Together, three nights have sent <b>${money(cfg.cumulative_to_mission)}</b> to the National MS Society.</p>` : ''}
+  </div></section>` : ''}
+
+  ${tiers ? `<section><div class="wrap"><div class="eyebrow">Made possible by</div><h2>Our sponsors</h2>${tiers}</div></section>` : ''}
+
+  ${(has(c.artists) || has(c.team)) ? `<section><div class="wrap">
+    ${has(c.artists) ? `<div class="eyebrow">On the decks</div><h2>Artists</h2>
+      <div class="inline-list">${c.artists.map(a => `<span class="chip">${esc(a)}</span>`).join('')}</div>` : ''}
+    ${has(c.team) ? `<div class="eyebrow" style="margin-top:24px">Behind it</div><h2>The team</h2>
+      <ul class="people">${c.team.map(p => `<li><strong>${esc(p.name)}</strong> <span>— ${esc(p.role)}</span></li>`).join('')}</ul>` : ''}
+  </div></section>` : ''}
+
+  ${nar.whats_next ? `<section><div class="wrap"><div class="eyebrow">What's next</div><h2>See you on the floor</h2>
+    <p class="narr">${esc(nar.whats_next)}</p></div></section>` : ''}
+
+  <section style="border-bottom:0"><div class="wrap"><div id="surveyCta"></div></div></section>
+
+  <footer><div class="wrap">
+    ${esc(name)} · A Come With production benefiting the National MS Society<br>
+    ${esc((c.contact && c.contact.instagram) || '')}${c.contact && c.contact.email ? ' · ' + esc(c.contact.email) : ''}
+  </div></footer>`;
+}
+
+(async function () {
+  const app = document.getElementById('app');
+  try {
+    const d = await load();
+    if (!d) { app.innerHTML = '<div class="err">This impact report isn’t published yet.</div>'; return; }
+    render(d);
+    surveyCta();
+  } catch (e) {
+    app.innerHTML = '<div class="err">Could not load the impact report.</div>';
+  }
+})();
+</script>
+</body>
+</html>

@@ -116,7 +116,7 @@ const photoSlot = (p, desc) => (p && typeof p === 'string')
 // fallback (keeps the dev preview + pre-migration state working).
 async function fromSupabase(){
   try{
-    const r = await fetch(SB_URL + '/rest/v1/v_public_impact_report?select=impact_report,hero_image_path,name,event_date&order=event_date.desc&limit=1',
+    const r = await fetch(SB_URL + '/rest/v1/v_public_impact_report?select=id,impact_report,hero_image_path,name,event_date&id=eq.ff2b1917-9a3f-42f8-8b9f-4a1deec2338e',
       { headers: { apikey: SB_KEY, Authorization: 'Bearer ' + SB_KEY } });
     if(!r.ok) return null;
     const rows = await r.json();
