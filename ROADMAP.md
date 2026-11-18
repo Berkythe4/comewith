@@ -207,6 +207,19 @@ preview — no build step required.
 
 ---
 
+## Current state — reconciled 2026-11-18 (DI #3 money final + impact report draft)
+
+- ✅ 249-255: DI #3 money final. The Signal minimum was missed, so Signal kept the deposit and no
+  balance is owed. The figures were checked against the Bluevine exports (§126). Founder money is
+  **sponsorship, not donation**, on DI #1-#3 (§125). To MS $1,965 (Keith kept the $40-tier split).
+  Emmy paid. DI #3 `completed`; homepage ticket button off. DI #3 segments merged into `dance-infusion-3`.
+- ✅ DI #3 impact report: a draft plus its own id-pinned page. DI #2's page is pinned too (§127).
+- ⏳ To record when they clear: Keith's $896.95 (confirmed sponsorship -> paid), Zeffy $770, RA
+  ~$104.40, Frick Frack $500, MS $1,965. Keith edits and publishes the impact report, then the
+  homepage button is repointed from DI #2.
+- Backlog: the 11-16 items below, minus "DI #3 still on_sale + Get tickets" (done). The homepage
+  `di.tier1_desc` typo ("%100").
+
 ## Current state — reconciled 2026-11-16 (DI #3 finals + Come With Consulting books)
 
 - ✅ DI #3 closed out: final Zeffy/RA/Partiful imported, comps reconciled (door list 96), homepage

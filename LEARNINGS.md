@@ -3233,3 +3233,46 @@ long invoice should stay readable rather than tiny. It scales the LAYOUT, not th
 `cm`. Margins and columns derive from that width, so the real margins stay 48pt and nothing is
 pushed into a corner. An invoice that already fits is byte-identical to before (tested). The floor
 is `FIT_MIN_SCALE` in template.ts.
+
+## Section 125 — Founder money on a fundraiser is SPONSORSHIP, never a donation (253-254, 2026-11-18)
+
+Keith: "Can't call my $1,750 or Come With $150 a donation because that implies it goes to MS
+Society, must call it sponsorship to keep it clean." On a benefit, a DONATION reads as money
+for the beneficiary. Money the founder (or Come With) puts in to cover production costs is a
+sponsorship: `sponsorships` row, tier **`Founder sponsorship`**, kept separate from the paid
+sponsors so it never reads as outside support. The DI #1/#2 pattern (`third_party_donations`,
+processor `Founder out-of-pocket`) was retired and both rows moved (254). Totals did not move:
+every money view sums donations + sponsor cash. `owner_advances` gained
+`converted_to_sponsorship` for an advance that is not repaid. Money committed but not yet sent
+is a `confirmed` sponsorship, flipped to `paid` when it lands. An outlay Keith paid himself (a
+Venmo tip) joins his founder sponsorship and its expense is marked `reimbursed_at` with the
+reason written on it.
+
+## Section 126 — Reconcile owner money against the bank export before you close an event (251-252, 2026-11-18)
+
+Three DI #3 entries had been typed in from memory with no bank record behind them, and all three
+were wrong. The "$2,000 transfer" was $1,750, and that $1,750 also covered the $500 Champion
+sponsorship, so booking the advance at $1,750 counted $500 twice. The Meta ad "paid personally"
+was Come With's 10/16 business-card charge, booked a second time. A $29.12 Signal charge was
+personal. The Bluevine exports caught every one in minutes. The audit that settles an event is a
+tie-out, not a re-read: **money recorded through a processor = paid out to the bank + the
+pending payout** (DI #3: Zeffy $3,615 = $2,845 + $770, to the penny). Ask for the exports
+before converting an advance or calling a gap.
+
+## Section 127 — An impact-report page is pinned to ONE event by id (255, 2026-11-18)
+
+The DI #2 page loaded `v_public_impact_report ... order by event_date desc limit 1`, the newest
+PUBLISHED report, and hardcoded DI #2's figures around it. Publishing DI #3 would have re-skinned
+it with DI #3's data. Every report page now filters `id=eq.<event>`, one page per event
+(`events/dance-infusion/<folder>/reports/impact-report.html`). The DI #3 page reads every figure
+from `impact_report.config` and leaves blank parts off. **A public page never shows a
+placeholder** (DI #2's draws "[PLACEHOLDER]" boxes whenever a field is empty). Side effect: DI #2's
+survey button had never worked (it read `rows[0].id` without selecting `id`), and the pin fixed it.
+
+## Section 128 — Remove a card-imported cost by soft-delete, and KEEP its external_ref (251-252, 2026-11-18)
+
+`uq_expenses_external_ref` is unique over ALL rows, deleted ones included (no `deleted_at`
+filter). A card row that turns out to be personal or a duplicate is soft-deleted with
+`external_ref` left in place, so the next import of the same statement collides and cannot
+re-create it. Nulling the ref, or hard-deleting the row, quietly invites it back. Write the reason
+on the row.

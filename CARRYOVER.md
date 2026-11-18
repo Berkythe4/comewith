@@ -1,3 +1,70 @@
+# Carryover - 2026-11-18 (DI #3 money finalized + impact report draft - DESKTOP, Full Close)
+
+**Closed 2026-11-18 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). No branch,
+no edge-function deploys.
+
+## State summary
+- **Migrations: repo and prod both top out at 255** (249-255 this session, applied in order,
+  each dry-run first; recorded in `public.applied_migrations`).
+- **Prod invariants (close checks, after 255):** all five financial views 401
+  (`check_financial_views.py`); anon sweep clean; post_apply 0 FAIL (run after 253's CHECK change).
+- **LEARNINGS latest: §128** (§125-128 this session). Roles unchanged.
+- The working tree still carries the 16+ uncommitted files that predate this session (radio
+  preview renders, deleted `Receipts/*.pdf`, deleted `events/dance-infusion-2/index-v2.html`).
+  **Not ours. Never `git commit -a` (§119).**
+
+## Tomorrow's default
+1. **When Keith's $896.95 lands in DI Bluevine:** flip the `confirmed` Founder sponsorship
+   ($896.95, DI #3) to `paid`.
+2. **Record as they clear:** Zeffy payout **$770** (confirmed pending, not yet landed); RA payout
+   (~$104.40); **Frick Frack $500** to Shane Fonda (expense `63bb906f`, accrued);
+   **MS Society $1,965** (no expense row; mission money is a promise, like DI #2's ACH note).
+   Projected DI Bluevine after all of it: about $104 (RA) - $3.05 opening = +$101.35 (matches
+   the Control Center).
+3. **Impact report:** Keith edits the draft copy in dashboard -> event -> Impact report (the
+   narratives are Claude's draft; check "every ticket sends $25 ... every donation goes to it in
+   full" and the public "Founding sponsors: Come With, Keith Berkman" tier), adds photos/quote,
+   then toggles **Show on public site**. THEN repoint the homepage button: `index.html`
+   `loadImpactReport()` hardcodes the DI #2 link and the "#2" label.
+
+## This session shipped
+**DI #3 money, final (Keith):**
+- **Signal:** $6,000 bar minimum NOT met (bar rang ~$3,000). The one $3,000 payment (11/4) was
+  $2,500 deposit (forfeited in full) + $500 drink tickets. The $3,000 balance invoice is not owed
+  (soft-deleted with reason). Tip guarantee final at $500. Budget lines set to final values
+  (originals in notes); the two TBD lines -> $0. (250)
+- **Checked against the Bluevine exports** (Keith's Downloads, 2026-11-18): one 11/4 transfer of
+  **$1,750** (Wealthfront), not $2,000 = $500 Champion + **$1,250 advance**. The Meta $150 "paid
+  personally" was the duplicate of Come With's 10/16 `FACEBK *AMBJF7ERA4` charge (now tagged to
+  DI #3 and kept on Come With's books). Tst*signal $29.12 was personal (removed). Emmy Adelle $800
+  **paid today** from DI Bluevine; balance **$798.05**. (251-252, §126)
+- **Founder money = sponsorship, not donation** (§125). DI #3: Keith Founder sponsorship $1,750
+  (paid) + **$896.95 (confirmed, not received)**; Come With Founder sponsorship $150 (new org
+  actor "Come With"). DI #1 $1,800 and DI #2 $162.44 moved the same way (254). No
+  `Founder out-of-pocket` donation rows remain anywhere. Advance status `converted_to_sponsorship`
+  (CHECK widened, 253).
+- **Final DI #3:** raised $7,016.35 ($6,119.40 received + $896.95 committed): tickets $1,879.40,
+  sponsors $4,796.95 (4 Champions $2,000 + founder $2,796.95), donations $340. **To MS $1,965**
+  ($25 x 65 + $340; the $40 tier's $15 stays with production; Keith KEPT the split). Costs
+  $4,950. Keith's own money in: **$3,146.95** (+ Come With $150).
+- **Mailing:** DI #3 segments merged into `dance-infusion-3` (the slug both importers write;
+  43 people). Before DI #3 the DI list was 80 subscribed; DI #3 added 34 new; now 115. (249)
+- **Closed out:** DI #3 `status = completed` (now counts on completed-only KPIs); homepage
+  "Get tickets" off (`di.ticket_show = 0`). (255)
+- **Impact report:** DI #3 `events.impact_report` written as a draft (`impact_report_public`
+  false), with its own page `events/dance-infusion/di-03-2026-11/reports/impact-report.html`:
+  every figure from `config`, no placeholders, three-night table + $6,105 total. Rendered and
+  checked in headless Edge. The DI #2 page is now pinned to its own event id (§127), which also
+  fixed its never-working survey button.
+
+## Parked / next
+- `di.tier1_desc` on the homepage reads "%100 Ticket sales donated" (typo; and "100%" is only
+  true of the $25 tier). Keith's copy; not touched.
+- Reimbursements in general still record no cash leaving the bank (`reimbursed_at` only).
+- `v_capital` has no ledger filter (pre-existing).
+
+---
+
 # Carryover - 2026-11-16 (DI #3 finals; FFBJ + Consulting invoicing; Come With Consulting ledger - DESKTOP, Full Close)
 
 **Closed 2026-11-16 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). Branch

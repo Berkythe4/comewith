@@ -33,3 +33,11 @@ See [[project-event-hub-and-di2-money]], [[project-event-import-tool]].
 - **Drinks tab:** − / + steppers for each sponsor package and each guest.
 - **Keith has now used it on prod:** he entered Emmy's $800 fee and set his own drink package.
 - **Still open:** Zeffy re-import before doors (Terry, Angela).
+
+**Update 2026-11-18 (249-255): DI #3 money is final.**
+- **Signal:** the minimum was missed, so Signal kept the $2,500 deposit (plus the $500 drinks, in one $3,000 payment). No balance is owed.
+- **Founder money is a `Founder sponsorship` row, never a donation** (Keith; §125). This applies to DI #1-#3.
+- **Before trusting owner-money entries, check them against the Bluevine exports** (§126). Three of three were wrong on DI #3.
+- **Final:** raised $7,016.35; to MS $1,965 (the $40 tier keeps $15 for production); costs $4,950; Keith's own money $3,146.95.
+- **Still to record:** Keith's $896.95 (confirmed), Zeffy $770, RA, Frick Frack $500, MS $1,965.
+- **Impact report:** a draft on its own id-pinned page (§127). It goes public only on Keith's toggle.

@@ -393,8 +393,10 @@ imported; 248 had to merge them. LEARNINGS §122.
 Two-level segments on `subscriber_segments`, established 2026-07-13:
 - **Brand rollups** (what campaigns target): `come_with`, `dance_infusion`.
   A subscriber can hold both. Unsubscribe stays **global** (one master list).
-- **Per-event segments** (cohort history): the event slug or event code,
-  e.g. `come-with-7-11`, `di-02-2026-05`.
+- **Per-event segments** (cohort history): **the event SLUG** (`come-with-7-11`,
+  `dance-infusion-3`) - it is what both importers write (`control-center.js` eventSeg,
+  `import-engine.js`). The code-style `di-01-2025-09` / `di-02-2026-05` are legacy from the
+  June backfill; don't hand-tag a new event that way or the next import splits it (249).
 
 Every event import MUST add BOTH the event segment AND the matching brand
 segment. Public signup widgets pass the brand segment (`come_with` on the
@@ -499,6 +501,19 @@ unique recipient, and never `.maybeSingle()` on a lookup another system can dupl
 - **`owner_advances` (225) is owner money that may be owed back. It is NOT income or
   sponsor cash.** Master-only, outside % to the mission, and it never converts itself:
   a closed status requires `resolved_at`, so a conversion is always a recorded decision (§103).
+- **Founder money is SPONSORSHIP, never a donation** (Keith, 2026-11-18). On a benefit a
+  donation reads as money for the beneficiary. Keith's (or Come With's) money covering production
+  is a `sponsorships` row, tier `Founder sponsorship`, separate from the paid sponsors. An
+  unrepaid advance resolves to `converted_to_sponsorship`; money committed but not yet sent is a
+  `confirmed` sponsorship. Never book it as `third_party_donations` (DI #1-#3 were moved, 253-254). §125.
+- **Reconcile owner money against the bank export before closing an event** (§126). Entries
+  typed in from memory were wrong 3 of 3 times on DI #3. The audit is the tie-out: processor
+  recorded = paid out + pending.
+- **Impact reports: one page per event, pinned by id** (`v_public_impact_report?id=eq.<event>`),
+  every figure read from `impact_report.config`, no placeholders on a public page. A page that
+  reads "the newest published report" gets re-skinned when the next one publishes. §127.
+- **Remove a card-imported cost by soft-delete with its `external_ref` KEPT.** The unique index
+  covers deleted rows, so the next import can't re-create it. §128.
 
 ## Come With Radio (episodes live outside `events`)
 
