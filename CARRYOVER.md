@@ -1,3 +1,54 @@
+# Carryover - 2026-11-20 (DI committee recap + meeting -> DI #4/#5, tip correction - DESKTOP, Standard Close)
+
+**Closed 2026-11-20 on the DESKTOP.** All on `master`, pushed. Migrations only (no site/dashboard
+code, no edge-function deploys), so Netlify rebuilt with identical content. No branch.
+
+## State summary
+- **Migrations: repo and prod both top out at 257** (256-257 this session, each dry-run first;
+  the 256 dry run caught `tasks.created_by` -> actors, see §130). Recorded in `applied_migrations`.
+- **Prod invariants (after 257):** all five financial views 401 (`check_financial_views.py`);
+  anon sweep clean; post_apply 0 FAIL; the newly filed xlsx is not reachable by public URL (400).
+- **LEARNINGS latest: §130** (§129-130 this session). Roles unchanged.
+- Working tree still carries the pre-existing uncommitted files from other machines (radio
+  renders, deleted `Receipts/*.pdf`, deleted DI #2 page). **Not ours; never `git commit -a`.**
+
+## Tomorrow's default
+1. Everything in the 11-18 "Tomorrow's default" below still stands (Keith's $896.95 -> paid; Zeffy
+   $770, RA ~$104, Frick Frack $500, MS $1,965 as they clear; impact report publish + homepage
+   button repoint).
+2. **DI #4 tasks are live** in the dashboard (Calendar & Tasks / DI #4 hub), owners Keith / Martin /
+   Henry, no due dates (the meeting set none). First up: Keith confirms Mar 6 + Oct 9 with Kim and
+   proposes the 2-event deal at $5,000 minimum each.
+3. **Signal tip overpayment $240.90** (task on DI #3): if Gavin refunds it, record it against
+   Keith's founder sponsorship - the $500 Venmo sits inside it (253). Nothing is booked as owed.
+4. Once Kim agrees a minimum, set `events.bar_minimum` on DI #4/#5 (deliberately blank now).
+
+## This session shipped (2026-11-20)
+- **Committee recap doc** (Claude Docs, private to Keith):
+  https://claude.ai/artifact/EKXzrVPU8wDxxQaYSp58fs - DI #3 results, series to date ($6,105 to
+  MS over three events), mailing list 80 -> 115 (+44%; promo opens ~65%), open items, and a
+  "Meeting outcomes" section added after the meeting.
+- **256:** DI #4 (Sat 2027-03-06) + DI #5 (Sat 2027-10-09) at Signal, `planning`, not public,
+  `event_control` fundraising for National MS Society, Emmy Adelle as resident headliner. The
+  meeting is a `meetings` row (team visibility, linked to DI #4) with 4 decisions, notes and an
+  action note per task; **17 tasks** (`source='meeting'`, one `doer` assignment each): 14 on DI #4,
+  3 on DI #3 (audio edit for set swaps, tip overpayment, voided drink tickets). Source: Gemini
+  notes in Keith's Downloads, checked (Easter 2027 is Mar 28, not 31 as Gemini said).
+- **Signal sales summary (Toast, 11/14)** read and filed on DI #3 (Files, kind `other`, vendor
+  Signal NYC): net bar $2,860 (48% of $6,000) + $253.35 tax + $480.90 card tips = $3,617.45; 39
+  items / $509 voided = the prepaid drink tickets (Keith confirmed); $29.79 per attendee, so $6,000
+  needs ~200 people. First hour (3-4 PM) sold $95.
+- **257:** tip guarantee words corrected (amounts unchanged): guarantee **$800**, guest tips
+  **$540.90** ($480.90 card + $60 cash), owed $259.10, paid $500 at Gavin's request -> **$240.90
+  overpaid**. DI #3 notes / 11/4 Signal payment now say $2,860, not "~$3,000". The private
+  `agreements` bucket now accepts xlsx/xls/csv (it refused the report; the dashboard would have too).
+
+## Parked / next
+- Whether to claim/book the $240.90 as a receivable - Keith's call; not booked.
+- `di.tier1_desc` homepage typo, reimbursement cash flow, `v_capital` ledger filter (from 11-18).
+
+---
+
 # Carryover - 2026-11-18 (DI #3 money finalized + impact report draft - DESKTOP, Full Close)
 
 **Closed 2026-11-18 on the DESKTOP.** All on `master`, pushed and deployed (Netlify). No branch,

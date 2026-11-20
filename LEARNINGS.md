@@ -3276,3 +3276,24 @@ filter). A card row that turns out to be personal or a duplicate is soft-deleted
 `external_ref` left in place, so the next import of the same statement collides and cannot
 re-create it. Nulling the ref, or hard-deleting the row, quietly invites it back. Write the reason
 on the row.
+
+## Section 129 — A venue's "you owe" is a claim; tie it to the venue's OWN sales report (257, 2026-11-20)
+
+On DI #3 night Signal's manager said $500 was owed on the tip guarantee, and it was paid by Venmo.
+Signal's own Toast sales summary, read four days later, showed $480.90 in card tips; with $60 cash
+that is $540.90 against an $800 guarantee, so $259.10 was owed and $240.90 was overpaid. The same
+report showed 39 items / $509 voided: the prepaid drink tickets, rung and voided, so NOT in the
+$2,860 net that the bar minimum is measured on. Get the POS summary (net sales, tips, voids)
+before settling a minimum or a guarantee, and write prepaid drink tickets into the deal as counting
+toward the minimum. Book what was actually paid; correct the words; never book a claimed refund
+until it is decided (same spirit as §126's bank tie-out).
+
+## Section 130 — Meeting -> tasks: the shape, and `tasks.created_by` is an ACTOR (256, 2026-11-20)
+
+A meeting lands as `meetings` (event_id, `visibility='team'`, attendee_ids = profile ids) +
+`meeting_notes` (`decision` / `note`, and one `action` note per task with `task_id`) + `tasks`
+(`source='meeting'`, `meeting_id`) + `task_assignments` (`actor_id`, role `doer` - the common one).
+Assignments and `tasks.created_by` take the ACTOR linked to a login (`actors.user_id`), NOT the
+profile id; `meeting_notes.created_by` / `meetings.created_by` take the profile. The 256 dry run
+failed on exactly that FK, after re-reading had passed it - another case for dry-running even a
+data-only migration.

@@ -1008,7 +1008,9 @@ status colours (green = completed only; `on_sale` → teal) and `0`-vs-`—` for
 ### ▶️ Open / next (this thread)
 - Fill in artist Instagram / SoundCloud / TikTok handles (Keith has them); optionally email artists
   their self-update links. Set a real **Donate link** (and Tickets when an event is on) in Site Editor.
-- Add a real **DI #3** event (October) when planned; feature it + add recap content afterward.
+- ~~Add a real **DI #3** event~~ - held 2026-11-14 at Signal. **DI #4 (2027-03-06) and DI #5
+  (2027-10-09)** created as planning placeholders 2026-11-20 (256); DI #4 carries the committee's
+  14 tasks. Feature DI #3 + recap content once the impact report publishes.
 - Offered but not built: a "Edit public profile →" shortcut on the **Actors** page for dj/artist rows.
 
 ## Current state — reconciled 2026-06-24 (Operations + CRM build-out)
